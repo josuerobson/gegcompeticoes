@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+.env
+.env.example
+README.md
+task.md
+implementation_plan.md
+walkthrough.md
