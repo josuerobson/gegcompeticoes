@@ -17,6 +17,7 @@ interface MemberProfileProps {
   onToggleFollow: (userId: string) => Promise<void>;
   onPaySignature: () => Promise<void>;
   onLogout: () => void;
+  onAddPost: (content: string, imageUrl?: string) => Promise<void>;
 }
 
 interface TrainingSession {
@@ -112,10 +113,11 @@ export default function MemberProfile({
   championships,
   onToggleFollow,
   onPaySignature,
-  onLogout
+  onLogout,
+  onAddPost
 }: MemberProfileProps) {
   // Tabs expanded
-  type ProfileTabType = 'posts' | 'targets' | 'safety' | 'results' | 'certificates' | 'club_card' | 'gg_card' | 'trainings' | 'declarations' | 'ammo';
+  type ProfileTabType = 'posts' | 'results' | 'certificates' | 'club_card' | 'gg_card' | 'trainings' | 'declarations' | 'ammo';
   const [profileTab, setProfileTab] = useState<ProfileTabType>('posts');
 
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
@@ -150,6 +152,39 @@ export default function MemberProfile({
     invoiceNumber: '',
     notes: ''
   });
+
+  // Profile post states
+  const [profilePostContent, setProfilePostContent] = useState('');
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [profileImagePreview, setProfileImagePreview] = useState<string>('');
+  const [isPostingProfilePost, setIsPostingProfilePost] = useState(false);
+
+  const handleProfileImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setProfileImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProfileImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCreateProfilePost = async () => {
+    if (!profilePostContent.trim()) return;
+    setIsPostingProfilePost(true);
+    try {
+      await onAddPost(profilePostContent, profileImagePreview || undefined);
+      setProfilePostContent('');
+      setProfileImageFile(null);
+      setProfileImagePreview('');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsPostingProfilePost(false);
+    }
+  };
 
   const isMe = currentUser?.id === selectedUser.id;
   const isFollowing = currentUser?.following.includes(selectedUser.id) || false;
@@ -295,8 +330,6 @@ export default function MemberProfile({
   // Define sidebar menu items (only active for user's own profile)
   const menuItems = [
     { id: 'posts', label: 'Fotos Publicadas', icon: Grid, count: userPosts.length, public: true },
-    { id: 'targets', label: 'Alvos Homologados', icon: Target, count: userTargetPosts.length, public: true },
-    { id: 'safety', label: 'Estatísticas Tiro', icon: Activity, public: true },
     { id: 'results', label: 'Resultados', icon: Trophy, count: userScores.length, public: true },
     { id: 'certificates', label: 'Certificados', icon: Award, count: approvedRegs.length, public: false },
     { id: 'club_card', label: 'Carteirinha Clube', icon: CreditCard, public: false },
@@ -492,118 +525,87 @@ export default function MemberProfile({
             })}
           </div>
 
-          {/* TAB CONTENT RENDERING */}
-
           {/* 1. Posts Grid (Original tab) */}
           {profileTab === 'posts' && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {userPosts.length === 0 ? (
-                <div className="col-span-full py-16 text-center text-slate-400 bg-white rounded-2xl smooth-shadow border border-slate-100">
-                  <Grid className="w-10 h-10 text-slate-200 mx-auto mb-2" />
-                  <p className="font-medium text-sm">Nenhuma foto publicada ainda.</p>
-                </div>
-              ) : (
-                userPosts.map((post) => (
-                  <motion.div
-                    key={post.id}
-                    whileHover={{ scale: 1.02 }}
-                    onClick={() => setSelectedExpandPost(post)}
-                    className="aspect-square bg-slate-100 rounded-xl overflow-hidden cursor-pointer smooth-shadow border border-slate-200 relative group"
-                  >
-                    <img
-                      src={post.imageUrl || "https://picsum.photos/seed/shoot/600/600"}
-                      alt="Thumbnail"
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
+            <div className="space-y-4">
+              {isMe && (
+                <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col gap-3">
+                  <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Publicar Nova Foto</h4>
+                  <div className="flex gap-2">
+                    <textarea
+                      rows={2}
+                      placeholder="Escreva uma legenda para sua foto de tiro..."
+                      value={profilePostContent}
+                      onChange={e => setProfilePostContent(e.target.value)}
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-blue-500 text-xs text-slate-800 resize-none"
                     />
-                    <div className="absolute inset-0 bg-blue-900/40 opacity-0 group-hover:opacity-100 transition duration-150 flex items-center justify-center gap-4 text-white text-xs font-bold font-mono">
-                      <span>❤ {post.likes.length}</span>
-                      <span>💬 {post.comments.length}</span>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div className="flex flex-col gap-1 w-full sm:w-auto">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase">Foto do Computador</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleProfileImageChange}
+                        className="text-[11px] text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                      />
                     </div>
-                  </motion.div>
-                ))
-              )}
-            </div>
-          )}
+                    
+                    {profileImagePreview && (
+                      <div className="relative w-12 h-12 rounded border border-slate-200 overflow-hidden flex-shrink-0 bg-slate-50">
+                        <img src={profileImagePreview} alt="Preview" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProfileImageFile(null);
+                            setProfileImagePreview('');
+                          }}
+                          className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 shadow hover:bg-red-650 flex items-center justify-center cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
 
-          {/* 2. Target Posts Grid (Original tab) */}
-          {profileTab === 'targets' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {userTargetPosts.length === 0 ? (
-                <div className="col-span-full py-16 text-center text-slate-400 bg-white rounded-2xl smooth-shadow border border-slate-100">
-                  <Target className="w-10 h-10 text-slate-200 mx-auto mb-2" />
-                  <p className="font-medium text-sm">Nenhum cartão de tiro homologado ainda.</p>
-                </div>
-              ) : (
-                userTargetPosts.map((post) => {
-                  if (!post.targetScore) return null;
-                  return (
-                    <div
-                      key={post.id}
-                      onClick={() => setSelectedExpandPost(post)}
-                      className="bg-white rounded-2xl smooth-shadow border border-slate-100 overflow-hidden cursor-pointer hover:border-blue-400 transition flex flex-col justify-between"
+                    <button
+                      onClick={handleCreateProfilePost}
+                      disabled={isPostingProfilePost || !profilePostContent.trim()}
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition self-end sm:self-center cursor-pointer shadow-md shadow-blue-50 flex items-center gap-1"
                     >
-                      <div className="aspect-video bg-slate-50 relative">
-                        <img
-                          src={post.imageUrl}
-                          alt="Target record"
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                        />
-                      </div>
-                      
-                      <div className="p-4 bg-slate-900 text-white font-mono text-xs space-y-2">
-                        <div className="flex justify-between font-bold">
-                          <span className="text-[10px] text-blue-300 uppercase tracking-widest">{post.targetScore.discipline}</span>
-                          <span className="text-amber-400">{post.targetScore.score} pts</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-300 pt-1 border-t border-slate-800">
-                          <span>Arma: {post.targetScore.gunModel}</span>
-                          <span>Alvo: {post.targetScore.distance}m</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
+                      {isPostingProfilePost ? 'Publicando...' : 'Publicar'}
+                    </button>
+                  </div>
+                </div>
               )}
-            </div>
-          )}
 
-          {/* 3. Safety Statistics (Original tab) */}
-          {profileTab === 'safety' && (
-            <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-6 space-y-6">
-              <h4 className="font-display font-bold text-slate-800 text-sm uppercase">Relatório de Rendimento Tático</h4>
-              
-              <div className="grid grid-cols-3 gap-4 font-mono">
-                <div className="bg-slate-50 p-4 rounded-xl text-center">
-                  <span className="text-[10px] text-slate-400 block uppercase font-sans">Total Disparos</span>
-                  <span className="text-xl font-bold text-slate-800 mt-1 block">
-                    {userTargetPosts.reduce((acc, p) => acc + (p.targetScore?.shots || 0), 0) + trainings.reduce((acc, t) => acc + t.shots, 0)}
-                  </span>
-                </div>
-                <div className="bg-slate-50 p-4 rounded-xl text-center">
-                  <span className="text-[10px] text-slate-400 block uppercase font-sans">Média Alvos (pts)</span>
-                  <span className="text-xl font-bold text-blue-600 mt-1 block">
-                    {userTargetPosts.length > 0
-                      ? (userTargetPosts.reduce((acc, p) => acc + (p.targetScore?.score || 0), 0) / userTargetPosts.length).toFixed(1)
-                      : '0.0'}
-                  </span>
-                </div>
-                <div className="bg-slate-50 p-4 rounded-xl text-center">
-                  <span className="text-[10px] text-slate-400 block uppercase font-sans">Precisão Média</span>
-                  <span className="text-xl font-bold text-emerald-600 mt-1 block">
-                    {userTargetPosts.length > 0
-                      ? ((userTargetPosts.reduce((acc, p) => acc + (p.targetScore?.hits || 0), 0) / userTargetPosts.reduce((acc, p) => acc + (p.targetScore?.shots || 0), 1)) * 100).toFixed(0) + '%'
-                      : '0%'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl space-y-2">
-                <span className="text-[10px] text-blue-800 font-bold block uppercase tracking-wider">RECOMENDAÇÃO DO INSTRUTOR G&G</span>
-                <p className="text-xs text-slate-600 leading-relaxed font-sans">
-                  Suas séries demonstram excelente consistência de grip e empunhadura no calibre {selectedUser.crNumber?.includes('DF') ? '9mm' : '.380'}. Sugerimos praticar o 'Trigger Reset' suave a seco 15 minutos diários para otimizar disparos rápidos dinâmicos de IPSC.
-                </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {userPosts.length === 0 ? (
+                  <div className="col-span-full py-16 text-center text-slate-400 bg-white rounded-2xl smooth-shadow border border-slate-100">
+                    <Grid className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                    <p className="font-medium text-sm">Nenhuma foto publicada ainda.</p>
+                  </div>
+                ) : (
+                  userPosts.map((post) => (
+                    <motion.div
+                      key={post.id}
+                      whileHover={{ scale: 1.02 }}
+                      onClick={() => setSelectedExpandPost(post)}
+                      className="aspect-square bg-slate-100 rounded-xl overflow-hidden cursor-pointer smooth-shadow border border-slate-200 relative group"
+                    >
+                      <img
+                        src={post.imageUrl || "https://picsum.photos/seed/shoot/600/600"}
+                        alt="Thumbnail"
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 bg-blue-900/40 opacity-0 group-hover:opacity-100 transition duration-150 flex items-center justify-center gap-4 text-white text-xs font-bold font-mono">
+                        <span>❤ {post.likes.length}</span>
+                        <span>💬 {post.comments.length}</span>
+                      </div>
+                    </motion.div>
+                  ))
+                )}
               </div>
             </div>
           )}

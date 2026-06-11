@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Post, User, Comment, ShootingResult } from '../types';
-import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2 } from 'lucide-react';
+import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { shootingImages } from '../data/mockData';
 
@@ -28,6 +28,8 @@ export default function FeedView({
   const [postContent, setPostContent] = useState('');
   const [selectedImagePreset, setSelectedImagePreset] = useState<string>(shootingImages.paper_target);
   const [customImageUrl, setCustomImageUrl] = useState('');
+  const [customImageFile, setCustomImageFile] = useState<File | null>(null);
+  const [customImagePreview, setCustomImagePreview] = useState<string>('');
   
   // Include target score info
   const [includeTargetScore, setIncludeTargetScore] = useState(false);
@@ -53,7 +55,9 @@ export default function FeedView({
     e.preventDefault();
     setIsSubmittingPost(true);
     try {
-      const finalImg = customImageUrl.trim() !== '' ? customImageUrl.trim() : selectedImagePreset;
+      const finalImg = customImagePreview !== '' 
+        ? customImagePreview 
+        : (customImageUrl.trim() !== '' ? customImageUrl.trim() : selectedImagePreset);
       let scoreObj: ShootingResult | undefined;
       
       if (includeTargetScore) {
@@ -73,6 +77,8 @@ export default function FeedView({
       // Reset
       setPostContent('');
       setCustomImageUrl('');
+      setCustomImagePreview('');
+      setCustomImageFile(null);
       setIncludeTargetScore(false);
       setIsPostingOpen(false);
     } catch (err) {
@@ -463,7 +469,7 @@ export default function FeedView({
                     ))}
                   </div>
                   <div className="pt-2">
-                    <span className="text-[11px] text-slate-400 block text-center font-medium">Ou adicione URL da sua imagem:</span>
+                    <span className="text-[11px] text-slate-450 block text-center font-medium">Ou adicione URL da sua imagem:</span>
                     <input
                       type="url"
                       placeholder="Ex: https://minha-foto-no-clube.jpg"
@@ -471,9 +477,50 @@ export default function FeedView({
                       onChange={(e) => {
                         setCustomImageUrl(e.target.value);
                         setSelectedImagePreset('');
+                        setCustomImagePreview('');
+                        setCustomImageFile(null);
                       }}
                       className="w-full mt-1 bg-slate-50 border border-slate-200 outline-none px-3 py-1.5 rounded-xl text-xs text-slate-600 focus:border-blue-500"
                     />
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 mt-2 flex flex-col gap-2">
+                    <span className="text-[11px] text-slate-450 block font-medium">Ou envie uma foto do seu computador:</span>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setCustomImageFile(file);
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setCustomImagePreview(reader.result as string);
+                              setSelectedImagePreset('');
+                              setCustomImageUrl('');
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        className="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                      />
+                      {customImagePreview && (
+                        <div className="relative w-10 h-10 rounded border border-slate-200 overflow-hidden flex-shrink-0 bg-slate-50">
+                          <img src={customImagePreview} alt="Preview" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomImageFile(null);
+                              setCustomImagePreview('');
+                            }}
+                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 shadow hover:bg-red-650 flex items-center justify-center cursor-pointer"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 

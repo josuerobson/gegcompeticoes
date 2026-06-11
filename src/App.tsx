@@ -913,6 +913,7 @@ export default function App() {
               onToggleFollow={handleToggleFollow}
               onPaySignature={handlePaySignature}
               onLogout={handleLogout}
+              onAddPost={handleAddPost}
             />
           )}
         </div>
