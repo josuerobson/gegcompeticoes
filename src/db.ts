@@ -4,7 +4,7 @@ import { defaultUsers, defaultChampionships, defaultRegistrations, defaultStageS
 const { Pool } = pg;
 
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/gegcompeticoes',
+  connectionString: process.env.DATABASE_URL || 'postgresql://spacevip_react:Jo159357*@localhost:5432/gegcompeticoes',
   ssl: process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('localhost') && !process.env.DATABASE_URL.includes('127.0.0.1')
     ? { rejectUnauthorized: false }
     : false,
