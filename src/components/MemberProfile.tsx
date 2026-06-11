@@ -117,13 +117,24 @@ export default function MemberProfile({
   onAddPost
 }: MemberProfileProps) {
   // Tabs expanded
-  type ProfileTabType = 'posts' | 'results' | 'certificates' | 'club_card' | 'gg_card' | 'trainings' | 'declarations' | 'ammo';
+  type ProfileTabType = 'posts' | 'championships' | 'multi_championships' | 'my_registrations' | 'results' | 'certificates' | 'club_card' | 'gg_card' | 'trainings' | 'declarations' | 'ammo';
   const [profileTab, setProfileTab] = useState<ProfileTabType>('posts');
 
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
   const [payingSign, setPayingSign] = useState(false);
   const [paidSignDone, setPaidSignDone] = useState(false);
   const [selectedExpandPost, setSelectedExpandPost] = useState<Post | null>(null);
+
+  // Local registration states
+  const [selectedChampRegLocal, setSelectedChampRegLocal] = useState<Championship | null>(null);
+  const [selectedModalityLocal, setSelectedModalityLocal] = useState('');
+  const [crInputLocal, setCrInputLocal] = useState(currentUser?.crNumber || '');
+  const [paymentMethodLocal, setPaymentMethodLocal] = useState<'pix' | 'credit_card'>('pix');
+  const [paymentStepLocal, setPaymentStepLocal] = useState<'form' | 'processing' | 'done'>('form');
+
+  // Local receipt states
+  const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
 
   // New features local states
   const [trainings, setTrainings] = useState<TrainingSession[]>([]);
@@ -282,6 +293,41 @@ export default function MemberProfile({
     });
   };
 
+  const handleRegisterSubmitLocal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedChampRegLocal || !selectedModalityLocal || !crInputLocal) return;
+
+    setPaymentStepLocal('processing');
+    
+    setTimeout(async () => {
+      try {
+        const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+        if (currentUser) {
+          authHeaders['x-user-id'] = currentUser.id;
+        }
+        const res = await fetch(`/api/championships/${selectedChampRegLocal.id}/register`, {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify({
+            modality: selectedModalityLocal,
+            crNumber: crInputLocal,
+            paymentMethod: paymentMethodLocal
+          })
+        });
+        if (res.ok) {
+          setPaymentStepLocal('done');
+        } else {
+          const data = await res.json();
+          alert(data.error || 'Erro ao realizar inscrição.');
+          setPaymentStepLocal('form');
+        }
+      } catch (err) {
+        console.error(err);
+        setPaymentStepLocal('form');
+      }
+    }, 1800);
+  };
+
   const deleteTraining = (id: string) => {
     saveTrainings(trainings.filter(t => t.id !== id));
   };
@@ -330,6 +376,9 @@ export default function MemberProfile({
   // Define sidebar menu items (only active for user's own profile)
   const menuItems = [
     { id: 'posts', label: 'Fotos Publicadas', icon: Grid, count: userPosts.length, public: true },
+    { id: 'championships', label: 'Campeonatos', icon: Trophy, public: true },
+    { id: 'multi_championships', label: 'Multi-Campeonatos', icon: Activity, public: true },
+    { id: 'my_registrations', label: 'Minhas Inscrições', icon: CheckCircle2, count: approvedRegs.length, public: false },
     { id: 'results', label: 'Resultados', icon: Trophy, count: userScores.length, public: true },
     { id: 'certificates', label: 'Certificados', icon: Award, count: approvedRegs.length, public: false },
     { id: 'club_card', label: 'Carteirinha Clube', icon: CreditCard, public: false },
@@ -607,6 +656,223 @@ export default function MemberProfile({
                   ))
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Campeonatos tab */}
+          {profileTab === 'championships' && (
+            <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-6 space-y-6">
+              <div className="flex justify-between items-center">
+                <h4 className="font-display font-bold text-slate-800 text-sm uppercase">Campeonatos do Clube</h4>
+                <Trophy className="w-5 h-5 text-blue-600" />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {championships.map((champ) => {
+                  const isFinished = champ.status === 'completed';
+                  const userRegs = registrations.filter(r => r.championshipId === champ.id && r.userId === selectedUser.id);
+                  const isRegistered = userRegs.length > 0;
+
+                  return (
+                    <div key={champ.id} className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50 flex flex-col justify-between">
+                      <div className="h-32 bg-slate-200 relative">
+                        <img src={champ.bannerUrl} alt={champ.title} className="w-full h-full object-cover" />
+                        <div className="absolute top-2 left-2 flex gap-1">
+                          {isFinished ? (
+                            <span className="bg-slate-900/80 text-white text-[9px] px-2 py-0.5 rounded font-bold uppercase">Finalizado</span>
+                          ) : (
+                            <span className="bg-emerald-600 text-white text-[9px] px-2 py-0.5 rounded font-bold uppercase">Aberto</span>
+                          )}
+                          {isRegistered && (
+                            <span className="bg-blue-600 text-white text-[9px] px-2 py-0.5 rounded font-bold uppercase">Inscrito</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
+                        <div>
+                          <h5 className="font-bold text-slate-900 text-xs">{champ.title}</h5>
+                          <p className="text-[10px] text-slate-500 line-clamp-2 mt-1">{champ.description}</p>
+                        </div>
+                        <div className="border-t border-slate-100 pt-2 mt-2 text-[10px] text-slate-650 space-y-1 font-mono">
+                          <div>Taxa: R$ {champ.registrationFee}</div>
+                          <div>Etapas: {champ.stagesCount}</div>
+                          <div className="flex flex-wrap gap-1 pt-1">
+                            {champ.modalities.slice(0, 3).map((m, idx) => (
+                              <span key={idx} className="bg-slate-200 text-slate-700 text-[8px] px-1.5 py-0.5 rounded font-bold uppercase">{m}</span>
+                            ))}
+                          </div>
+                        </div>
+                        {isMe && !isFinished && (
+                          <button
+                            onClick={() => {
+                              setSelectedChampRegLocal(champ);
+                              setSelectedModalityLocal(champ.modalities[0]);
+                            }}
+                            className="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white text-[11px] py-2 rounded-lg font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <Target className="w-3.5 h-3.5" />
+                            Inscrever-se
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Multi-Campeonatos tab */}
+          {profileTab === 'multi_championships' && (
+            <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-6 space-y-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h4 className="font-display font-bold text-slate-800 text-sm uppercase">Painel Multi-Campeonatos</h4>
+                  <p className="text-[10px] text-slate-400">Visão consolidada do atleta em todas as competições federadas.</p>
+                </div>
+                <Activity className="w-5 h-5 text-blue-600 animate-pulse" />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-center">
+                <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                  <span className="text-[10px] text-slate-500 block font-sans">Média Geral de Pontos</span>
+                  <span className="font-bold text-lg text-blue-700">
+                    {userScores.length > 0
+                      ? (userScores.reduce((sum, s) => sum + s.score, 0) / userScores.length).toFixed(2)
+                      : '0.00'}
+                  </span>
+                </div>
+                <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100">
+                  <span className="text-[10px] text-slate-500 block font-sans">Aproveitamento Técnico</span>
+                  <span className="font-bold text-lg text-emerald-700">
+                    {userScores.length > 0
+                      ? `${Math.min(100, (userScores.reduce((sum, s) => sum + s.score, 0) / (userScores.length * 150)) * 100).toFixed(1)}%`
+                      : '0.0%'}
+                  </span>
+                </div>
+                <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-100">
+                  <span className="text-[10px] text-slate-500 block font-sans">Presença nas Etapas</span>
+                  <span className="font-bold text-lg text-amber-700">
+                    {championships.length > 0 && approvedRegs.length > 0
+                      ? `${((userScores.length / (approvedRegs.length * 4)) * 100).toFixed(0)}%`
+                      : '0%'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h5 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Desempenho por Campeonato</h5>
+                {approvedRegs.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-xl">
+                    <Activity className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                    <p className="text-xs">O atleta ainda não está inscrito em nenhum campeonato ativo.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {approvedRegs.map((reg) => {
+                      const champ = championships.find(c => c.id === reg.championshipId);
+                      if (!champ) return null;
+
+                      const scoresForChamp = userScores.filter(s => s.championshipId === reg.championshipId && s.modality === reg.modality);
+                      const totalPoints = scoresForChamp.reduce((sum, s) => sum + s.score, 0);
+                      const progressPercent = Math.min(100, (scoresForChamp.length / champ.stagesCount) * 100);
+
+                      return (
+                        <div key={reg.id} className="border border-slate-150 rounded-xl p-4 bg-slate-50/50 hover:bg-slate-50 transition space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h6 className="font-bold text-slate-800 text-xs">{champ.title}</h6>
+                              <span className="text-[10px] text-slate-400 block font-mono">{reg.modality}</span>
+                            </div>
+                            <span className="text-[10px] bg-blue-100 text-blue-800 font-mono font-bold px-2 py-0.5 rounded">
+                              {scoresForChamp.length} / {champ.stagesCount} Etapas
+                            </span>
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[9px] text-slate-400">
+                              <span>Progresso das Etapas</span>
+                              <span>{progressPercent.toFixed(0)}%</span>
+                            </div>
+                            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                              <div className="bg-blue-600 h-full rounded-full" style={{ width: `${progressPercent}%` }}></div>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-slate-500 pt-1">
+                            <div>Pontuação: <span className="font-bold text-slate-700">{totalPoints.toFixed(2)} pts</span></div>
+                            <div>Média/Etapa: <span className="font-bold text-slate-700">{scoresForChamp.length > 0 ? (totalPoints / scoresForChamp.length).toFixed(2) : '0.00'} pts</span></div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Minhas Inscrições tab */}
+          {profileTab === 'my_registrations' && (
+            <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-6 space-y-6">
+              <div className="flex justify-between items-center">
+                <h4 className="font-display font-bold text-slate-800 text-sm uppercase">Minhas Inscrições Homologadas</h4>
+                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+              </div>
+
+              {registrations.filter(r => r.userId === selectedUser.id).length === 0 ? (
+                <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-xl">
+                  <CheckCircle2 className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                  <p className="text-xs">Nenhuma inscrição encontrada para este atleta.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {registrations.filter(r => r.userId === selectedUser.id).map((reg) => {
+                    const champ = championships.find(c => c.id === reg.championshipId);
+                    return (
+                      <div key={reg.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 hover:bg-slate-50 transition flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase ${reg.paymentStatus === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                              {reg.paymentStatus === 'approved' ? 'HOMOLOGADA' : 'PENDENTE'}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono">ID: {reg.id.slice(0, 8).toUpperCase()}</span>
+                          </div>
+                          <h5 className="font-bold text-slate-800 text-xs mt-1">{champ ? champ.title : 'Campeonato G&G'}</h5>
+                          <div className="text-[10px] text-slate-550 space-y-0.5 font-mono leading-tight">
+                            <div>Modalidade: <span className="font-bold text-slate-700">{reg.modality}</span></div>
+                            <div>Documento CR: <span className="font-bold text-slate-700">{reg.crNumber}</span></div>
+                            <div>Data Registro: {new Date(reg.registeredAt).toLocaleDateString()}</div>
+                            {reg.txId && <div className="truncate max-w-[280px]">TxID: {reg.txId}</div>}
+                          </div>
+                        </div>
+                        
+                        <button
+                          onClick={() => {
+                            setReceiptData({
+                              regId: reg.id,
+                              champTitle: champ ? champ.title : 'Campeonato G&G',
+                              modality: reg.modality,
+                              crNumber: reg.crNumber,
+                              registeredAt: reg.registeredAt,
+                              paymentMethod: reg.paymentMethod,
+                              paymentStatus: reg.paymentStatus,
+                              txId: reg.txId,
+                              athleteName: selectedUser.fullName,
+                              athleteUsername: selectedUser.username
+                            });
+                            setIsReceiptOpen(true);
+                          }}
+                          className="self-end sm:self-center bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-800 text-xs px-3.5 py-2 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer border border-blue-100"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          Ver Comprovante
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -1871,6 +2137,206 @@ export default function MemberProfile({
               )}
 
             </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* LOCAL REGISTRATION MODAL */}
+      <AnimatePresence>
+        {selectedChampRegLocal && (
+          <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white max-w-lg w-full rounded-2xl smooth-shadow overflow-hidden text-slate-800"
+            >
+              <div className="bg-blue-900 text-white p-4 flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-amber-400" />
+                  <span className="font-display font-semibold text-sm">Ficha de Inscrição</span>
+                </div>
+                <button
+                  onClick={() => setSelectedChampRegLocal(null)}
+                  className="text-white/70 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {paymentStepLocal === 'form' && (
+                <form onSubmit={handleRegisterSubmitLocal} className="p-5 space-y-4">
+                  <div className="bg-blue-50 p-3 rounded-lg flex items-center justify-between text-xs text-blue-900 font-semibold">
+                    <span>{selectedChampRegLocal.title}</span>
+                    <span className="text-blue-600 font-bold">R$ {selectedChampRegLocal.registrationFee}</span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 uppercase block font-semibold">Modalidade de Disputa</label>
+                    <select
+                      value={selectedModalityLocal}
+                      onChange={(e) => setSelectedModalityLocal(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
+                    >
+                      {selectedChampRegLocal.modalities.map((mod, i) => (
+                        <option key={i} value={mod}>{mod}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 uppercase block font-semibold">Seu Documento CR</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: CR-102938-DF"
+                      value={crInputLocal}
+                      onChange={(e) => setCrInputLocal(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-750 font-mono"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] text-slate-500 uppercase block font-semibold">Meio de Pagamento</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethodLocal('pix')}
+                        className={`p-3 border rounded-xl flex flex-col items-center justify-center gap-1 transition ${paymentMethodLocal === 'pix' ? 'border-blue-600 bg-blue-50 text-blue-900' : 'border-slate-200 bg-slate-50 text-slate-650'}`}
+                      >
+                        <Copy className="w-5 h-5" />
+                        <span className="text-xs font-bold leading-none">PIX</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethodLocal('credit_card')}
+                        className={`p-3 border rounded-xl flex flex-col items-center justify-center gap-1 transition ${paymentMethodLocal === 'credit_card' ? 'border-blue-600 bg-blue-50 text-blue-900' : 'border-slate-200 bg-slate-50 text-slate-650'}`}
+                      >
+                        <CreditCard className="w-5 h-5" />
+                        <span className="text-xs font-bold leading-none">Cartão</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedChampRegLocal(null)}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-semibold text-xs transition"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold text-xs shadow-md transition"
+                    >
+                      Confirmar e Pagar
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {paymentStepLocal === 'processing' && (
+                <div className="p-8 text-center space-y-4">
+                  <div className="w-12 h-12 rounded-full border-4 border-slate-200 animate-spin border-t-blue-600 mx-auto"></div>
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-sm">Processando Pagamento...</h4>
+                    <p className="text-xs text-slate-400">Aguardando confirmação bancária.</p>
+                  </div>
+                </div>
+              )}
+
+              {paymentStepLocal === 'done' && (
+                <div className="p-6 text-center space-y-4">
+                  <div className="bg-emerald-50 text-emerald-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto shadow-md">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-sm">Inscrição Homologada!</h4>
+                    <p className="text-xs text-slate-500">Seu comprovante está disponível na aba "Minhas Inscrições".</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedChampRegLocal(null);
+                      window.location.reload();
+                    }}
+                    className="w-full bg-slate-950 hover:bg-slate-900 text-white py-3 rounded-xl font-semibold text-xs transition"
+                  >
+                    Fechar e Atualizar
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* RECEIPT MODAL */}
+      <AnimatePresence>
+        {isReceiptOpen && receiptData && (
+          <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white max-w-md w-full rounded-2xl smooth-shadow overflow-hidden p-6 space-y-6 relative text-slate-805"
+            >
+              <button
+                onClick={() => setIsReceiptOpen(false)}
+                className="absolute top-4 right-4 text-slate-500 hover:text-slate-700 text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+
+              <div id="printable-receipt" className="space-y-4 border border-dashed border-slate-300 p-4 rounded-xl font-mono text-xs text-slate-800 bg-slate-50">
+                <div className="text-center border-b border-dashed border-slate-200 pb-3 space-y-1">
+                  <h4 className="font-bold tracking-wider">COMPROVANTE DE INSCRIÇÃO</h4>
+                  <p className="text-[10px] text-slate-500">G&G COMPETIÇÕES • BRASÍLIA-DF</p>
+                </div>
+                
+                <div className="space-y-2 leading-relaxed">
+                  <div><strong>Atleta:</strong> {receiptData.athleteName} (@{receiptData.athleteUsername})</div>
+                  <div><strong>CR Militar/Defesa:</strong> {receiptData.crNumber}</div>
+                  <div><strong>Campeonato:</strong> {receiptData.champTitle}</div>
+                  <div><strong>Modalidade:</strong> {receiptData.modality}</div>
+                  <div><strong>Registro:</strong> {new Date(receiptData.registeredAt).toLocaleString('pt-BR')}</div>
+                  <div><strong>Pagamento:</strong> {receiptData.paymentMethod.toUpperCase()} ({receiptData.paymentStatus === 'approved' ? 'APROVADO' : 'PENDENTE'})</div>
+                  {receiptData.txId && (
+                    <div className="break-all"><strong>TxID:</strong> {receiptData.txId}</div>
+                  )}
+                </div>
+
+                <div className="border-t border-dashed border-slate-200 pt-3 text-center text-[9px] text-slate-500 space-y-1">
+                  <p>VAGA CONFIRMADA E HOMOLOGADA PELO SFPC</p>
+                  <p>Código Verificador: GG-REG-{receiptData.regId.slice(0, 8).toUpperCase()}</p>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setIsReceiptOpen(false)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-semibold text-xs transition cursor-pointer"
+                >
+                  Fechar
+                </button>
+                <button
+                  onClick={() => {
+                    const printContent = document.getElementById('printable-receipt')?.innerHTML;
+                    const originalContent = document.body.innerHTML;
+                    if (printContent) {
+                      document.body.innerHTML = `<div style="font-family: monospace; padding: 20px; max-width: 400px; margin: auto;">${printContent}</div>`;
+                      window.print();
+                      document.body.innerHTML = originalContent;
+                      window.location.reload();
+                    }
+                  }}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold text-xs transition flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Imprimir
+                </button>
+              </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
