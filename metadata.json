@@ -1,0 +1,6 @@
+{
+  "name": "G&G Competições",
+  "description": "Plataforma de rede social e painel administrativo para controle de filiação, inscrições, campeonatos e resultados do clube de tiro G&G Competições.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
