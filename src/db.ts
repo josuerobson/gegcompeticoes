@@ -138,8 +138,10 @@ export async function initDB() {
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
           [u.id, u.email, u.username, u.fullName, u.avatarUrl, u.bio, u.crNumber || null, u.isClubMember, u.memberSince || null, u.role, u.hasPaidSignature, u.signatureExpiry || null]
         );
+      }
 
-        // Seed follows (if they have followers/following)
+      // Seed follows (after all users exist in the users table)
+      for (const u of defaultUsers) {
         for (const folId of u.following) {
           if (defaultUsers.some(user => user.id === folId)) {
             await client.query(
