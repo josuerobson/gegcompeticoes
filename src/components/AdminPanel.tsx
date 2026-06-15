@@ -23,6 +23,15 @@ interface AdminPanelProps {
     modalities: string[];
     stagesCount: number;
   }) => Promise<void>;
+  onUpdateChampionship?: (id: string, data: {
+    title: string;
+    description: string;
+    startDate: string;
+    endDate: string;
+    registrationFee: number;
+    modalities: string[];
+    stagesCount: number;
+  }) => Promise<void>;
   onRecordScore: (data: {
     championshipId: string;
     registrationId: string;
@@ -40,6 +49,7 @@ export default function AdminPanel({
   stageScores,
   users,
   onCreateChampionship,
+  onUpdateChampionship,
   onRecordScore,
   onToggleAdminDemo
 }: AdminPanelProps) {
@@ -74,6 +84,17 @@ export default function AdminPanel({
   const [selectedMods, setSelectedMods] = useState<string[]>(['IPSC Handgun Standard']);
   const [champStages, setChampStages] = useState(4);
   const [createSuccess, setCreateSuccess] = useState(false);
+
+  // Edit championship state (functional)
+  const [editingChampId, setEditingChampId] = useState<string | null>(null);
+  const [editChampTitle, setEditChampTitle] = useState('');
+  const [editChampDesc, setEditChampDesc] = useState('');
+  const [editChampStart, setEditChampStart] = useState('');
+  const [editChampEnd, setEditChampEnd] = useState('');
+  const [editChampFee, setEditChampFee] = useState(120);
+  const [editSelectedMods, setEditSelectedMods] = useState<string[]>([]);
+  const [editChampStages, setEditChampStages] = useState(4);
+  const [editSuccess, setEditSuccess] = useState(false);
 
   // Score recording state (functional)
   const [selectedChampId, setSelectedChampId] = useState(championships[0]?.id || '');
@@ -131,6 +152,36 @@ export default function AdminPanel({
     setChampTitle('');
     setChampDesc('');
     setTimeout(() => setCreateSuccess(false), 3000);
+  };
+
+  const handleUpdateChamp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingChampId || !editChampTitle || !editChampDesc || editSelectedMods.length === 0 || !onUpdateChampionship) return;
+
+    await onUpdateChampionship(editingChampId, {
+      title: editChampTitle,
+      description: editChampDesc,
+      startDate: editChampStart,
+      endDate: editChampEnd,
+      registrationFee: Number(editChampFee),
+      modalities: editSelectedMods,
+      stagesCount: Number(editChampStages)
+    });
+
+    setEditSuccess(true);
+    setEditingChampId(null);
+    setTimeout(() => setEditSuccess(false), 3000);
+  };
+
+  const startEditingChamp = (champ: Championship) => {
+    setEditingChampId(champ.id);
+    setEditChampTitle(champ.title);
+    setEditChampDesc(champ.description);
+    setEditChampStart(champ.startDate.split('T')[0]);
+    setEditChampEnd(champ.endDate.split('T')[0]);
+    setEditChampFee(champ.registrationFee);
+    setEditSelectedMods(champ.modalities);
+    setEditChampStages(champ.stagesCount);
   };
 
   const handleRecordScoreSubmit = async (e: React.FormEvent) => {
@@ -994,127 +1045,317 @@ export default function AdminPanel({
 
       case 'novo_campeonato':
         return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-            <h3 className="font-display font-bold text-slate-900 text-lg mb-4 flex items-center gap-2">
-              <PlusCircle className="w-5 h-5 text-blue-600" />
-              Configurar Novo Campeonato
-            </h3>
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs text-slate-800">
+              {editingChampId ? (
+                <>
+                  <h3 className="font-display font-bold text-slate-900 text-lg mb-4 flex items-center gap-2">
+                    <Settings className="w-5 h-5 text-amber-500 animate-spin-slow" />
+                    Editar Campeonato: <span className="text-blue-600">{editChampTitle}</span>
+                  </h3>
 
-            {createSuccess && (
-              <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 mb-4 text-xs">
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
-                Campeonato anunciado com sucesso no clube G&G Competições!
+                  {editSuccess && (
+                    <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 mb-4 text-xs font-semibold">
+                      <CheckCircle className="w-5 h-5 text-emerald-600" />
+                      Campeonato atualizado com sucesso no banco de dados!
+                    </div>
+                  )}
+
+                  <form onSubmit={handleUpdateChamp} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Nome do Circuito / Competição</label>
+                        <input
+                          type="text"
+                          required
+                          value={editChampTitle}
+                          onChange={(e) => setEditChampTitle(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
+                        />
+                      </div>
+
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Regras & Descrição Oficial do Torneio</label>
+                        <textarea
+                          rows={3}
+                          required
+                          value={editChampDesc}
+                          onChange={(e) => setEditChampDesc(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Data Inicial</label>
+                        <input
+                          type="date"
+                          required
+                          value={editChampStart}
+                          onChange={(e) => setEditChampStart(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Data Limite / Final</label>
+                        <input
+                          type="date"
+                          required
+                          value={editChampEnd}
+                          onChange={(e) => setEditChampEnd(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Taxa de Homologação (R$)</label>
+                        <input
+                          type="number"
+                          required
+                          value={editChampFee}
+                          onChange={(e) => setEditChampFee(Number(e.target.value))}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-mono"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Quantidade Estágios (Stages)</label>
+                        <input
+                          type="number"
+                          required
+                          min={1}
+                          max={10}
+                          value={editChampStages}
+                          onChange={(e) => setEditChampStages(Number(e.target.value))}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                        />
+                      </div>
+
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Injetar Estágio / Modalidade Ativa</label>
+                        <div className="flex flex-wrap gap-2">
+                          {['IPSC Handgun Standard', 'IPSC Handgun Production', 'Carabina Mira Aberta 10m', 'Trap Americano Sênior'].map((dis, i) => {
+                            const isSel = editSelectedMods.includes(dis);
+                            return (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => {
+                                  if (isSel) {
+                                    setEditSelectedMods(editSelectedMods.filter(m => m !== dis));
+                                  } else {
+                                    setEditSelectedMods([...editSelectedMods, dis]);
+                                  }
+                                }}
+                                className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${isSel ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650'}`}
+                              >
+                                {dis}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-100 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingChampId(null)}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-5 py-3 rounded-xl font-bold transition cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        className="bg-amber-500 hover:bg-amber-600 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg cursor-pointer"
+                      >
+                        Salvar Alterações
+                      </button>
+                    </div>
+                  </form>
+                </>
+              ) : (
+                <>
+                  <h3 className="font-display font-bold text-slate-900 text-lg mb-4 flex items-center gap-2">
+                    <PlusCircle className="w-5 h-5 text-blue-600" />
+                    Configurar Novo Campeonato
+                  </h3>
+
+                  {createSuccess && (
+                    <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 mb-4 text-xs font-semibold">
+                      <CheckCircle className="w-5 h-5 text-emerald-600" />
+                      Campeonato anunciado com sucesso no clube G&G Competições!
+                    </div>
+                  )}
+
+                  {editSuccess && (
+                    <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 mb-4 text-xs font-semibold">
+                      <CheckCircle className="w-5 h-5 text-emerald-600" />
+                      Campeonato atualizado com sucesso!
+                    </div>
+                  )}
+
+                  <form onSubmit={handleCreateChamp} className="space-y-4 text-slate-850">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Nome do Circuito / Competição</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ex: II Torneio G&G de Precisão e Canos Longos"
+                          value={champTitle}
+                          onChange={(e) => setChampTitle(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                        />
+                      </div>
+
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Regras & Descrição Oficial do Torneio</label>
+                        <textarea
+                          rows={3}
+                          required
+                          placeholder="Especifique as categorias permitidas, as premiações das etapas e os critérios de desempate técnicos..."
+                          value={champDesc}
+                          onChange={(e) => setChampDesc(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Data Inicial</label>
+                        <input
+                          type="date"
+                          required
+                          value={champStart}
+                          onChange={(e) => setChampStart(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Data Limite / Final</label>
+                        <input
+                          type="date"
+                          required
+                          value={champEnd}
+                          onChange={(e) => setChampEnd(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Taxa de Homologação (R$)</label>
+                        <input
+                          type="number"
+                          required
+                          value={champFee}
+                          onChange={(e) => setChampFee(Number(e.target.value))}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-mono"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Quantidade Estágios (Stages)</label>
+                        <input
+                          type="number"
+                          required
+                          min={1}
+                          max={10}
+                          value={champStages}
+                          onChange={(e) => setChampStages(Number(e.target.value))}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                        />
+                      </div>
+
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Injetar Estágio / Modalidade Ativa</label>
+                        <div className="flex flex-wrap gap-2">
+                          {['IPSC Handgun Standard', 'IPSC Handgun Production', 'Carabina Mira Aberta 10m', 'Trap Americano Sênior'].map((dis, i) => {
+                            const isSel = selectedMods.includes(dis);
+                            return (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => {
+                                  if (isSel) {
+                                    setSelectedMods(selectedMods.filter(m => m !== dis));
+                                  } else {
+                                    setSelectedMods([...selectedMods, dis]);
+                                  }
+                                }}
+                                className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${isSel ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650'}`}
+                              >
+                                {dis}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-100 flex justify-end">
+                      <button
+                        type="submit"
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg cursor-pointer"
+                      >
+                        Publicar Campeonato
+                      </button>
+                    </div>
+                  </form>
+                </>
+              )}
+            </div>
+
+            {/* List of Championships to select for Edit */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs text-slate-800">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+                <div>
+                  <h3 className="font-display font-bold text-slate-900 text-base">Campeonatos Cadastrados para Edição</h3>
+                  <p className="text-xs text-slate-400">Gerencie e altere dados das competições abaixo.</p>
+                </div>
+                <Trophy className="w-5 h-5 text-blue-600" />
               </div>
-            )}
 
-            <form onSubmit={handleCreateChamp} className="space-y-4 text-slate-850">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Nome do Circuito / Competição</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: II Torneio G&G de Precisão e Canos Longos"
-                    value={champTitle}
-                    onChange={(e) => setChampTitle(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                  />
-                </div>
-
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Regras & Descrição Oficial do Torneio</label>
-                  <textarea
-                    rows={3}
-                    required
-                    placeholder="Especifique as categorias permitidas, as premiações das etapas e os critérios de desempate técnicos..."
-                    value={champDesc}
-                    onChange={(e) => setChampDesc(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Data Inicial</label>
-                  <input
-                    type="date"
-                    required
-                    value={champStart}
-                    onChange={(e) => setChampStart(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Data Limite / Final</label>
-                  <input
-                    type="date"
-                    required
-                    value={champEnd}
-                    onChange={(e) => setChampEnd(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Taxa de Homologação (R$)</label>
-                  <input
-                    type="number"
-                    required
-                    value={champFee}
-                    onChange={(e) => setChampFee(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Quantidade Estágios (Stages)</label>
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    max={10}
-                    value={champStages}
-                    onChange={(e) => setChampStages(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                  />
-                </div>
-
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Injetar Estágio / Modalidade Ativa</label>
-                  <div className="flex flex-wrap gap-2">
-                    {['IPSC Handgun Standard', 'IPSC Handgun Production', 'Carabina Mira Aberta 10m', 'Trap Americano Sênior'].map((dis, i) => {
-                      const isSel = selectedMods.includes(dis);
-                      return (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => {
-                            if (isSel) {
-                              setSelectedMods(selectedMods.filter(m => m !== dis));
-                            } else {
-                              setSelectedMods([...selectedMods, dis]);
-                            }
-                          }}
-                          className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${isSel ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650'}`}
-                        >
-                          {dis}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
+                      <th className="py-3 px-2">Campeonato</th>
+                      <th className="py-3 px-2">Período</th>
+                      <th className="py-3 px-2 text-center">Etapas</th>
+                      <th className="py-3 px-2 text-right">Inscrição</th>
+                      <th className="py-3 px-2 text-center">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {championships.map((champ) => (
+                      <tr key={champ.id} className="hover:bg-slate-50/50">
+                        <td className="py-3 px-2">
+                          <span className="font-bold text-slate-800 block">{champ.title}</span>
+                          <span className="text-[10px] text-slate-450 block truncate max-w-[280px]">{champ.description}</span>
+                        </td>
+                        <td className="py-3 px-2 font-mono text-slate-600">
+                          {new Date(champ.startDate).toLocaleDateString()} - {new Date(champ.endDate).toLocaleDateString()}
+                        </td>
+                        <td className="py-3 px-2 text-center font-bold font-mono">{champ.stagesCount}</td>
+                        <td className="py-3 px-2 text-right font-bold font-mono text-slate-850">R$ {champ.registrationFee}</td>
+                        <td className="py-3 px-2 text-center">
+                          <button
+                            onClick={() => startEditingChamp(champ)}
+                            className="bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-[10px] px-3 py-1.5 rounded-xl transition inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Settings className="w-3.5 h-3.5" />
+                            Editar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-
-              <div className="pt-4 border-t border-slate-100 flex justify-end">
-                <button
-                  type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg cursor-pointer"
-                >
-                  Publicar Campeonato
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
         );
 

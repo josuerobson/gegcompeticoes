@@ -528,6 +528,43 @@ app.post('/api/championships/:id/status', requireAdmin, async (req, res) => {
   }
 });
 
+app.put('/api/championships/:id', requireAdmin, async (req, res) => {
+  const champId = req.params.id;
+  const { title, description, startDate, endDate, registrationFee, modalities, stagesCount } = req.body;
+
+  if (!title || !description || !registrationFee || !modalities || !stagesCount) {
+    return res.status(400).json({ error: 'Preencha todos os campos obrigatórios.' });
+  }
+
+  try {
+    const champRes = await pool.query('SELECT * FROM championships WHERE id = $1', [champId]);
+    if (champRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Campeonato não encontrado.' });
+    }
+
+    await pool.query(
+      `UPDATE championships
+       SET title = $1, description = $2, start_date = $3, end_date = $4, registration_fee = $5, modalities = $6, stages_count = $7
+       WHERE id = $8`,
+      [
+        title,
+        description,
+        startDate,
+        endDate,
+        Number(registrationFee),
+        JSON.stringify(Array.isArray(modalities) ? modalities : [modalities]),
+        Number(stagesCount),
+        champId
+      ]
+    );
+
+    res.json({ success: true, message: 'Campeonato atualizado com sucesso.' });
+  } catch (err) {
+    console.error('Update championship database error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar campeonato.' });
+  }
+});
+
 // 5. Registration & Payments
 app.get('/api/registrations', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;

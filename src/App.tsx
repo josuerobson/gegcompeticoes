@@ -298,6 +298,34 @@ export default function App() {
     }
   };
 
+  const handleUpdateChampionshipAdmin = async (id: string, data: {
+    title: string;
+    description: string;
+    startDate: string;
+    endDate: string;
+    registrationFee: number;
+    modalities: string[];
+    stagesCount: number;
+  }) => {
+    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentUser) {
+      authHeaders['x-user-id'] = currentUser.id;
+    }
+
+    try {
+      const res = await fetch(`/api/championships/${id}`, {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify(data)
+      });
+      if (res.ok) {
+        await syncWithBackend();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleRecordScoreAdmin = async (data: {
     championshipId: string;
     registrationId: string;
@@ -897,6 +925,7 @@ export default function App() {
               stageScores={stageScores}
               users={users}
               onCreateChampionship={handleCreateChampionshipAdmin}
+              onUpdateChampionship={handleUpdateChampionshipAdmin}
               onRecordScore={handleRecordScoreAdmin}
               onToggleAdminDemo={handleToggleAdminDemo}
             />
