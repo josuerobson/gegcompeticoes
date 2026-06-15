@@ -8,6 +8,16 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
+const GALLERY_IMAGES = [
+  { id: 'ipsc_range', label: 'Estande IPSC', url: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80" },
+  { id: 'precision_rifle', label: 'Carabina Precisão', url: "https://images.unsplash.com/photo-1599819811279-d5ad9cccf838?w=800&auto=format&fit=crop&q=80" },
+  { id: 'paper_target', label: 'Alvo de Papel', url: "https://images.unsplash.com/photo-1605330372990-281b504cc2c4?w=800&auto=format&fit=crop&q=80" },
+  { id: 'pistol_grip', label: 'Empunhadura', url: "https://images.unsplash.com/photo-1569584312214-362c37aed31c?w=800&auto=format&fit=crop&q=80" },
+  { id: 'clay_trap', label: 'Tiro ao Prato', url: "https://images.unsplash.com/photo-1511919884226-fd3cad34687c?w=800&auto=format&fit=crop&q=80" },
+  { id: 'trophies', label: 'Troféus G&G', url: "https://images.unsplash.com/photo-1578269174936-2709b5a5c0e5?w=800&auto=format&fit=crop&q=80" },
+  { id: 'range_glasses', label: 'Equipamentos', url: "https://images.unsplash.com/photo-1517466787929-bc90951d0974?w=800&auto=format&fit=crop&q=80" }
+];
+
 interface AdminPanelProps {
   currentUser: User | null;
   championships: Championship[];
@@ -86,6 +96,7 @@ export default function AdminPanel({
   const [selectedMods, setSelectedMods] = useState<string[]>(['IPSC Handgun Standard']);
   const [champStages, setChampStages] = useState(4);
   const [champBanner, setChampBanner] = useState('');
+  const [champImageSourceMode, setChampImageSourceMode] = useState<'url' | 'upload' | 'gallery'>('gallery');
   const [createSuccess, setCreateSuccess] = useState(false);
 
   // Edit championship state (functional)
@@ -98,6 +109,7 @@ export default function AdminPanel({
   const [editSelectedMods, setEditSelectedMods] = useState<string[]>([]);
   const [editChampStages, setEditChampStages] = useState(4);
   const [editChampBanner, setEditChampBanner] = useState('');
+  const [editChampImageSourceMode, setEditChampImageSourceMode] = useState<'url' | 'upload' | 'gallery'>('gallery');
   const [editSuccess, setEditSuccess] = useState(false);
 
   // Score recording state (functional)
@@ -1165,15 +1177,80 @@ export default function AdminPanel({
                         </div>
                       </div>
 
-                      <div className="space-y-1 sm:col-span-2">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">URL da Imagem do Banner</label>
-                        <input
-                          type="text"
-                          value={editChampBanner}
-                          onChange={(e) => setEditChampBanner(e.target.value)}
-                          placeholder="Ex: https://images.unsplash.com/photo-..."
-                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                        />
+                      <div className="space-y-2 sm:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Imagem de Capa (Banner)</label>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditChampImageSourceMode('gallery')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${editChampImageSourceMode === 'gallery' ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650 hover:bg-slate-100'}`}
+                          >
+                            Galeria G&G
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditChampImageSourceMode('upload')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${editChampImageSourceMode === 'upload' ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650 hover:bg-slate-100'}`}
+                          >
+                            Upload de Imagem
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditChampImageSourceMode('url')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${editChampImageSourceMode === 'url' ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650 hover:bg-slate-100'}`}
+                          >
+                            URL Externa
+                          </button>
+                        </div>
+
+                        {editChampImageSourceMode === 'gallery' && (
+                          <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-3">
+                            {GALLERY_IMAGES.map((img) => (
+                              <button
+                                key={img.id}
+                                type="button"
+                                onClick={() => setEditChampBanner(img.url)}
+                                className={`relative rounded-lg overflow-hidden border-2 h-14 bg-slate-100 transition cursor-pointer ${editChampBanner === img.url ? 'border-blue-600 scale-95 shadow-xs' : 'border-transparent hover:border-slate-300'}`}
+                              >
+                                <img src={img.url} alt={img.label} className="w-full h-full object-cover" />
+                                <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-white text-[7px] truncate px-1 py-0.5 text-center font-semibold">
+                                  {img.label}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {editChampImageSourceMode === 'upload' && (
+                          <div className="mb-3">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    setEditChampBanner(reader.result as string);
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                              className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                            />
+                          </div>
+                        )}
+
+                        {editChampImageSourceMode === 'url' && (
+                          <input
+                            type="text"
+                            value={editChampBanner}
+                            onChange={(e) => setEditChampBanner(e.target.value)}
+                            placeholder="Ex: https://images.unsplash.com/photo-..."
+                            className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                          />
+                        )}
+
                         {editChampBanner && (
                           <div className="mt-2 relative rounded-xl overflow-hidden border border-slate-200 h-28 bg-slate-50">
                             <img
@@ -1184,7 +1261,7 @@ export default function AdminPanel({
                                 (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80';
                               }}
                             />
-                            <div className="absolute top-2 left-2 bg-slate-905/70 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase">
+                            <div className="absolute top-2 left-2 bg-slate-905/70 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase font-sans">
                               Imagem do Campeonato
                             </div>
                           </div>
@@ -1328,15 +1405,80 @@ export default function AdminPanel({
                         </div>
                       </div>
 
-                      <div className="space-y-1 sm:col-span-2">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">URL da Imagem do Banner (Opcional)</label>
-                        <input
-                          type="text"
-                          value={champBanner}
-                          onChange={(e) => setChampBanner(e.target.value)}
-                          placeholder="Ex: https://images.unsplash.com/photo-..."
-                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                        />
+                      <div className="space-y-2 sm:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Imagem de Capa (Banner)</label>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          <button
+                            type="button"
+                            onClick={() => setChampImageSourceMode('gallery')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${champImageSourceMode === 'gallery' ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650 hover:bg-slate-100'}`}
+                          >
+                            Galeria G&G
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setChampImageSourceMode('upload')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${champImageSourceMode === 'upload' ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650 hover:bg-slate-100'}`}
+                          >
+                            Upload de Imagem
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setChampImageSourceMode('url')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${champImageSourceMode === 'url' ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650 hover:bg-slate-100'}`}
+                          >
+                            URL Externa
+                          </button>
+                        </div>
+
+                        {champImageSourceMode === 'gallery' && (
+                          <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-3">
+                            {GALLERY_IMAGES.map((img) => (
+                              <button
+                                key={img.id}
+                                type="button"
+                                onClick={() => setChampBanner(img.url)}
+                                className={`relative rounded-lg overflow-hidden border-2 h-14 bg-slate-100 transition cursor-pointer ${champBanner === img.url ? 'border-blue-600 scale-95 shadow-xs' : 'border-transparent hover:border-slate-300'}`}
+                              >
+                                <img src={img.url} alt={img.label} className="w-full h-full object-cover" />
+                                <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-white text-[7px] truncate px-1 py-0.5 text-center font-semibold">
+                                  {img.label}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {champImageSourceMode === 'upload' && (
+                          <div className="mb-3">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    setChampBanner(reader.result as string);
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                              className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                            />
+                          </div>
+                        )}
+
+                        {champImageSourceMode === 'url' && (
+                          <input
+                            type="text"
+                            value={champBanner}
+                            onChange={(e) => setChampBanner(e.target.value)}
+                            placeholder="Ex: https://images.unsplash.com/photo-..."
+                            className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                          />
+                        )}
+
                         {champBanner && (
                           <div className="mt-2 relative rounded-xl overflow-hidden border border-slate-200 h-28 bg-slate-50">
                             <img
@@ -1347,7 +1489,7 @@ export default function AdminPanel({
                                 (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80';
                               }}
                             />
-                            <div className="absolute top-2 left-2 bg-slate-905/70 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase">
+                            <div className="absolute top-2 left-2 bg-slate-905/70 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase font-sans">
                               Imagem do Campeonato
                             </div>
                           </div>
