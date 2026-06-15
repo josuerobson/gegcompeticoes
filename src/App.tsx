@@ -278,6 +278,7 @@ export default function App() {
     registrationFee: number;
     modalities: string[];
     stagesCount: number;
+    bannerUrl?: string;
   }) => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {
@@ -306,6 +307,7 @@ export default function App() {
     registrationFee: number;
     modalities: string[];
     stagesCount: number;
+    bannerUrl?: string;
   }) => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {

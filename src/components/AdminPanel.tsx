@@ -22,6 +22,7 @@ interface AdminPanelProps {
     registrationFee: number;
     modalities: string[];
     stagesCount: number;
+    bannerUrl?: string;
   }) => Promise<void>;
   onUpdateChampionship?: (id: string, data: {
     title: string;
@@ -31,6 +32,7 @@ interface AdminPanelProps {
     registrationFee: number;
     modalities: string[];
     stagesCount: number;
+    bannerUrl?: string;
   }) => Promise<void>;
   onRecordScore: (data: {
     championshipId: string;
@@ -83,6 +85,7 @@ export default function AdminPanel({
   const [champFee, setChampFee] = useState(120);
   const [selectedMods, setSelectedMods] = useState<string[]>(['IPSC Handgun Standard']);
   const [champStages, setChampStages] = useState(4);
+  const [champBanner, setChampBanner] = useState('');
   const [createSuccess, setCreateSuccess] = useState(false);
 
   // Edit championship state (functional)
@@ -94,6 +97,7 @@ export default function AdminPanel({
   const [editChampFee, setEditChampFee] = useState(120);
   const [editSelectedMods, setEditSelectedMods] = useState<string[]>([]);
   const [editChampStages, setEditChampStages] = useState(4);
+  const [editChampBanner, setEditChampBanner] = useState('');
   const [editSuccess, setEditSuccess] = useState(false);
 
   // Score recording state (functional)
@@ -145,12 +149,14 @@ export default function AdminPanel({
       endDate: champEnd,
       registrationFee: Number(champFee),
       modalities: selectedMods,
-      stagesCount: Number(champStages)
+      stagesCount: Number(champStages),
+      bannerUrl: champBanner || undefined
     });
 
     setCreateSuccess(true);
     setChampTitle('');
     setChampDesc('');
+    setChampBanner('');
     setTimeout(() => setCreateSuccess(false), 3000);
   };
 
@@ -165,11 +171,13 @@ export default function AdminPanel({
       endDate: editChampEnd,
       registrationFee: Number(editChampFee),
       modalities: editSelectedMods,
-      stagesCount: Number(editChampStages)
+      stagesCount: Number(editChampStages),
+      bannerUrl: editChampBanner || undefined
     });
 
     setEditSuccess(true);
     setEditingChampId(null);
+    setEditChampBanner('');
     setTimeout(() => setEditSuccess(false), 3000);
   };
 
@@ -182,6 +190,7 @@ export default function AdminPanel({
     setEditChampFee(champ.registrationFee);
     setEditSelectedMods(champ.modalities);
     setEditChampStages(champ.stagesCount);
+    setEditChampBanner(champ.bannerUrl || '');
   };
 
   const handleRecordScoreSubmit = async (e: React.FormEvent) => {
@@ -1156,6 +1165,32 @@ export default function AdminPanel({
                         </div>
                       </div>
 
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">URL da Imagem do Banner</label>
+                        <input
+                          type="text"
+                          value={editChampBanner}
+                          onChange={(e) => setEditChampBanner(e.target.value)}
+                          placeholder="Ex: https://images.unsplash.com/photo-..."
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                        />
+                        {editChampBanner && (
+                          <div className="mt-2 relative rounded-xl overflow-hidden border border-slate-200 h-28 bg-slate-50">
+                            <img
+                              src={editChampBanner}
+                              alt="Pré-visualização do Banner"
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80';
+                              }}
+                            />
+                            <div className="absolute top-2 left-2 bg-slate-905/70 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase">
+                              Imagem do Campeonato
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
                     </div>
 
                     <div className="pt-4 border-t border-slate-100 flex justify-end gap-2">
@@ -1293,6 +1328,32 @@ export default function AdminPanel({
                         </div>
                       </div>
 
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">URL da Imagem do Banner (Opcional)</label>
+                        <input
+                          type="text"
+                          value={champBanner}
+                          onChange={(e) => setChampBanner(e.target.value)}
+                          placeholder="Ex: https://images.unsplash.com/photo-..."
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                        />
+                        {champBanner && (
+                          <div className="mt-2 relative rounded-xl overflow-hidden border border-slate-200 h-28 bg-slate-50">
+                            <img
+                              src={champBanner}
+                              alt="Pré-visualização do Banner"
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80';
+                              }}
+                            />
+                            <div className="absolute top-2 left-2 bg-slate-905/70 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase">
+                              Imagem do Campeonato
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
                     </div>
 
                     <div className="pt-4 border-t border-slate-100 flex justify-end">
@@ -1332,9 +1393,19 @@ export default function AdminPanel({
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     {championships.map((champ) => (
                       <tr key={champ.id} className="hover:bg-slate-50/50">
-                        <td className="py-3 px-2">
-                          <span className="font-bold text-slate-800 block">{champ.title}</span>
-                          <span className="text-[10px] text-slate-450 block truncate max-w-[280px]">{champ.description}</span>
+                        <td className="py-3 px-2 flex items-center gap-3">
+                          <img
+                            src={champ.bannerUrl}
+                            alt=""
+                            className="w-12 h-8 rounded-lg object-cover border border-slate-200"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80';
+                            }}
+                          />
+                          <div>
+                            <span className="font-bold text-slate-800 block">{champ.title}</span>
+                            <span className="text-[10px] text-slate-450 block truncate max-w-[200px]">{champ.description}</span>
+                          </div>
                         </td>
                         <td className="py-3 px-2 font-mono text-slate-600">
                           {new Date(champ.startDate).toLocaleDateString()} - {new Date(champ.endDate).toLocaleDateString()}

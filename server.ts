@@ -456,7 +456,7 @@ app.get('/api/championships', async (req, res) => {
 });
 
 app.post('/api/championships', requireAdmin, async (req, res) => {
-  const { title, description, startDate, endDate, registrationFee, modalities, stagesCount } = req.body;
+  const { title, description, startDate, endDate, registrationFee, modalities, stagesCount, bannerUrl } = req.body;
 
   if (!title || !description || !registrationFee || !modalities || !stagesCount) {
     return res.status(400).json({ error: 'Preencha todos os campos obrigatórios do campeonato.' });
@@ -473,7 +473,7 @@ app.post('/api/championships', requireAdmin, async (req, res) => {
     stagesCount: Number(stagesCount),
     currentStage: 1,
     status: 'open',
-    bannerUrl: 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80'
+    bannerUrl: bannerUrl || 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80'
   };
 
   try {
@@ -530,7 +530,7 @@ app.post('/api/championships/:id/status', requireAdmin, async (req, res) => {
 
 app.put('/api/championships/:id', requireAdmin, async (req, res) => {
   const champId = req.params.id;
-  const { title, description, startDate, endDate, registrationFee, modalities, stagesCount } = req.body;
+  const { title, description, startDate, endDate, registrationFee, modalities, stagesCount, bannerUrl } = req.body;
 
   if (!title || !description || !registrationFee || !modalities || !stagesCount) {
     return res.status(400).json({ error: 'Preencha todos os campos obrigatórios.' });
@@ -542,10 +542,12 @@ app.put('/api/championships/:id', requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Campeonato não encontrado.' });
     }
 
+    const currentBanner = champRes.rows[0].banner_url;
+
     await pool.query(
       `UPDATE championships
-       SET title = $1, description = $2, start_date = $3, end_date = $4, registration_fee = $5, modalities = $6, stages_count = $7
-       WHERE id = $8`,
+       SET title = $1, description = $2, start_date = $3, end_date = $4, registration_fee = $5, modalities = $6, stages_count = $7, banner_url = $8
+       WHERE id = $9`,
       [
         title,
         description,
@@ -554,6 +556,7 @@ app.put('/api/championships/:id', requireAdmin, async (req, res) => {
         Number(registrationFee),
         JSON.stringify(Array.isArray(modalities) ? modalities : [modalities]),
         Number(stagesCount),
+        bannerUrl || currentBanner || 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80',
         champId
       ]
     );
