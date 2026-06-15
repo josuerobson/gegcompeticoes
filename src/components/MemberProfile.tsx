@@ -3,7 +3,7 @@ import { User, Post, Registration, StageScore, Championship } from '../types';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, Copy, LogOut, FileText, Trophy,
-  Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, Info, PlusCircle, X
+  Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronDown, Info, PlusCircle, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -121,6 +121,7 @@ export default function MemberProfile({
   // Tabs expanded
   type ProfileTabType = 'posts' | 'championships' | 'multi_championships' | 'my_registrations' | 'results' | 'certificates' | 'club_card' | 'gg_card' | 'trainings' | 'declarations' | 'ammo';
   const [profileTab, setProfileTab] = useState<ProfileTabType>('posts');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
   const [payingSign, setPayingSign] = useState(false);
@@ -557,27 +558,63 @@ export default function MemberProfile({
         {/* Right Column: Content viewport based on current tab */}
         <div className="space-y-6 md:col-span-2">
           
-          {/* MOBILE TAB CAROUSEL / HORIZONTAL SCROLL (Visible on Mobile) */}
-          <div className="md:hidden flex gap-2 overflow-x-auto pb-2 border-b border-slate-200 no-scrollbar">
-            {filteredMenuItems.map((item) => {
-              const Icon = item.icon;
-              const active = profileTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setProfileTab(item.id as ProfileTabType)}
-                  className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold transition duration-150 cursor-pointer ${active ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200'}`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{item.label.split(' ')[0]}</span>
-                  {item.count !== undefined && (
-                    <span className={`text-[9px] font-mono px-1 rounded ${active ? 'bg-blue-800 text-blue-100' : 'bg-slate-100 text-slate-500'}`}>
-                      {item.count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+          {/* MOBILE TAB DROPDOWN (Visible on Mobile) */}
+          <div className="md:hidden relative w-full mb-4 z-20">
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-white border border-slate-200 rounded-xl font-semibold text-xs text-slate-800 shadow-xs hover:bg-slate-50 transition cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const currentItem = filteredMenuItems.find(item => item.id === profileTab);
+                  if (currentItem) {
+                    const CurrentIcon = currentItem.icon;
+                    return (
+                      <>
+                        <CurrentIcon className="w-4 h-4 text-blue-600" />
+                        <span>{currentItem.label}</span>
+                        {currentItem.count !== undefined && (
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
+                            {currentItem.count}
+                          </span>
+                        )}
+                      </>
+                    );
+                  }
+                  return <span>Selecionar Serviço</span>;
+                })()}
+              </div>
+              <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${isMobileMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isMobileMenuOpen && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg z-30 overflow-hidden py-1">
+                {filteredMenuItems.map((item) => {
+                  const Icon = item.icon;
+                  const active = profileTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setProfileTab(item.id as ProfileTabType);
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-4 py-2.5 text-left text-xs font-semibold transition ${active ? 'bg-blue-50 text-blue-700 font-bold border-l-4 border-blue-600' : 'text-slate-650 hover:bg-slate-50'}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Icon className={`w-4 h-4 ${active ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <span>{item.label}</span>
+                      </div>
+                      {item.count !== undefined && (
+                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${active ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-650'}`}>
+                          {item.count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* 1. Posts Grid (Original tab) */}
