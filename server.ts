@@ -894,6 +894,40 @@ app.post('/api/users/signature', requireAuth, async (req, res) => {
   }
 });
 
+// 9. Site Settings
+app.get('/api/settings', async (req, res) => {
+  try {
+    const settingsRes = await pool.query('SELECT * FROM settings');
+    const settings: { [key: string]: string } = {};
+    settingsRes.rows.forEach(row => {
+      settings[row.key] = row.value;
+    });
+    res.json({ settings });
+  } catch (err) {
+    console.error('Fetch settings database error:', err);
+    res.status(500).json({ error: 'Erro ao buscar configurações.' });
+  }
+});
+
+app.post('/api/settings', requireAdmin, async (req, res) => {
+  const { key, value } = req.body;
+  if (!key || !value) {
+    return res.status(400).json({ error: 'Chave e valor são obrigatórios.' });
+  }
+
+  try {
+    await pool.query(
+      `INSERT INTO settings (key, value) VALUES ($1, $2)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [key, value]
+    );
+    res.json({ success: true, key, value });
+  } catch (err) {
+    console.error('Update setting database error:', err);
+    res.status(500).json({ error: 'Erro ao salvar configuração.' });
+  }
+});
+
 // ==========================================
 // VITE DEV SERVER AND PRODUCTION ASSET HANDLERS
 // ==========================================

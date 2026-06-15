@@ -121,11 +121,23 @@ export async function initDB() {
       );
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
+
     await client.query('COMMIT');
 
     // Seeding Check
     const userCountRes = await client.query('SELECT COUNT(*) FROM users');
     const userCount = parseInt(userCountRes.rows[0].count, 10);
+
+    const settingsCountRes = await client.query("SELECT COUNT(*) FROM settings WHERE key = 'default_image'");
+    if (parseInt(settingsCountRes.rows[0].count, 10) === 0) {
+      await client.query("INSERT INTO settings (key, value) VALUES ('default_image', 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80')");
+    }
 
     if (userCount === 0) {
       console.log('PostgreSQL database is empty. Seeding with mock data...');

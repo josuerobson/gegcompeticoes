@@ -18,6 +18,7 @@ interface MemberProfileProps {
   onPaySignature: () => Promise<void>;
   onLogout: () => void;
   onAddPost: (content: string, imageUrl?: string) => Promise<void>;
+  defaultImage?: string;
 }
 
 interface TrainingSession {
@@ -114,7 +115,8 @@ export default function MemberProfile({
   onToggleFollow,
   onPaySignature,
   onLogout,
-  onAddPost
+  onAddPost,
+  defaultImage
 }: MemberProfileProps) {
   // Tabs expanded
   type ProfileTabType = 'posts' | 'championships' | 'multi_championships' | 'my_registrations' | 'results' | 'certificates' | 'club_card' | 'gg_card' | 'trainings' | 'declarations' | 'ammo';
@@ -413,6 +415,10 @@ export default function MemberProfile({
                 alt={selectedUser.username}
                 className="w-full h-full object-cover rounded-full"
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                }}
               />
               {selectedUser.role === 'admin' && (
                 <div className="absolute bottom-1 right-1 bg-amber-500 text-white p-1 rounded-full border-2 border-white shadow-md">
@@ -643,10 +649,14 @@ export default function MemberProfile({
                       className="aspect-square bg-slate-100 rounded-xl overflow-hidden cursor-pointer smooth-shadow border border-slate-200 relative group"
                     >
                       <img
-                        src={post.imageUrl || "https://picsum.photos/seed/shoot/600/600"}
+                        src={post.imageUrl || defaultImage}
                         alt="Thumbnail"
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          if (defaultImage) e.currentTarget.src = defaultImage;
+                        }}
                       />
                       <div className="absolute inset-0 bg-blue-900/40 opacity-0 group-hover:opacity-100 transition duration-150 flex items-center justify-center gap-4 text-white text-xs font-bold font-mono">
                         <span>❤ {post.likes.length}</span>
@@ -676,7 +686,15 @@ export default function MemberProfile({
                   return (
                     <div key={champ.id} className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50 flex flex-col justify-between">
                       <div className="h-32 bg-slate-200 relative">
-                        <img src={champ.bannerUrl} alt={champ.title} className="w-full h-full object-cover" />
+                        <img
+                          src={champ.bannerUrl || defaultImage}
+                          alt={champ.title}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            if (defaultImage) e.currentTarget.src = defaultImage;
+                          }}
+                        />
                         <div className="absolute top-2 left-2 flex gap-1">
                           {isFinished ? (
                             <span className="bg-slate-900/80 text-white text-[9px] px-2 py-0.5 rounded font-bold uppercase">Finalizado</span>
@@ -1034,6 +1052,10 @@ export default function MemberProfile({
                       src={selectedUser.avatarUrl}
                       alt={selectedUser.username}
                       className="w-14 h-14 rounded-lg object-cover border border-slate-700 bg-slate-900"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                      }}
                     />
                     <div className="text-[10px] space-y-0.5 leading-tight">
                       <div className="font-bold text-white text-[11px] truncate w-[190px]">{selectedUser.fullName}</div>
@@ -1127,6 +1149,10 @@ export default function MemberProfile({
                       src={selectedUser.avatarUrl}
                       alt={selectedUser.username}
                       className="w-14 h-14 rounded-lg object-cover border-2 border-amber-500/40 bg-slate-900"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                      }}
                     />
                     <div className="text-[10px] space-y-0.5 leading-tight">
                       <div className="font-bold text-white text-[11px] truncate w-[190px]">{selectedUser.fullName}</div>
@@ -1696,17 +1722,30 @@ export default function MemberProfile({
             >
               <div className="sm:w-1/2 bg-slate-900 flex items-center justify-center">
                 <img
-                  src={selectedExpandPost.imageUrl || "https://picsum.photos/seed/shoot/600/600"}
+                  src={selectedExpandPost.imageUrl || defaultImage}
                   alt="Expanded target"
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    if (defaultImage) e.currentTarget.src = defaultImage;
+                  }}
                 />
               </div>
 
               <div className="p-4 sm:w-1/2 flex flex-col justify-between max-h-[85vh] overflow-y-auto">
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 border-b border-slate-50 pb-3">
-                    <img src={selectedExpandPost.userAvatar} alt="user" className="w-9 h-9 rounded-full object-cover" referrerPolicy="no-referrer" />
+                    <img
+                      src={selectedExpandPost.userAvatar}
+                      alt="user"
+                      className="w-9 h-9 rounded-full object-cover"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                      }}
+                    />
                     <span className="font-bold text-slate-900 text-xs">@{selectedExpandPost.username}</span>
                   </div>
 
@@ -1914,7 +1953,15 @@ export default function MemberProfile({
                     </div>
 
                     <div className="flex gap-3 items-center my-1">
-                      <img src={selectedUser.avatarUrl} alt="avatar" className="w-12 h-12 rounded object-cover border border-slate-700 bg-slate-900" />
+                      <img
+                        src={selectedUser.avatarUrl}
+                        alt="avatar"
+                        className="w-12 h-12 rounded object-cover border border-slate-700 bg-slate-900"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                        }}
+                      />
                       <div className="text-[9.5px] space-y-0.5 leading-tight">
                         <div className="font-bold text-white text-[10.5px] truncate w-[180px]">{printData.fullName}</div>
                         <div><span className="text-slate-450">CR nº:</span> <span className="text-white font-mono font-bold">{printData.crNumber}</span></div>
@@ -1971,7 +2018,15 @@ export default function MemberProfile({
                     </div>
 
                     <div className="flex gap-3 items-center my-1">
-                      <img src={selectedUser.avatarUrl} alt="avatar" className="w-12 h-12 rounded object-cover border-2 border-amber-500/40 bg-slate-900" />
+                      <img
+                        src={selectedUser.avatarUrl}
+                        alt="avatar"
+                        className="w-12 h-12 rounded object-cover border-2 border-amber-500/40 bg-slate-900"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                        }}
+                      />
                       <div className="text-[9.5px] space-y-0.5 leading-tight">
                         <div className="font-bold text-white text-[10.5px] truncate w-[180px]">{printData.fullName}</div>
                         <div><span className="text-slate-400">CR nº:</span> <span className="text-white font-mono font-bold">{printData.crNumber}</span></div>

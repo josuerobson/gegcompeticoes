@@ -52,6 +52,8 @@ interface AdminPanelProps {
     timeSeconds?: number;
   }) => Promise<void>;
   onToggleAdminDemo: () => void;
+  settings?: { [key: string]: string };
+  onSaveSetting?: (key: string, value: string) => Promise<void>;
 }
 
 export default function AdminPanel({
@@ -63,7 +65,9 @@ export default function AdminPanel({
   onCreateChampionship,
   onUpdateChampionship,
   onRecordScore,
-  onToggleAdminDemo
+  onToggleAdminDemo,
+  settings = {},
+  onSaveSetting
 }: AdminPanelProps) {
   // Main tabs: 'clube' | 'plataforma'
   const [mainTab, setMainTab] = useState<'clube' | 'plataforma'>('clube');
@@ -111,6 +115,17 @@ export default function AdminPanel({
   const [editChampBanner, setEditChampBanner] = useState('');
   const [editChampImageSourceMode, setEditChampImageSourceMode] = useState<'url' | 'upload' | 'gallery'>('gallery');
   const [editSuccess, setEditSuccess] = useState(false);
+
+  // Default image settings state (functional)
+  const [defaultImageSourceMode, setDefaultImageSourceMode] = useState<'url' | 'upload' | 'gallery'>('gallery');
+  const [newDefaultImage, setNewDefaultImage] = useState(settings.default_image || '');
+  const [defaultImageSuccess, setDefaultImageSuccess] = useState(false);
+
+  React.useEffect(() => {
+    if (settings.default_image) {
+      setNewDefaultImage(settings.default_image);
+    }
+  }, [settings.default_image]);
 
   // Score recording state (functional)
   const [selectedChampId, setSelectedChampId] = useState(championships[0]?.id || '');
@@ -192,6 +207,16 @@ export default function AdminPanel({
     setEditChampBanner('');
     setTimeout(() => setEditSuccess(false), 3000);
   };
+
+  const handleSaveDefaultImage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDefaultImage || !onSaveSetting) return;
+
+    await onSaveSetting('default_image', newDefaultImage);
+    setDefaultImageSuccess(true);
+    setTimeout(() => setDefaultImageSuccess(false), 3000);
+  };
+
 
   const startEditingChamp = (champ: Championship) => {
     setEditingChampId(champ.id);
@@ -1782,6 +1807,127 @@ export default function AdminPanel({
           </div>
         );
 
+      case 'imagem_padrao':
+        return (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="font-display font-bold text-slate-900 text-base">Configurar Imagem Padrão</h3>
+                <p className="text-xs text-slate-400">Esta imagem será exibida em posts, campeonatos e outros conteúdos que não possuírem imagem ou quando o link da imagem estiver quebrado.</p>
+              </div>
+              <Settings className="w-5 h-5 text-blue-600 animate-spin-slow" />
+            </div>
+
+            {defaultImageSuccess && (
+              <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 mb-4 text-xs font-semibold">
+                <CheckCircle className="w-5 h-5 text-emerald-600" />
+                Imagem padrão atualizada com sucesso no banco de dados!
+              </div>
+            )}
+
+            <form onSubmit={handleSaveDefaultImage} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase block">Origem da Imagem Padrão</label>
+                <div className="flex gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setDefaultImageSourceMode('gallery')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${defaultImageSourceMode === 'gallery' ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650 hover:bg-slate-100'}`}
+                  >
+                    Galeria G&G
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDefaultImageSourceMode('upload')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${defaultImageSourceMode === 'upload' ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650 hover:bg-slate-100'}`}
+                  >
+                    Upload de Imagem
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDefaultImageSourceMode('url')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${defaultImageSourceMode === 'url' ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650 hover:bg-slate-100'}`}
+                  >
+                    URL Externa
+                  </button>
+                </div>
+
+                {defaultImageSourceMode === 'gallery' && (
+                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-3">
+                    {GALLERY_IMAGES.map((img) => (
+                      <button
+                        key={img.id}
+                        type="button"
+                        onClick={() => setNewDefaultImage(img.url)}
+                        className={`relative rounded-lg overflow-hidden border-2 h-14 bg-slate-100 transition cursor-pointer ${newDefaultImage === img.url ? 'border-blue-600 scale-95 shadow-xs' : 'border-transparent hover:border-slate-300'}`}
+                      >
+                        <img src={img.url} alt={img.label} className="w-full h-full object-cover" />
+                        <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-white text-[7px] truncate px-1 py-0.5 text-center font-semibold">
+                          {img.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {defaultImageSourceMode === 'upload' && (
+                  <div className="mb-3">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setNewDefaultImage(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                    />
+                  </div>
+                )}
+
+                {defaultImageSourceMode === 'url' && (
+                  <input
+                    type="url"
+                    value={newDefaultImage}
+                    onChange={(e) => setNewDefaultImage(e.target.value)}
+                    placeholder="Cole a URL direta da imagem padrão (ex: https://images.unsplash.com/...)"
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-mono"
+                  />
+                )}
+              </div>
+
+              {newDefaultImage && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Pré-visualização</label>
+                  <div className="relative h-44 bg-slate-100 rounded-xl overflow-hidden border border-slate-200">
+                    <img
+                      src={newDefaultImage}
+                      alt="Pré-visualização da imagem padrão"
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-3 border-t border-slate-100">
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg shadow-blue-100 cursor-pointer"
+                >
+                  Salvar Imagem Padrão
+                </button>
+              </div>
+            </form>
+          </div>
+        );
+
+
       default:
         return (
           <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-400 shadow-xs">
@@ -1974,6 +2120,8 @@ export default function AdminPanel({
                     <button onClick={() => setPlataformaMenu('banners_paginas')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'banners_paginas' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Banners Paginas</button>
                     <button onClick={() => setPlataformaMenu('patrocinadores')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'patrocinadores' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Patrocinadores</button>
                     <button onClick={() => setPlataformaMenu('videos_destaque')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'videos_destaque' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Vídeos Destaque</button>
+                    <button onClick={() => setPlataformaMenu('imagem_padrao')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'imagem_padrao' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Imagem padrão</button>
+
                   </div>
                 )}
               </div>

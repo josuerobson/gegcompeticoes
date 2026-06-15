@@ -12,6 +12,7 @@ interface ChampionshipsProps {
   globalRankings: RankingItem[];
   onSelectModalityRanking: (modality: string) => void;
   selectedRankingModality: string;
+  defaultImage?: string;
 }
 
 export default function ChampionshipsView({
@@ -22,7 +23,8 @@ export default function ChampionshipsView({
   onRegister,
   globalRankings,
   onSelectModalityRanking,
-  selectedRankingModality
+  selectedRankingModality,
+  defaultImage
 }: ChampionshipsProps) {
   // Navigation states
   const [activeTab, setActiveTab] = useState<'tournaments' | 'rankings' | 'certificates'>('tournaments');
@@ -212,6 +214,10 @@ export default function ChampionshipsView({
                   alt="Founder signature placeholder"
                   className="w-10 h-10 object-cover rounded-full mx-auto opacity-75 ring-2 ring-slate-100 mb-2"
                   referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                  }}
                 />
                 <div className="w-40 h-px bg-slate-300 mx-auto mt-2"></div>
                 <p className="font-bold text-slate-800 mt-1">Guilherme Guedes</p>
@@ -224,6 +230,10 @@ export default function ChampionshipsView({
                   alt="Founder signature placeholder"
                   className="w-10 h-10 object-cover rounded-full mx-auto opacity-75 ring-2 ring-slate-100 mb-2"
                   referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                  }}
                 />
                 <div className="w-40 h-px bg-slate-300 mx-auto mt-2"></div>
                 <p className="font-bold text-slate-800 mt-1">Gabriel G&G</p>
@@ -261,10 +271,14 @@ export default function ChampionshipsView({
                     {/* Banner Image */}
                     <div className="h-44 bg-slate-100 relative">
                       <img
-                        src={champ.bannerUrl}
+                        src={champ.bannerUrl || defaultImage}
                         alt={champ.title}
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          if (defaultImage) e.currentTarget.src = defaultImage;
+                        }}
                       />
                       <div className="absolute top-3 left-3 flex gap-2">
                         {isFinished ? (
@@ -420,6 +434,10 @@ export default function ChampionshipsView({
                                   alt={ranking.username}
                                   className="w-8 h-8 rounded-full object-cover border border-slate-200"
                                   referrerPolicy="no-referrer"
+                                  onError={(e) => {
+                                    e.currentTarget.onerror = null;
+                                    e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                                  }}
                                 />
                                 <div>
                                   <span className="font-semibold text-slate-900 block text-xs">{ranking.fullName}</span>

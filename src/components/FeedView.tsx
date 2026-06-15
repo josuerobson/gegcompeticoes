@@ -12,6 +12,7 @@ interface FeedProps {
   onLikePost: (postId: string) => Promise<void>;
   onCommentPost: (postId: string, content: string) => Promise<void>;
   onToggleFollow: (userId: string) => Promise<void>;
+  defaultImage?: string;
 }
 
 export default function FeedView({
@@ -21,7 +22,8 @@ export default function FeedView({
   onAddPost,
   onLikePost,
   onCommentPost,
-  onToggleFollow
+  onToggleFollow,
+  defaultImage
 }: FeedProps) {
   // New post state
   const [isPostingOpen, setIsPostingOpen] = useState(false);
@@ -122,6 +124,10 @@ export default function FeedView({
                     alt={u.username}
                     className="w-full h-full object-cover rounded-full border-2 border-white"
                     referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                    }}
                   />
                 </div>
                 <span className="text-xs text-slate-600 mt-1 font-medium max-w-[75px] truncate">
@@ -139,6 +145,10 @@ export default function FeedView({
             alt="My Avatar"
             className="w-10 h-10 rounded-full object-cover border border-slate-200"
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+            }}
           />
           <button
             onClick={() => setIsPostingOpen(true)}
@@ -177,6 +187,10 @@ export default function FeedView({
                         alt={post.username}
                         className="w-10 h-10 rounded-full object-cover border border-slate-200"
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                        }}
                       />
                       <div>
                         <div className="flex items-center gap-1.5">
@@ -203,10 +217,14 @@ export default function FeedView({
                   {post.imageUrl && (
                     <div className="relative aspect-video sm:aspect-[4/3] bg-slate-100">
                       <img
-                        src={post.imageUrl}
+                        src={post.imageUrl || defaultImage}
                         alt="Post Asset"
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          if (defaultImage) e.currentTarget.src = defaultImage;
+                        }}
                       />
                       {/* Floating Indicator of Shooting Record */}
                       {hasScore && (
@@ -342,6 +360,10 @@ export default function FeedView({
                 alt={currentUser.fullName}
                 className="w-12 h-12 rounded-full object-cover border border-slate-200"
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                }}
               />
               <div className="leading-tight">
                 <span className="font-bold text-slate-900 block text-sm">@{currentUser.username}</span>
@@ -389,6 +411,10 @@ export default function FeedView({
                       alt={su.username}
                       className="w-9 h-9 rounded-full object-cover border border-slate-200"
                       referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                      }}
                     />
                     <div>
                       <span className="font-bold text-slate-800 block text-xs">@{su.username}</span>
@@ -680,6 +706,10 @@ export default function FeedView({
                             alt={comment.username}
                             className="w-8 h-8 rounded-full object-cover border border-slate-200 mt-0.5"
                             referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                            }}
                           />
                           <div>
                             <div className="bg-slate-100 rounded-2xl p-3">

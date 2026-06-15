@@ -35,6 +35,9 @@ export default function App() {
   const [stageScores, setStageScores] = useState<StageScore[]>([]);
   const [globalRankings, setGlobalRankings] = useState<RankingItem[]>([]);
   const [selectedRankingModality, setSelectedRankingModality] = useState('');
+  const [settings, setSettings] = useState<{ [key: string]: string }>({
+    default_image: 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80'
+  });
 
   // UI States
   const [activeTab, setActiveTab] = useState<'feed' | 'championships' | 'admin' | 'profile'>('feed');
@@ -103,6 +106,13 @@ export default function App() {
       const scoresRes = await fetch('/api/scores', { headers: authHeaders });
       const scoresData = await scoresRes.json();
       setStageScores(scoresData.stageScores || []);
+
+      // 7. Fetch Site Settings
+      const settingsRes = await fetch('/api/settings', { headers: authHeaders });
+      const settingsData = await settingsRes.json();
+      if (settingsData.settings) {
+        setSettings(settingsData.settings);
+      }
 
       // Initialize selected modality for rankings if empty
       if (champData.championships && champData.championships.length > 0 && !selectedRankingModality) {
@@ -320,6 +330,26 @@ export default function App() {
         method: 'PUT',
         headers: authHeaders,
         body: JSON.stringify(data)
+      });
+      if (res.ok) {
+        await syncWithBackend();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSaveSetting = async (key: string, value: string) => {
+    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentUser) {
+      authHeaders['x-user-id'] = currentUser.id;
+    }
+
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ key, value })
       });
       if (res.ok) {
         await syncWithBackend();
@@ -904,6 +934,7 @@ export default function App() {
               onLikePost={handleLikePost}
               onCommentPost={handleCommentPost}
               onToggleFollow={handleToggleFollow}
+              defaultImage={settings.default_image}
             />
           )}
 
@@ -917,6 +948,7 @@ export default function App() {
               globalRankings={globalRankings}
               onSelectModalityRanking={setSelectedRankingModality}
               selectedRankingModality={selectedRankingModality}
+              defaultImage={settings.default_image}
             />
           )}
 
@@ -931,6 +963,8 @@ export default function App() {
               onUpdateChampionship={handleUpdateChampionshipAdmin}
               onRecordScore={handleRecordScoreAdmin}
               onToggleAdminDemo={handleToggleAdminDemo}
+              settings={settings}
+              onSaveSetting={handleSaveSetting}
             />
           )}
 
@@ -946,6 +980,7 @@ export default function App() {
               onPaySignature={handlePaySignature}
               onLogout={handleLogout}
               onAddPost={handleAddPost}
+              defaultImage={settings.default_image}
             />
           )}
         </div>
