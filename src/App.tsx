@@ -158,6 +158,7 @@ export default function App() {
         setCurrentUser(data.user);
         localStorage.setItem('gg_user_id', data.user.id);
         await syncWithBackend(data.user.id);
+        setActiveTab('championships');
       }
     } catch (err) {
       console.error(err);
