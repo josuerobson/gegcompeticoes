@@ -69,14 +69,59 @@ export default function AdminPanel({
   settings = {},
   onSaveSetting
 }: AdminPanelProps) {
-  // Main tabs: 'clube' | 'plataforma'
-  const [mainTab, setMainTab] = useState<'clube' | 'plataforma'>('clube');
+  // Main tabs: 'clube' | 'plataforma' | 'master'
+  const [mainTab, setMainTab] = useState<'clube' | 'plataforma' | 'master'>('clube');
 
   // Sidebar Menu selection for Clube
   const [clubeMenu, setClubeMenu] = useState<string>('campeonatos');
 
   // Sidebar Menu selection for Plataforma
   const [plataformaMenu, setPlataformaMenu] = useState<string>('novo_campeonato');
+
+  // Sidebar Menu selection for Master
+  const [masterMenu, setMasterMenu] = useState<string>('gerenciar_clubes');
+
+  // Master mock states
+  const [masterClubs, setMasterClubs] = useState([
+    { id: '1', name: 'Unidade Sede (Brasília)', location: 'Brasília - DF', shootersCount: 142, status: 'Ativo', president: 'Guilherme Guedes' },
+    { id: '2', name: 'G&G Sobradinho', location: 'Sobradinho - DF', shootersCount: 68, status: 'Ativo', president: 'Gabriel Guedes' },
+    { id: '3', name: 'G&G Taguatinga', location: 'Taguatinga - DF', shootersCount: 54, status: 'Ativo', president: 'Carlos Souza' },
+    { id: '4', name: 'Estande Alvo Certo (Pendente)', location: 'Goiânia - GO', shootersCount: 0, status: 'Pendente', president: 'Roberto Silva' },
+  ]);
+
+  const [billingList, setBillingList] = useState([
+    { id: 'bill-1', target: 'G&G Sobradinho', type: 'Franquia (15%)', amount: 6765, dueDate: '2026-06-30', status: 'Pendente' },
+    { id: 'bill-2', target: 'G&G Taguatinga', type: 'Franquia (15%)', amount: 4875, dueDate: '2026-06-30', status: 'Pago' },
+    { id: 'bill-3', target: 'Ana Clara', type: 'Anuidade Atleta', amount: 350, dueDate: '2026-06-25', status: 'Pendente' },
+    { id: 'bill-4', target: 'Marcos Oliveira', type: 'Anuidade Atleta', amount: 350, dueDate: '2026-06-20', status: 'Pago' },
+    { id: 'bill-5', target: 'Estande Alvo Certo', type: 'Taxa Adesão Filiação', amount: 2500, dueDate: '2026-07-05', status: 'Pendente' },
+  ]);
+
+  const [billingSuccessMsg, setBillingSuccessMsg] = useState('');
+
+  const handleToggleClubStatus = (clubId: string) => {
+    setMasterClubs(prev => prev.map(c => {
+      if (c.id === clubId) {
+        const newStatus = c.status === 'Ativo' ? 'Suspenso' : 'Ativo';
+        return { ...c, status: newStatus };
+      }
+      return c;
+    }));
+  };
+
+  const handleApproveClub = (clubId: string) => {
+    setMasterClubs(prev => prev.map(c => {
+      if (c.id === clubId) {
+        return { ...c, status: 'Ativo' };
+      }
+      return c;
+    }));
+  };
+
+  const handleSendBillingReminder = (billId: string) => {
+    setBillingSuccessMsg(`Lembrete de cobrança enviado com sucesso para ${billingList.find(b => b.id === billId)?.target}!`);
+    setTimeout(() => setBillingSuccessMsg(''), 3000);
+  };
 
   // Plataforma sidebar collapsible sections (accordions)
   const [expandedSections, setExpandedSections] = useState<{ [key: string]: boolean }>({
@@ -1939,6 +1984,172 @@ export default function AdminPanel({
     }
   };
 
+  const renderMasterContent = () => {
+    switch (masterMenu) {
+      case 'gerenciar_clubes':
+        return (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800 text-left">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="font-display font-bold text-slate-900 text-base">Gerenciar Clubes Filiados</h3>
+                <p className="text-xs text-slate-400">Ativação, suspensão e homologação de estandes de tiro integrados à rede G&G.</p>
+              </div>
+              <Landmark className="w-5 h-5 text-blue-600 animate-pulse" />
+            </div>
+
+            {/* Club List */}
+            <div className="space-y-4">
+              <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Unidades e Estandes Credenciados</h4>
+              
+              <div className="grid grid-cols-1 gap-4">
+                {masterClubs.map((club) => {
+                  const isPending = club.status === 'Pendente';
+                  const isSuspended = club.status === 'Suspenso';
+                  return (
+                    <div key={club.id} className="border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-slate-50/50 hover:border-slate-350 transition">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-slate-900 text-sm">{club.name}</h4>
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                            club.status === 'Ativo' ? 'bg-emerald-100 text-emerald-800' :
+                            club.status === 'Suspenso' ? 'bg-rose-100 text-rose-800' :
+                            'bg-amber-100 text-amber-800'
+                          }`}>
+                            {club.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500">{club.location} • Diretor: {club.president}</p>
+                        <p className="text-[10px] text-slate-400 font-mono">Total de Atiradores: {club.shootersCount} federados</p>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        {isPending ? (
+                          <>
+                            <button
+                              onClick={() => handleApproveClub(club.id)}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10.5px] px-3.5 py-2 rounded-xl transition cursor-pointer"
+                            >
+                              Homologar
+                            </button>
+                            <button
+                              onClick={() => setMasterClubs(prev => prev.filter(c => c.id !== club.id))}
+                              className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10.5px] px-3.5 py-2 rounded-xl transition cursor-pointer"
+                            >
+                              Recusar
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => handleToggleClubStatus(club.id)}
+                            className={`font-bold text-[10.5px] px-3.5 py-2 rounded-xl transition cursor-pointer ${
+                              isSuspended ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700' : 'bg-rose-50 hover:bg-rose-100 text-rose-700'
+                            }`}
+                          >
+                            {isSuspended ? 'Reativar Estande' : 'Suspender Estande'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'gestao_cobrancas':
+        return (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800 text-left">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="font-display font-bold text-slate-900 text-base">Gestão de Cobranças & Faturamento</h3>
+                <p className="text-xs text-slate-400">Controle financeiro de royalties de franquias e anuidades de assinaturas.</p>
+              </div>
+              <DollarSign className="w-5 h-5 text-blue-600" />
+            </div>
+
+            {billingSuccessMsg && (
+              <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
+                <CheckCircle className="w-5 h-5 text-emerald-600" />
+                {billingSuccessMsg}
+              </div>
+            )}
+
+            {/* Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <span className="text-[10px] text-slate-400 block uppercase font-sans font-bold">Faturamento Master</span>
+                <span className="text-lg font-bold text-slate-900 font-mono">R$ 11.640,00</span>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <span className="text-[10px] text-slate-400 block uppercase font-sans font-bold">Pendências em Aberto</span>
+                <span className="text-lg font-bold text-amber-600 font-mono">R$ 9.615,00</span>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <span className="text-[10px] text-slate-400 block uppercase font-sans font-bold">Taxa Adimplência</span>
+                <span className="text-lg font-bold text-emerald-600 font-mono">92.4%</span>
+              </div>
+            </div>
+
+            {/* Billing List */}
+            <div className="space-y-3">
+              <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Faturas & Títulos a Receber</h4>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-700">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-[10px] text-slate-450 uppercase font-mono">
+                      <th className="py-2.5 px-2">Devedor</th>
+                      <th className="py-2.5 px-2">Tipo Cobrança</th>
+                      <th className="py-2.5 px-2 text-right">Valor</th>
+                      <th className="py-2.5 px-2">Vencimento</th>
+                      <th className="py-2.5 px-2 text-center">Status</th>
+                      <th className="py-2.5 px-2 text-right">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {billingList.map((bill) => {
+                      const isPending = bill.status === 'Pendente';
+                      return (
+                        <tr key={bill.id} className="hover:bg-slate-50/30 transition">
+                          <td className="py-3 px-2 font-bold text-slate-800">{bill.target}</td>
+                          <td className="py-3 px-2 text-slate-500">{bill.type}</td>
+                          <td className="py-3 px-2 text-right font-mono font-bold text-slate-900">R$ {bill.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-2 font-mono text-slate-500">{new Date(bill.dueDate).toLocaleDateString('pt-BR')}</td>
+                          <td className="py-3 px-2 text-center">
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${
+                              isPending ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {bill.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-2 text-right">
+                            {isPending ? (
+                              <button
+                                onClick={() => handleSendBillingReminder(bill.id)}
+                                className="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-bold text-[9px] px-2 py-1 rounded transition cursor-pointer"
+                              >
+                                Notificar
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="py-6 space-y-6">
       
@@ -1970,15 +2181,21 @@ export default function AdminPanel({
       <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
         <button
           onClick={() => setMainTab('clube')}
-          className={`px-4 py-2.5 text-xs font-semibold rounded-lg transition duration-200 cursor-pointer ${mainTab === 'clube' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+          className={`px-4 py-2.5 text-xs font-semibold rounded-lg transition duration-200 cursor-pointer ${mainTab === 'clube' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-655 hover:text-slate-900'}`}
         >
           Gerenciamento Clube
         </button>
         <button
           onClick={() => setMainTab('plataforma')}
-          className={`px-4 py-2.5 text-xs font-semibold rounded-lg transition duration-200 cursor-pointer ${mainTab === 'plataforma' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+          className={`px-4 py-2.5 text-xs font-semibold rounded-lg transition duration-200 cursor-pointer ${mainTab === 'plataforma' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-655 hover:text-slate-900'}`}
         >
           Gerenciamento Plataforma
+        </button>
+        <button
+          onClick={() => setMainTab('master')}
+          className={`px-4 py-2.5 text-xs font-semibold rounded-lg transition duration-200 cursor-pointer ${mainTab === 'master' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-655 hover:text-slate-900'}`}
+        >
+          Administrador master
         </button>
       </div>
 
@@ -1988,7 +2205,7 @@ export default function AdminPanel({
         {/* Sidebar Nav Area */}
         <div className="md:col-span-1 bg-white rounded-2xl border border-slate-200 p-4 space-y-1 shadow-xs">
           
-          {mainTab === 'clube' ? (
+          {mainTab === 'clube' && (
             /* ==================================================== */
             /* CLUBE SIDEBAR MENUS                                  */
             /* ==================================================== */
@@ -2019,7 +2236,9 @@ export default function AdminPanel({
                 );
               })}
             </div>
-          ) : (
+          )}
+
+          {mainTab === 'plataforma' && (
             /* ==================================================== */
             /* PLATAFORMA SIDEBAR COLLAPSIBLE ACCORDIONS            */
             /* ==================================================== */
@@ -2037,8 +2256,8 @@ export default function AdminPanel({
                 </button>
                 {expandedSections.clubes && (
                   <div className="pl-3 border-l border-slate-100 space-y-0.5 mt-1">
-                    <button onClick={() => setPlataformaMenu('novo_clube')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'novo_clube' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Novo Clube</button>
-                    <button onClick={() => setPlataformaMenu('relatorio_financeiro')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'relatorio_financeiro' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Relatorio Financeiro</button>
+                    <button onClick={() => setPlataformaMenu('novo_clube')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'novo_clube' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Novo Clube</button>
+                    <button onClick={() => setPlataformaMenu('relatorio_financeiro')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'relatorio_financeiro' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Relatorio Financeiro</button>
                   </div>
                 )}
               </div>
@@ -2054,12 +2273,12 @@ export default function AdminPanel({
                 </button>
                 {expandedSections.campeonatos && (
                   <div className="pl-3 border-l border-slate-100 space-y-0.5 mt-1">
-                    <button onClick={() => setPlataformaMenu('novo_campeonato')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'novo_campeonato' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Novo Campeonato</button>
-                    <button onClick={() => setPlataformaMenu('etapas')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'etapas' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Etapas</button>
-                    <button onClick={() => setPlataformaMenu('modalidades')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'modalidades' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Modalidades</button>
-                    <button onClick={() => setPlataformaMenu('cadastrar_resultados')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'cadastrar_resultados' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Cadastrar Resultados</button>
-                    <button onClick={() => setPlataformaMenu('multi_campeonatos')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'multi_campeonatos' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Multi-campeonatos</button>
-                    <button onClick={() => setPlataformaMenu('equipes_interclubes')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'equipes_interclubes' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Equipes Interclubes</button>
+                    <button onClick={() => setPlataformaMenu('novo_campeonato')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'novo_campeonato' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Novo Campeonato</button>
+                    <button onClick={() => setPlataformaMenu('etapas')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'etapas' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Etapas</button>
+                    <button onClick={() => setPlataformaMenu('modalidades')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'modalidades' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Modalidades</button>
+                    <button onClick={() => setPlataformaMenu('cadastrar_resultados')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'cadastrar_resultados' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Cadastrar Resultados</button>
+                    <button onClick={() => setPlataformaMenu('multi_campeonatos')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'multi_campeonatos' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Multi-campeonatos</button>
+                    <button onClick={() => setPlataformaMenu('equipes_interclubes')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'equipes_interclubes' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Equipes Interclubes</button>
                   </div>
                 )}
               </div>
@@ -2075,13 +2294,13 @@ export default function AdminPanel({
                 </button>
                 {expandedSections.adm && (
                   <div className="pl-3 border-l border-slate-100 space-y-0.5 mt-1">
-                    <button onClick={() => setPlataformaMenu('cadastro_armas')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'cadastro_armas' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Cadastro de armas</button>
-                    <button onClick={() => setPlataformaMenu('municoes')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'municoes' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Munições</button>
-                    <button onClick={() => setPlataformaMenu('filtro_resultados')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'filtro_resultados' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Filtro Resultados</button>
-                    <button onClick={() => setPlataformaMenu('consulta_inscricoes')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'consulta_inscricoes' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Consulta Inscrições</button>
-                    <button onClick={() => setPlataformaMenu('relatorios_declaracoes')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'relatorios_declaracoes' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Relatórios e declarações</button>
-                    <button onClick={() => setPlataformaMenu('treinamentos_competicoes')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'treinamentos_competicoes' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Treinamento/competições</button>
-                    <button onClick={() => setPlataformaMenu('validar_treinamentos')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'validar_treinamentos' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Validar treinamentos</button>
+                    <button onClick={() => setPlataformaMenu('cadastro_armas')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'cadastro_armas' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Cadastro de armas</button>
+                    <button onClick={() => setPlataformaMenu('municoes')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'municoes' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-655'}`}>Munições</button>
+                    <button onClick={() => setPlataformaMenu('filtro_resultados')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'filtro_resultados' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Filtro Resultados</button>
+                    <button onClick={() => setPlataformaMenu('consulta_inscricoes')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'consulta_inscricoes' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Consulta Inscrições</button>
+                    <button onClick={() => setPlataformaMenu('relatorios_declaracoes')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'relatorios_declaracoes' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Relatórios e declarações</button>
+                    <button onClick={() => setPlataformaMenu('treinamentos_competicoes')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'treinamentos_competicoes' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-655'}`}>Treinamento/competições</button>
+                    <button onClick={() => setPlataformaMenu('validar_treinamentos')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'validar_treinamentos' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Validar treinamentos</button>
                   </div>
                 )}
               </div>
@@ -2097,10 +2316,10 @@ export default function AdminPanel({
                 </button>
                 {expandedSections.idsc && (
                   <div className="pl-3 border-l border-slate-100 space-y-0.5 mt-1">
-                    <button onClick={() => setPlataformaMenu('idsc_campeonatos')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'idsc_campeonatos' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Campeonatos</button>
-                    <button onClick={() => setPlataformaMenu('idsc_etapas')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'idsc_etapas' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Etapas</button>
-                    <button onClick={() => setPlataformaMenu('idsc_inscricao')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'idsc_inscricao' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Inscrição</button>
-                    <button onClick={() => setPlataformaMenu('idsc_resultados')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'idsc_resultados' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Resultados</button>
+                    <button onClick={() => setPlataformaMenu('idsc_campeonatos')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'idsc_campeonatos' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Campeonatos</button>
+                    <button onClick={() => setPlataformaMenu('idsc_etapas')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'idsc_etapas' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Etapas</button>
+                    <button onClick={() => setPlataformaMenu('idsc_inscricao')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'idsc_inscricao' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Inscrição</button>
+                    <button onClick={() => setPlataformaMenu('idsc_resultados')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'idsc_resultados' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-655'}`}>Resultados</button>
                   </div>
                 )}
               </div>
@@ -2116,12 +2335,11 @@ export default function AdminPanel({
                 </button>
                 {expandedSections.site && (
                   <div className="pl-3 border-l border-slate-100 space-y-0.5 mt-1">
-                    <button onClick={() => setPlataformaMenu('banner_home')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'banner_home' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Banner Home</button>
-                    <button onClick={() => setPlataformaMenu('banners_paginas')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'banners_paginas' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Banners Paginas</button>
-                    <button onClick={() => setPlataformaMenu('patrocinadores')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'patrocinadores' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Patrocinadores</button>
-                    <button onClick={() => setPlataformaMenu('videos_destaque')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'videos_destaque' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Vídeos Destaque</button>
-                    <button onClick={() => setPlataformaMenu('imagem_padrao')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'imagem_padrao' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'}`}>Imagem padrão</button>
-
+                    <button onClick={() => setPlataformaMenu('banner_home')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'banner_home' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Banner Home</button>
+                    <button onClick={() => setPlataformaMenu('banners_paginas')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'banners_paginas' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Banners Paginas</button>
+                    <button onClick={() => setPlataformaMenu('patrocinadores')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'patrocinadores' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Patrocinadores</button>
+                    <button onClick={() => setPlataformaMenu('videos_destaque')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'videos_destaque' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Vídeos Destaque</button>
+                    <button onClick={() => setPlataformaMenu('imagem_padrao')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'imagem_padrao' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Imagem padrão</button>
                   </div>
                 )}
               </div>
@@ -2129,11 +2347,39 @@ export default function AdminPanel({
             </div>
           )}
 
+          {mainTab === 'master' && (
+            /* ==================================================== */
+            /* MASTER SIDEBAR MENUS                                 */
+            /* ==================================================== */
+            <div className="space-y-1 text-left">
+              <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider px-3 mb-2">Menus Master</h4>
+              {[
+                { id: 'gerenciar_clubes', label: 'Gerenciar Clubes', icon: Landmark },
+                { id: 'gestao_cobrancas', label: 'Gestão de Cobranças', icon: CreditCard }
+              ].map((item) => {
+                const Icon = item.icon;
+                const active = masterMenu === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setMasterMenu(item.id)}
+                    className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold tracking-wide transition duration-150 cursor-pointer ${active ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-600' : 'text-slate-655 hover:bg-slate-50'}`}
+                  >
+                    <Icon className={`w-4 h-4 ${active ? 'text-blue-600' : 'text-slate-400'}`} />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
         </div>
 
         {/* Dynamic content viewport column */}
         <div className="md:col-span-3 space-y-6">
-          {mainTab === 'clube' ? renderClubeContent() : renderPlataformaContent()}
+          {mainTab === 'clube' && renderClubeContent()}
+          {mainTab === 'plataforma' && renderPlataformaContent()}
+          {mainTab === 'master' && renderMasterContent()}
         </div>
 
       </div>
