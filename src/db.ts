@@ -242,15 +242,6 @@ export async function initDB() {
 
     await client.query('COMMIT');
 
-    // Backfill demo password ("123456") for the known seed/demo accounts specifically (by id),
-    // regardless of whatever password_hash they already carry from earlier migrations — nobody
-    // knows the plaintext behind that legacy hash, so it's unusable for testing. Also fills in
-    // any other pre-existing user left with a NULL password_hash. Idempotent; once real
-    // registration exists, it won't touch users created through that flow (different ids).
-    const demoUserIds = defaultUsers.map(u => u.id);
-    await client.query('UPDATE users SET password_hash = $1 WHERE id = ANY($2)', [DEMO_PASSWORD_HASH, demoUserIds]);
-    await client.query('UPDATE users SET password_hash = $1 WHERE password_hash IS NULL', [DEMO_PASSWORD_HASH]);
-
     // Seeding Check
     const userCountRes = await client.query('SELECT COUNT(*) FROM users');
     const userCount = parseInt(userCountRes.rows[0].count, 10);
@@ -379,6 +370,26 @@ export async function initDB() {
       await client.query('COMMIT');
       console.log('Database seeded successfully.');
     }
+
+    // Converge the known demo/seed accounts (by id) to mockData.ts, regardless of whatever
+    // partial/legacy state they already carry (rows from an earlier schema version, or a
+    // login-page auto-registration that predates real auth — e.g. missing cpf entirely).
+    // Runs after the seed-if-empty block above, so it's a harmless no-op confirmation on a
+    // freshly seeded database, and a real fix-up on a pre-existing one (e.g. production).
+    // Only touches these specific known demo ids; any other real account is left untouched.
+    for (const u of defaultUsers) {
+      await client.query(
+        `INSERT INTO users (id, email, username, full_name, avatar_url, bio, cr_number, is_club_member, member_since, role, has_paid_signature, signature_expiry, club_id, is_profile_complete, cpf, rg, phone, password_hash)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+         ON CONFLICT (id) DO UPDATE SET
+           role = EXCLUDED.role, club_id = EXCLUDED.club_id, is_profile_complete = EXCLUDED.is_profile_complete,
+           cpf = EXCLUDED.cpf, rg = EXCLUDED.rg, phone = EXCLUDED.phone, password_hash = EXCLUDED.password_hash`,
+        [u.id, u.email, u.username, u.fullName, u.avatarUrl, u.bio, u.crNumber || null, u.isClubMember, u.memberSince || null, u.role, u.hasPaidSignature, u.signatureExpiry || null, u.clubId || null, u.isProfileComplete || false, u.cpf || null, u.rg || null, u.phone || null, DEMO_PASSWORD_HASH]
+      );
+    }
+    // Any other pre-existing user (e.g. a real signup from the old username-only login) left
+    // without a password still gets the demo password so they aren't locked out.
+    await client.query('UPDATE users SET password_hash = $1 WHERE password_hash IS NULL', [DEMO_PASSWORD_HASH]);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error during database initialization:', err);
