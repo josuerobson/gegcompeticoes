@@ -254,35 +254,35 @@ export async function initDB() {
       await client.query("INSERT INTO settings (key, value) VALUES ('default_image', 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80')");
     }
 
-    // Each reference table is seeded independently if it's empty, rather than gating
-    // everything on "users is empty" — production's users table turned out to already
-    // have rows (from an older schema) that were never actually part of any seed run,
-    // which meant the old combined gate silently skipped seeding clubs/championships/etc.
-    // entirely. ON CONFLICT DO NOTHING on every insert makes each of these idempotent
-    // and safe to re-run even if the table isn't perfectly empty.
+    // Converge every reference table identified by static mockData.ts ids, rather than
+    // gating on emptiness. An earlier deploy raced two container versions against the same
+    // fresh database (a duplicate-key error on pg_type during CREATE TABLE was the tell),
+    // and whichever version's code won for a given table left that table non-empty but with
+    // stale/older content (e.g. production's championships kept pre-Fase-1 titles and was
+    // missing the IDSC championship entirely) — so an "only seed if empty" check could never
+    // self-heal it. ON CONFLICT (id) DO UPDATE makes every one of these converge to exactly
+    // mockData.ts on every boot, without touching unrelated real data (different ids).
     const isEmpty = async (table: string) => {
       const r = await client.query(`SELECT 1 FROM ${table} LIMIT 1`);
       return r.rows.length === 0;
     };
 
-    if (await isEmpty('clubs')) {
-      for (const c of defaultClubs) {
-        await client.query(
-          `INSERT INTO clubs (id, name, logo_url, sub_domain, cnpj, phone, is_premium, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING`,
-          [c.id, c.name, c.logoUrl || null, c.subDomain || null, c.cnpj || null, c.phone || null, c.isPremium, c.createdAt]
-        );
-      }
+    for (const c of defaultClubs) {
+      await client.query(
+        `INSERT INTO clubs (id, name, logo_url, sub_domain, cnpj, phone, is_premium, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, logo_url = EXCLUDED.logo_url, sub_domain = EXCLUDED.sub_domain, cnpj = EXCLUDED.cnpj, phone = EXCLUDED.phone, is_premium = EXCLUDED.is_premium`,
+        [c.id, c.name, c.logoUrl || null, c.subDomain || null, c.cnpj || null, c.phone || null, c.isPremium, c.createdAt]
+      );
     }
 
-    if (await isEmpty('modalities')) {
-      for (const m of defaultModalities) {
-        await client.query(
-          `INSERT INTO modalities (id, name, discipline, target_preview, series_count, shots_per_series, time_per_series_minutes, evaluation_type)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING`,
-          [m.id, m.name, m.discipline, m.targetPreview || null, m.seriesCount || null, m.shotsPerSeries || null, m.timePerSeriesMinutes || null, m.evaluationType || null]
-        );
-      }
+    for (const m of defaultModalities) {
+      await client.query(
+        `INSERT INTO modalities (id, name, discipline, target_preview, series_count, shots_per_series, time_per_series_minutes, evaluation_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, discipline = EXCLUDED.discipline, target_preview = EXCLUDED.target_preview, series_count = EXCLUDED.series_count, shots_per_series = EXCLUDED.shots_per_series, time_per_series_minutes = EXCLUDED.time_per_series_minutes, evaluation_type = EXCLUDED.evaluation_type`,
+        [m.id, m.name, m.discipline, m.targetPreview || null, m.seriesCount || null, m.shotsPerSeries || null, m.timePerSeriesMinutes || null, m.evaluationType || null]
+      );
     }
 
     // Converge the known demo/seed accounts (by id) to mockData.ts, regardless of whatever
@@ -303,14 +303,13 @@ export async function initDB() {
     // without a password still gets the demo password so they aren't locked out.
     await client.query('UPDATE users SET password_hash = $1 WHERE password_hash IS NULL', [DEMO_PASSWORD_HASH]);
 
-    if (await isEmpty('weapons')) {
-      for (const w of defaultWeapons) {
-        await client.query(
-          `INSERT INTO weapons (id, owner_id, manufacturer, model, caliber, serial_number, weapon_type, weapon_number, sigma_number, class, permission_status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING`,
-          [w.id, w.ownerId, w.manufacturer, w.model, w.caliber, w.serialNumber, w.weaponType, w.weaponNumber || null, w.sigmaNumber || null, w.weaponClass || null, w.permissionStatus || null]
-        );
-      }
+    for (const w of defaultWeapons) {
+      await client.query(
+        `INSERT INTO weapons (id, owner_id, manufacturer, model, caliber, serial_number, weapon_type, weapon_number, sigma_number, class, permission_status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         ON CONFLICT (id) DO UPDATE SET owner_id = EXCLUDED.owner_id, manufacturer = EXCLUDED.manufacturer, model = EXCLUDED.model, caliber = EXCLUDED.caliber, serial_number = EXCLUDED.serial_number, weapon_type = EXCLUDED.weapon_type, weapon_number = EXCLUDED.weapon_number, sigma_number = EXCLUDED.sigma_number, class = EXCLUDED.class, permission_status = EXCLUDED.permission_status`,
+        [w.id, w.ownerId, w.manufacturer, w.model, w.caliber, w.serialNumber, w.weaponType, w.weaponNumber || null, w.sigmaNumber || null, w.weaponClass || null, w.permissionStatus || null]
+      );
     }
 
     // Follows for the demo accounts — always attempted, ON CONFLICT DO NOTHING makes it safe.
@@ -325,44 +324,40 @@ export async function initDB() {
       }
     }
 
-    if (await isEmpty('championships')) {
-      for (const c of defaultChampionships) {
-        await client.query(
-          `INSERT INTO championships (id, title, description, start_date, end_date, registration_fee, modalities, stages_count, status, banner_url, club_id, type)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (id) DO NOTHING`,
-          [c.id, c.title, c.description, c.startDate, c.endDate, c.registrationFee, JSON.stringify(c.modalities), c.stagesCount, c.status, c.bannerUrl, c.clubId || null, c.type]
-        );
-      }
+    for (const c of defaultChampionships) {
+      await client.query(
+        `INSERT INTO championships (id, title, description, start_date, end_date, registration_fee, modalities, stages_count, status, banner_url, club_id, type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date, registration_fee = EXCLUDED.registration_fee, modalities = EXCLUDED.modalities, stages_count = EXCLUDED.stages_count, status = EXCLUDED.status, banner_url = EXCLUDED.banner_url, club_id = EXCLUDED.club_id, type = EXCLUDED.type`,
+        [c.id, c.title, c.description, c.startDate, c.endDate, c.registrationFee, JSON.stringify(c.modalities), c.stagesCount, c.status, c.bannerUrl, c.clubId || null, c.type]
+      );
     }
 
-    if (await isEmpty('stages')) {
-      for (const s of defaultStages) {
-        await client.query(
-          `INSERT INTO stages (id, championship_id, stage_num, title, date, regulations_file, scorecard_file)
-           VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING`,
-          [s.id, s.championshipId, s.stageNum, s.title, s.date, s.regulationsFile || null, s.scorecardFile || null]
-        );
-      }
+    for (const s of defaultStages) {
+      await client.query(
+        `INSERT INTO stages (id, championship_id, stage_num, title, date, regulations_file, scorecard_file)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (id) DO UPDATE SET championship_id = EXCLUDED.championship_id, stage_num = EXCLUDED.stage_num, title = EXCLUDED.title, date = EXCLUDED.date, regulations_file = EXCLUDED.regulations_file, scorecard_file = EXCLUDED.scorecard_file`,
+        [s.id, s.championshipId, s.stageNum, s.title, s.date, s.regulationsFile || null, s.scorecardFile || null]
+      );
     }
 
-    if (await isEmpty('registrations')) {
-      for (const r of defaultRegistrations) {
-        await client.query(
-          `INSERT INTO registrations (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number, payment_method, payment_status, completion_status, registered_at, approved_at, tx_id, score_details, total_points, idsc_total_seconds, disqualified, penalty)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) ON CONFLICT (id) DO NOTHING`,
-          [r.id, r.championshipId, r.userId, r.clubId || null, r.modalityId, r.stageId, r.weaponId, r.crNumber, r.paymentMethod, r.paymentStatus, r.completionStatus, r.registeredAt, r.approvedAt || null, r.txId || null, r.scoreDetails ? JSON.stringify(r.scoreDetails) : null, r.totalPoints ?? null, r.idscTotalSeconds ?? null, r.disqualified, r.penalty]
-        );
-      }
+    for (const r of defaultRegistrations) {
+      await client.query(
+        `INSERT INTO registrations (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number, payment_method, payment_status, completion_status, registered_at, approved_at, tx_id, score_details, total_points, idsc_total_seconds, disqualified, penalty)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+         ON CONFLICT (id) DO NOTHING`,
+        [r.id, r.championshipId, r.userId, r.clubId || null, r.modalityId, r.stageId, r.weaponId, r.crNumber, r.paymentMethod, r.paymentStatus, r.completionStatus, r.registeredAt, r.approvedAt || null, r.txId || null, r.scoreDetails ? JSON.stringify(r.scoreDetails) : null, r.totalPoints ?? null, r.idscTotalSeconds ?? null, r.disqualified, r.penalty]
+      );
     }
 
-    if (await isEmpty('stage_scores')) {
-      for (const s of defaultStageScores) {
-        await client.query(
-          `INSERT INTO stage_scores (id, championship_id, registration_id, user_id, shooter_name, modality, stage_num, score, time_seconds, hit_factor, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING`,
-          [s.id, s.championshipId, s.registrationId, s.userId, s.shooterName, s.modality, s.stageNum, s.score, s.timeSeconds || null, s.hitFactor || null, s.createdAt]
-        );
-      }
+    for (const s of defaultStageScores) {
+      await client.query(
+        `INSERT INTO stage_scores (id, championship_id, registration_id, user_id, shooter_name, modality, stage_num, score, time_seconds, hit_factor, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         ON CONFLICT (id) DO NOTHING`,
+        [s.id, s.championshipId, s.registrationId, s.userId, s.shooterName, s.modality, s.stageNum, s.score, s.timeSeconds || null, s.hitFactor || null, s.createdAt]
+      );
     }
 
     if (await isEmpty('posts')) {
