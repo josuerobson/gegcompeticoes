@@ -3,15 +3,17 @@ import { defaultUsers, defaultChampionships, defaultRegistrations, defaultStageS
 
 const { Pool } = pg;
 
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL não está definida. Configure-a no ambiente (.env local ou variáveis do EasyPanel).');
+}
+
+// The internal EasyPanel Postgres does not support SSL connections at all, and the previous
+// hostname-substring heuristic here didn't reliably detect it (the deployed container was
+// crash-looping on startup with "The server does not support SSL connections"). SSL is now
+// opt-in only, via DATABASE_SSL=true, instead of guessed from the connection string.
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://spacevip_react:Jo159357*@localhost:5432/gegcompeticoes',
-  ssl: process.env.DATABASE_URL && 
-       !process.env.DATABASE_URL.includes('localhost') && 
-       !process.env.DATABASE_URL.includes('127.0.0.1') &&
-       !process.env.DATABASE_URL.includes('sslmode=disable') &&
-       !process.env.DATABASE_URL.includes('_database')
-    ? { rejectUnauthorized: false }
-    : false,
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
 });
 
 export async function initDB() {
