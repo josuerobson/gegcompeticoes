@@ -129,6 +129,14 @@ export async function initDB() {
       );
     `);
 
+    // Defensive column backfill: this table may already exist from an earlier schema
+    // version (CREATE TABLE IF NOT EXISTS above won't add missing columns to it).
+    await client.query(`
+      ALTER TABLE championships
+        ADD COLUMN IF NOT EXISTS club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'individual';
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS stages (
         id TEXT PRIMARY KEY,
@@ -190,6 +198,33 @@ export async function initDB() {
         penalty INTEGER NOT NULL DEFAULT 0
       );
     `);
+
+    // Defensive backfill: this table may already exist from an earlier schema version
+    // (CREATE TABLE IF NOT EXISTS above won't add missing columns to it).
+    await client.query(`
+      ALTER TABLE registrations
+        ADD COLUMN IF NOT EXISTS club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS modality_id TEXT REFERENCES modalities(id),
+        ADD COLUMN IF NOT EXISTS stage_id TEXT REFERENCES stages(id),
+        ADD COLUMN IF NOT EXISTS weapon_id TEXT REFERENCES weapons(id),
+        ADD COLUMN IF NOT EXISTS completion_status TEXT NOT NULL DEFAULT 'pending',
+        ADD COLUMN IF NOT EXISTS score_details JSONB,
+        ADD COLUMN IF NOT EXISTS total_points INTEGER,
+        ADD COLUMN IF NOT EXISTS idsc_total_seconds DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS disqualified BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS penalty INTEGER NOT NULL DEFAULT 0;
+    `);
+
+    // The legacy free-text `modality` column (unused by this app) may still exist with a
+    // NOT NULL constraint from an earlier schema version, which would reject every new
+    // insert that doesn't set it. Relax the constraint without touching the column or its
+    // data — non-destructive, unlike dropping it.
+    const legacyModalityCol = await client.query(
+      `SELECT is_nullable FROM information_schema.columns WHERE table_name = 'registrations' AND column_name = 'modality'`
+    );
+    if (legacyModalityCol.rows.length > 0 && legacyModalityCol.rows[0].is_nullable === 'NO') {
+      await client.query('ALTER TABLE registrations ALTER COLUMN modality DROP NOT NULL');
+    }
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS stage_scores (
