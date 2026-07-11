@@ -74,6 +74,13 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS password_hash TEXT;
     `);
 
+    // The role CHECK constraint on a pre-existing users table may still be the old
+    // admin/member-only version — replace it so master_admin/club_admin are accepted.
+    await client.query(`
+      ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+      ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'master_admin', 'club_admin', 'member'));
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS follows (
         follower_id TEXT REFERENCES users(id) ON DELETE CASCADE,
