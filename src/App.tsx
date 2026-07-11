@@ -126,14 +126,132 @@ export default function App() {
     }
   };
 
-  // Run on start
+  // Sincronização automática do estado com a URL do navegador e Título de SEO
+  useEffect(() => {
+    if (booting) return;
+    
+    if (!currentUser) {
+      document.title = showLoginModal ? 'G&G Competições - Entrar na Plataforma' : 'G&G Competições - Estande e Tiro Esportivo';
+      const targetPath = showLoginModal ? '/login' : '/';
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState(null, '', targetPath);
+      }
+      return;
+    }
+
+    // Usuário autenticado
+    let targetPath = '/campeonatos';
+    if (activeTab === 'feed') {
+      targetPath = '/feed';
+      document.title = 'G&G Competições - Feed Social';
+    } else if (activeTab === 'championships') {
+      targetPath = '/campeonatos';
+      document.title = 'G&G Competições - Campeonatos e Rankings';
+    } else if (activeTab === 'admin') {
+      targetPath = '/admin';
+      document.title = 'G&G Competições - Painel Diretor';
+    } else if (activeTab === 'profile') {
+      const isSelf = !selectedProfileUser || selectedProfileUser.id === currentUser.id;
+      if (isSelf) {
+        targetPath = '/perfil';
+        document.title = 'G&G Competições - Meu Perfil';
+      } else {
+        targetPath = `/perfil/${selectedProfileUser.username}`;
+        document.title = `G&G Competições - Perfil de ${selectedProfileUser.fullName} (@${selectedProfileUser.username})`;
+      }
+    }
+
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState(null, '', targetPath);
+    }
+  }, [activeTab, selectedProfileUser, currentUser, showLoginModal, booting]);
+
+  // Handler para processar a rota da URL e setar os estados
+  const handleRouteNavigation = (pathname: string) => {
+    const cleanPath = pathname.replace(/\/$/, '') || '/';
+    
+    if (!currentUser) {
+      if (cleanPath === '/login') {
+        setShowLoginModal(true);
+      } else {
+        setShowLoginModal(false);
+      }
+      return;
+    }
+
+    // Roteamento de usuário autenticado
+    if (cleanPath === '/' || cleanPath === '/login') {
+      setActiveTab('championships');
+      setSelectedProfileUser(null);
+    } else if (cleanPath === '/feed') {
+      setActiveTab('feed');
+      setSelectedProfileUser(null);
+    } else if (cleanPath === '/campeonatos') {
+      setActiveTab('championships');
+      setSelectedProfileUser(null);
+    } else if (cleanPath === '/admin') {
+      if (currentUser.role === 'admin') {
+        setActiveTab('admin');
+        setSelectedProfileUser(null);
+      } else {
+        setActiveTab('championships');
+        setSelectedProfileUser(null);
+      }
+    } else if (cleanPath === '/perfil') {
+      setActiveTab('profile');
+      setSelectedProfileUser(currentUser);
+    } else if (cleanPath.startsWith('/perfil/')) {
+      const username = cleanPath.split('/perfil/')[1];
+      const targetUser = users.find(u => u.username === username);
+      if (targetUser) {
+        setActiveTab('profile');
+        setSelectedProfileUser(targetUser);
+      } else {
+        setActiveTab('profile');
+        setSelectedProfileUser(currentUser);
+      }
+    } else {
+      setActiveTab('championships');
+      setSelectedProfileUser(null);
+    }
+  };
+
+  // Escuta o evento 'popstate' do navegador (botão voltar/avançar)
+  useEffect(() => {
+    const onPopState = () => {
+      handleRouteNavigation(window.location.pathname);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [currentUser, users]);
+
+  // Inicialização do App: Sincroniza do banco de dados e analisa a rota inicial
   useEffect(() => {
     const initApp = async () => {
       await syncWithBackend();
+      const userId = localStorage.getItem('gg_user_id');
+      if (!userId) {
+        const cleanPath = window.location.pathname.replace(/\/$/, '') || '/';
+        if (cleanPath === '/login') {
+          setShowLoginModal(true);
+        } else {
+          setShowLoginModal(false);
+          if (cleanPath !== '/') {
+            window.history.replaceState(null, '', '/');
+          }
+        }
+      }
       setBooting(false);
     };
     initApp();
   }, []);
+
+  // Analisa rota caso o currentUser mude (e.g. após o login ou restauração de sessão)
+  useEffect(() => {
+    if (!booting) {
+      handleRouteNavigation(window.location.pathname);
+    }
+  }, [booting, currentUser, users]);
 
   // Recalculate rankings locally or from API whenever scores or registrations change
   useEffect(() => {
@@ -415,6 +533,13 @@ export default function App() {
   const navigateToProfile = (user: User) => {
     setSelectedProfileUser(user);
     setActiveTab('profile');
+  };
+
+  const handleViewProfile = (username: string) => {
+    const targetUser = users.find(u => u.username === username);
+    if (targetUser) {
+      navigateToProfile(targetUser);
+    }
   };
 
   if (booting) {
@@ -935,6 +1060,7 @@ export default function App() {
               onCommentPost={handleCommentPost}
               onToggleFollow={handleToggleFollow}
               defaultImage={settings.default_image}
+              onViewProfile={handleViewProfile}
             />
           )}
 
@@ -949,6 +1075,7 @@ export default function App() {
               onSelectModalityRanking={setSelectedRankingModality}
               selectedRankingModality={selectedRankingModality}
               defaultImage={settings.default_image}
+              onViewProfile={handleViewProfile}
             />
           )}
 

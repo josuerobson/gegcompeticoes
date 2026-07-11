@@ -13,6 +13,7 @@ interface FeedProps {
   onCommentPost: (postId: string, content: string) => Promise<void>;
   onToggleFollow: (userId: string) => Promise<void>;
   defaultImage?: string;
+  onViewProfile: (username: string) => void;
 }
 
 export default function FeedView({
@@ -23,7 +24,8 @@ export default function FeedView({
   onLikePost,
   onCommentPost,
   onToggleFollow,
-  defaultImage
+  defaultImage,
+  onViewProfile
 }: FeedProps) {
   // New post state
   const [isPostingOpen, setIsPostingOpen] = useState(false);
@@ -181,7 +183,7 @@ export default function FeedView({
                 >
                   {/* Header */}
                   <div className="p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 cursor-pointer hover:opacity-85 transition" onClick={() => onViewProfile(post.username)}>
                       <img
                         src={post.userAvatar}
                         alt={post.username}
@@ -307,7 +309,7 @@ export default function FeedView({
                       <div className="bg-slate-50 rounded-xl p-3 space-y-2 mt-2 text-sm">
                         {post.comments.slice(-3).map((comment) => (
                           <div key={comment.id} className="flex gap-2">
-                            <span className="font-bold text-slate-800">@{comment.username}:</span>
+                            <span className="font-bold text-slate-800 cursor-pointer hover:underline" onClick={() => onViewProfile(comment.username)}>@{comment.username}:</span>
                             <span className="text-slate-600">{comment.content}</span>
                           </div>
                         ))}
@@ -405,7 +407,7 @@ export default function FeedView({
             <div className="space-y-3">
               {suggestedUsers.map((su) => (
                 <div key={su.id} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 cursor-pointer hover:opacity-85 transition" onClick={() => onViewProfile(su.username)}>
                     <img
                       src={su.avatarUrl}
                       alt={su.username}
@@ -704,16 +706,17 @@ export default function FeedView({
                           <img
                             src={comment.userAvatar}
                             alt={comment.username}
-                            className="w-8 h-8 rounded-full object-cover border border-slate-200 mt-0.5"
+                            className="w-8 h-8 rounded-full object-cover border border-slate-200 mt-0.5 cursor-pointer hover:opacity-85 transition"
                             referrerPolicy="no-referrer"
                             onError={(e) => {
                               e.currentTarget.onerror = null;
                               e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
                             }}
+                            onClick={() => onViewProfile(comment.username)}
                           />
                           <div>
                             <div className="bg-slate-100 rounded-2xl p-3">
-                              <span className="font-bold text-slate-800 block text-xs">@{comment.username}</span>
+                              <span className="font-bold text-slate-800 block text-xs cursor-pointer hover:underline" onClick={() => onViewProfile(comment.username)}>@{comment.username}</span>
                               <span className="text-slate-600 block mt-0.5">{comment.content}</span>
                             </div>
                             <span className="text-[10px] text-slate-400 pl-2">

@@ -13,6 +13,7 @@ interface ChampionshipsProps {
   onSelectModalityRanking: (modality: string) => void;
   selectedRankingModality: string;
   defaultImage?: string;
+  onViewProfile?: (username: string) => void;
 }
 
 export default function ChampionshipsView({
@@ -24,7 +25,8 @@ export default function ChampionshipsView({
   globalRankings,
   onSelectModalityRanking,
   selectedRankingModality,
-  defaultImage
+  defaultImage,
+  onViewProfile
 }: ChampionshipsProps) {
   // Navigation states
   const [activeTab, setActiveTab] = useState<'tournaments' | 'rankings' | 'certificates'>('tournaments');
@@ -428,7 +430,7 @@ export default function ChampionshipsView({
                               )}
                             </td>
                             <td className="py-3 px-4">
-                              <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-3 cursor-pointer hover:opacity-85 transition" onClick={() => onViewProfile && onViewProfile(ranking.username)}>
                                 <img
                                   src={ranking.avatarUrl}
                                   alt={ranking.username}
