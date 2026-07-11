@@ -249,140 +249,45 @@ export async function initDB() {
 
     await client.query('COMMIT');
 
-    // Seeding Check
-    const userCountRes = await client.query('SELECT COUNT(*) FROM users');
-    const userCount = parseInt(userCountRes.rows[0].count, 10);
-
     const settingsCountRes = await client.query("SELECT COUNT(*) FROM settings WHERE key = 'default_image'");
     if (parseInt(settingsCountRes.rows[0].count, 10) === 0) {
       await client.query("INSERT INTO settings (key, value) VALUES ('default_image', 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80')");
     }
 
-    if (userCount === 0) {
-      console.log('PostgreSQL database is empty. Seeding with mock data...');
-      await client.query('BEGIN');
+    // Each reference table is seeded independently if it's empty, rather than gating
+    // everything on "users is empty" — production's users table turned out to already
+    // have rows (from an older schema) that were never actually part of any seed run,
+    // which meant the old combined gate silently skipped seeding clubs/championships/etc.
+    // entirely. ON CONFLICT DO NOTHING on every insert makes each of these idempotent
+    // and safe to re-run even if the table isn't perfectly empty.
+    const isEmpty = async (table: string) => {
+      const r = await client.query(`SELECT 1 FROM ${table} LIMIT 1`);
+      return r.rows.length === 0;
+    };
 
-      // Seed clubs (before users, referenced by users.club_id)
+    if (await isEmpty('clubs')) {
       for (const c of defaultClubs) {
         await client.query(
           `INSERT INTO clubs (id, name, logo_url, sub_domain, cnpj, phone, is_premium, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING`,
           [c.id, c.name, c.logoUrl || null, c.subDomain || null, c.cnpj || null, c.phone || null, c.isPremium, c.createdAt]
         );
       }
+    }
 
-      // Seed modalities
+    if (await isEmpty('modalities')) {
       for (const m of defaultModalities) {
         await client.query(
           `INSERT INTO modalities (id, name, discipline, target_preview, series_count, shots_per_series, time_per_series_minutes, evaluation_type)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING`,
           [m.id, m.name, m.discipline, m.targetPreview || null, m.seriesCount || null, m.shotsPerSeries || null, m.timePerSeriesMinutes || null, m.evaluationType || null]
         );
       }
-
-      // Seed users (demo password for all seeded accounts: "123456")
-      for (const u of defaultUsers) {
-        await client.query(
-          `INSERT INTO users (id, email, username, full_name, avatar_url, bio, cr_number, is_club_member, member_since, role, has_paid_signature, signature_expiry, club_id, is_profile_complete, cpf, rg, phone, password_hash)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
-          [u.id, u.email, u.username, u.fullName, u.avatarUrl, u.bio, u.crNumber || null, u.isClubMember, u.memberSince || null, u.role, u.hasPaidSignature, u.signatureExpiry || null, u.clubId || null, u.isProfileComplete || false, u.cpf || null, u.rg || null, u.phone || null, DEMO_PASSWORD_HASH]
-        );
-      }
-
-      // Seed weapons (owner can be a user or a club)
-      for (const w of defaultWeapons) {
-        await client.query(
-          `INSERT INTO weapons (id, owner_id, manufacturer, model, caliber, serial_number, weapon_type, weapon_number, sigma_number, class, permission_status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-          [w.id, w.ownerId, w.manufacturer, w.model, w.caliber, w.serialNumber, w.weaponType, w.weaponNumber || null, w.sigmaNumber || null, w.weaponClass || null, w.permissionStatus || null]
-        );
-      }
-
-      // Seed follows (after all users exist in the users table)
-      for (const u of defaultUsers) {
-        for (const folId of u.following) {
-          if (defaultUsers.some(user => user.id === folId)) {
-            await client.query(
-              `INSERT INTO follows (follower_id, following_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-              [u.id, folId]
-            );
-          }
-        }
-      }
-
-      // Seed championships
-      for (const c of defaultChampionships) {
-        await client.query(
-          `INSERT INTO championships (id, title, description, start_date, end_date, registration_fee, modalities, stages_count, status, banner_url, club_id, type)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-          [c.id, c.title, c.description, c.startDate, c.endDate, c.registrationFee, JSON.stringify(c.modalities), c.stagesCount, c.status, c.bannerUrl, c.clubId || null, c.type]
-        );
-      }
-
-      // Seed stages (after championships, referenced by championship_id)
-      for (const s of defaultStages) {
-        await client.query(
-          `INSERT INTO stages (id, championship_id, stage_num, title, date, regulations_file, scorecard_file)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [s.id, s.championshipId, s.stageNum, s.title, s.date, s.regulationsFile || null, s.scorecardFile || null]
-        );
-      }
-
-      // Seed registrations
-      for (const r of defaultRegistrations) {
-        await client.query(
-          `INSERT INTO registrations (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number, payment_method, payment_status, completion_status, registered_at, approved_at, tx_id, score_details, total_points, idsc_total_seconds, disqualified, penalty)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
-          [r.id, r.championshipId, r.userId, r.clubId || null, r.modalityId, r.stageId, r.weaponId, r.crNumber, r.paymentMethod, r.paymentStatus, r.completionStatus, r.registeredAt, r.approvedAt || null, r.txId || null, r.scoreDetails ? JSON.stringify(r.scoreDetails) : null, r.totalPoints ?? null, r.idscTotalSeconds ?? null, r.disqualified, r.penalty]
-        );
-      }
-
-      // Seed stage scores
-      for (const s of defaultStageScores) {
-        await client.query(
-          `INSERT INTO stage_scores (id, championship_id, registration_id, user_id, shooter_name, modality, stage_num, score, time_seconds, hit_factor, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-          [s.id, s.championshipId, s.registrationId, s.userId, s.shooterName, s.modality, s.stageNum, s.score, s.timeSeconds || null, s.hitFactor || null, s.createdAt]
-        );
-      }
-
-      // Seed posts, likes and comments
-      for (const p of defaultPosts) {
-        await client.query(
-          `INSERT INTO posts (id, user_id, username, user_avatar, content, image_url, target_score, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [p.id, p.userId, p.username, p.userAvatar, p.content, p.imageUrl || null, p.targetScore ? JSON.stringify(p.targetScore) : null, p.createdAt]
-        );
-
-        // Seed likes
-        for (const l of p.likes) {
-          if (defaultUsers.some(user => user.id === l)) {
-            await client.query(
-              `INSERT INTO likes (post_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-              [p.id, l]
-            );
-          }
-        }
-
-        // Seed comments
-        for (const comm of p.comments) {
-          await client.query(
-            `INSERT INTO comments (id, post_id, user_id, username, user_avatar, content, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [comm.id, p.id, comm.userId, comm.username, comm.userAvatar, comm.content, comm.createdAt]
-          );
-        }
-      }
-
-      await client.query('COMMIT');
-      console.log('Database seeded successfully.');
     }
 
     // Converge the known demo/seed accounts (by id) to mockData.ts, regardless of whatever
     // partial/legacy state they already carry (rows from an earlier schema version, or a
     // login-page auto-registration that predates real auth — e.g. missing cpf entirely).
-    // Runs after the seed-if-empty block above, so it's a harmless no-op confirmation on a
-    // freshly seeded database, and a real fix-up on a pre-existing one (e.g. production).
     // Only touches these specific known demo ids; any other real account is left untouched.
     for (const u of defaultUsers) {
       await client.query(
@@ -397,6 +302,97 @@ export async function initDB() {
     // Any other pre-existing user (e.g. a real signup from the old username-only login) left
     // without a password still gets the demo password so they aren't locked out.
     await client.query('UPDATE users SET password_hash = $1 WHERE password_hash IS NULL', [DEMO_PASSWORD_HASH]);
+
+    if (await isEmpty('weapons')) {
+      for (const w of defaultWeapons) {
+        await client.query(
+          `INSERT INTO weapons (id, owner_id, manufacturer, model, caliber, serial_number, weapon_type, weapon_number, sigma_number, class, permission_status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING`,
+          [w.id, w.ownerId, w.manufacturer, w.model, w.caliber, w.serialNumber, w.weaponType, w.weaponNumber || null, w.sigmaNumber || null, w.weaponClass || null, w.permissionStatus || null]
+        );
+      }
+    }
+
+    // Follows for the demo accounts — always attempted, ON CONFLICT DO NOTHING makes it safe.
+    for (const u of defaultUsers) {
+      for (const folId of u.following) {
+        if (defaultUsers.some(user => user.id === folId)) {
+          await client.query(
+            `INSERT INTO follows (follower_id, following_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [u.id, folId]
+          );
+        }
+      }
+    }
+
+    if (await isEmpty('championships')) {
+      for (const c of defaultChampionships) {
+        await client.query(
+          `INSERT INTO championships (id, title, description, start_date, end_date, registration_fee, modalities, stages_count, status, banner_url, club_id, type)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (id) DO NOTHING`,
+          [c.id, c.title, c.description, c.startDate, c.endDate, c.registrationFee, JSON.stringify(c.modalities), c.stagesCount, c.status, c.bannerUrl, c.clubId || null, c.type]
+        );
+      }
+    }
+
+    if (await isEmpty('stages')) {
+      for (const s of defaultStages) {
+        await client.query(
+          `INSERT INTO stages (id, championship_id, stage_num, title, date, regulations_file, scorecard_file)
+           VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING`,
+          [s.id, s.championshipId, s.stageNum, s.title, s.date, s.regulationsFile || null, s.scorecardFile || null]
+        );
+      }
+    }
+
+    if (await isEmpty('registrations')) {
+      for (const r of defaultRegistrations) {
+        await client.query(
+          `INSERT INTO registrations (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number, payment_method, payment_status, completion_status, registered_at, approved_at, tx_id, score_details, total_points, idsc_total_seconds, disqualified, penalty)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) ON CONFLICT (id) DO NOTHING`,
+          [r.id, r.championshipId, r.userId, r.clubId || null, r.modalityId, r.stageId, r.weaponId, r.crNumber, r.paymentMethod, r.paymentStatus, r.completionStatus, r.registeredAt, r.approvedAt || null, r.txId || null, r.scoreDetails ? JSON.stringify(r.scoreDetails) : null, r.totalPoints ?? null, r.idscTotalSeconds ?? null, r.disqualified, r.penalty]
+        );
+      }
+    }
+
+    if (await isEmpty('stage_scores')) {
+      for (const s of defaultStageScores) {
+        await client.query(
+          `INSERT INTO stage_scores (id, championship_id, registration_id, user_id, shooter_name, modality, stage_num, score, time_seconds, hit_factor, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING`,
+          [s.id, s.championshipId, s.registrationId, s.userId, s.shooterName, s.modality, s.stageNum, s.score, s.timeSeconds || null, s.hitFactor || null, s.createdAt]
+        );
+      }
+    }
+
+    if (await isEmpty('posts')) {
+      for (const p of defaultPosts) {
+        await client.query(
+          `INSERT INTO posts (id, user_id, username, user_avatar, content, image_url, target_score, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING`,
+          [p.id, p.userId, p.username, p.userAvatar, p.content, p.imageUrl || null, p.targetScore ? JSON.stringify(p.targetScore) : null, p.createdAt]
+        );
+
+        for (const l of p.likes) {
+          if (defaultUsers.some(user => user.id === l)) {
+            await client.query(
+              `INSERT INTO likes (post_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+              [p.id, l]
+            );
+          }
+        }
+
+        for (const comm of p.comments) {
+          await client.query(
+            `INSERT INTO comments (id, post_id, user_id, username, user_avatar, content, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING`,
+            [comm.id, p.id, comm.userId, comm.username, comm.userAvatar, comm.content, comm.createdAt]
+          );
+        }
+      }
+    }
+
+    console.log('Database seed check complete.');
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error during database initialization:', err);
