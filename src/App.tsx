@@ -46,7 +46,8 @@ export default function App() {
   // UI States
   const [activeTab, setActiveTab] = useState<'feed' | 'championships' | 'admin' | 'profile'>('feed');
   const [selectedProfileUser, setSelectedProfileUser] = useState<User | null>(null);
-  const [loginUsername, setLoginUsername] = useState('');
+  const [loginCpf, setLoginCpf] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [booting, setBooting] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -297,23 +298,28 @@ export default function App() {
   };
 
   // API Mutating Actions
-  const handleLogin = async (username: string) => {
-    if (!username || !username.trim()) return;
+  const handleLogin = async (cpf: string, password: string): Promise<boolean> => {
+    if (!cpf.trim() || !password) return false;
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username })
+        body: JSON.stringify({ cpf, password })
       });
       const data = await res.json();
-      if (data.user) {
+      if (res.ok && data.user) {
         setCurrentUser(data.user);
         localStorage.setItem('gg_user_id', data.user.id);
         await syncWithBackend(data.user.id);
         setActiveTab('championships');
+        return true;
       }
+      setLoginModalMessage(data.error || 'CPF ou senha inválidos.');
+      return false;
     } catch (err) {
       console.error(err);
+      setLoginModalMessage('Erro ao tentar entrar. Tente novamente.');
+      return false;
     }
   };
 
@@ -587,8 +593,11 @@ export default function App() {
   // Demo admin simulator trigger
   const handleToggleAdminDemo = async () => {
     if (!currentUser) return;
-    const targetUsername = currentUser.role === 'admin' ? 'roberto_ipsc' : 'guilherme_gg';
-    await handleLogin(targetUsername);
+    const isCurrentlyAdmin = currentUser.role === 'admin' || currentUser.role === 'master_admin' || currentUser.role === 'club_admin';
+    const targetUsername = isCurrentlyAdmin ? 'roberto_ipsc' : 'guilherme_gg';
+    const targetUser = users.find(u => u.username === targetUsername);
+    if (!targetUser?.cpf) return;
+    await handleLogin(targetUser.cpf, '123456');
   };
 
   // Navigations routing
@@ -937,65 +946,39 @@ export default function App() {
                 )}
               </div>
 
-              {/* Quick Member presets selector */}
-              <div className={`p-4 rounded-2xl border space-y-3 ${theme === 'dark' ? 'bg-slate-950/60 border-slate-850' : 'bg-slate-50 border-slate-200'}`}>
-                <span className={`text-[10px] font-bold block uppercase tracking-wider text-center flex items-center justify-center gap-1 ${theme === 'dark' ? 'text-amber-400' : 'text-amber-600'}`}>
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Entrar como Atleta Demonstrativo
-                </span>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => { handleLogin('guilherme_gg'); setShowLoginModal(false); }}
-                    className={`p-2.5 rounded-xl border transition flex items-center gap-2 text-left cursor-pointer ${theme === 'dark' ? 'bg-slate-900 hover:bg-slate-850 border-slate-800 hover:border-slate-700 text-white' : 'bg-white hover:bg-slate-50 border-slate-200 hover:border-slate-300 text-slate-800'}`}
-                  >
-                    <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50&auto=format&fit=crop&q=80" alt="Guilherme" className="w-6 h-6 rounded-full object-cover" />
-                    <div>
-                      <span className="font-bold block text-[11px]">Guilherme</span>
-                      <span className={`text-[9px] block uppercase font-bold ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>Diretor/Admin</span>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => { handleLogin('ana_precision'); setShowLoginModal(false); }}
-                    className={`p-2.5 rounded-xl border transition flex items-center gap-2 text-left cursor-pointer ${theme === 'dark' ? 'bg-slate-900 hover:bg-slate-850 border-slate-800 hover:border-slate-700 text-white' : 'bg-white hover:bg-slate-50 border-slate-200 hover:border-slate-300 text-slate-800'}`}
-                  >
-                    <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=50&auto=format&fit=crop&q=80" alt="Ana" className="w-6 h-6 rounded-full object-cover" />
-                    <div>
-                      <span className="font-bold block text-[11px]">Ana Clara</span>
-                      <span className={`text-[9px] block uppercase font-bold ${theme === 'dark' ? 'text-amber-400' : 'text-amber-600'}`}>Atleta Elite</span>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                  <div className={`w-full border-t ${theme === 'dark' ? 'border-slate-800/80' : 'border-slate-200'}`}></div>
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className={`px-3 text-[10px] font-bold font-mono ${theme === 'dark' ? 'bg-slate-900 text-slate-500' : 'bg-white text-slate-400'}`}>OU INFORME USUÁRIO DE CADASTRO</span>
-                </div>
-              </div>
-
               {/* Form */}
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
-                  handleLogin(loginUsername);
-                  setShowLoginModal(false);
+                  const ok = await handleLogin(loginCpf, loginPassword);
+                  if (ok) {
+                    setShowLoginModal(false);
+                    setLoginCpf('');
+                    setLoginPassword('');
+                  }
                 }}
                 className="space-y-4"
               >
                 <div className="space-y-1.5">
-                  <label className={`text-[10px] font-bold uppercase tracking-wider block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Nome Usuário (Para o Feed)</label>
+                  <label className={`text-[10px] font-bold uppercase tracking-wider block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>CPF</label>
                   <input
                     type="text"
                     required
-                    placeholder="Ex: @roberto_ipsc, carlotacabral"
-                    value={loginUsername}
-                    onChange={(e) => setLoginUsername(e.target.value)}
+                    placeholder="Ex: 000.000.000-00"
+                    value={loginCpf}
+                    onChange={(e) => setLoginCpf(e.target.value)}
+                    className={`w-full border outline-none px-4 py-3 rounded-2xl text-xs font-semibold focus:ring-1 transition ${theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-blue-600 focus:ring-blue-600' : 'bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:ring-blue-500'}`}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className={`text-[10px] font-bold uppercase tracking-wider block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Senha</label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
                     className={`w-full border outline-none px-4 py-3 rounded-2xl text-xs font-semibold focus:ring-1 transition ${theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-blue-600 focus:ring-blue-600' : 'bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:ring-blue-500'}`}
                   />
                 </div>

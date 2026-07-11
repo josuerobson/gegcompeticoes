@@ -6,6 +6,7 @@ import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
 import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon } from './src/types.js';
 import { pool, initDB } from './src/db.js';
+import { verifyPassword } from './src/auth.js';
 
 const app = express();
 const PORT = 3000;
@@ -224,86 +225,32 @@ app.get('/api/auth/me', (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  const { username } = req.body;
-  if (!username) {
-    return res.status(400).json({ error: 'Nome de usuário é obrigatório.' });
+  const { cpf, password } = req.body;
+  if (!cpf || !password) {
+    return res.status(400).json({ error: 'CPF e senha são obrigatórios.' });
   }
 
-  const cleanUsername = username.trim().toLowerCase().replace('@', '');
-  
+  const cleanCpf = String(cpf).replace(/\D/g, '');
+  const invalidCredentials = () => res.status(401).json({ error: 'CPF ou senha inválidos.' });
+
   try {
-    // Find user by clean username
     const userRes = await pool.query(
       `SELECT u.*,
         COALESCE((SELECT json_agg(follower_id) FROM follows WHERE following_id = u.id), '[]'::json) as followers,
         COALESCE((SELECT json_agg(following_id) FROM follows WHERE follower_id = u.id), '[]'::json) as following
-      FROM users u WHERE LOWER(u.username) = $1`,
-      [cleanUsername]
+      FROM users u WHERE regexp_replace(u.cpf, '[^0-9]', '', 'g') = $1`,
+      [cleanCpf]
     );
 
-    let user: User;
-
-    if (userRes.rows.length === 0) {
-      // Elegant Auto-registration for seamless onboarding!
-      const newId = `user_${Date.now()}`;
-      const email = `${cleanUsername}@clubgegpistol.com.br`;
-      const fullName = username.trim();
-      const avatarUrl = `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`;
-      const bio = "Novo atleta federado do G&G Competições! Pronto para os desafios nas pistas. 🎯";
-      const crNumber = `CR-${Math.floor(100000 + Math.random() * 900000)}-DF`;
-      const isClubMember = true;
-      const memberSince = new Date().toISOString().split('T')[0];
-      const role = cleanUsername.includes('admin') || cleanUsername === 'gg' ? 'admin' : 'member';
-      const hasPaidSignature = false;
-
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        await client.query(
-          `INSERT INTO users (id, email, username, full_name, avatar_url, bio, cr_number, is_club_member, member_since, role, has_paid_signature)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-          [newId, email, cleanUsername, fullName, avatarUrl, bio, crNumber, isClubMember, memberSince, role, hasPaidSignature]
-        );
-
-        // Auto-follow founders (user_guilherme, user_gabriel)
-        const founders = ['user_guilherme', 'user_gabriel'];
-        for (const founderId of founders) {
-          const checkFounder = await client.query('SELECT 1 FROM users WHERE id = $1', [founderId]);
-          if (checkFounder.rows.length > 0) {
-            await client.query(
-              `INSERT INTO follows (follower_id, following_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-              [newId, founderId]
-            );
-          }
-        }
-        await client.query('COMMIT');
-      } catch (e) {
-        await client.query('ROLLBACK');
-        throw e;
-      } finally {
-        client.release();
-      }
-
-      user = {
-        id: newId,
-        email,
-        username: cleanUsername,
-        fullName,
-        avatarUrl,
-        bio,
-        crNumber,
-        isClubMember,
-        memberSince,
-        role,
-        followers: [],
-        following: ["user_guilherme", "user_gabriel"],
-        hasPaidSignature,
-      };
-    } else {
-      user = mapUser(userRes.rows[0]);
+    if (userRes.rows.length === 0 || !userRes.rows[0].password_hash) {
+      return invalidCredentials();
     }
 
-    res.json({ user });
+    if (!verifyPassword(password, userRes.rows[0].password_hash)) {
+      return invalidCredentials();
+    }
+
+    res.json({ user: mapUser(userRes.rows[0]) });
   } catch (err) {
     console.error('Login database error:', err);
     res.status(500).json({ error: 'Erro interno ao realizar login.' });
