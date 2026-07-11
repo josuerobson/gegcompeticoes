@@ -61,6 +61,19 @@ export async function initDB() {
       );
     `);
 
+    // Defensive column backfill: this table may already exist from an earlier schema
+    // version (CREATE TABLE IF NOT EXISTS above won't add missing columns to it) — this
+    // is exactly what broke the password_hash backfill against production.
+    await client.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS is_profile_complete BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS cpf TEXT,
+        ADD COLUMN IF NOT EXISTS rg TEXT,
+        ADD COLUMN IF NOT EXISTS phone TEXT,
+        ADD COLUMN IF NOT EXISTS password_hash TEXT;
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS follows (
         follower_id TEXT REFERENCES users(id) ON DELETE CASCADE,
