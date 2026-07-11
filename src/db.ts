@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { defaultUsers, defaultChampionships, defaultRegistrations, defaultStageScores, defaultPosts } from './data/mockData.js';
+import { defaultUsers, defaultChampionships, defaultRegistrations, defaultStageScores, defaultPosts, defaultClubs, defaultModalities, defaultStages, defaultWeapons } from './data/mockData.js';
 
 const { Pool } = pg;
 
@@ -21,6 +21,19 @@ export async function initDB() {
 
     // Create Tables
     await client.query(`
+      CREATE TABLE IF NOT EXISTS clubs (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        logo_url TEXT,
+        sub_domain TEXT,
+        cnpj TEXT,
+        phone TEXT,
+        is_premium BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TEXT NOT NULL
+      );
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
@@ -31,9 +44,15 @@ export async function initDB() {
         cr_number TEXT,
         is_club_member BOOLEAN NOT NULL DEFAULT TRUE,
         member_since TEXT,
-        role TEXT NOT NULL CHECK (role IN ('admin', 'member')),
+        role TEXT NOT NULL CHECK (role IN ('admin', 'master_admin', 'club_admin', 'member')),
         has_paid_signature BOOLEAN NOT NULL DEFAULT FALSE,
-        signature_expiry TEXT
+        signature_expiry TEXT,
+        club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL,
+        is_profile_complete BOOLEAN NOT NULL DEFAULT FALSE,
+        cpf TEXT,
+        rg TEXT,
+        phone TEXT,
+        password_hash TEXT
       );
     `);
 
@@ -46,6 +65,29 @@ export async function initDB() {
     `);
 
     await client.query(`
+      CREATE TABLE IF NOT EXISTS modalities (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        discipline TEXT NOT NULL,
+        target_preview TEXT,
+        series_count INTEGER,
+        shots_per_series INTEGER,
+        time_per_series_minutes INTEGER,
+        evaluation_type TEXT CHECK (evaluation_type IN ('pontuacao', 'pontuacao_tempo', 'tempo'))
+      );
+    `);
+
+    // Defensive column backfill: this table may already exist from an earlier schema
+    // version (CREATE TABLE IF NOT EXISTS above won't add missing columns to it).
+    await client.query(`
+      ALTER TABLE modalities
+        ADD COLUMN IF NOT EXISTS series_count INTEGER,
+        ADD COLUMN IF NOT EXISTS shots_per_series INTEGER,
+        ADD COLUMN IF NOT EXISTS time_per_series_minutes INTEGER,
+        ADD COLUMN IF NOT EXISTS evaluation_type TEXT;
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS championships (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -55,10 +97,49 @@ export async function initDB() {
         registration_fee DOUBLE PRECISION NOT NULL,
         modalities JSONB NOT NULL,
         stages_count INTEGER NOT NULL,
-        current_stage INTEGER NOT NULL DEFAULT 1,
         status TEXT NOT NULL CHECK (status IN ('draft', 'open', 'completed')),
-        banner_url TEXT NOT NULL
+        banner_url TEXT NOT NULL,
+        club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL,
+        type TEXT NOT NULL DEFAULT 'individual' CHECK (type IN ('individual', 'clube'))
       );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS stages (
+        id TEXT PRIMARY KEY,
+        championship_id TEXT REFERENCES championships(id) ON DELETE CASCADE,
+        stage_num INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        date TEXT NOT NULL,
+        regulations_file TEXT,
+        scorecard_file TEXT
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS weapons (
+        id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        manufacturer TEXT NOT NULL,
+        model TEXT NOT NULL,
+        caliber TEXT NOT NULL,
+        serial_number TEXT NOT NULL,
+        weapon_type TEXT NOT NULL,
+        weapon_number TEXT,
+        sigma_number TEXT,
+        class TEXT,
+        permission_status TEXT
+      );
+    `);
+
+    // Defensive column backfill: this table may already exist from an earlier schema
+    // version (CREATE TABLE IF NOT EXISTS above won't add missing columns to it).
+    await client.query(`
+      ALTER TABLE weapons
+        ADD COLUMN IF NOT EXISTS weapon_number TEXT,
+        ADD COLUMN IF NOT EXISTS sigma_number TEXT,
+        ADD COLUMN IF NOT EXISTS class TEXT,
+        ADD COLUMN IF NOT EXISTS permission_status TEXT;
     `);
 
     await client.query(`
@@ -66,13 +147,22 @@ export async function initDB() {
         id TEXT PRIMARY KEY,
         championship_id TEXT REFERENCES championships(id) ON DELETE CASCADE,
         user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
-        modality TEXT NOT NULL,
+        club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL,
+        modality_id TEXT REFERENCES modalities(id),
+        stage_id TEXT REFERENCES stages(id),
+        weapon_id TEXT REFERENCES weapons(id),
         cr_number TEXT NOT NULL,
         payment_method TEXT NOT NULL CHECK (payment_method IN ('pix', 'credit_card')),
         payment_status TEXT NOT NULL CHECK (payment_status IN ('pending', 'approved')),
+        completion_status TEXT NOT NULL DEFAULT 'pending' CHECK (completion_status IN ('pending', 'completed')),
         registered_at TEXT NOT NULL,
         approved_at TEXT,
-        tx_id TEXT
+        tx_id TEXT,
+        score_details JSONB,
+        total_points INTEGER,
+        idsc_total_seconds DOUBLE PRECISION,
+        disqualified BOOLEAN NOT NULL DEFAULT FALSE,
+        penalty INTEGER NOT NULL DEFAULT 0
       );
     `);
 
@@ -147,12 +237,39 @@ export async function initDB() {
       console.log('PostgreSQL database is empty. Seeding with mock data...');
       await client.query('BEGIN');
 
+      // Seed clubs (before users, referenced by users.club_id)
+      for (const c of defaultClubs) {
+        await client.query(
+          `INSERT INTO clubs (id, name, logo_url, sub_domain, cnpj, phone, is_premium, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [c.id, c.name, c.logoUrl || null, c.subDomain || null, c.cnpj || null, c.phone || null, c.isPremium, c.createdAt]
+        );
+      }
+
+      // Seed modalities
+      for (const m of defaultModalities) {
+        await client.query(
+          `INSERT INTO modalities (id, name, discipline, target_preview, series_count, shots_per_series, time_per_series_minutes, evaluation_type)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [m.id, m.name, m.discipline, m.targetPreview || null, m.seriesCount || null, m.shotsPerSeries || null, m.timePerSeriesMinutes || null, m.evaluationType || null]
+        );
+      }
+
       // Seed users
       for (const u of defaultUsers) {
         await client.query(
-          `INSERT INTO users (id, email, username, full_name, avatar_url, bio, cr_number, is_club_member, member_since, role, has_paid_signature, signature_expiry)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-          [u.id, u.email, u.username, u.fullName, u.avatarUrl, u.bio, u.crNumber || null, u.isClubMember, u.memberSince || null, u.role, u.hasPaidSignature, u.signatureExpiry || null]
+          `INSERT INTO users (id, email, username, full_name, avatar_url, bio, cr_number, is_club_member, member_since, role, has_paid_signature, signature_expiry, club_id, is_profile_complete, cpf, rg, phone)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+          [u.id, u.email, u.username, u.fullName, u.avatarUrl, u.bio, u.crNumber || null, u.isClubMember, u.memberSince || null, u.role, u.hasPaidSignature, u.signatureExpiry || null, u.clubId || null, u.isProfileComplete || false, u.cpf || null, u.rg || null, u.phone || null]
+        );
+      }
+
+      // Seed weapons (owner can be a user or a club)
+      for (const w of defaultWeapons) {
+        await client.query(
+          `INSERT INTO weapons (id, owner_id, manufacturer, model, caliber, serial_number, weapon_type, weapon_number, sigma_number, class, permission_status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          [w.id, w.ownerId, w.manufacturer, w.model, w.caliber, w.serialNumber, w.weaponType, w.weaponNumber || null, w.sigmaNumber || null, w.weaponClass || null, w.permissionStatus || null]
         );
       }
 
@@ -171,18 +288,27 @@ export async function initDB() {
       // Seed championships
       for (const c of defaultChampionships) {
         await client.query(
-          `INSERT INTO championships (id, title, description, start_date, end_date, registration_fee, modalities, stages_count, current_stage, status, banner_url)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-          [c.id, c.title, c.description, c.startDate, c.endDate, c.registrationFee, JSON.stringify(c.modalities), c.stagesCount, c.currentStage, c.status, c.bannerUrl]
+          `INSERT INTO championships (id, title, description, start_date, end_date, registration_fee, modalities, stages_count, status, banner_url, club_id, type)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          [c.id, c.title, c.description, c.startDate, c.endDate, c.registrationFee, JSON.stringify(c.modalities), c.stagesCount, c.status, c.bannerUrl, c.clubId || null, c.type]
+        );
+      }
+
+      // Seed stages (after championships, referenced by championship_id)
+      for (const s of defaultStages) {
+        await client.query(
+          `INSERT INTO stages (id, championship_id, stage_num, title, date, regulations_file, scorecard_file)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [s.id, s.championshipId, s.stageNum, s.title, s.date, s.regulationsFile || null, s.scorecardFile || null]
         );
       }
 
       // Seed registrations
       for (const r of defaultRegistrations) {
         await client.query(
-          `INSERT INTO registrations (id, championship_id, user_id, modality, cr_number, payment_method, payment_status, registered_at, approved_at, tx_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-          [r.id, r.championshipId, r.userId, r.modality, r.crNumber, r.paymentMethod, r.paymentStatus, r.registeredAt, r.approvedAt || null, r.txId || null]
+          `INSERT INTO registrations (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number, payment_method, payment_status, completion_status, registered_at, approved_at, tx_id, score_details, total_points, idsc_total_seconds, disqualified, penalty)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+          [r.id, r.championshipId, r.userId, r.clubId || null, r.modalityId, r.stageId, r.weaponId, r.crNumber, r.paymentMethod, r.paymentStatus, r.completionStatus, r.registeredAt, r.approvedAt || null, r.txId || null, r.scoreDetails ? JSON.stringify(r.scoreDetails) : null, r.totalPoints ?? null, r.idscTotalSeconds ?? null, r.disqualified, r.penalty]
         );
       }
 

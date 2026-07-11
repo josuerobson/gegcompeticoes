@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Championship, Registration, User, StageScore } from '../types';
+import { Championship, Registration, User, StageScore, Weapon, Modality } from '../types';
 import { 
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
@@ -24,6 +24,10 @@ interface AdminPanelProps {
   registrations: Registration[];
   stageScores: StageScore[];
   users: User[];
+  weapons: Weapon[];
+  modalities: Modality[];
+  onAddWeapon: (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; serialNumber: string; weaponType: string }) => Promise<void>;
+  onRemoveWeapon: (weaponId: string) => Promise<void>;
   onCreateChampionship: (data: {
     title: string;
     description: string;
@@ -62,6 +66,10 @@ export default function AdminPanel({
   registrations,
   stageScores,
   users,
+  weapons,
+  modalities,
+  onAddWeapon,
+  onRemoveWeapon,
   onCreateChampionship,
   onUpdateChampionship,
   onRecordScore,
@@ -69,6 +77,20 @@ export default function AdminPanel({
   settings = {},
   onSaveSetting
 }: AdminPanelProps) {
+  const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
+  const [newClubWeapon, setNewClubWeapon] = useState({ manufacturer: '', model: '', caliber: '', serialNumber: '', weaponType: 'Pistola' });
+  const [savingClubWeapon, setSavingClubWeapon] = useState(false);
+
+  const handleSaveClubWeapon = async () => {
+    if (!newClubWeapon.manufacturer || !newClubWeapon.model || !currentUser?.clubId) return;
+    setSavingClubWeapon(true);
+    try {
+      await onAddWeapon({ ownerId: currentUser.clubId, ...newClubWeapon, serialNumber: newClubWeapon.serialNumber || `SIGMA-${Date.now()}` });
+      setNewClubWeapon({ manufacturer: '', model: '', caliber: '', serialNumber: '', weaponType: 'Pistola' });
+    } finally {
+      setSavingClubWeapon(false);
+    }
+  };
   // Main tabs: 'clube' | 'plataforma' | 'master'
   const [mainTab, setMainTab] = useState<'clube' | 'plataforma' | 'master'>('clube');
 
@@ -305,7 +327,7 @@ export default function AdminPanel({
     }, 2500);
   };
 
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'master_admin' || currentUser?.role === 'club_admin';
 
   if (!isAdmin) {
     return (
@@ -610,7 +632,7 @@ export default function AdminPanel({
                       const athlete = users.find(u => u.id === reg.userId);
                       return (
                         <option key={reg.id} value={reg.id}>
-                          {athlete?.fullName} | CR: {reg.crNumber} ({reg.modality})
+                          {athlete?.fullName} | CR: {reg.crNumber} ({modalityName(reg.modalityId)})
                         </option>
                       );
                     })}
@@ -686,7 +708,7 @@ export default function AdminPanel({
                     <div>
                       <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded font-mono">IDSC / IPSC OFICIAL</span>
                       <h4 className="font-bold text-slate-800 text-xs mt-1.5">{athlete?.fullName}</h4>
-                      <p className="text-[10px] text-slate-500">{champ?.title} - {reg.modality}</p>
+                      <p className="text-[10px] text-slate-500">{champ?.title} - {modalityName(reg.modalityId)}</p>
                     </div>
                     <span className="text-emerald-600 text-[10px] font-bold flex items-center gap-1">
                       <CheckCircle className="w-3.5 h-3.5" /> ELEGÍVEL
@@ -1652,7 +1674,7 @@ export default function AdminPanel({
                 <div key={c.id} className="border border-slate-100 rounded-xl p-4 flex justify-between items-center bg-slate-50/50">
                   <div>
                     <h4 className="font-bold text-slate-805 text-xs">{c.title}</h4>
-                    <span className="text-[10px] text-slate-400 font-mono">Etapa Ativa: {c.currentStage}ª Etapa</span>
+                    <span className="text-[10px] text-slate-400 font-mono">Etapas: {c.stagesCount}</span>
                   </div>
                   <div className="flex gap-2">
                     <button className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold text-[10px] px-3 py-1.5 rounded transition">Avançar Etapa</button>
@@ -1716,7 +1738,7 @@ export default function AdminPanel({
                       <tr key={reg.id}>
                         <td className="py-2.5 font-bold text-slate-800">{athlete?.fullName}</td>
                         <td className="py-2.5 text-slate-500">{champ?.title}</td>
-                        <td className="py-2.5 font-mono">{reg.modality}</td>
+                        <td className="py-2.5 font-mono">{modalityName(reg.modalityId)}</td>
                         <td className="py-2.5 text-center">
                           <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${reg.paymentStatus === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
                             {reg.paymentStatus === 'approved' ? 'HOMOLOGADA' : 'PENDENTE'}
@@ -1731,7 +1753,8 @@ export default function AdminPanel({
           </div>
         );
 
-      case 'cadastro_armas':
+      case 'cadastro_armas': {
+        const clubWeapons = weapons.filter(w => w.ownerId === currentUser?.clubId);
         return (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-805">
             <h3 className="font-display font-bold text-slate-900 text-base">Controle de Acervo de Material Bélico</h3>
@@ -1739,31 +1762,38 @@ export default function AdminPanel({
               <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-xl space-y-3">
                 <h4 className="font-bold text-xs">Registrar Arma no Estande</h4>
                 <div className="space-y-2">
-                  <input type="text" placeholder="Espécie/Modelo: Ex: Glock G17 Gen 5" className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
-                  <input type="text" placeholder="Registro SIGMA/SINARM" className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
+                  <input type="text" placeholder="Fabricante: Ex: Glock" value={newClubWeapon.manufacturer} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, manufacturer: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
+                  <input type="text" placeholder="Modelo: Ex: G17 Gen 5" value={newClubWeapon.model} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, model: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
+                  <input type="text" placeholder="Calibre: Ex: 9mm" value={newClubWeapon.caliber} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, caliber: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
+                  <input type="text" placeholder="Registro SIGMA/SINARM" value={newClubWeapon.serialNumber} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, serialNumber: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
                 </div>
-                <button className="w-full bg-blue-600 text-white text-xs py-2 rounded-lg font-bold">Salvar Arma</button>
+                <button
+                  onClick={handleSaveClubWeapon}
+                  disabled={savingClubWeapon || !newClubWeapon.manufacturer || !newClubWeapon.model || !currentUser?.clubId}
+                  className="w-full bg-blue-600 disabled:opacity-60 text-white text-xs py-2 rounded-lg font-bold"
+                >
+                  {savingClubWeapon ? 'Salvando...' : 'Salvar Arma'}
+                </button>
               </div>
 
               {/* Weapons list */}
               <div className="space-y-2 max-h-[220px] overflow-y-auto">
-                {[
-                  { m: 'Taurus TS9 9mm', s: 'SIGMA-910293' },
-                  { m: 'Glock G25 .380', s: 'SIGMA-451298' },
-                  { m: 'Imbel GC .40', s: 'SIGMA-783912' }
-                ].map((item, idx) => (
-                  <div key={idx} className="bg-slate-100/50 p-2.5 rounded-lg text-xs flex justify-between items-center leading-tight">
+                {clubWeapons.length === 0 ? (
+                  <p className="text-xs text-slate-400 p-2.5">Nenhuma arma cadastrada para este clube ainda.</p>
+                ) : clubWeapons.map((w) => (
+                  <div key={w.id} className="bg-slate-100/50 p-2.5 rounded-lg text-xs flex justify-between items-center leading-tight">
                     <div>
-                      <span className="font-bold text-slate-800 block">{item.m}</span>
-                      <span className="text-[10px] text-slate-450 font-mono">Registro: {item.s}</span>
+                      <span className="font-bold text-slate-800 block">{w.manufacturer} {w.model} {w.caliber}</span>
+                      <span className="text-[10px] text-slate-450 font-mono">Registro: {w.serialNumber}</span>
                     </div>
-                    <button className="text-red-500 hover:text-red-700">Remover</button>
+                    <button onClick={() => onRemoveWeapon(w.id)} className="text-red-500 hover:text-red-700">Remover</button>
                   </div>
                 ))}
               </div>
             </div>
           </div>
         );
+      }
 
       case 'municoes':
         return (

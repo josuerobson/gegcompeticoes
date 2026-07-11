@@ -8,11 +8,27 @@ export interface User {
   crNumber?: string; // Army Command CR (Certificado de Registro) for Brazilian sport shooters
   isClubMember: boolean;
   memberSince?: string;
-  role: 'admin' | 'member';
+  role: 'admin' | 'master_admin' | 'club_admin' | 'member';
   followers: string[]; // user IDs
   following: string[]; // user IDs
   hasPaidSignature: boolean;
   signatureExpiry?: string;
+  clubId?: string;
+  isProfileComplete?: boolean;
+  cpf?: string;
+  rg?: string;
+  phone?: string;
+}
+
+export interface Club {
+  id: string;
+  name: string;
+  logoUrl?: string;
+  subDomain?: string;
+  cnpj?: string;
+  phone?: string;
+  isPremium: boolean;
+  createdAt: string;
 }
 
 export interface Comment {
@@ -50,7 +66,36 @@ export interface Post {
 export interface Modality {
   id: string;
   name: string; // e.g., "IPSC Handgun", "Trap Americano", "Carabina Mira Aberta 10m"
-  category: string; // e.g., "Pistola", "Revolver", "Fuzil", "Carabina", "Espingarda"
+  discipline: string; // e.g., "IPSC", "IDSC", "Tiro de Precisão"
+  targetPreview?: string;
+  seriesCount?: number;
+  shotsPerSeries?: number;
+  timePerSeriesMinutes?: number;
+  evaluationType?: 'pontuacao' | 'pontuacao_tempo' | 'tempo';
+}
+
+export interface Stage {
+  id: string;
+  championshipId: string;
+  stageNum: number;
+  title: string;
+  date: string;
+  regulationsFile?: string;
+  scorecardFile?: string;
+}
+
+export interface Weapon {
+  id: string;
+  ownerId: string; // user id or club id
+  manufacturer: string;
+  model: string;
+  caliber: string;
+  serialNumber: string;
+  weaponType: string;
+  weaponNumber?: string; // "Número da arma" from the club registry
+  sigmaNumber?: string; // Exército "Número Sigma"
+  weaponClass?: string; // "Classe"
+  permissionStatus?: string; // "Status de permissão"
 }
 
 export interface Championship {
@@ -60,24 +105,35 @@ export interface Championship {
   startDate: string;
   endDate: string;
   registrationFee: number;
-  modalities: string[]; // lists of modality IDs or names
+  modalities: string[]; // list of modality IDs
   stagesCount: number;
-  currentStage: number;
+  currentStage?: number;
   status: 'draft' | 'open' | 'completed';
   bannerUrl: string;
+  clubId?: string;
+  type: 'individual' | 'clube';
 }
 
 export interface Registration {
   id: string;
   championshipId: string;
   userId: string;
-  modality: string;
+  clubId?: string;
+  modalityId: string;
+  stageId: string;
+  weaponId: string;
   crNumber: string;
   paymentMethod: 'pix' | 'credit_card';
   paymentStatus: 'pending' | 'approved';
+  completionStatus: 'pending' | 'completed';
   registeredAt: string;
   approvedAt?: string;
   txId?: string; // transaction hash/ID representation
+  scoreDetails?: Record<string, unknown>;
+  totalPoints?: number;
+  idscTotalSeconds?: number;
+  disqualified: boolean;
+  penalty: number;
 }
 
 export interface StageScore {

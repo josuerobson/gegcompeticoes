@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
-import { User, Post, Championship, Registration, StageScore, Comment } from './src/types.js';
+import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon } from './src/types.js';
 import { pool, initDB } from './src/db.js';
 
 const app = express();
@@ -21,11 +21,70 @@ function mapUser(u: any): User {
     crNumber: u.cr_number || undefined,
     isClubMember: u.is_club_member,
     memberSince: u.member_since || undefined,
-    role: u.role as 'admin' | 'member',
+    role: u.role as User['role'],
     followers: u.followers || [],
     following: u.following || [],
     hasPaidSignature: u.has_paid_signature,
     signatureExpiry: u.signature_expiry || undefined,
+    clubId: u.club_id || undefined,
+    isProfileComplete: u.is_profile_complete || false,
+    cpf: u.cpf || undefined,
+    rg: u.rg || undefined,
+    phone: u.phone || undefined,
+  };
+}
+
+function mapClub(c: any): Club {
+  return {
+    id: c.id,
+    name: c.name,
+    logoUrl: c.logo_url || undefined,
+    subDomain: c.sub_domain || undefined,
+    cnpj: c.cnpj || undefined,
+    phone: c.phone || undefined,
+    isPremium: c.is_premium,
+    createdAt: c.created_at,
+  };
+}
+
+function mapModality(m: any): Modality {
+  return {
+    id: m.id,
+    name: m.name,
+    discipline: m.discipline,
+    targetPreview: m.target_preview || undefined,
+    seriesCount: m.series_count ?? undefined,
+    shotsPerSeries: m.shots_per_series ?? undefined,
+    timePerSeriesMinutes: m.time_per_series_minutes ?? undefined,
+    evaluationType: m.evaluation_type || undefined,
+  };
+}
+
+function mapStage(s: any): Stage {
+  return {
+    id: s.id,
+    championshipId: s.championship_id,
+    stageNum: s.stage_num,
+    title: s.title,
+    date: s.date,
+    regulationsFile: s.regulations_file || undefined,
+    scorecardFile: s.scorecard_file || undefined,
+  };
+}
+
+function mapWeapon(w: any): Weapon {
+  return {
+    id: w.id,
+    ownerId: w.owner_id,
+    manufacturer: w.manufacturer,
+    model: w.model,
+    caliber: w.caliber,
+    serialNumber: w.serial_number,
+    weaponType: w.weapon_type,
+    weaponNumber: w.weapon_number || undefined,
+    sigmaNumber: w.sigma_number || undefined,
+    weaponClass: w.class || undefined,
+    permissionStatus: w.permission_status || undefined,
   };
 }
 
@@ -39,9 +98,10 @@ function mapChampionship(c: any): Championship {
     registrationFee: Number(c.registration_fee),
     modalities: c.modalities,
     stagesCount: c.stages_count,
-    currentStage: c.current_stage,
     status: c.status as 'draft' | 'open' | 'completed',
     bannerUrl: c.banner_url,
+    clubId: c.club_id || undefined,
+    type: (c.type as 'individual' | 'clube') || 'individual',
   };
 }
 
@@ -50,13 +110,22 @@ function mapRegistration(r: any): Registration {
     id: r.id,
     championshipId: r.championship_id,
     userId: r.user_id,
-    modality: r.modality,
+    clubId: r.club_id || undefined,
+    modalityId: r.modality_id,
+    stageId: r.stage_id,
+    weaponId: r.weapon_id,
     crNumber: r.cr_number,
     paymentMethod: r.payment_method as 'pix' | 'credit_card',
     paymentStatus: r.payment_status as 'pending' | 'approved',
+    completionStatus: (r.completion_status as 'pending' | 'completed') || 'pending',
     registeredAt: r.registered_at,
     approvedAt: r.approved_at || undefined,
     txId: r.tx_id || undefined,
+    scoreDetails: r.score_details || undefined,
+    totalPoints: r.total_points ?? undefined,
+    idscTotalSeconds: r.idsc_total_seconds ?? undefined,
+    disqualified: r.disqualified || false,
+    penalty: r.penalty || 0,
   };
 }
 
@@ -131,8 +200,10 @@ const requireAuth = (req: express.Request, res: express.Response, next: express.
   next();
 };
 
+const ADMIN_ROLES = ['admin', 'master_admin', 'club_admin'];
+
 const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (!(req as any).user || (req as any).user.role !== 'admin') {
+  if (!(req as any).user || !ADMIN_ROLES.includes((req as any).user.role)) {
     return res.status(403).json({ error: 'Acesso restrito para administradores do G&G.' });
   }
   next();
@@ -456,7 +527,7 @@ app.get('/api/championships', async (req, res) => {
 });
 
 app.post('/api/championships', requireAdmin, async (req, res) => {
-  const { title, description, startDate, endDate, registrationFee, modalities, stagesCount, bannerUrl } = req.body;
+  const { title, description, startDate, endDate, registrationFee, modalities, stagesCount, bannerUrl, clubId, type } = req.body;
 
   if (!title || !description || !registrationFee || !modalities || !stagesCount) {
     return res.status(400).json({ error: 'Preencha todos os campos obrigatórios do campeonato.' });
@@ -471,15 +542,16 @@ app.post('/api/championships', requireAdmin, async (req, res) => {
     registrationFee: Number(registrationFee),
     modalities: Array.isArray(modalities) ? modalities : [modalities],
     stagesCount: Number(stagesCount),
-    currentStage: 1,
     status: 'open',
-    bannerUrl: bannerUrl || 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80'
+    bannerUrl: bannerUrl || 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80',
+    clubId: clubId || undefined,
+    type: type === 'clube' ? 'clube' : 'individual'
   };
 
   try {
     await pool.query(
-      `INSERT INTO championships (id, title, description, start_date, end_date, registration_fee, modalities, stages_count, current_stage, status, banner_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      `INSERT INTO championships (id, title, description, start_date, end_date, registration_fee, modalities, stages_count, status, banner_url, club_id, type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         newChamp.id,
         newChamp.title,
@@ -489,9 +561,10 @@ app.post('/api/championships', requireAdmin, async (req, res) => {
         newChamp.registrationFee,
         JSON.stringify(newChamp.modalities),
         newChamp.stagesCount,
-        newChamp.currentStage,
         newChamp.status,
-        newChamp.bannerUrl
+        newChamp.bannerUrl,
+        newChamp.clubId || null,
+        newChamp.type
       ]
     );
     res.status(201).json({ championship: newChamp });
@@ -502,7 +575,7 @@ app.post('/api/championships', requireAdmin, async (req, res) => {
 });
 
 app.post('/api/championships/:id/status', requireAdmin, async (req, res) => {
-  const { status, currentStage } = req.body;
+  const { status } = req.body;
   const champId = req.params.id;
 
   try {
@@ -514,11 +587,10 @@ app.post('/api/championships/:id/status', requireAdmin, async (req, res) => {
     const champ = mapChampionship(champRes.rows[0]);
 
     if (status) champ.status = status;
-    if (currentStage) champ.currentStage = Number(currentStage);
 
     await pool.query(
-      `UPDATE championships SET status = $1, current_stage = $2 WHERE id = $3`,
-      [champ.status, champ.currentStage, champId]
+      `UPDATE championships SET status = $1 WHERE id = $2`,
+      [champ.status, champId]
     );
 
     res.json({ success: true, championship: champ });
@@ -574,7 +646,7 @@ app.get('/api/registrations', requireAuth, async (req, res) => {
   
   try {
     let regsRes;
-    if (currentUser.role === 'admin') {
+    if (ADMIN_ROLES.includes(currentUser.role)) {
       regsRes = await pool.query('SELECT * FROM registrations');
     } else {
       regsRes = await pool.query('SELECT * FROM registrations WHERE user_id = $1', [currentUser.id]);
@@ -589,53 +661,71 @@ app.get('/api/registrations', requireAuth, async (req, res) => {
 
 app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
   const championshipId = req.params.id;
-  const { modality, crNumber, paymentMethod } = req.body;
+  const { modalityId, stageId, weaponId, crNumber, paymentMethod } = req.body;
   const currentUser = (req as any).user as User;
 
-  if (!modality || !crNumber || !paymentMethod) {
-    return res.status(400).json({ error: 'Inscrição requer modalidade, CR válido e meio de pagamento.' });
+  if (!modalityId || !stageId || !weaponId || !crNumber || !paymentMethod) {
+    return res.status(400).json({ error: 'Inscrição requer modalidade, etapa, arma, CR válido e meio de pagamento.' });
   }
 
   try {
+    const champRes = await pool.query('SELECT * FROM championships WHERE id = $1', [championshipId]);
+    if (champRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Campeonato não encontrado.' });
+    }
+    const champ = mapChampionship(champRes.rows[0]);
+
     const alreadyRegisteredRes = await pool.query(
-      'SELECT 1 FROM registrations WHERE championship_id = $1 AND user_id = $2 AND modality = $3',
-      [championshipId, currentUser.id, modality]
+      'SELECT 1 FROM registrations WHERE championship_id = $1 AND user_id = $2 AND modality_id = $3 AND stage_id = $4',
+      [championshipId, currentUser.id, modalityId, stageId]
     );
 
     if (alreadyRegisteredRes.rows.length > 0) {
-      return res.status(400).json({ error: 'Você já possui inscrição activa nesta modalidade para este campeonato.' });
+      return res.status(400).json({ error: 'Você já possui inscrição ativa nesta modalidade/etapa para este campeonato.' });
     }
 
     const newReg: Registration = {
       id: `reg_${Date.now()}`,
       championshipId,
       userId: currentUser.id,
-      modality,
+      clubId: currentUser.clubId || champ.clubId || undefined,
+      modalityId,
+      stageId,
+      weaponId,
       crNumber,
       paymentMethod,
       paymentStatus: 'approved', // Auto approved for responsive demonstration flow!
+      completionStatus: 'pending',
       registeredAt: new Date().toISOString(),
       approvedAt: new Date().toISOString(),
-      txId: `tx_gg_${Math.random().toString(36).substring(2, 12)}`
+      txId: `tx_gg_${Math.random().toString(36).substring(2, 12)}`,
+      disqualified: false,
+      penalty: 0
     };
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       await client.query(
-        `INSERT INTO registrations (id, championship_id, user_id, modality, cr_number, payment_method, payment_status, registered_at, approved_at, tx_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        `INSERT INTO registrations (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number, payment_method, payment_status, completion_status, registered_at, approved_at, tx_id, disqualified, penalty)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
         [
           newReg.id,
           newReg.championshipId,
           newReg.userId,
-          newReg.modality,
+          newReg.clubId || null,
+          newReg.modalityId,
+          newReg.stageId,
+          newReg.weaponId,
           newReg.crNumber,
           newReg.paymentMethod,
           newReg.paymentStatus,
+          newReg.completionStatus,
           newReg.registeredAt,
           newReg.approvedAt || null,
-          newReg.txId || null
+          newReg.txId || null,
+          newReg.disqualified,
+          newReg.penalty
         ]
       );
 
@@ -655,6 +745,127 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Register championship database error:', err);
     res.status(500).json({ error: 'Erro ao realizar inscrição.' });
+  }
+});
+
+// 4b. Clubs, Modalities, Stages & Weapons (lookup / registry data)
+app.get('/api/clubs', async (req, res) => {
+  try {
+    const clubsRes = await pool.query('SELECT * FROM clubs');
+    res.json({ clubs: clubsRes.rows.map(mapClub) });
+  } catch (err) {
+    console.error('Fetch clubs database error:', err);
+    res.status(500).json({ error: 'Erro ao buscar clubes.' });
+  }
+});
+
+app.get('/api/modalities', async (req, res) => {
+  try {
+    const modalitiesRes = await pool.query('SELECT * FROM modalities');
+    res.json({ modalities: modalitiesRes.rows.map(mapModality) });
+  } catch (err) {
+    console.error('Fetch modalities database error:', err);
+    res.status(500).json({ error: 'Erro ao buscar modalidades.' });
+  }
+});
+
+app.get('/api/stages', async (req, res) => {
+  try {
+    const { championshipId } = req.query;
+    const stagesRes = championshipId
+      ? await pool.query('SELECT * FROM stages WHERE championship_id = $1 ORDER BY stage_num ASC', [championshipId])
+      : await pool.query('SELECT * FROM stages ORDER BY stage_num ASC');
+    res.json({ stages: stagesRes.rows.map(mapStage) });
+  } catch (err) {
+    console.error('Fetch stages database error:', err);
+    res.status(500).json({ error: 'Erro ao buscar etapas.' });
+  }
+});
+
+app.get('/api/weapons', async (req, res) => {
+  try {
+    const { ownerId } = req.query;
+    const weaponsRes = ownerId
+      ? await pool.query('SELECT * FROM weapons WHERE owner_id = $1', [ownerId])
+      : await pool.query('SELECT * FROM weapons');
+    res.json({ weapons: weaponsRes.rows.map(mapWeapon) });
+  } catch (err) {
+    console.error('Fetch weapons database error:', err);
+    res.status(500).json({ error: 'Erro ao buscar armas.' });
+  }
+});
+
+app.post('/api/weapons', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { ownerId, manufacturer, model, caliber, serialNumber, weaponType, weaponNumber, sigmaNumber, weaponClass, permissionStatus } = req.body;
+
+  if (!manufacturer || !model || !caliber || !serialNumber || !weaponType) {
+    return res.status(400).json({ error: 'Preencha fabricante, modelo, calibre, número de série e tipo da arma.' });
+  }
+
+  // Members can only register weapons for themselves; admins may register on behalf of their club.
+  const resolvedOwnerId = ownerId && ADMIN_ROLES.includes(currentUser.role) ? ownerId : currentUser.id;
+
+  const newWeapon: Weapon = {
+    id: `weapon_${Date.now()}`,
+    ownerId: resolvedOwnerId,
+    manufacturer,
+    model,
+    caliber,
+    serialNumber,
+    weaponType,
+    weaponNumber: weaponNumber || undefined,
+    sigmaNumber: sigmaNumber || undefined,
+    weaponClass: weaponClass || undefined,
+    permissionStatus: permissionStatus || undefined,
+  };
+
+  try {
+    await pool.query(
+      `INSERT INTO weapons (id, owner_id, manufacturer, model, caliber, serial_number, weapon_type, weapon_number, sigma_number, class, permission_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [
+        newWeapon.id,
+        newWeapon.ownerId,
+        newWeapon.manufacturer,
+        newWeapon.model,
+        newWeapon.caliber,
+        newWeapon.serialNumber,
+        newWeapon.weaponType,
+        newWeapon.weaponNumber || null,
+        newWeapon.sigmaNumber || null,
+        newWeapon.weaponClass || null,
+        newWeapon.permissionStatus || null
+      ]
+    );
+    res.status(201).json({ weapon: newWeapon });
+  } catch (err) {
+    console.error('Create weapon database error:', err);
+    res.status(500).json({ error: 'Erro ao cadastrar arma.' });
+  }
+});
+
+app.delete('/api/weapons/:id', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const weaponId = req.params.id;
+
+  try {
+    const weaponRes = await pool.query('SELECT * FROM weapons WHERE id = $1', [weaponId]);
+    if (weaponRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Arma não encontrada.' });
+    }
+    const weapon = mapWeapon(weaponRes.rows[0]);
+
+    const canDelete = weapon.ownerId === currentUser.id || (ADMIN_ROLES.includes(currentUser.role) && weapon.ownerId === currentUser.clubId);
+    if (!canDelete) {
+      return res.status(403).json({ error: 'Você não tem permissão para remover esta arma.' });
+    }
+
+    await pool.query('DELETE FROM weapons WHERE id = $1', [weaponId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete weapon database error:', err);
+    res.status(500).json({ error: 'Erro ao remover arma.' });
   }
 });
 
@@ -691,6 +902,9 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
     }
     const shooter = mapUser(shooterRes.rows[0]);
 
+    const modalityRes = await pool.query('SELECT * FROM modalities WHERE id = $1', [reg.modalityId]);
+    const modalityName = modalityRes.rows.length > 0 ? mapModality(modalityRes.rows[0]).name : reg.modalityId;
+
     let hitFactor: number | undefined;
     if (timeSeconds && Number(timeSeconds) > 0) {
       hitFactor = Number((Number(score) / Number(timeSeconds)).toFixed(4));
@@ -702,7 +916,7 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
       registrationId,
       userId: reg.userId,
       shooterName: shooter.fullName,
-      modality: reg.modality,
+      modality: modalityName,
       stageNum: Number(stageNum),
       score: Number(score),
       timeSeconds: timeSeconds ? Number(timeSeconds) : undefined,
@@ -752,10 +966,10 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
             hits: Math.floor(score / 10),
             shots: Math.floor(score / 10) + 1,
             score: score,
-            distance: reg.modality.includes('10m') ? 10 : (reg.modality.includes('25m') ? 25 : 15),
+            distance: modalityName.includes('10m') ? 10 : (modalityName.includes('25m') ? 25 : 15),
             gunModel: "Imbel GC MD2 LX",
-            caliber: reg.modality.includes('IPSC') ? "380 ACP" : ".22 LR",
-            discipline: reg.modality
+            caliber: modalityName.includes('IPSC') ? "380 ACP" : ".22 LR",
+            discipline: modalityName
           },
           likes: [],
           comments: [],

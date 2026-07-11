@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Post, Championship, Registration, StageScore, RankingItem, ShootingResult } from './types';
+import { User, Post, Championship, Registration, StageScore, RankingItem, ShootingResult, Club, Modality, Stage, Weapon } from './types';
 import FeedView from './components/FeedView';
 import ChampionshipsView from './components/ChampionshipsView';
 import AdminPanel from './components/AdminPanel';
@@ -33,6 +33,10 @@ export default function App() {
   const [championships, setChampionships] = useState<Championship[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [stageScores, setStageScores] = useState<StageScore[]>([]);
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const [modalities, setModalities] = useState<Modality[]>([]);
+  const [stages, setStages] = useState<Stage[]>([]);
+  const [weapons, setWeapons] = useState<Weapon[]>([]);
   const [globalRankings, setGlobalRankings] = useState<RankingItem[]>([]);
   const [selectedRankingModality, setSelectedRankingModality] = useState('');
   const [settings, setSettings] = useState<{ [key: string]: string }>({
@@ -107,6 +111,23 @@ export default function App() {
       const scoresData = await scoresRes.json();
       setStageScores(scoresData.stageScores || []);
 
+      // 6b. Fetch clubs, modalities, stages and weapons (registration reference data)
+      const clubsRes = await fetch('/api/clubs', { headers: authHeaders });
+      const clubsData = await clubsRes.json();
+      setClubs(clubsData.clubs || []);
+
+      const modalitiesRes = await fetch('/api/modalities', { headers: authHeaders });
+      const modalitiesData = await modalitiesRes.json();
+      setModalities(modalitiesData.modalities || []);
+
+      const stagesRes = await fetch('/api/stages', { headers: authHeaders });
+      const stagesData = await stagesRes.json();
+      setStages(stagesData.stages || []);
+
+      const weaponsRes = await fetch('/api/weapons', { headers: authHeaders });
+      const weaponsData = await weaponsRes.json();
+      setWeapons(weaponsData.weapons || []);
+
       // 7. Fetch Site Settings
       const settingsRes = await fetch('/api/settings', { headers: authHeaders });
       const settingsData = await settingsRes.json();
@@ -114,9 +135,12 @@ export default function App() {
         setSettings(settingsData.settings);
       }
 
-      // Initialize selected modality for rankings if empty
+      // Initialize selected modality for rankings if empty (resolve modality id -> name, since
+      // stage_scores/rankings still key off the modality display name, not its id)
       if (champData.championships && champData.championships.length > 0 && !selectedRankingModality) {
-        setSelectedRankingModality(champData.championships[0].modalities[0]);
+        const firstModalityId = champData.championships[0].modalities[0];
+        const firstModalityName = (modalitiesData.modalities || []).find((m: Modality) => m.id === firstModalityId)?.name || firstModalityId;
+        setSelectedRankingModality(firstModalityName);
       }
 
     } catch (err) {
@@ -190,7 +214,7 @@ export default function App() {
       setActiveTab('championships');
       setSelectedProfileUser(null);
     } else if (cleanPath === '/admin') {
-      if (currentUser.role === 'admin') {
+      if (currentUser.role === 'admin' || currentUser.role === 'master_admin' || currentUser.role === 'club_admin') {
         setActiveTab('admin');
         setSelectedProfileUser(null);
       } else {
@@ -379,7 +403,7 @@ export default function App() {
     }
   };
 
-  const handleRegisterChamp = async (championshipId: string, modality: string, crNumber: string, paymentMethod: 'pix' | 'credit_card') => {
+  const handleRegisterChamp = async (championshipId: string, modalityId: string, stageId: string, weaponId: string, crNumber: string, paymentMethod: 'pix' | 'credit_card') => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {
       authHeaders['x-user-id'] = currentUser.id;
@@ -389,13 +413,51 @@ export default function App() {
       const res = await fetch(`/api/championships/${championshipId}/register`, {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ modality, crNumber, paymentMethod })
+        body: JSON.stringify({ modalityId, stageId, weaponId, crNumber, paymentMethod })
       });
       if (res.ok) {
         await syncWithBackend();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Erro ao realizar inscrição.');
       }
     } catch (err) {
       console.error(err);
+      throw err;
+    }
+  };
+
+  const handleAddWeapon = async (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; serialNumber: string; weaponType: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string }) => {
+    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentUser) {
+      authHeaders['x-user-id'] = currentUser.id;
+    }
+
+    const res = await fetch('/api/weapons', {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify(weapon)
+    });
+    if (res.ok) {
+      await syncWithBackend();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Erro ao cadastrar arma.');
+    }
+  };
+
+  const handleRemoveWeapon = async (weaponId: string) => {
+    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentUser) {
+      authHeaders['x-user-id'] = currentUser.id;
+    }
+
+    const res = await fetch(`/api/weapons/${weaponId}`, {
+      method: 'DELETE',
+      headers: authHeaders
+    });
+    if (res.ok) {
+      await syncWithBackend();
     }
   };
 
@@ -1070,7 +1132,11 @@ export default function App() {
               registrations={registrations}
               stageScores={stageScores}
               currentUser={currentUser}
+              modalities={modalities}
+              stages={stages}
+              weapons={weapons}
               onRegister={handleRegisterChamp}
+              onAddWeapon={handleAddWeapon}
               globalRankings={globalRankings}
               onSelectModalityRanking={setSelectedRankingModality}
               selectedRankingModality={selectedRankingModality}
@@ -1086,10 +1152,14 @@ export default function App() {
               registrations={registrations}
               stageScores={stageScores}
               users={users}
+              weapons={weapons}
+              modalities={modalities}
               onCreateChampionship={handleCreateChampionshipAdmin}
               onUpdateChampionship={handleUpdateChampionshipAdmin}
               onRecordScore={handleRecordScoreAdmin}
               onToggleAdminDemo={handleToggleAdminDemo}
+              onAddWeapon={handleAddWeapon}
+              onRemoveWeapon={handleRemoveWeapon}
               settings={settings}
               onSaveSetting={handleSaveSetting}
             />
@@ -1103,10 +1173,12 @@ export default function App() {
               registrations={registrations}
               stageScores={stageScores}
               championships={championships}
+              modalities={modalities}
               onToggleFollow={handleToggleFollow}
               onPaySignature={handlePaySignature}
               onLogout={handleLogout}
               onAddPost={handleAddPost}
+              onNavigateToChampionships={() => setActiveTab('championships')}
               defaultImage={settings.default_image}
             />
           )}

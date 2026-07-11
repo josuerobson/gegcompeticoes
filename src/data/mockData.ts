@@ -1,4 +1,4 @@
-import { User, Post, Championship, Registration, StageScore } from '../types';
+import { User, Post, Championship, Registration, StageScore, Club, Modality, Stage, Weapon } from '../types';
 
 export const shootingImages = {
   ipsc_range: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80",
@@ -9,6 +9,80 @@ export const shootingImages = {
   trophies: "https://images.unsplash.com/photo-1578269174936-2709b5a5c0e5?w=800&auto=format&fit=crop&q=80",
   range_glasses: "https://images.unsplash.com/photo-1517466787929-bc90951d0974?w=800&auto=format&fit=crop&q=80"
 };
+
+export const defaultClubs: Club[] = [
+  {
+    id: "club_aranas",
+    name: "Clube de Tiro Aranãs",
+    logoUrl: "https://images.unsplash.com/photo-1578269174936-2709b5a5c0e5?w=150&auto=format&fit=crop&q=80",
+    subDomain: "aranas",
+    cnpj: "12.345.678/0001-90",
+    phone: "(33) 98888-1111",
+    isPremium: true,
+    createdAt: "2024-01-01"
+  },
+  {
+    id: "club_geg",
+    name: "Clube de Tiro G&G",
+    logoUrl: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=150&auto=format&fit=crop&q=80",
+    subDomain: "geg",
+    cnpj: "98.765.432/0001-10",
+    phone: "(61) 97777-2222",
+    isPremium: true,
+    createdAt: "2024-01-15"
+  },
+  {
+    id: "club_standard",
+    name: "Clube Standard de Brasília",
+    cnpj: "45.678.901/0001-20",
+    phone: "(61) 96666-3333",
+    isPremium: false,
+    createdAt: "2025-05-10"
+  }
+];
+
+export const defaultModalities: Modality[] = [
+  {
+    id: "mod_ipsc",
+    name: "IPSC Handgun (Standard)",
+    discipline: "IPSC",
+    targetPreview: "Alvo oficial IPSC. Pontuações: Alpha (5 pts), Charlie (3 pts), Delta (1 pt).",
+    seriesCount: 1,
+    shotsPerSeries: 20,
+    timePerSeriesMinutes: 5,
+    evaluationType: "pontuacao_tempo"
+  },
+  {
+    id: "mod_idsc",
+    name: "Tiro Defensivo IDSC",
+    discipline: "IDSC",
+    targetPreview: "Alvos silhueta defensivos. Pontuação baseada em tempo total mais penalidades (pontos perdidos x 0.5s).",
+    seriesCount: 1,
+    shotsPerSeries: 18,
+    timePerSeriesMinutes: 5,
+    evaluationType: "tempo"
+  },
+  {
+    id: "mod_precisao",
+    name: "Pistola Fogo Central 25m",
+    discipline: "Tiro de Precisão",
+    targetPreview: "Alvo de precisão com anéis concêntricos de 1 a 10 pontos. 10 tiros por etapa.",
+    seriesCount: 1,
+    shotsPerSeries: 10,
+    timePerSeriesMinutes: 3,
+    evaluationType: "pontuacao"
+  },
+  {
+    id: "mod_trap",
+    name: "Trap Americano",
+    discipline: "Trap",
+    targetPreview: "Prato de argila lançado em voo; acerto ou erro por disparo.",
+    seriesCount: 4,
+    shotsPerSeries: 25,
+    timePerSeriesMinutes: 15,
+    evaluationType: "pontuacao"
+  }
+];
 
 export const defaultUsers: User[] = [
   {
@@ -21,11 +95,16 @@ export const defaultUsers: User[] = [
     crNumber: "CR-998822-DF",
     isClubMember: true,
     memberSince: "2024-01-15",
-    role: "admin",
+    role: "master_admin",
     followers: ["user_ana", "user_roberto", "user_carla"],
     following: ["user_gabriel", "user_roberto"],
     hasPaidSignature: true,
-    signatureExpiry: "2027-12-31"
+    signatureExpiry: "2027-12-31",
+    clubId: "club_aranas",
+    isProfileComplete: true,
+    cpf: "111.111.111-11",
+    rg: "MG-11.111.111",
+    phone: "(33) 91111-1111"
   },
   {
     id: "user_gabriel",
@@ -37,11 +116,16 @@ export const defaultUsers: User[] = [
     crNumber: "CR-774431-DF",
     isClubMember: true,
     memberSince: "2024-02-10",
-    role: "admin",
+    role: "club_admin",
     followers: ["user_guilherme", "user_roberto", "user_carla"],
     following: ["user_guilherme", "user_ana"],
     hasPaidSignature: true,
-    signatureExpiry: "2027-12-31"
+    signatureExpiry: "2027-12-31",
+    clubId: "club_geg",
+    isProfileComplete: true,
+    cpf: "222.222.222-22",
+    rg: "DF-22.222.222",
+    phone: "(61) 92222-2222"
   },
   {
     id: "user_ana",
@@ -57,7 +141,12 @@ export const defaultUsers: User[] = [
     followers: ["user_guilherme", "user_gabriel"],
     following: ["user_guilherme", "user_gabriel", "user_carla"],
     hasPaidSignature: true,
-    signatureExpiry: "2026-12-31"
+    signatureExpiry: "2026-12-31",
+    clubId: "club_geg",
+    isProfileComplete: true,
+    cpf: "333.333.333-33",
+    rg: "DF-33.333.333",
+    phone: "(61) 93333-3333"
   },
   {
     id: "user_roberto",
@@ -73,7 +162,12 @@ export const defaultUsers: User[] = [
     followers: ["user_guilherme", "user_gabriel"],
     following: ["user_guilherme", "user_gabriel", "user_ana"],
     hasPaidSignature: true,
-    signatureExpiry: "2027-02-15"
+    signatureExpiry: "2027-02-15",
+    clubId: "club_geg",
+    isProfileComplete: true,
+    cpf: "444.444.444-44",
+    rg: "DF-44.444.444",
+    phone: "(61) 94444-4444"
   },
   {
     id: "user_carla",
@@ -89,36 +183,105 @@ export const defaultUsers: User[] = [
     followers: ["user_ana"],
     following: ["user_guilherme", "user_gabriel", "user_roberto"],
     hasPaidSignature: true,
-    signatureExpiry: "2026-11-11"
+    signatureExpiry: "2026-11-11",
+    clubId: "club_aranas",
+    isProfileComplete: true,
+    cpf: "555.555.555-55",
+    rg: "MG-55.555.555",
+    phone: "(33) 95555-5555"
+  }
+];
+
+export const defaultWeapons: Weapon[] = [
+  {
+    id: "weapon_glock",
+    ownerId: "user_guilherme",
+    manufacturer: "Glock",
+    model: "17 Gen 5",
+    caliber: "9mm",
+    serialNumber: "G17-998822",
+    weaponType: "Pistola"
+  },
+  {
+    id: "weapon_taurus",
+    ownerId: "user_roberto",
+    manufacturer: "Taurus",
+    model: "TS9",
+    caliber: "9mm",
+    serialNumber: "TS9-448202",
+    weaponType: "Pistola"
+  },
+  {
+    id: "weapon_imbel",
+    ownerId: "user_ana",
+    manufacturer: "Imbel",
+    model: "MD2 LX",
+    caliber: ".40 S&W",
+    serialNumber: "MD2-104928",
+    weaponType: "Pistola"
+  },
+  {
+    id: "weapon_club_geg",
+    ownerId: "club_geg",
+    manufacturer: "Taurus",
+    model: "1911 Officer",
+    caliber: ".45 ACP",
+    serialNumber: "TAU-1911-GEG",
+    weaponType: "Pistola"
+  },
+  {
+    id: "weapon_carla",
+    ownerId: "user_carla",
+    manufacturer: "Taurus",
+    model: "TS9",
+    caliber: "9mm",
+    serialNumber: "SN-TEST-001",
+    weaponType: "Pistola"
   }
 ];
 
 export const defaultChampionships: Championship[] = [
   {
     id: "champ_ipsc_2026",
-    title: "Campeonato G&G Competições IPSC Copa de Inverno",
-    description: "Competição oficial de IPSC Handgun com 4 etapas eliminatórias. Pistas dinâmicas projetadas para testar velocidade, precisão e potência (DVC). Modalidades Open, Standard, Production e Light. Pontuação calculada via coeficiente (Hit Factor). Premiação exclusiva em dinheiro e medalhas personalizadas.",
-    startDate: "2026-06-20",
-    endDate: "2026-08-30",
+    title: "Campeonato Oficial IPSC - Copa Aranãs",
+    description: "Campeonato oficial de IPSC Handgun. Pistas dinâmicas projetadas para testar velocidade, precisão e potência (DVC). Pontuação calculada via coeficiente (Hit Factor).",
+    startDate: "2026-06-01",
+    endDate: "2026-10-31",
     registrationFee: 150.00,
-    modalities: ["IPSC Handgun Standard", "IPSC Handgun Production", "IPSC Handgun Light"],
-    stagesCount: 4,
-    currentStage: 1,
+    modalities: ["mod_ipsc"],
+    stagesCount: 2,
     status: "open",
-    bannerUrl: shootingImages.ipsc_range
+    bannerUrl: shootingImages.ipsc_range,
+    clubId: "club_aranas",
+    type: "individual"
+  },
+  {
+    id: "champ_idsc_2026",
+    title: "Torneio Interno IDSC - G&G",
+    description: "Competição de tiro defensivo IDSC voltada para capacitação e confraternização de atletas e membros credenciados.",
+    startDate: "2026-07-01",
+    endDate: "2026-09-30",
+    registrationFee: 100.00,
+    modalities: ["mod_idsc"],
+    stagesCount: 1,
+    status: "open",
+    bannerUrl: shootingImages.pistol_grip,
+    clubId: "club_geg",
+    type: "individual"
   },
   {
     id: "champ_precisao_2026",
-    title: "Torneio G&G de Precisão de Carabina & Pistola",
-    description: "Campeonato focado no tiro estático a 10m, 15m e 25m. Categorias de Carabina de Pressão Mira Aberta e Fogo Central. Desafio de precisão extrema de 20 e 40 disparos. Perfeito para afiar os fundamentos essenciais e postura dos atiradores.",
+    title: "Torneio G&G de Precisão de Pistola",
+    description: "Campeonato focado no tiro estático a 25m. Desafio de precisão extrema de 10 disparos por etapa. Perfeito para afiar os fundamentos essenciais e postura dos atiradores.",
     startDate: "2026-07-05",
     endDate: "2026-07-25",
     registrationFee: 90.00,
-    modalities: ["Carabina Mira Aberta 10m", "Pistola de Precisão Fogo Central 25m"],
+    modalities: ["mod_precisao"],
     stagesCount: 2,
-    currentStage: 1,
     status: "open",
-    bannerUrl: shootingImages.paper_target
+    bannerUrl: shootingImages.paper_target,
+    clubId: "club_geg",
+    type: "individual"
   },
   {
     id: "champ_trap_completed",
@@ -127,74 +290,182 @@ export const defaultChampionships: Championship[] = [
     startDate: "2026-04-01",
     endDate: "2026-05-15",
     registrationFee: 180.00,
-    modalities: ["Trap Americano Sênior", "Trap Americano Iniciante"],
+    modalities: ["mod_trap"],
     stagesCount: 4,
-    currentStage: 4,
     status: "completed",
-    bannerUrl: shootingImages.clay_trap
+    bannerUrl: shootingImages.clay_trap,
+    clubId: "club_aranas",
+    type: "individual"
+  }
+];
+
+export const defaultStages: Stage[] = [
+  {
+    id: "stage_ipsc_1",
+    championshipId: "champ_ipsc_2026",
+    stageNum: 1,
+    title: "1ª Etapa - Abertura da Copa",
+    date: "2026-06-15",
+    regulationsFile: "/files/regulamento_ipsc_etapa1.pdf",
+    scorecardFile: "/files/sumula_ipsc_etapa1.pdf"
+  },
+  {
+    id: "stage_ipsc_2",
+    championshipId: "champ_ipsc_2026",
+    stageNum: 2,
+    title: "2ª Etapa - Encerramento",
+    date: "2026-08-20",
+    regulationsFile: "/files/regulamento_ipsc_etapa2.pdf",
+    scorecardFile: "/files/sumula_ipsc_etapa2.pdf"
+  },
+  {
+    id: "stage_idsc_1",
+    championshipId: "champ_idsc_2026",
+    stageNum: 1,
+    title: "Etapa Única G&G",
+    date: "2026-07-20",
+    regulationsFile: "/files/regulamento_idsc.pdf",
+    scorecardFile: "/files/sumula_idsc.pdf"
+  },
+  {
+    id: "stage_precisao_1",
+    championshipId: "champ_precisao_2026",
+    stageNum: 1,
+    title: "1ª Etapa - Precisão 25m",
+    date: "2026-07-10"
+  },
+  {
+    id: "stage_precisao_2",
+    championshipId: "champ_precisao_2026",
+    stageNum: 2,
+    title: "2ª Etapa - Precisão 25m",
+    date: "2026-07-24"
+  },
+  {
+    id: "stage_trap_1",
+    championshipId: "champ_trap_completed",
+    stageNum: 1,
+    title: "1ª Etapa",
+    date: "2026-04-05"
+  },
+  {
+    id: "stage_trap_2",
+    championshipId: "champ_trap_completed",
+    stageNum: 2,
+    title: "2ª Etapa",
+    date: "2026-04-12"
+  },
+  {
+    id: "stage_trap_3",
+    championshipId: "champ_trap_completed",
+    stageNum: 3,
+    title: "3ª Etapa",
+    date: "2026-04-19"
+  },
+  {
+    id: "stage_trap_4",
+    championshipId: "champ_trap_completed",
+    stageNum: 4,
+    title: "4ª Etapa - Final",
+    date: "2026-04-26"
   }
 ];
 
 export const defaultRegistrations: Registration[] = [
   {
-    id: "reg_1",
+    id: "reg_roberto_ipsc_s1",
     championshipId: "champ_ipsc_2026",
     userId: "user_roberto",
-    modality: "IPSC Handgun Production",
+    clubId: "club_geg",
+    modalityId: "mod_ipsc",
+    stageId: "stage_ipsc_1",
+    weaponId: "weapon_taurus",
     crNumber: "CR-448202-DF",
     paymentMethod: "pix",
     paymentStatus: "approved",
-    registeredAt: "2026-06-01T10:30:00Z",
-    approvedAt: "2026-06-01T10:35:00Z",
-    txId: "tx_pix_99fhdh27364fhskd"
+    completionStatus: "completed",
+    registeredAt: "2026-06-05T10:00:00Z",
+    approvedAt: "2026-06-05T10:05:00Z",
+    txId: "tx_123456",
+    scoreDetails: { rings: { x: 5, p8: 1, p9: 2, p10: 7 } },
+    totalPoints: 176,
+    disqualified: false,
+    penalty: 0
   },
   {
-    id: "reg_2",
+    id: "reg_ana_ipsc_s1",
     championshipId: "champ_ipsc_2026",
     userId: "user_ana",
-    modality: "IPSC Handgun Standard",
+    clubId: "club_geg",
+    modalityId: "mod_ipsc",
+    stageId: "stage_ipsc_1",
+    weaponId: "weapon_imbel",
     crNumber: "CR-104928-DF",
     paymentMethod: "credit_card",
     paymentStatus: "approved",
-    registeredAt: "2026-06-02T14:15:00Z",
-    approvedAt: "2026-06-02T14:15:10Z",
-    txId: "tx_cc_cc88192837ff29"
+    completionStatus: "completed",
+    registeredAt: "2026-06-06T14:30:00Z",
+    approvedAt: "2026-06-06T14:32:00Z",
+    txId: "tx_789101",
+    scoreDetails: { rings: { x: 10, p9: 2, p10: 8 } },
+    totalPoints: 211,
+    disqualified: false,
+    penalty: 0
   },
   {
-    id: "reg_3",
+    id: "reg_ana_precisao_s1",
     championshipId: "champ_precisao_2026",
     userId: "user_ana",
-    modality: "Carabina Mira Aberta 10m",
+    clubId: "club_geg",
+    modalityId: "mod_precisao",
+    stageId: "stage_precisao_1",
+    weaponId: "weapon_imbel",
     crNumber: "CR-104928-DF",
     paymentMethod: "pix",
     paymentStatus: "approved",
+    completionStatus: "completed",
     registeredAt: "2026-06-03T09:00:00Z",
     approvedAt: "2026-06-03T09:05:00Z",
-    txId: "tx_pix_228fhdh7364ffsks"
+    txId: "tx_pix_228fhdh7364ffsks",
+    totalPoints: 99,
+    disqualified: false,
+    penalty: 0
   },
   {
-    id: "reg_4",
+    id: "reg_carla_trap_s1",
     championshipId: "champ_trap_completed",
     userId: "user_carla",
-    modality: "Trap Americano Sênior",
+    clubId: "club_aranas",
+    modalityId: "mod_trap",
+    stageId: "stage_trap_1",
+    weaponId: "weapon_carla",
     crNumber: "CR-339941-DF",
     paymentMethod: "pix",
     paymentStatus: "approved",
+    completionStatus: "completed",
     registeredAt: "2026-03-15T11:00:00Z",
-    approvedAt: "2016-03-15T11:05:00Z",
-    txId: "tx_pix_trap_finalized"
+    approvedAt: "2026-03-15T11:05:00Z",
+    txId: "tx_pix_trap_finalized",
+    disqualified: false,
+    penalty: 0
   },
   {
-    id: "reg_5",
+    id: "reg_roberto_trap_s1",
     championshipId: "champ_trap_completed",
     userId: "user_roberto",
-    modality: "Trap Americano Iniciante",
+    clubId: "club_geg",
+    modalityId: "mod_trap",
+    stageId: "stage_trap_1",
+    weaponId: "weapon_taurus",
     crNumber: "CR-448202-DF",
     paymentMethod: "credit_card",
     paymentStatus: "approved",
+    completionStatus: "completed",
     registeredAt: "2026-03-16T12:00:00Z",
     approvedAt: "2026-03-16T12:00:05Z",
-    txId: "tx_cc_trap_init"
+    txId: "tx_cc_trap_init",
+    disqualified: false,
+    penalty: 0
   }
 ];
 
@@ -203,7 +474,7 @@ export const defaultStageScores: StageScore[] = [
   {
     id: "score_1",
     championshipId: "champ_ipsc_2026",
-    registrationId: "reg_1",
+    registrationId: "reg_roberto_ipsc_s1",
     userId: "user_roberto",
     shooterName: "Roberto Silva",
     modality: "IPSC Handgun Production",
@@ -217,10 +488,10 @@ export const defaultStageScores: StageScore[] = [
   {
     id: "score_trap_carla_s1",
     championshipId: "champ_trap_completed",
-    registrationId: "reg_4",
+    registrationId: "reg_carla_trap_s1",
     userId: "user_carla",
     shooterName: "Carla Dias",
-    modality: "Trap Americano Sênior",
+    modality: "Trap Americano",
     stageNum: 1,
     score: 24.00, // 24 hits out of 25
     createdAt: "2026-04-05T15:00:00Z"
@@ -228,10 +499,10 @@ export const defaultStageScores: StageScore[] = [
   {
     id: "score_trap_carla_s2",
     championshipId: "champ_trap_completed",
-    registrationId: "reg_4",
+    registrationId: "reg_carla_trap_s1",
     userId: "user_carla",
     shooterName: "Carla Dias",
-    modality: "Trap Americano Sênior",
+    modality: "Trap Americano",
     stageNum: 2,
     score: 25.00, // Perfect round!
     createdAt: "2026-04-12T14:30:00Z"
@@ -239,10 +510,10 @@ export const defaultStageScores: StageScore[] = [
   {
     id: "score_trap_carla_s3",
     championshipId: "champ_trap_completed",
-    registrationId: "reg_4",
+    registrationId: "reg_carla_trap_s1",
     userId: "user_carla",
     shooterName: "Carla Dias",
-    modality: "Trap Americano Sênior",
+    modality: "Trap Americano",
     stageNum: 3,
     score: 23.00,
     createdAt: "2026-04-19T16:00:00Z"
@@ -250,10 +521,10 @@ export const defaultStageScores: StageScore[] = [
   {
     id: "score_trap_carla_s4",
     championshipId: "champ_trap_completed",
-    registrationId: "reg_4",
+    registrationId: "reg_carla_trap_s1",
     userId: "user_carla",
     shooterName: "Carla Dias",
-    modality: "Trap Americano Sênior",
+    modality: "Trap Americano",
     stageNum: 4,
     score: 25.00, // Perfect round!
     createdAt: "2026-04-26T14:00:00Z"
@@ -261,10 +532,10 @@ export const defaultStageScores: StageScore[] = [
   {
     id: "score_trap_roberto_s1",
     championshipId: "champ_trap_completed",
-    registrationId: "reg_5",
+    registrationId: "reg_roberto_trap_s1",
     userId: "user_roberto",
     shooterName: "Roberto Silva",
-    modality: "Trap Americano Iniciante",
+    modality: "Trap Americano",
     stageNum: 1,
     score: 18.00,
     createdAt: "2026-04-05T15:15:00Z"
@@ -272,10 +543,10 @@ export const defaultStageScores: StageScore[] = [
   {
     id: "score_trap_roberto_s2",
     championshipId: "champ_trap_completed",
-    registrationId: "reg_5",
+    registrationId: "reg_roberto_trap_s1",
     userId: "user_roberto",
     shooterName: "Roberto Silva",
-    modality: "Trap Americano Iniciante",
+    modality: "Trap Americano",
     stageNum: 2,
     score: 19.00,
     createdAt: "2026-04-12T14:45:00Z"
@@ -283,10 +554,10 @@ export const defaultStageScores: StageScore[] = [
   {
     id: "score_trap_roberto_s3",
     championshipId: "champ_trap_completed",
-    registrationId: "reg_5",
+    registrationId: "reg_roberto_trap_s1",
     userId: "user_roberto",
     shooterName: "Roberto Silva",
-    modality: "Trap Americano Iniciante",
+    modality: "Trap Americano",
     stageNum: 3,
     score: 21.00,
     createdAt: "2026-04-19T16:15:00Z"
@@ -294,10 +565,10 @@ export const defaultStageScores: StageScore[] = [
   {
     id: "score_trap_roberto_s4",
     championshipId: "champ_trap_completed",
-    registrationId: "reg_5",
+    registrationId: "reg_roberto_trap_s1",
     userId: "user_roberto",
     shooterName: "Roberto Silva",
-    modality: "Trap Americano Iniciante",
+    modality: "Trap Americano",
     stageNum: 4,
     score: 20.00,
     createdAt: "2026-04-26T14:15:00Z"

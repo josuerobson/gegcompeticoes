@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { User, Post, Registration, StageScore, Championship } from '../types';
+import { User, Post, Registration, StageScore, Championship, Modality } from '../types';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
-  DollarSign, Calendar, CreditCard, Copy, LogOut, FileText, Trophy,
+  DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
   Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronDown, Info, PlusCircle, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -14,10 +14,12 @@ interface MemberProfileProps {
   registrations: Registration[];
   stageScores: StageScore[];
   championships: Championship[];
+  modalities: Modality[];
   onToggleFollow: (userId: string) => Promise<void>;
   onPaySignature: () => Promise<void>;
   onLogout: () => void;
   onAddPost: (content: string, imageUrl?: string) => Promise<void>;
+  onNavigateToChampionships: () => void;
   defaultImage?: string;
 }
 
@@ -112,12 +114,16 @@ export default function MemberProfile({
   registrations,
   stageScores,
   championships,
+  modalities,
   onToggleFollow,
   onPaySignature,
   onLogout,
   onAddPost,
+  onNavigateToChampionships,
   defaultImage
 }: MemberProfileProps) {
+  const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
+
   // Tabs expanded
   type ProfileTabType = 'posts' | 'championships' | 'multi_championships' | 'my_registrations' | 'results' | 'certificates' | 'club_card' | 'gg_card' | 'trainings' | 'declarations' | 'ammo';
   const [profileTab, setProfileTab] = useState<ProfileTabType>('posts');
@@ -127,13 +133,6 @@ export default function MemberProfile({
   const [payingSign, setPayingSign] = useState(false);
   const [paidSignDone, setPaidSignDone] = useState(false);
   const [selectedExpandPost, setSelectedExpandPost] = useState<Post | null>(null);
-
-  // Local registration states
-  const [selectedChampRegLocal, setSelectedChampRegLocal] = useState<Championship | null>(null);
-  const [selectedModalityLocal, setSelectedModalityLocal] = useState('');
-  const [crInputLocal, setCrInputLocal] = useState(currentUser?.crNumber || '');
-  const [paymentMethodLocal, setPaymentMethodLocal] = useState<'pix' | 'credit_card'>('pix');
-  const [paymentStepLocal, setPaymentStepLocal] = useState<'form' | 'processing' | 'done'>('form');
 
   // Local receipt states
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
@@ -294,41 +293,6 @@ export default function MemberProfile({
       invoiceNumber: '',
       notes: ''
     });
-  };
-
-  const handleRegisterSubmitLocal = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedChampRegLocal || !selectedModalityLocal || !crInputLocal) return;
-
-    setPaymentStepLocal('processing');
-    
-    setTimeout(async () => {
-      try {
-        const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
-        if (currentUser) {
-          authHeaders['x-user-id'] = currentUser.id;
-        }
-        const res = await fetch(`/api/championships/${selectedChampRegLocal.id}/register`, {
-          method: 'POST',
-          headers: authHeaders,
-          body: JSON.stringify({
-            modality: selectedModalityLocal,
-            crNumber: crInputLocal,
-            paymentMethod: paymentMethodLocal
-          })
-        });
-        if (res.ok) {
-          setPaymentStepLocal('done');
-        } else {
-          const data = await res.json();
-          alert(data.error || 'Erro ao realizar inscrição.');
-          setPaymentStepLocal('form');
-        }
-      } catch (err) {
-        console.error(err);
-        setPaymentStepLocal('form');
-      }
-    }, 1800);
   };
 
   const deleteTraining = (id: string) => {
@@ -759,10 +723,7 @@ export default function MemberProfile({
                         </div>
                         {isMe && !isFinished && (
                           <button
-                            onClick={() => {
-                              setSelectedChampRegLocal(champ);
-                              setSelectedModalityLocal(champ.modalities[0]);
-                            }}
+                            onClick={onNavigateToChampionships}
                             className="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white text-[11px] py-2 rounded-lg font-bold transition flex items-center justify-center gap-1 cursor-pointer"
                           >
                             <Target className="w-3.5 h-3.5" />
@@ -828,7 +789,7 @@ export default function MemberProfile({
                       const champ = championships.find(c => c.id === reg.championshipId);
                       if (!champ) return null;
 
-                      const scoresForChamp = userScores.filter(s => s.championshipId === reg.championshipId && s.modality === reg.modality);
+                      const scoresForChamp = userScores.filter(s => s.championshipId === reg.championshipId && s.modality === modalityName(reg.modalityId));
                       const totalPoints = scoresForChamp.reduce((sum, s) => sum + s.score, 0);
                       const progressPercent = Math.min(100, (scoresForChamp.length / champ.stagesCount) * 100);
 
@@ -837,7 +798,7 @@ export default function MemberProfile({
                           <div className="flex justify-between items-start">
                             <div>
                               <h6 className="font-bold text-slate-800 text-xs">{champ.title}</h6>
-                              <span className="text-[10px] text-slate-400 block font-mono">{reg.modality}</span>
+                              <span className="text-[10px] text-slate-400 block font-mono">{modalityName(reg.modalityId)}</span>
                             </div>
                             <span className="text-[10px] bg-blue-100 text-blue-800 font-mono font-bold px-2 py-0.5 rounded">
                               {scoresForChamp.length} / {champ.stagesCount} Etapas
@@ -895,7 +856,7 @@ export default function MemberProfile({
                           </div>
                           <h5 className="font-bold text-slate-800 text-xs mt-1">{champ ? champ.title : 'Campeonato G&G'}</h5>
                           <div className="text-[10px] text-slate-550 space-y-0.5 font-mono leading-tight">
-                            <div>Modalidade: <span className="font-bold text-slate-700">{reg.modality}</span></div>
+                            <div>Modalidade: <span className="font-bold text-slate-700">{modalityName(reg.modalityId)}</span></div>
                             <div>Documento CR: <span className="font-bold text-slate-700">{reg.crNumber}</span></div>
                             <div>Data Registro: {new Date(reg.registeredAt).toLocaleDateString()}</div>
                             {reg.txId && <div className="truncate max-w-[280px]">TxID: {reg.txId}</div>}
@@ -907,7 +868,7 @@ export default function MemberProfile({
                             setReceiptData({
                               regId: reg.id,
                               champTitle: champ ? champ.title : 'Campeonato G&G',
-                              modality: reg.modality,
+                              modality: modalityName(reg.modalityId),
                               crNumber: reg.crNumber,
                               registeredAt: reg.registeredAt,
                               paymentMethod: reg.paymentMethod,
@@ -1024,7 +985,7 @@ export default function MemberProfile({
                           </span>
                           <h5 className="font-bold text-slate-800 text-xs mt-1.5">{champName}</h5>
                           <div className="text-[10px] text-slate-450 font-mono">
-                            <div>Mod: {reg.modality}</div>
+                            <div>Mod: {modalityName(reg.modalityId)}</div>
                             <div>Etapas: {scoresForChamp.length} concluídas</div>
                           </div>
                         </div>
@@ -1035,7 +996,7 @@ export default function MemberProfile({
                               fullName: selectedUser.fullName,
                               crNumber: selectedUser.crNumber || 'Emitindo...',
                               championshipTitle: champName,
-                              modality: reg.modality,
+                              modality: modalityName(reg.modalityId),
                               score: totalPoints,
                               date: new Date(reg.registeredAt).toISOString().split('T')[0],
                               hash: `GG-CERT-${reg.id.slice(0, 8).toUpperCase()}`
@@ -2229,136 +2190,6 @@ export default function MemberProfile({
               )}
 
             </div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* LOCAL REGISTRATION MODAL */}
-      <AnimatePresence>
-        {selectedChampRegLocal && (
-          <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-center justify-center p-4">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white max-w-lg w-full rounded-2xl smooth-shadow overflow-hidden text-slate-800"
-            >
-              <div className="bg-blue-900 text-white p-4 flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-amber-400" />
-                  <span className="font-display font-semibold text-sm">Ficha de Inscrição</span>
-                </div>
-                <button
-                  onClick={() => setSelectedChampRegLocal(null)}
-                  className="text-white/70 hover:text-white"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {paymentStepLocal === 'form' && (
-                <form onSubmit={handleRegisterSubmitLocal} className="p-5 space-y-4">
-                  <div className="bg-blue-50 p-3 rounded-lg flex items-center justify-between text-xs text-blue-900 font-semibold">
-                    <span>{selectedChampRegLocal.title}</span>
-                    <span className="text-blue-600 font-bold">R$ {selectedChampRegLocal.registrationFee}</span>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-slate-500 uppercase block font-semibold">Modalidade de Disputa</label>
-                    <select
-                      value={selectedModalityLocal}
-                      onChange={(e) => setSelectedModalityLocal(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
-                    >
-                      {selectedChampRegLocal.modalities.map((mod, i) => (
-                        <option key={i} value={mod}>{mod}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-slate-500 uppercase block font-semibold">Seu Documento CR</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: CR-102938-DF"
-                      value={crInputLocal}
-                      onChange={(e) => setCrInputLocal(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-750 font-mono"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] text-slate-500 uppercase block font-semibold">Meio de Pagamento</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethodLocal('pix')}
-                        className={`p-3 border rounded-xl flex flex-col items-center justify-center gap-1 transition ${paymentMethodLocal === 'pix' ? 'border-blue-600 bg-blue-50 text-blue-900' : 'border-slate-200 bg-slate-50 text-slate-650'}`}
-                      >
-                        <Copy className="w-5 h-5" />
-                        <span className="text-xs font-bold leading-none">PIX</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethodLocal('credit_card')}
-                        className={`p-3 border rounded-xl flex flex-col items-center justify-center gap-1 transition ${paymentMethodLocal === 'credit_card' ? 'border-blue-600 bg-blue-50 text-blue-900' : 'border-slate-200 bg-slate-50 text-slate-650'}`}
-                      >
-                        <CreditCard className="w-5 h-5" />
-                        <span className="text-xs font-bold leading-none">Cartão</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3 pt-3">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedChampRegLocal(null)}
-                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-semibold text-xs transition"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold text-xs shadow-md transition"
-                    >
-                      Confirmar e Pagar
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {paymentStepLocal === 'processing' && (
-                <div className="p-8 text-center space-y-4">
-                  <div className="w-12 h-12 rounded-full border-4 border-slate-200 animate-spin border-t-blue-600 mx-auto"></div>
-                  <div>
-                    <h4 className="font-bold text-slate-800 text-sm">Processando Pagamento...</h4>
-                    <p className="text-xs text-slate-400">Aguardando confirmação bancária.</p>
-                  </div>
-                </div>
-              )}
-
-              {paymentStepLocal === 'done' && (
-                <div className="p-6 text-center space-y-4">
-                  <div className="bg-emerald-50 text-emerald-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto shadow-md">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-900 text-sm">Inscrição Homologada!</h4>
-                    <p className="text-xs text-slate-500">Seu comprovante está disponível na aba "Minhas Inscrições".</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setSelectedChampRegLocal(null);
-                      window.location.reload();
-                    }}
-                    className="w-full bg-slate-950 hover:bg-slate-900 text-white py-3 rounded-xl font-semibold text-xs transition"
-                  >
-                    Fechar e Atualizar
-                  </button>
-                </div>
-              )}
-            </motion.div>
           </div>
         )}
       </AnimatePresence>

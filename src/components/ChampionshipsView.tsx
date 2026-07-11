@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Championship, User, Registration, StageScore, RankingItem } from '../types';
-import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, Award, Printer, Copy, CreditCard, ChevronRight, Download, Medal } from 'lucide-react';
+import { Championship, User, Registration, StageScore, RankingItem, Modality, Stage, Weapon } from '../types';
+import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, Award, Printer, Copy, CreditCard, ChevronRight, Download, Medal, PlusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ChampionshipsProps {
@@ -8,7 +8,11 @@ interface ChampionshipsProps {
   registrations: Registration[];
   stageScores: StageScore[];
   currentUser: User | null;
-  onRegister: (championshipId: string, modality: string, crNumber: string, paymentMethod: 'pix' | 'credit_card') => Promise<void>;
+  modalities: Modality[];
+  stages: Stage[];
+  weapons: Weapon[];
+  onRegister: (championshipId: string, modalityId: string, stageId: string, weaponId: string, crNumber: string, paymentMethod: 'pix' | 'credit_card') => Promise<void>;
+  onAddWeapon: (weapon: { manufacturer: string; model: string; caliber: string; serialNumber: string; weaponType: string }) => Promise<void>;
   globalRankings: RankingItem[];
   onSelectModalityRanking: (modality: string) => void;
   selectedRankingModality: string;
@@ -21,7 +25,11 @@ export default function ChampionshipsView({
   registrations,
   stageScores,
   currentUser,
+  modalities,
+  stages,
+  weapons,
   onRegister,
+  onAddWeapon,
   globalRankings,
   onSelectModalityRanking,
   selectedRankingModality,
@@ -30,14 +38,23 @@ export default function ChampionshipsView({
 }: ChampionshipsProps) {
   // Navigation states
   const [activeTab, setActiveTab] = useState<'tournaments' | 'rankings' | 'certificates'>('tournaments');
-  
+
   // Registration and payment popup state
   const [selectedChampReg, setSelectedChampReg] = useState<Championship | null>(null);
-  const [selectedModality, setSelectedModality] = useState('');
+  const [selectedModalityId, setSelectedModalityId] = useState('');
+  const [selectedStageId, setSelectedStageId] = useState('');
+  const [selectedWeaponId, setSelectedWeaponId] = useState('');
   const [crInput, setCrInput] = useState(currentUser?.crNumber || '');
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card'>('pix');
   const [paymentStep, setPaymentStep] = useState<'form' | 'processing' | 'done'>('form');
   const [pixCopied, setPixCopied] = useState(false);
+  const [registerError, setRegisterError] = useState('');
+  const [showAddWeapon, setShowAddWeapon] = useState(false);
+  const [newWeapon, setNewWeapon] = useState({ manufacturer: '', model: '', caliber: '', serialNumber: '', weaponType: 'Pistola' });
+  const [savingWeapon, setSavingWeapon] = useState(false);
+
+  const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
+  const eligibleWeapons = weapons.filter(w => w.ownerId === currentUser?.id || (currentUser?.clubId && w.ownerId === currentUser.clubId));
 
   // Selected Certificate to show print preview
   const [activeCertificate, setActiveCertificate] = useState<{
@@ -47,34 +64,53 @@ export default function ChampionshipsView({
     position?: number;
   } | null>(null);
 
-  // Available unique modalities in the database for the dropdown/selector
+  // Available unique modalities (by display name) in the database for the rankings dropdown/selector
   const allModalities = Array.from(new Set(
-    championships.flatMap(c => c.modalities)
+    championships.flatMap(c => c.modalities).map(modalityName)
   ));
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedChampReg || !selectedModality || !crInput) return;
+    if (!selectedChampReg || !selectedModalityId || !selectedStageId || !selectedWeaponId || !crInput) return;
 
+    setRegisterError('');
     setPaymentStep('processing');
-    
+
     // Simulate payment response delay
     setTimeout(async () => {
       try {
-        await onRegister(selectedChampReg.id, selectedModality, crInput, paymentMethod);
+        await onRegister(selectedChampReg.id, selectedModalityId, selectedStageId, selectedWeaponId, crInput, paymentMethod);
         setPaymentStep('done');
       } catch (err) {
-        console.error(err);
+        setRegisterError(err instanceof Error ? err.message : 'Erro ao realizar inscrição.');
         setPaymentStep('form');
       }
     }, 1800);
   };
 
+  const handleSaveNewWeapon = async () => {
+    if (!newWeapon.manufacturer || !newWeapon.model || !newWeapon.caliber || !newWeapon.serialNumber) return;
+    setSavingWeapon(true);
+    try {
+      await onAddWeapon(newWeapon);
+      setShowAddWeapon(false);
+      setNewWeapon({ manufacturer: '', model: '', caliber: '', serialNumber: '', weaponType: 'Pistola' });
+    } catch (err) {
+      setRegisterError(err instanceof Error ? err.message : 'Erro ao cadastrar arma.');
+    } finally {
+      setSavingWeapon(false);
+    }
+  };
+
   const closeRegModal = () => {
     setSelectedChampReg(null);
-    setSelectedModality('');
+    setSelectedModalityId('');
+    setSelectedStageId('');
+    setSelectedWeaponId('');
     setPaymentStep('form');
     setPaymentMethod('pix');
+    setRegisterError('');
+    setShowAddWeapon(false);
   };
 
   // Find users approved registrations for certificate retrieval
@@ -190,7 +226,7 @@ export default function ChampionshipsView({
               </div>
 
               <p className="text-slate-600 leading-relaxed text-sm sm:text-base max-w-xl mx-auto">
-                participou e concluiu com aproveitamento técnico o campeonato <strong className="text-slate-900">{activeCertificate.championship.title}</strong>, concorrendo na modalidade esportiva oficial <strong className="text-slate-900">{activeCertificate.registration.modality}</strong>.
+                participou e concluiu com aproveitamento técnico o campeonato <strong className="text-slate-900">{activeCertificate.championship.title}</strong>, concorrendo na modalidade esportiva oficial <strong className="text-slate-900">{modalityName(activeCertificate.registration.modalityId)}</strong>.
               </p>
 
               {activeCertificate.finalScore ? (
@@ -328,7 +364,7 @@ export default function ChampionshipsView({
                         <div className="flex flex-wrap gap-1">
                           {champ.modalities.map((mod, i) => (
                             <span key={i} className="text-[9px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold uppercase">
-                              {mod}
+                              {modalityName(mod)}
                             </span>
                           ))}
                         </div>
@@ -346,7 +382,10 @@ export default function ChampionshipsView({
                           <button
                             onClick={() => {
                               setSelectedChampReg(champ);
-                              setSelectedModality(champ.modalities[0]);
+                              setSelectedModalityId(champ.modalities[0]);
+                              const firstStage = stages.find(s => s.championshipId === champ.id);
+                              setSelectedStageId(firstStage?.id || '');
+                              setSelectedWeaponId('');
                             }}
                             className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-3 rounded-xl font-bold shadow-md shadow-blue-100 transition flex items-center justify-center gap-2"
                           >
@@ -497,8 +536,9 @@ export default function ChampionshipsView({
                     if (!champ) return null;
 
                     // Compute score if available
-                    const score = globalRankings.find(r => r.userId === currentUser.id && r.modality === reg.modality);
-                    const positionInMod = globalRankings.findIndex(r => r.userId === currentUser.id && r.modality === reg.modality) + 1;
+                    const regModalityName = modalityName(reg.modalityId);
+                    const score = globalRankings.find(r => r.userId === currentUser.id && r.modality === regModalityName);
+                    const positionInMod = globalRankings.findIndex(r => r.userId === currentUser.id && r.modality === regModalityName) + 1;
 
                     return (
                       <div key={reg.id} className="border border-slate-100 rounded-xl p-4 flex items-center justify-between hover:bg-slate-50/50 transition">
@@ -507,7 +547,7 @@ export default function ChampionshipsView({
                             CERTIFICADO ELEGÍVEL
                           </span>
                           <h4 className="font-bold text-slate-900 font-display text-sm truncate max-w-[240px]">{champ.title}</h4>
-                          <span className="text-xs text-slate-400 block">{reg.modality}</span>
+                          <span className="text-xs text-slate-400 block">{regModalityName}</span>
                           <span className="text-[10px] text-slate-400 font-mono block">Liberação: {new Date(reg.registeredAt).toLocaleDateString()}</span>
                         </div>
                         
@@ -565,17 +605,93 @@ export default function ChampionshipsView({
                     <span className="text-blue-600 font-bold">R$ {selectedChampReg.registrationFee}</span>
                   </div>
 
+                  {registerError && (
+                    <div className="bg-red-50 border border-red-100 text-red-700 text-xs p-2.5 rounded-lg font-medium">
+                      {registerError}
+                    </div>
+                  )}
+
                   <div className="space-y-1">
                     <label className="text-[10px] text-slate-500 uppercase block font-semibold">Escolha a Modalidade de Disputa</label>
                     <select
-                      value={selectedModality}
-                      onChange={(e) => setSelectedModality(e.target.value)}
+                      value={selectedModalityId}
+                      onChange={(e) => setSelectedModalityId(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
                     >
-                      {selectedChampReg.modalities.map((mod, i) => (
-                        <option key={i} value={mod}>{mod}</option>
+                      {selectedChampReg.modalities.map((modId, i) => (
+                        <option key={i} value={modId}>{modalityName(modId)}</option>
                       ))}
                     </select>
+                    {(() => {
+                      const mod = modalities.find(m => m.id === selectedModalityId);
+                      if (!mod || (!mod.seriesCount && !mod.shotsPerSeries && !mod.timePerSeriesMinutes)) return null;
+                      return (
+                        <div className="text-[10px] text-slate-500 bg-slate-50 border border-slate-100 rounded-lg p-2 font-mono flex flex-wrap gap-x-3 gap-y-0.5">
+                          {mod.seriesCount && <span>Séries: <b>{mod.seriesCount}</b></span>}
+                          {mod.shotsPerSeries && <span>Tiros/série: <b>{mod.shotsPerSeries}</b></span>}
+                          {mod.timePerSeriesMinutes && <span>Tempo: <b>{mod.timePerSeriesMinutes} min</b></span>}
+                          {mod.evaluationType && <span>Avaliação: <b>{mod.evaluationType === 'pontuacao' ? 'Pontuação' : mod.evaluationType === 'tempo' ? 'Tempo' : 'Pontuação + Tempo'}</b></span>}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 uppercase block font-semibold">Etapa</label>
+                    <select
+                      value={selectedStageId}
+                      onChange={(e) => setSelectedStageId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
+                    >
+                      <option value="">Selecione a etapa</option>
+                      {stages.filter(s => s.championshipId === selectedChampReg.id).map(s => (
+                        <option key={s.id} value={s.id}>{s.title} — {new Date(s.date).toLocaleDateString('pt-BR')}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 uppercase block font-semibold">Arma a ser utilizada</label>
+                    {eligibleWeapons.length > 0 && !showAddWeapon && (
+                      <select
+                        value={selectedWeaponId}
+                        onChange={(e) => setSelectedWeaponId(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
+                      >
+                        <option value="">Selecione a arma</option>
+                        {eligibleWeapons.map(w => (
+                          <option key={w.id} value={w.id}>{w.manufacturer} {w.model} — {w.caliber}</option>
+                        ))}
+                      </select>
+                    )}
+                    {eligibleWeapons.length === 0 && !showAddWeapon && (
+                      <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2">Nenhuma arma cadastrada pelo seu clube ainda. Cadastre a sua abaixo para poder se inscrever.</p>
+                    )}
+                    {!showAddWeapon && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAddWeapon(true)}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1"
+                      >
+                        <PlusCircle className="w-3 h-3" /> Adicionar arma
+                      </button>
+                    )}
+                    {showAddWeapon && (
+                      <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <input type="text" placeholder="Fabricante" value={newWeapon.manufacturer} onChange={(e) => setNewWeapon({ ...newWeapon, manufacturer: e.target.value })} className="bg-white border border-slate-200 p-2 rounded-lg text-xs" />
+                          <input type="text" placeholder="Modelo" value={newWeapon.model} onChange={(e) => setNewWeapon({ ...newWeapon, model: e.target.value })} className="bg-white border border-slate-200 p-2 rounded-lg text-xs" />
+                          <input type="text" placeholder="Calibre" value={newWeapon.caliber} onChange={(e) => setNewWeapon({ ...newWeapon, caliber: e.target.value })} className="bg-white border border-slate-200 p-2 rounded-lg text-xs" />
+                          <input type="text" placeholder="Número de série" value={newWeapon.serialNumber} onChange={(e) => setNewWeapon({ ...newWeapon, serialNumber: e.target.value })} className="bg-white border border-slate-200 p-2 rounded-lg text-xs" />
+                        </div>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => setShowAddWeapon(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-2 rounded-lg text-[11px] font-semibold">Cancelar</button>
+                          <button type="button" disabled={savingWeapon} onClick={handleSaveNewWeapon} className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white py-2 rounded-lg text-[11px] font-semibold">
+                            {savingWeapon ? 'Salvando...' : 'Salvar Arma'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1">
