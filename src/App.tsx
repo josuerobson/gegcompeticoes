@@ -411,19 +411,21 @@ export default function App() {
     setActiveTab('feed');
   };
 
-  const uploadDocumentFile = async (userId: string, kind: string, file: File, target: 'user' | 'club') => {
+  const uploadDocumentFile = async (userId: string, kind: string, file: File, target: 'user' | 'club'): Promise<boolean> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('kind', kind);
     formData.append('target', target);
     try {
-      await fetch('/api/uploads', {
+      const res = await fetch('/api/uploads', {
         method: 'POST',
         headers: { 'x-user-id': userId },
         body: formData
       });
+      return res.ok;
     } catch (err) {
       console.error(`Erro ao enviar documento (${kind}):`, err);
+      return false;
     }
   };
 
@@ -457,6 +459,53 @@ export default function App() {
     } finally {
       setRegisterSubmitting(false);
     }
+  };
+
+  const handleUpdateProfile = async (fields: Record<string, unknown>): Promise<boolean> => {
+    if (!currentUser) return false;
+    try {
+      const res = await fetch('/api/users/me/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify(fields)
+      });
+      const data = await res.json();
+      if (res.ok && data.user) {
+        setCurrentUser(data.user);
+        await syncWithBackend(data.user.id);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Erro ao salvar cadastro:', err);
+      return false;
+    }
+  };
+
+  const handleUpdateClub = async (clubId: string, fields: Record<string, unknown>): Promise<boolean> => {
+    if (!currentUser) return false;
+    try {
+      const res = await fetch(`/api/clubs/${clubId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify(fields)
+      });
+      if (res.ok) {
+        await syncWithBackend();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Erro ao salvar dados do clube:', err);
+      return false;
+    }
+  };
+
+  const handleUploadDocument = async (kind: string, file: File, target: 'user' | 'club'): Promise<boolean> => {
+    if (!currentUser) return false;
+    const ok = await uploadDocumentFile(currentUser.id, kind, file, target);
+    if (ok) await syncWithBackend();
+    return ok;
   };
 
   const handleAddPost = async (content: string, imageUrl?: string, targetScore?: ShootingResult) => {
@@ -1458,11 +1507,15 @@ export default function App() {
               stageScores={stageScores}
               championships={championships}
               modalities={modalities}
+              clubs={clubs}
               onToggleFollow={handleToggleFollow}
               onPaySignature={handlePaySignature}
               onLogout={handleLogout}
               onAddPost={handleAddPost}
               onNavigateToChampionships={() => setActiveTab('championships')}
+              onUpdateProfile={handleUpdateProfile}
+              onUpdateClub={handleUpdateClub}
+              onUploadDocument={handleUploadDocument}
               defaultImage={settings.default_image}
             />
           )}

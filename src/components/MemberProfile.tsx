@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { User, Post, Registration, StageScore, Championship, Modality } from '../types';
+import { User, Post, Registration, StageScore, Championship, Modality, Club } from '../types';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
-  Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronDown, Info, PlusCircle, X
+  Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronDown, Info, PlusCircle, X, UserCog
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -15,12 +15,114 @@ interface MemberProfileProps {
   stageScores: StageScore[];
   championships: Championship[];
   modalities: Modality[];
+  clubs: Club[];
   onToggleFollow: (userId: string) => Promise<void>;
   onPaySignature: () => Promise<void>;
   onLogout: () => void;
   onAddPost: (content: string, imageUrl?: string) => Promise<void>;
   onNavigateToChampionships: () => void;
+  onUpdateProfile: (fields: Record<string, unknown>) => Promise<boolean>;
+  onUpdateClub: (clubId: string, fields: Record<string, unknown>) => Promise<boolean>;
+  onUploadDocument: (kind: string, file: File, target: 'user' | 'club') => Promise<boolean>;
   defaultImage?: string;
+}
+
+// Labeled text input matching this page's light card style (see the Treinamentos
+// tab's add-form for the reference styling this mirrors).
+function ProfileField({ label, value, onChange, type = 'text', placeholder }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <label className="block text-[10px] text-slate-450 font-bold uppercase mb-1">{label}</label>
+      <input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={e => onChange(e.target.value)}
+        className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-blue-500 text-slate-800"
+      />
+    </div>
+  );
+}
+
+// Labeled file input for the document-completion section, same 1MB cap the
+// upload endpoint enforces server-side.
+function ProfileFileField({ label, onUpload }: { label: string; onUpload: (file: File) => Promise<void> }) {
+  const [fileName, setFileName] = useState('');
+  const [error, setError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  return (
+    <div>
+      <label className="block text-[10px] text-slate-450 font-bold uppercase mb-1">{label}</label>
+      <input
+        type="file"
+        accept="application/pdf,image/jpeg,image/png"
+        disabled={uploading}
+        onChange={async (e) => {
+          const file = e.target.files?.[0] || null;
+          if (!file) return;
+          if (file.size > 1024 * 1024) {
+            setError('Arquivo maior que 1MB.');
+            e.target.value = '';
+            return;
+          }
+          setError('');
+          setUploading(true);
+          await onUpload(file);
+          setFileName(file.name);
+          setUploading(false);
+          e.target.value = '';
+        }}
+        className="w-full text-[11px] text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+      />
+      {error ? (
+        <p className="text-[10px] text-red-500 mt-1">{error}</p>
+      ) : uploading ? (
+        <p className="text-[10px] text-slate-400 mt-1">Enviando...</p>
+      ) : fileName ? (
+        <p className="text-[10px] text-emerald-600 mt-1">Enviado: {fileName}</p>
+      ) : null}
+    </div>
+  );
+}
+
+// A section of the "Meu cadastro" form that saves independently — the user
+// fills in whatever part they have on hand and comes back later for the rest.
+function ProfileSection({ title, children, onSave, saving, saved }: {
+  title: string;
+  children: React.ReactNode;
+  onSave: () => void;
+  saving: boolean;
+  saved: boolean;
+}) {
+  return (
+    <div className="bg-slate-50 p-4 rounded-xl space-y-3 border border-slate-100">
+      <h5 className="text-[10px] font-bold uppercase tracking-wider text-slate-450">{title}</h5>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        {children}
+      </div>
+      <div className="flex items-center gap-3 pt-1">
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saving}
+          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold px-4 py-2 rounded-lg transition cursor-pointer"
+        >
+          {saving ? 'Salvando...' : 'Salvar'}
+        </button>
+        {saved && (
+          <span className="text-emerald-600 text-[11px] font-bold flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Salvo
+          </span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 interface TrainingSession {
@@ -115,19 +217,109 @@ export default function MemberProfile({
   stageScores,
   championships,
   modalities,
+  clubs,
   onToggleFollow,
   onPaySignature,
   onLogout,
   onAddPost,
   onNavigateToChampionships,
+  onUpdateProfile,
+  onUpdateClub,
+  onUploadDocument,
   defaultImage
 }: MemberProfileProps) {
   const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
 
   // Tabs expanded
-  type ProfileTabType = 'posts' | 'championships' | 'multi_championships' | 'my_registrations' | 'results' | 'certificates' | 'club_card' | 'gg_card' | 'trainings' | 'declarations' | 'ammo';
+  type ProfileTabType = 'my_profile' | 'posts' | 'championships' | 'multi_championships' | 'my_registrations' | 'results' | 'certificates' | 'club_card' | 'gg_card' | 'trainings' | 'declarations' | 'ammo';
   const [profileTab, setProfileTab] = useState<ProfileTabType>('posts');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // "Meu cadastro" — progressive profile completion, saved one section at a time
+  const isClubAdmin = selectedUser.role === 'club_admin';
+  const myClub = clubs.find(c => c.id === selectedUser.clubId);
+
+  const [profileForm, setProfileForm] = useState({
+    fullName: '', birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
+    fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', nationality: '',
+    phone: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
+  });
+  const [clubForm, setClubForm] = useState({
+    name: '', crNumber: '', responsibleName: '', phone: '', email: '',
+    cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
+  });
+  const [savingSection, setSavingSection] = useState<string | null>(null);
+  const [savedSection, setSavedSection] = useState<string | null>(null);
+
+  useEffect(() => {
+    setProfileForm({
+      fullName: selectedUser.fullName || '',
+      birthDate: selectedUser.birthDate || '',
+      sex: selectedUser.sex || '',
+      rg: selectedUser.rg || '',
+      rgIssuer: selectedUser.rgIssuer || '',
+      rgIssueDate: selectedUser.rgIssueDate || '',
+      fatherName: selectedUser.fatherName || '',
+      motherName: selectedUser.motherName || '',
+      crNumber: selectedUser.crNumber || '',
+      crValidity: selectedUser.crValidity || '',
+      militaryRegion: selectedUser.militaryRegion || '',
+      nationality: selectedUser.nationality || '',
+      phone: selectedUser.phone || '',
+      cep: selectedUser.cep || '',
+      address: selectedUser.address || '',
+      addressNumber: selectedUser.addressNumber || '',
+      complement: selectedUser.complement || '',
+      neighborhood: selectedUser.neighborhood || '',
+      city: selectedUser.city || '',
+      state: selectedUser.state || ''
+    });
+  }, [selectedUser.id]);
+
+  useEffect(() => {
+    if (!myClub) return;
+    setClubForm({
+      name: myClub.name || '',
+      crNumber: myClub.crNumber || '',
+      responsibleName: myClub.responsibleName || '',
+      phone: myClub.phone || '',
+      email: myClub.email || '',
+      cep: myClub.cep || '',
+      address: myClub.address || '',
+      addressNumber: myClub.addressNumber || '',
+      complement: myClub.complement || '',
+      neighborhood: myClub.neighborhood || '',
+      city: myClub.city || '',
+      state: myClub.state || ''
+    });
+  }, [myClub?.id]);
+
+  const saveUserSection = async (sectionId: string, fields: Record<string, string>) => {
+    setSavingSection(sectionId);
+    setSavedSection(null);
+    const ok = await onUpdateProfile(fields);
+    setSavingSection(null);
+    if (ok) {
+      setSavedSection(sectionId);
+      setTimeout(() => setSavedSection(null), 2500);
+    }
+  };
+
+  const saveClubSection = async (sectionId: string, fields: Record<string, string>) => {
+    if (!myClub) return;
+    setSavingSection(sectionId);
+    setSavedSection(null);
+    const ok = await onUpdateClub(myClub.id, fields);
+    setSavingSection(null);
+    if (ok) {
+      setSavedSection(sectionId);
+      setTimeout(() => setSavedSection(null), 2500);
+    }
+  };
+
+  const uploadProfileDoc = async (kind: string, file: File) => {
+    await onUploadDocument(kind, file, isClubAdmin ? 'club' : 'user');
+  };
 
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
   const [payingSign, setPayingSign] = useState(false);
@@ -342,6 +534,7 @@ export default function MemberProfile({
 
   // Define sidebar menu items (only active for user's own profile)
   const menuItems = [
+    { id: 'my_profile', label: 'Meu Cadastro', icon: UserCog, public: false },
     { id: 'posts', label: 'Fotos Publicadas', icon: Grid, count: userPosts.length, public: true },
     { id: 'championships', label: 'Campeonatos', icon: Trophy, public: true },
     { id: 'multi_championships', label: 'Multi-Campeonatos', icon: Activity, public: true },
@@ -580,6 +773,143 @@ export default function MemberProfile({
               </div>
             )}
           </div>
+
+          {/* 0. Meu Cadastro — progressive profile completion */}
+          {profileTab === 'my_profile' && isMe && (
+            <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-6 space-y-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h4 className="font-display font-bold text-slate-800 text-sm uppercase">Meu Cadastro</h4>
+                  <p className="text-[11px] text-slate-450 mt-0.5">Complete seus dados quando puder — cada seção é salva de forma independente.</p>
+                </div>
+                {selectedUser.isProfileComplete ? (
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Cadastro completo
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full">
+                    <Info className="w-3.5 h-3.5" /> Cadastro incompleto
+                  </span>
+                )}
+              </div>
+
+              {isClubAdmin ? (
+                myClub ? (
+                  <div className="space-y-4">
+                    <ProfileSection
+                      title="Dados Cadastrais do Clube"
+                      onSave={() => saveClubSection('club_data', { name: clubForm.name, crNumber: clubForm.crNumber, responsibleName: clubForm.responsibleName })}
+                      saving={savingSection === 'club_data'}
+                      saved={savedSection === 'club_data'}
+                    >
+                      <div className="sm:col-span-2"><ProfileField label="Razão Social" value={clubForm.name} onChange={v => setClubForm({ ...clubForm, name: v })} /></div>
+                      <ProfileField label="CR" value={clubForm.crNumber} onChange={v => setClubForm({ ...clubForm, crNumber: v })} />
+                      <ProfileField label="Nome do responsável" value={clubForm.responsibleName} onChange={v => setClubForm({ ...clubForm, responsibleName: v })} />
+                    </ProfileSection>
+
+                    <ProfileSection
+                      title="Contato do Clube"
+                      onSave={() => saveClubSection('club_contact', { phone: clubForm.phone, email: clubForm.email })}
+                      saving={savingSection === 'club_contact'}
+                      saved={savedSection === 'club_contact'}
+                    >
+                      <ProfileField label="Telefone" type="tel" value={clubForm.phone} onChange={v => setClubForm({ ...clubForm, phone: v })} />
+                      <ProfileField label="E-mail" type="email" value={clubForm.email} onChange={v => setClubForm({ ...clubForm, email: v })} />
+                    </ProfileSection>
+
+                    <ProfileSection
+                      title="Endereço do Clube"
+                      onSave={() => saveClubSection('club_address', { cep: clubForm.cep, address: clubForm.address, addressNumber: clubForm.addressNumber, complement: clubForm.complement, neighborhood: clubForm.neighborhood, city: clubForm.city, state: clubForm.state })}
+                      saving={savingSection === 'club_address'}
+                      saved={savedSection === 'club_address'}
+                    >
+                      <ProfileField label="CEP" value={clubForm.cep} onChange={v => setClubForm({ ...clubForm, cep: v })} />
+                      <ProfileField label="Endereço" value={clubForm.address} onChange={v => setClubForm({ ...clubForm, address: v })} />
+                      <ProfileField label="Número" value={clubForm.addressNumber} onChange={v => setClubForm({ ...clubForm, addressNumber: v })} />
+                      <ProfileField label="Complemento" value={clubForm.complement} onChange={v => setClubForm({ ...clubForm, complement: v })} />
+                      <ProfileField label="Bairro" value={clubForm.neighborhood} onChange={v => setClubForm({ ...clubForm, neighborhood: v })} />
+                      <ProfileField label="Cidade" value={clubForm.city} onChange={v => setClubForm({ ...clubForm, city: v })} />
+                      <ProfileField label="Estado" value={clubForm.state} onChange={v => setClubForm({ ...clubForm, state: v })} />
+                    </ProfileSection>
+
+                    <div className="bg-slate-50 p-4 rounded-xl space-y-3 border border-slate-100">
+                      <h5 className="text-[10px] font-bold uppercase tracking-wider text-slate-450">Documentos do Clube (PDF/JPG/PNG até 1MB)</h5>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <ProfileFileField label="Cartão CNPJ" onUpload={f => uploadProfileDoc('cnpj_card', f)} />
+                        <ProfileFileField label="CR" onUpload={f => uploadProfileDoc('cr', f)} />
+                        <div className="sm:col-span-2"><ProfileFileField label="Alvará de funcionamento" onUpload={f => uploadProfileDoc('alvara', f)} /></div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-450">Clube não encontrado.</p>
+                )
+              ) : (
+                <div className="space-y-4">
+                  <ProfileSection
+                    title="Dados Cadastrais"
+                    onSave={() => saveUserSection('user_data', {
+                      fullName: profileForm.fullName, birthDate: profileForm.birthDate, sex: profileForm.sex, rg: profileForm.rg,
+                      rgIssuer: profileForm.rgIssuer, rgIssueDate: profileForm.rgIssueDate, fatherName: profileForm.fatherName,
+                      motherName: profileForm.motherName, crNumber: profileForm.crNumber, crValidity: profileForm.crValidity,
+                      militaryRegion: profileForm.militaryRegion, nationality: profileForm.nationality
+                    })}
+                    saving={savingSection === 'user_data'}
+                    saved={savedSection === 'user_data'}
+                  >
+                    <div className="sm:col-span-2"><ProfileField label="Nome completo" value={profileForm.fullName} onChange={v => setProfileForm({ ...profileForm, fullName: v })} /></div>
+                    <ProfileField label="Data de nascimento" type="date" value={profileForm.birthDate} onChange={v => setProfileForm({ ...profileForm, birthDate: v })} />
+                    <ProfileField label="Sexo" value={profileForm.sex} onChange={v => setProfileForm({ ...profileForm, sex: v })} />
+                    <ProfileField label="RG" value={profileForm.rg} onChange={v => setProfileForm({ ...profileForm, rg: v })} />
+                    <ProfileField label="Órgão emissor RG" value={profileForm.rgIssuer} onChange={v => setProfileForm({ ...profileForm, rgIssuer: v })} />
+                    <ProfileField label="Data emissão RG" type="date" value={profileForm.rgIssueDate} onChange={v => setProfileForm({ ...profileForm, rgIssueDate: v })} />
+                    <ProfileField label="Nome do pai" value={profileForm.fatherName} onChange={v => setProfileForm({ ...profileForm, fatherName: v })} />
+                    <ProfileField label="Nome da mãe" value={profileForm.motherName} onChange={v => setProfileForm({ ...profileForm, motherName: v })} />
+                    <ProfileField label="CR" placeholder="Ex: CR-102938-DF" value={profileForm.crNumber} onChange={v => setProfileForm({ ...profileForm, crNumber: v })} />
+                    <ProfileField label="Validade CR" type="date" value={profileForm.crValidity} onChange={v => setProfileForm({ ...profileForm, crValidity: v })} />
+                    <ProfileField label="Região Militar" value={profileForm.militaryRegion} onChange={v => setProfileForm({ ...profileForm, militaryRegion: v })} />
+                    <ProfileField label="Nacionalidade" value={profileForm.nationality} onChange={v => setProfileForm({ ...profileForm, nationality: v })} />
+                  </ProfileSection>
+
+                  <ProfileSection
+                    title="Contato"
+                    onSave={() => saveUserSection('user_contact', { phone: profileForm.phone })}
+                    saving={savingSection === 'user_contact'}
+                    saved={savedSection === 'user_contact'}
+                  >
+                    <ProfileField label="Celular" type="tel" value={profileForm.phone} onChange={v => setProfileForm({ ...profileForm, phone: v })} />
+                  </ProfileSection>
+
+                  <ProfileSection
+                    title="Endereço"
+                    onSave={() => saveUserSection('user_address', {
+                      cep: profileForm.cep, address: profileForm.address, addressNumber: profileForm.addressNumber,
+                      complement: profileForm.complement, neighborhood: profileForm.neighborhood, city: profileForm.city, state: profileForm.state
+                    })}
+                    saving={savingSection === 'user_address'}
+                    saved={savedSection === 'user_address'}
+                  >
+                    <ProfileField label="CEP" value={profileForm.cep} onChange={v => setProfileForm({ ...profileForm, cep: v })} />
+                    <ProfileField label="Endereço" value={profileForm.address} onChange={v => setProfileForm({ ...profileForm, address: v })} />
+                    <ProfileField label="Número" value={profileForm.addressNumber} onChange={v => setProfileForm({ ...profileForm, addressNumber: v })} />
+                    <ProfileField label="Complemento" value={profileForm.complement} onChange={v => setProfileForm({ ...profileForm, complement: v })} />
+                    <ProfileField label="Bairro" value={profileForm.neighborhood} onChange={v => setProfileForm({ ...profileForm, neighborhood: v })} />
+                    <ProfileField label="Cidade" value={profileForm.city} onChange={v => setProfileForm({ ...profileForm, city: v })} />
+                    <ProfileField label="Estado" value={profileForm.state} onChange={v => setProfileForm({ ...profileForm, state: v })} />
+                  </ProfileSection>
+
+                  <div className="bg-slate-50 p-4 rounded-xl space-y-3 border border-slate-100">
+                    <h5 className="text-[10px] font-bold uppercase tracking-wider text-slate-450">Documentos (PDF/JPG/PNG até 1MB)</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <ProfileFileField label="RG ou CNH" onUpload={f => uploadProfileDoc('rg_cnh', f)} />
+                      <ProfileFileField label="CR" onUpload={f => uploadProfileDoc('cr', f)} />
+                      <div className="sm:col-span-2"><ProfileFileField label="Declaração de filiação" onUpload={f => uploadProfileDoc('declaracao_filiacao', f)} /></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 1. Posts Grid (Original tab) */}
           {profileTab === 'posts' && (

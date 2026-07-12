@@ -315,6 +315,19 @@ async function uniqueUsername(client: any, base: string): Promise<string> {
 
 const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
 
+// Fields a member profile needs to be considered complete for championship
+// registration — shared between initial registration and later "Meu cadastro"
+// edits so the flag means the same thing regardless of which path filled it in.
+const USER_PROFILE_REQUIRED_COLUMNS = ['full_name', 'email', 'cpf', 'club_id', 'rg', 'phone', 'birth_date', 'address', 'city', 'state'];
+
+async function recomputeUserProfileComplete(client: { query: (text: string, params?: unknown[]) => Promise<any> }, userId: string): Promise<void> {
+  const checkRes = await client.query(
+    `SELECT (${USER_PROFILE_REQUIRED_COLUMNS.map(c => `${c} IS NOT NULL AND ${c} != ''`).join(' AND ')}) as complete FROM users WHERE id = $1`,
+    [userId]
+  );
+  await client.query('UPDATE users SET is_profile_complete = $1 WHERE id = $2', [Boolean(checkRes.rows[0]?.complete), userId]);
+}
+
 app.post('/api/auth/register', async (req, res) => {
   const { type } = req.body;
 
@@ -405,8 +418,9 @@ app.post('/api/auth/register', async (req, res) => {
       await client.query(
         `INSERT INTO users (id, email, username, full_name, avatar_url, bio, cr_number, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, cpf, rg, phone, password_hash, birth_date, sex, rg_issuer, rg_issue_date, father_name, mother_name, cr_validity, military_region, nationality, cep, address, address_number, complement, neighborhood, city, state)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)`,
-        [userId, email, username, fullName, DEFAULT_AVATAR, 'Atleta federado do G&G Competições.', crNumber || null, true, new Date().toISOString().split('T')[0], 'member', false, clubId, true, cpf, rg || null, phone || null, hashPassword(password), birthDate || null, sex || null, rgIssuer || null, rgIssueDate || null, fatherName || null, motherName || null, crValidity || null, militaryRegion || null, nationality || null, cep || null, address || null, addressNumber || null, complement || null, neighborhood || null, city || null, state || null]
+        [userId, email, username, fullName, DEFAULT_AVATAR, 'Atleta federado do G&G Competições.', crNumber || null, true, new Date().toISOString().split('T')[0], 'member', false, clubId, false, cpf, rg || null, phone || null, hashPassword(password), birthDate || null, sex || null, rgIssuer || null, rgIssueDate || null, fatherName || null, motherName || null, crValidity || null, militaryRegion || null, nationality || null, cep || null, address || null, addressNumber || null, complement || null, neighborhood || null, city || null, state || null]
       );
+      await recomputeUserProfileComplete(client, userId);
       await client.query('COMMIT');
 
       const fullUserRes = await client.query(
@@ -546,6 +560,118 @@ app.get('/api/uploads/:kind', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Get document error:', err);
     res.status(500).json({ error: 'Erro ao baixar documento.' });
+  }
+});
+
+// 1c. Progressive profile completion — "Meu cadastro". Lets an athlete or club
+// admin fill in and save the registration data they skipped, one section at a
+// time, across multiple visits, instead of requiring it all up front.
+const USER_PROFILE_COLUMNS: Record<string, string> = {
+  fullName: 'full_name',
+  birthDate: 'birth_date',
+  sex: 'sex',
+  rg: 'rg',
+  rgIssuer: 'rg_issuer',
+  rgIssueDate: 'rg_issue_date',
+  fatherName: 'father_name',
+  motherName: 'mother_name',
+  crNumber: 'cr_number',
+  crValidity: 'cr_validity',
+  militaryRegion: 'military_region',
+  nationality: 'nationality',
+  phone: 'phone',
+  cep: 'cep',
+  address: 'address',
+  addressNumber: 'address_number',
+  complement: 'complement',
+  neighborhood: 'neighborhood',
+  city: 'city',
+  state: 'state',
+};
+
+app.patch('/api/users/me/profile', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const updates: string[] = [];
+  const values: unknown[] = [];
+
+  for (const [key, column] of Object.entries(USER_PROFILE_COLUMNS)) {
+    if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+      updates.push(`${column} = $${updates.length + 1}`);
+      values.push(req.body[key] || null);
+    }
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({ error: 'Nenhum campo para atualizar.' });
+  }
+
+  try {
+    values.push(currentUser.id);
+    await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${values.length}`, values);
+    await recomputeUserProfileComplete(pool, currentUser.id);
+
+    const fullUserRes = await pool.query(
+      `SELECT u.*,
+        COALESCE((SELECT json_agg(follower_id) FROM follows WHERE following_id = u.id), '[]'::json) as followers,
+        COALESCE((SELECT json_agg(following_id) FROM follows WHERE follower_id = u.id), '[]'::json) as following
+      FROM users u WHERE id = $1`,
+      [currentUser.id]
+    );
+    res.json({ user: mapUser(fullUserRes.rows[0]) });
+  } catch (err) {
+    console.error('Update profile database error:', err);
+    res.status(500).json({ error: 'Erro ao salvar cadastro.' });
+  }
+});
+
+const CLUB_PROFILE_COLUMNS: Record<string, string> = {
+  name: 'name',
+  crNumber: 'cr_number',
+  responsibleName: 'responsible_name',
+  phone: 'phone',
+  email: 'email',
+  cep: 'cep',
+  address: 'address',
+  addressNumber: 'address_number',
+  complement: 'complement',
+  neighborhood: 'neighborhood',
+  city: 'city',
+  state: 'state',
+};
+
+app.patch('/api/clubs/:id', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const clubId = req.params.id;
+
+  if (currentUser.role !== 'club_admin' || currentUser.clubId !== clubId) {
+    return res.status(403).json({ error: 'Apenas o administrador do clube pode editar estes dados.' });
+  }
+
+  const updates: string[] = [];
+  const values: unknown[] = [];
+
+  for (const [key, column] of Object.entries(CLUB_PROFILE_COLUMNS)) {
+    if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+      updates.push(`${column} = $${updates.length + 1}`);
+      values.push(req.body[key] || null);
+    }
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({ error: 'Nenhum campo para atualizar.' });
+  }
+
+  try {
+    values.push(clubId);
+    await pool.query(`UPDATE clubs SET ${updates.join(', ')} WHERE id = $${values.length}`, values);
+    const clubRes = await pool.query('SELECT * FROM clubs WHERE id = $1', [clubId]);
+    if (clubRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Clube não encontrado.' });
+    }
+    res.json({ club: mapClub(clubRes.rows[0]) });
+  } catch (err) {
+    console.error('Update club database error:', err);
+    res.status(500).json({ error: 'Erro ao salvar dados do clube.' });
   }
 });
 
