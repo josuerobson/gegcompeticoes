@@ -3,7 +3,7 @@ import { User, Post, Registration, StageScore, Championship, Modality, Club } fr
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
-  Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronDown, Info, PlusCircle, X, UserCog
+  Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronDown, Info, PlusCircle, X, UserCog, Camera
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -209,6 +209,39 @@ const DEFAULT_AMMO_PURCHASES: AmmoPurchase[] = [
   }
 ];
 
+// Downscales and JPEG-compresses an avatar image client-side before it's sent
+// as a data URL — avatars ride along on every GET /api/users response, so an
+// uncompressed photo would bloat that payload for everyone, not just the owner.
+function resizeImageToDataUrl(file: File, maxSize = 400, quality = 0.85): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxSize) {
+          height = Math.round((height * maxSize) / width);
+          width = maxSize;
+        } else if (height > maxSize) {
+          width = Math.round((width * maxSize) / height);
+          height = maxSize;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Canvas não suportado neste navegador.'));
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function MemberProfile({
   currentUser,
   selectedUser,
@@ -234,6 +267,33 @@ export default function MemberProfile({
   type ProfileTabType = 'my_profile' | 'posts' | 'championships' | 'multi_championships' | 'my_registrations' | 'results' | 'certificates' | 'club_card' | 'gg_card' | 'trainings' | 'declarations' | 'ammo';
   const [profileTab, setProfileTab] = useState<ProfileTabType>('posts');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Avatar change
+  const [avatarSaving, setAvatarSaving] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setAvatarError('Selecione um arquivo de imagem.');
+      e.target.value = '';
+      return;
+    }
+    setAvatarError('');
+    setAvatarSaving(true);
+    try {
+      const dataUrl = await resizeImageToDataUrl(file);
+      const ok = await onUpdateProfile({ avatarUrl: dataUrl });
+      if (!ok) setAvatarError('Erro ao atualizar foto.');
+    } catch (err) {
+      console.error(err);
+      setAvatarError('Erro ao processar imagem.');
+    } finally {
+      setAvatarSaving(false);
+      e.target.value = '';
+    }
+  };
 
   // "Meu cadastro" — progressive profile completion, saved one section at a time
   const isClubAdmin = selectedUser.role === 'club_admin';
@@ -593,7 +653,18 @@ export default function MemberProfile({
                   <ShieldCheck className="w-4 h-4" />
                 </div>
               )}
+              {isMe && (
+                <label
+                  title="Trocar foto de perfil"
+                  className={`absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded-full border-2 border-white shadow-md cursor-pointer transition ${avatarSaving ? 'opacity-60 pointer-events-none' : ''}`}
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <input type="file" accept="image/*" onChange={handleAvatarChange} disabled={avatarSaving} className="hidden" />
+                </label>
+              )}
             </div>
+            {isMe && avatarSaving && <p className="text-[10px] text-slate-400 mt-1.5">Enviando foto...</p>}
+            {isMe && avatarError && <p className="text-[10px] text-red-500 mt-1.5">{avatarError}</p>}
 
             <div className="mt-4 leading-tight">
               <h3 className="font-display font-extrabold text-lg text-slate-900">{selectedUser.fullName}</h3>

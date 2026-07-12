@@ -576,6 +576,7 @@ app.get('/api/uploads/:kind', requireAuth, async (req, res) => {
 // time, across multiple visits, instead of requiring it all up front.
 const USER_PROFILE_COLUMNS: Record<string, string> = {
   fullName: 'full_name',
+  avatarUrl: 'avatar_url',
   birthDate: 'birth_date',
   sex: 'sex',
   rg: 'rg',
