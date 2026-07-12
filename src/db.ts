@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { defaultUsers, defaultChampionships, defaultRegistrations, defaultStageScores, defaultPosts, defaultClubs, defaultModalities, defaultStages, defaultWeapons } from './data/mockData.js';
 import { hashPassword } from './auth.js';
+import { ensureBucket } from './storage.js';
 
 const DEMO_PASSWORD_HASH = hashPassword('123456');
 
@@ -61,7 +62,10 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS complement TEXT,
         ADD COLUMN IF NOT EXISTS neighborhood TEXT,
         ADD COLUMN IF NOT EXISTS city TEXT,
-        ADD COLUMN IF NOT EXISTS state TEXT;
+        ADD COLUMN IF NOT EXISTS state TEXT,
+        ADD COLUMN IF NOT EXISTS doc_cnpj_key TEXT,
+        ADD COLUMN IF NOT EXISTS doc_cr_key TEXT,
+        ADD COLUMN IF NOT EXISTS doc_alvara_key TEXT;
     `);
 
     await client.query(`
@@ -129,7 +133,10 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS complement TEXT,
         ADD COLUMN IF NOT EXISTS neighborhood TEXT,
         ADD COLUMN IF NOT EXISTS city TEXT,
-        ADD COLUMN IF NOT EXISTS state TEXT;
+        ADD COLUMN IF NOT EXISTS state TEXT,
+        ADD COLUMN IF NOT EXISTS doc_rg_cnh_key TEXT,
+        ADD COLUMN IF NOT EXISTS doc_cr_key TEXT,
+        ADD COLUMN IF NOT EXISTS doc_declaracao_key TEXT;
     `);
 
     // The role CHECK constraint on a pre-existing users table may still be the old
@@ -481,6 +488,12 @@ export async function initDB() {
     }
 
     console.log('Database seed check complete.');
+
+    try {
+      await ensureBucket();
+    } catch (err) {
+      console.error('Could not ensure MinIO bucket exists:', err);
+    }
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error during database initialization:', err);

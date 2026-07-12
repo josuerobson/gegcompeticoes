@@ -7,6 +7,8 @@ import { defaultChampionships, shootingImages } from './src/data/mockData.js';
 import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon } from './src/types.js';
 import { pool, initDB } from './src/db.js';
 import { hashPassword, verifyPassword } from './src/auth.js';
+import { uploadDocument, getDocumentDownloadUrl, storageEnabled } from './src/storage.js';
+import multer from 'multer';
 
 const app = express();
 const PORT = 3000;
@@ -49,6 +51,9 @@ function mapUser(u: any): User {
     neighborhood: u.neighborhood || undefined,
     city: u.city || undefined,
     state: u.state || undefined,
+    docRgCnhUploaded: Boolean(u.doc_rg_cnh_key),
+    docCrUploaded: Boolean(u.doc_cr_key),
+    docDeclaracaoUploaded: Boolean(u.doc_declaracao_key),
   };
 }
 
@@ -72,6 +77,9 @@ function mapClub(c: any): Club {
     neighborhood: c.neighborhood || undefined,
     city: c.city || undefined,
     state: c.state || undefined,
+    docCnpjUploaded: Boolean(c.doc_cnpj_key),
+    docCrUploaded: Boolean(c.doc_cr_key),
+    docAlvaraUploaded: Boolean(c.doc_alvara_key),
   };
 }
 
@@ -415,6 +423,124 @@ app.post('/api/auth/register', async (req, res) => {
   } catch (err) {
     console.error('Register database error:', err);
     res.status(500).json({ error: 'Erro ao realizar cadastro.' });
+  }
+});
+
+// 1b. Document uploads (RG/CNH, CR, Declaração de filiação for members;
+// Cartão CNPJ, CR, Alvará for clubs) — stored in MinIO, only a boolean
+// "uploaded" flag is ever exposed to the client, never the storage key.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 1 * 1024 * 1024 }, // 1MB, matches the legacy system's document upload limit
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png'];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Formato de arquivo não suportado. Envie PDF, JPG ou PNG.'));
+  },
+});
+
+const handleUpload = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  upload.single('file')(req, res, (err: any) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Erro ao processar arquivo.' });
+    }
+    next();
+  });
+};
+
+const USER_DOC_KIND_COLUMNS: Record<string, string> = {
+  rg_cnh: 'doc_rg_cnh_key',
+  cr: 'doc_cr_key',
+  declaracao_filiacao: 'doc_declaracao_key',
+};
+
+const CLUB_DOC_KIND_COLUMNS: Record<string, string> = {
+  cnpj_card: 'doc_cnpj_key',
+  cr: 'doc_cr_key',
+  alvara: 'doc_alvara_key',
+};
+
+app.post('/api/uploads', requireAuth, handleUpload, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { kind, target } = req.body as { kind?: string; target?: string };
+  const file = (req as any).file as Express.Multer.File | undefined;
+
+  if (!storageEnabled) {
+    return res.status(503).json({ error: 'Armazenamento de documentos não está configurado neste ambiente.' });
+  }
+  if (!file) {
+    return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+  }
+
+  const isClubTarget = target === 'club';
+  const columnMap = isClubTarget ? CLUB_DOC_KIND_COLUMNS : USER_DOC_KIND_COLUMNS;
+  const column = kind ? columnMap[kind] : undefined;
+  if (!column) {
+    return res.status(400).json({ error: 'Tipo de documento inválido.' });
+  }
+
+  let recordId: string;
+  let table: 'users' | 'clubs';
+  if (isClubTarget) {
+    if (currentUser.role !== 'club_admin' || !currentUser.clubId) {
+      return res.status(403).json({ error: 'Apenas o administrador do clube pode enviar estes documentos.' });
+    }
+    recordId = currentUser.clubId;
+    table = 'clubs';
+  } else {
+    recordId = currentUser.id;
+    table = 'users';
+  }
+
+  try {
+    const ext = file.originalname.includes('.') ? file.originalname.split('.').pop() : 'bin';
+    const objectKey = `${table}/${recordId}/${kind}-${Date.now()}.${ext}`;
+    await uploadDocument(objectKey, file.buffer, file.mimetype);
+    await pool.query(`UPDATE ${table} SET ${column} = $1 WHERE id = $2`, [objectKey, recordId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Upload document error:', err);
+    res.status(500).json({ error: 'Erro ao enviar documento.' });
+  }
+});
+
+app.get('/api/uploads/:kind', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { kind } = req.params;
+  const isClubTarget = req.query.target === 'club';
+
+  if (!storageEnabled) {
+    return res.status(503).json({ error: 'Armazenamento de documentos não está configurado neste ambiente.' });
+  }
+
+  const columnMap = isClubTarget ? CLUB_DOC_KIND_COLUMNS : USER_DOC_KIND_COLUMNS;
+  const column = columnMap[kind];
+  if (!column) {
+    return res.status(400).json({ error: 'Tipo de documento inválido.' });
+  }
+
+  try {
+    let objectKey: string | null = null;
+    if (isClubTarget) {
+      if (currentUser.role !== 'club_admin' || !currentUser.clubId) {
+        return res.status(403).json({ error: 'Acesso não autorizado.' });
+      }
+      const r = await pool.query(`SELECT ${column} as key FROM clubs WHERE id = $1`, [currentUser.clubId]);
+      objectKey = r.rows[0]?.key || null;
+    } else {
+      const r = await pool.query(`SELECT ${column} as key FROM users WHERE id = $1`, [currentUser.id]);
+      objectKey = r.rows[0]?.key || null;
+    }
+
+    if (!objectKey) {
+      return res.status(404).json({ error: 'Documento não encontrado.' });
+    }
+
+    const url = await getDocumentDownloadUrl(objectKey);
+    res.json({ url });
+  } catch (err) {
+    console.error('Get document URL error:', err);
+    res.status(500).json({ error: 'Erro ao gerar link de download.' });
   }
 });
 

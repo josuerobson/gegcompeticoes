@@ -31,6 +31,51 @@ function AuthField({ label, theme, required, ...inputProps }: {
   );
 }
 
+// Labeled file input for the document upload steps of the Membro/Clube registration
+// forms (RG/CNH, CR, Declaração de filiação, Cartão CNPJ, Alvará) — enforces the 1MB
+// limit client-side to match the server's multer config and the legacy system's own limit.
+function FileField({ label, theme, hint, onFileChange }: {
+  label: string;
+  theme: 'light' | 'dark';
+  hint?: string;
+  onFileChange: (file: File | null) => void;
+}) {
+  const [fileName, setFileName] = useState('');
+  const [error, setError] = useState('');
+  return (
+    <div className="space-y-1.5">
+      <label className={`text-[10px] font-bold uppercase tracking-wider block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+        {label}
+      </label>
+      <input
+        type="file"
+        accept="application/pdf,image/jpeg,image/png"
+        onChange={(e) => {
+          const file = e.target.files?.[0] || null;
+          if (file && file.size > 1024 * 1024) {
+            setError('Arquivo maior que 1MB.');
+            setFileName('');
+            onFileChange(null);
+            e.target.value = '';
+            return;
+          }
+          setError('');
+          setFileName(file?.name || '');
+          onFileChange(file);
+        }}
+        className={`w-full border outline-none px-4 py-2.5 rounded-2xl text-[11px] font-semibold file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-[10px] file:font-bold file:uppercase transition ${theme === 'dark' ? 'bg-slate-950 border-slate-800 text-slate-300 file:bg-blue-600 file:text-white' : 'bg-slate-50 border-slate-200 text-slate-600 file:bg-blue-100 file:text-blue-700'}`}
+      />
+      {error ? (
+        <p className="text-[10px] text-red-500">{error}</p>
+      ) : fileName ? (
+        <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>{fileName}</p>
+      ) : hint ? (
+        <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>{hint}</p>
+      ) : null}
+    </div>
+  );
+}
+
 export default function App() {
   // Theme State
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -81,6 +126,8 @@ export default function App() {
     cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '',
     cnpj: '', password: '', confirmPassword: '', termsAccepted: false
   });
+  const [membroFiles, setMembroFiles] = useState<{ rgCnh: File | null; cr: File | null; declaracao: File | null }>({ rgCnh: null, cr: null, declaracao: null });
+  const [clubeFiles, setClubeFiles] = useState<{ cnpjCard: File | null; cr: File | null; alvara: File | null }>({ cnpjCard: null, cr: null, alvara: null });
   const [registerSubmitting, setRegisterSubmitting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [booting, setBooting] = useState(true);
@@ -364,7 +411,23 @@ export default function App() {
     setActiveTab('feed');
   };
 
-  const handleRegister = async (payload: Record<string, unknown>): Promise<boolean> => {
+  const uploadDocumentFile = async (userId: string, kind: string, file: File, target: 'user' | 'club') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('kind', kind);
+    formData.append('target', target);
+    try {
+      await fetch('/api/uploads', {
+        method: 'POST',
+        headers: { 'x-user-id': userId },
+        body: formData
+      });
+    } catch (err) {
+      console.error(`Erro ao enviar documento (${kind}):`, err);
+    }
+  };
+
+  const handleRegister = async (payload: Record<string, unknown>, docs?: { kind: string; file: File }[]): Promise<boolean> => {
     setRegisterSubmitting(true);
     setLoginModalMessage('');
     try {
@@ -375,6 +438,10 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.user) {
+        if (docs && docs.length > 0) {
+          const target = payload.type === 'clube' ? 'club' : 'user';
+          await Promise.all(docs.map(d => uploadDocumentFile(data.user.id, d.kind, d.file, target)));
+        }
         setCurrentUser(data.user);
         localStorage.setItem('gg_user_id', data.user.id);
         await syncWithBackend(data.user.id);
@@ -1063,7 +1130,12 @@ export default function App() {
                       return;
                     }
                     const { confirmPassword, termsAccepted, ...payload } = membroForm;
-                    const ok = await handleRegister({ type: 'membro', ...payload });
+                    const docs = [
+                      membroFiles.rgCnh && { kind: 'rg_cnh', file: membroFiles.rgCnh },
+                      membroFiles.cr && { kind: 'cr', file: membroFiles.cr },
+                      membroFiles.declaracao && { kind: 'declaracao_filiacao', file: membroFiles.declaracao },
+                    ].filter(Boolean) as { kind: string; file: File }[];
+                    const ok = await handleRegister({ type: 'membro', ...payload }, docs);
                     if (ok) setShowLoginModal(false);
                   }}
                   className="space-y-4"
@@ -1121,6 +1193,13 @@ export default function App() {
                     <AuthField label="Repita a senha" theme={theme} required type="password" value={membroForm.confirmPassword} onChange={(e) => setMembroForm({ ...membroForm, confirmPassword: e.target.value })} />
                   </div>
 
+                  <p className={`text-[10px] font-bold uppercase tracking-wider pt-2 ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Documentos (opcional, PDF/JPG/PNG até 1MB)</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <FileField label="RG ou CNH" theme={theme} onFileChange={(f) => setMembroFiles({ ...membroFiles, rgCnh: f })} />
+                    <FileField label="CR" theme={theme} onFileChange={(f) => setMembroFiles({ ...membroFiles, cr: f })} />
+                    <div className="sm:col-span-2"><FileField label="Declaração de filiação" theme={theme} onFileChange={(f) => setMembroFiles({ ...membroFiles, declaracao: f })} /></div>
+                  </div>
+
                   <label className={`flex items-center gap-2 text-[11px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
                     <input type="checkbox" checked={membroForm.termsAccepted} onChange={(e) => setMembroForm({ ...membroForm, termsAccepted: e.target.checked })} />
                     Eu aceito os termos e condições
@@ -1149,7 +1228,12 @@ export default function App() {
                       return;
                     }
                     const { confirmPassword, termsAccepted, ...payload } = clubeForm;
-                    const ok = await handleRegister({ type: 'clube', ...payload });
+                    const docs = [
+                      clubeFiles.cnpjCard && { kind: 'cnpj_card', file: clubeFiles.cnpjCard },
+                      clubeFiles.cr && { kind: 'cr', file: clubeFiles.cr },
+                      clubeFiles.alvara && { kind: 'alvara', file: clubeFiles.alvara },
+                    ].filter(Boolean) as { kind: string; file: File }[];
+                    const ok = await handleRegister({ type: 'clube', ...payload }, docs);
                     if (ok) setShowLoginModal(false);
                   }}
                   className="space-y-4"
@@ -1184,6 +1268,13 @@ export default function App() {
                     <div />
                     <AuthField label="Senha" theme={theme} required type="password" value={clubeForm.password} onChange={(e) => setClubeForm({ ...clubeForm, password: e.target.value })} />
                     <AuthField label="Repita a senha" theme={theme} required type="password" value={clubeForm.confirmPassword} onChange={(e) => setClubeForm({ ...clubeForm, confirmPassword: e.target.value })} />
+                  </div>
+
+                  <p className={`text-[10px] font-bold uppercase tracking-wider pt-2 ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Documentos (opcional, PDF/JPG/PNG até 1MB)</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <FileField label="Cartão CNPJ" theme={theme} onFileChange={(f) => setClubeFiles({ ...clubeFiles, cnpjCard: f })} />
+                    <FileField label="CR" theme={theme} onFileChange={(f) => setClubeFiles({ ...clubeFiles, cr: f })} />
+                    <div className="sm:col-span-2"><FileField label="Alvará de funcionamento" theme={theme} onFileChange={(f) => setClubeFiles({ ...clubeFiles, alvara: f })} /></div>
                   </div>
 
                   <label className={`flex items-center gap-2 text-[11px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>

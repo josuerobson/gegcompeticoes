@@ -34,6 +34,9 @@ export interface User {
   neighborhood?: string;
   city?: string;
   state?: string;
+  docRgCnhUploaded?: boolean;
+  docCrUploaded?: boolean;
+  docDeclaracaoUploaded?: boolean;
 }
 
 export interface Club {
@@ -55,6 +58,9 @@ export interface Club {
   neighborhood?: string;
   city?: string;
   state?: string;
+  docCnpjUploaded?: boolean;
+  docCrUploaded?: boolean;
+  docAlvaraUploaded?: boolean;
 }
 
 export interface Comment {
