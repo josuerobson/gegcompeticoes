@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Championship, Registration, User, StageScore, Weapon, Modality } from '../types';
 import { 
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
@@ -58,6 +58,107 @@ interface AdminPanelProps {
   onToggleAdminDemo: () => void;
   settings?: { [key: string]: string };
   onSaveSetting?: (key: string, value: string) => Promise<void>;
+  onCreateMember: (fields: { fullName: string; cpf: string; email: string; password: string }) => Promise<{ user?: User; error?: string }>;
+  onUpdateMemberProfile: (memberId: string, fields: Record<string, unknown>) => Promise<boolean>;
+  onUploadMemberDocument: (memberId: string, kind: string, file: File) => Promise<boolean>;
+}
+
+// Labeled input matching this panel's existing form style (see the
+// decorative cadastrar_membros/cadastro_armas inputs this mirrors).
+function MemberField({ label, value, onChange, type = 'text', placeholder }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="text-[10px] font-bold text-slate-500 uppercase block">{label}</label>
+      <input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+      />
+    </div>
+  );
+}
+
+// A section of the member's profile that saves independently — the director
+// fills in whatever part they have on hand and comes back later for the rest,
+// same progressive pattern as the athlete's own "Meu Cadastro".
+function MemberSection({ title, children, onSave, saving, saved }: {
+  title: string;
+  children: React.ReactNode;
+  onSave: () => void;
+  saving: boolean;
+  saved: boolean;
+}) {
+  return (
+    <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-xl space-y-3">
+      <h4 className="font-bold text-xs text-slate-700">{title}</h4>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {children}
+      </div>
+      <div className="flex items-center gap-3 pt-1">
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saving}
+          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold px-4 py-2 rounded-lg transition cursor-pointer"
+        >
+          {saving ? 'Salvando...' : 'Salvar'}
+        </button>
+        {saved && (
+          <span className="text-emerald-600 text-[11px] font-bold flex items-center gap-1">
+            <CheckCircle className="w-3.5 h-3.5" /> Salvo
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Labeled file input for the member document-completion section.
+function MemberFileField({ label, onUpload }: { label: string; onUpload: (file: File) => Promise<void> }) {
+  const [fileName, setFileName] = useState('');
+  const [error, setError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  return (
+    <div className="space-y-1">
+      <label className="text-[10px] font-bold text-slate-500 uppercase block">{label}</label>
+      <input
+        type="file"
+        accept="application/pdf,image/jpeg,image/png"
+        disabled={uploading}
+        onChange={async (e) => {
+          const file = e.target.files?.[0] || null;
+          if (!file) return;
+          if (file.size > 1024 * 1024) {
+            setError('Arquivo maior que 1MB.');
+            e.target.value = '';
+            return;
+          }
+          setError('');
+          setUploading(true);
+          await onUpload(file);
+          setFileName(file.name);
+          setUploading(false);
+          e.target.value = '';
+        }}
+        className="w-full text-[11px] text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+      />
+      {error ? (
+        <p className="text-[10px] text-red-500 mt-1">{error}</p>
+      ) : uploading ? (
+        <p className="text-[10px] text-slate-400 mt-1">Enviando...</p>
+      ) : fileName ? (
+        <p className="text-[10px] text-emerald-600 mt-1">Enviado: {fileName}</p>
+      ) : null}
+    </div>
+  );
 }
 
 export default function AdminPanel({
@@ -75,7 +176,10 @@ export default function AdminPanel({
   onRecordScore,
   onToggleAdminDemo,
   settings = {},
-  onSaveSetting
+  onSaveSetting,
+  onCreateMember,
+  onUpdateMemberProfile,
+  onUploadMemberDocument
 }: AdminPanelProps) {
   const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
   const [newClubWeapon, setNewClubWeapon] = useState({ manufacturer: '', model: '', caliber: '', serialNumber: '', weaponType: 'Pistola' });
@@ -203,12 +307,89 @@ export default function AdminPanel({
   const [scoreSuccess, setScoreSuccess] = useState(false);
 
   // MOCK states for new features
-  // Member signup
-  const [newMemberName, setNewMemberName] = useState('');
-  const [newMemberUser, setNewMemberUser] = useState('');
-  const [newMemberCR, setNewMemberCR] = useState('');
-  const [newMemberEmail, setNewMemberEmail] = useState('');
-  const [memberSuccess, setMemberSuccess] = useState(false);
+  // Member signup — "Cadastrar Membros": quick-create a member, then
+  // progressively complete their profile the same way "Meu Cadastro" does.
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [createMemberForm, setCreateMemberForm] = useState({ fullName: '', cpf: '', email: '', password: '' });
+  const [creatingMember, setCreatingMember] = useState(false);
+  const [createMemberError, setCreateMemberError] = useState('');
+
+  const [memberEditForm, setMemberEditForm] = useState({
+    fullName: '', birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
+    fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', nationality: '',
+    phone: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
+  });
+  const [memberSavingSection, setMemberSavingSection] = useState<string | null>(null);
+  const [memberSavedSection, setMemberSavedSection] = useState<string | null>(null);
+
+  const clubMembers = users.filter(u => u.clubId === currentUser?.clubId && u.role === 'member');
+  const selectedMember = clubMembers.find(m => m.id === selectedMemberId) || null;
+
+  useEffect(() => {
+    if (!selectedMember) return;
+    setMemberEditForm({
+      fullName: selectedMember.fullName || '',
+      birthDate: selectedMember.birthDate || '',
+      sex: selectedMember.sex || '',
+      rg: selectedMember.rg || '',
+      rgIssuer: selectedMember.rgIssuer || '',
+      rgIssueDate: selectedMember.rgIssueDate || '',
+      fatherName: selectedMember.fatherName || '',
+      motherName: selectedMember.motherName || '',
+      crNumber: selectedMember.crNumber || '',
+      crValidity: selectedMember.crValidity || '',
+      militaryRegion: selectedMember.militaryRegion || '',
+      nationality: selectedMember.nationality || '',
+      phone: selectedMember.phone || '',
+      cep: selectedMember.cep || '',
+      address: selectedMember.address || '',
+      addressNumber: selectedMember.addressNumber || '',
+      complement: selectedMember.complement || '',
+      neighborhood: selectedMember.neighborhood || '',
+      city: selectedMember.city || '',
+      state: selectedMember.state || ''
+    });
+  }, [selectedMember?.id]);
+
+  const handleCreateMemberSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateMemberError('');
+    setCreatingMember(true);
+    const result = await onCreateMember(createMemberForm);
+    setCreatingMember(false);
+    if (result.user) {
+      setCreateMemberForm({ fullName: '', cpf: '', email: '', password: '' });
+      setSelectedMemberId(result.user.id);
+    } else {
+      setCreateMemberError(result.error || 'Erro ao cadastrar membro.');
+    }
+  };
+
+  const saveMemberSection = async (sectionId: string, fields: Record<string, string>) => {
+    if (!selectedMemberId) return;
+    setMemberSavingSection(sectionId);
+    setMemberSavedSection(null);
+    const ok = await onUpdateMemberProfile(selectedMemberId, fields);
+    setMemberSavingSection(null);
+    if (ok) {
+      setMemberSavedSection(sectionId);
+      setTimeout(() => setMemberSavedSection(null), 2500);
+    }
+  };
+
+  const uploadMemberDoc = async (kind: string, file: File) => {
+    if (!selectedMemberId) return;
+    await onUploadMemberDocument(selectedMemberId, kind, file);
+  };
+
+  // "Novo Clube" (Gerenciamento Plataforma) is still a decorative mock form,
+  // unrelated to the real member registration flow above.
+  const [novoClubeSuccess, setNovoClubeSuccess] = useState(false);
+  const handleNovoClubeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setNovoClubeSuccess(true);
+    setTimeout(() => setNovoClubeSuccess(false), 2500);
+  };
 
   // Weapon Concession
   const [cessaoAtletaName, setCessaoAtletaName] = useState('');
@@ -313,18 +494,6 @@ export default function AdminPanel({
     setScoreInput('');
     setTimeInput('');
     setTimeout(() => setScoreSuccess(false), 3000);
-  };
-
-  const handleCreateMember = (e: React.FormEvent) => {
-    e.preventDefault();
-    setMemberSuccess(true);
-    setTimeout(() => {
-      setMemberSuccess(false);
-      setNewMemberName('');
-      setNewMemberUser('');
-      setNewMemberCR('');
-      setNewMemberEmail('');
-    }, 2500);
   };
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'master_admin' || currentUser?.role === 'club_admin';
@@ -722,78 +891,149 @@ export default function AdminPanel({
 
       case 'cadastrar_membros':
         return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-display font-bold text-slate-900 text-base">Cadastrar Novo Sócio / Atleta</h3>
-                <p className="text-xs text-slate-400">Adicionar registro regulamentar de filiado G&G.</p>
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="font-display font-bold text-slate-900 text-base">
+                    {selectedMember ? `Editando: ${selectedMember.fullName}` : 'Cadastrar Novo Sócio / Atleta'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {selectedMember
+                      ? 'Complete os dados quando puder — cada seção é salva de forma independente.'
+                      : 'Crie o login do atleta; o resto do cadastro pode ser completado depois.'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {selectedMember && (
+                    <span className={`text-[11px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1 ${selectedMember.isProfileComplete ? 'text-emerald-600 bg-emerald-50' : 'text-amber-600 bg-amber-50'}`}>
+                      {selectedMember.isProfileComplete ? 'Cadastro completo' : 'Cadastro incompleto'}
+                    </span>
+                  )}
+                  <UserPlus className="w-5 h-5 text-blue-600" />
+                </div>
               </div>
-              <UserPlus className="w-5 h-5 text-blue-600" />
+
+              {selectedMember ? (
+                <div className="space-y-4">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMemberId(null)}
+                    className="text-blue-600 hover:text-blue-700 text-xs font-bold cursor-pointer"
+                  >
+                    + Cadastrar outro membro
+                  </button>
+
+                  <MemberSection
+                    title="Dados Cadastrais"
+                    onSave={() => saveMemberSection('member_data', {
+                      fullName: memberEditForm.fullName, birthDate: memberEditForm.birthDate, sex: memberEditForm.sex, rg: memberEditForm.rg,
+                      rgIssuer: memberEditForm.rgIssuer, rgIssueDate: memberEditForm.rgIssueDate, fatherName: memberEditForm.fatherName,
+                      motherName: memberEditForm.motherName, crNumber: memberEditForm.crNumber, crValidity: memberEditForm.crValidity,
+                      militaryRegion: memberEditForm.militaryRegion, nationality: memberEditForm.nationality
+                    })}
+                    saving={memberSavingSection === 'member_data'}
+                    saved={memberSavedSection === 'member_data'}
+                  >
+                    <div className="sm:col-span-2"><MemberField label="Nome completo" value={memberEditForm.fullName} onChange={v => setMemberEditForm({ ...memberEditForm, fullName: v })} /></div>
+                    <MemberField label="Data de nascimento" type="date" value={memberEditForm.birthDate} onChange={v => setMemberEditForm({ ...memberEditForm, birthDate: v })} />
+                    <MemberField label="Sexo" value={memberEditForm.sex} onChange={v => setMemberEditForm({ ...memberEditForm, sex: v })} />
+                    <MemberField label="RG" value={memberEditForm.rg} onChange={v => setMemberEditForm({ ...memberEditForm, rg: v })} />
+                    <MemberField label="Órgão emissor RG" value={memberEditForm.rgIssuer} onChange={v => setMemberEditForm({ ...memberEditForm, rgIssuer: v })} />
+                    <MemberField label="Data emissão RG" type="date" value={memberEditForm.rgIssueDate} onChange={v => setMemberEditForm({ ...memberEditForm, rgIssueDate: v })} />
+                    <MemberField label="Nome do pai" value={memberEditForm.fatherName} onChange={v => setMemberEditForm({ ...memberEditForm, fatherName: v })} />
+                    <MemberField label="Nome da mãe" value={memberEditForm.motherName} onChange={v => setMemberEditForm({ ...memberEditForm, motherName: v })} />
+                    <MemberField label="CR" placeholder="Ex: CR-102938-DF" value={memberEditForm.crNumber} onChange={v => setMemberEditForm({ ...memberEditForm, crNumber: v })} />
+                    <MemberField label="Validade CR" type="date" value={memberEditForm.crValidity} onChange={v => setMemberEditForm({ ...memberEditForm, crValidity: v })} />
+                    <MemberField label="Região Militar" value={memberEditForm.militaryRegion} onChange={v => setMemberEditForm({ ...memberEditForm, militaryRegion: v })} />
+                    <MemberField label="Nacionalidade" value={memberEditForm.nationality} onChange={v => setMemberEditForm({ ...memberEditForm, nationality: v })} />
+                  </MemberSection>
+
+                  <MemberSection
+                    title="Contato"
+                    onSave={() => saveMemberSection('member_contact', { phone: memberEditForm.phone })}
+                    saving={memberSavingSection === 'member_contact'}
+                    saved={memberSavedSection === 'member_contact'}
+                  >
+                    <MemberField label="Celular" type="tel" value={memberEditForm.phone} onChange={v => setMemberEditForm({ ...memberEditForm, phone: v })} />
+                  </MemberSection>
+
+                  <MemberSection
+                    title="Endereço"
+                    onSave={() => saveMemberSection('member_address', {
+                      cep: memberEditForm.cep, address: memberEditForm.address, addressNumber: memberEditForm.addressNumber,
+                      complement: memberEditForm.complement, neighborhood: memberEditForm.neighborhood, city: memberEditForm.city, state: memberEditForm.state
+                    })}
+                    saving={memberSavingSection === 'member_address'}
+                    saved={memberSavedSection === 'member_address'}
+                  >
+                    <MemberField label="CEP" value={memberEditForm.cep} onChange={v => setMemberEditForm({ ...memberEditForm, cep: v })} />
+                    <MemberField label="Endereço" value={memberEditForm.address} onChange={v => setMemberEditForm({ ...memberEditForm, address: v })} />
+                    <MemberField label="Número" value={memberEditForm.addressNumber} onChange={v => setMemberEditForm({ ...memberEditForm, addressNumber: v })} />
+                    <MemberField label="Complemento" value={memberEditForm.complement} onChange={v => setMemberEditForm({ ...memberEditForm, complement: v })} />
+                    <MemberField label="Bairro" value={memberEditForm.neighborhood} onChange={v => setMemberEditForm({ ...memberEditForm, neighborhood: v })} />
+                    <MemberField label="Cidade" value={memberEditForm.city} onChange={v => setMemberEditForm({ ...memberEditForm, city: v })} />
+                    <MemberField label="Estado" value={memberEditForm.state} onChange={v => setMemberEditForm({ ...memberEditForm, state: v })} />
+                  </MemberSection>
+
+                  <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-xl space-y-3">
+                    <h4 className="font-bold text-xs text-slate-700">Documentos (PDF/JPG/PNG até 1MB)</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <MemberFileField label="RG ou CNH" onUpload={f => uploadMemberDoc('rg_cnh', f)} />
+                      <MemberFileField label="CR" onUpload={f => uploadMemberDoc('cr', f)} />
+                      <div className="sm:col-span-2"><MemberFileField label="Declaração de filiação" onUpload={f => uploadMemberDoc('declaracao_filiacao', f)} /></div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleCreateMemberSubmit} className="space-y-4 text-slate-800">
+                  {createMemberError && (
+                    <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{createMemberError}</div>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2"><MemberField label="Nome completo" value={createMemberForm.fullName} onChange={v => setCreateMemberForm({ ...createMemberForm, fullName: v })} placeholder="Ex: Carlos Cabral" /></div>
+                    <MemberField label="CPF" value={createMemberForm.cpf} onChange={v => setCreateMemberForm({ ...createMemberForm, cpf: v })} placeholder="Ex: 000.000.000-00" />
+                    <MemberField label="E-mail de contato" type="email" value={createMemberForm.email} onChange={v => setCreateMemberForm({ ...createMemberForm, email: v })} placeholder="carlos@exemplo.com" />
+                    <MemberField label="Senha inicial" type="password" value={createMemberForm.password} onChange={v => setCreateMemberForm({ ...createMemberForm, password: v })} />
+                  </div>
+                  <div className="flex justify-end pt-3 border-t border-slate-100">
+                    <button
+                      type="submit"
+                      disabled={creatingMember}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg shadow-blue-100 cursor-pointer"
+                    >
+                      {creatingMember ? 'Salvando...' : 'Cadastrar Membro'}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
 
-            {memberSuccess && (
-              <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 mb-4 text-xs font-semibold">
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
-                Atleta desportivo cadastrado e regularizado no sistema com sucesso!
-              </div>
-            )}
-
-            <form onSubmit={handleCreateMember} className="space-y-4 text-slate-800">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Nome Completo</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Carlos Cabral"
-                    value={newMemberName}
-                    onChange={(e) => setNewMemberName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                  />
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+              <h4 className="font-display font-bold text-slate-900 text-sm">Membros do Clube ({clubMembers.length})</h4>
+              {clubMembers.length === 0 ? (
+                <p className="text-xs text-slate-400">Nenhum membro cadastrado ainda.</p>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {clubMembers.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setSelectedMemberId(m.id)}
+                      className={`w-full flex items-center justify-between py-3 px-2 text-left rounded-lg transition cursor-pointer ${selectedMemberId === m.id ? 'bg-blue-50' : 'hover:bg-slate-50'}`}
+                    >
+                      <div>
+                        <p className="text-xs font-bold text-slate-800">{m.fullName}</p>
+                        <p className="text-[10px] text-slate-400 font-mono">{m.cpf || 'CPF não informado'}</p>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${m.isProfileComplete ? 'text-emerald-600 bg-emerald-50' : 'text-amber-600 bg-amber-50'}`}>
+                        {m.isProfileComplete ? 'Completo' : 'Incompleto'}
+                      </span>
+                    </button>
+                  ))}
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Username / Apelido</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: carlota_ipsc"
-                    value={newMemberUser}
-                    onChange={(e) => setNewMemberUser(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Certificado de Registro (CR)</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: CR-873918-DF"
-                    value={newMemberCR}
-                    onChange={(e) => setNewMemberCR(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-750 font-mono"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">E-mail de Contato</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="carlos@cabal.com"
-                    value={newMemberEmail}
-                    onChange={(e) => setNewMemberEmail(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end pt-3 border-t border-slate-100">
-                <button
-                  type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg shadow-blue-100 cursor-pointer"
-                >
-                  Salvar Registro de Atleta
-                </button>
-              </div>
-            </form>
+              )}
+            </div>
           </div>
         );
 
@@ -1052,14 +1292,14 @@ export default function AdminPanel({
               <Landmark className="w-5 h-5 text-blue-600" />
             </div>
 
-            {memberSuccess && (
+            {novoClubeSuccess && (
               <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 mb-4 text-xs font-semibold">
                 <CheckCircle className="w-5 h-5 text-emerald-600" />
                 Unidade filiada integrada ao sistema nacional G&G!
               </div>
             )}
 
-            <form onSubmit={handleCreateMember} className="space-y-4 text-slate-805">
+            <form onSubmit={handleNovoClubeSubmit} className="space-y-4 text-slate-805">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-500 uppercase block">Nome do Estande/Clube</label>

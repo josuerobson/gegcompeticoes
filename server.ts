@@ -448,6 +448,58 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
+// 1a2. Club-admin-initiated member registration ("Cadastrar Membros" in Painel
+// Diretor) — creates the account with the minimum fields needed for a working
+// CPF+senha login, without logging the admin in as the new member. The rest
+// of the profile (RG, endereço, documentos) is completed afterwards through
+// PATCH /api/admin/members/:id/profile, same section-by-section flow as
+// "Meu Cadastro".
+app.post('/api/admin/members', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { fullName, cpf, email, password } = req.body;
+
+  if (!currentUser.clubId) {
+    return res.status(400).json({ error: 'Sua conta não está vinculada a um clube.' });
+  }
+  if (!fullName || !cpf || !email || !password) {
+    return res.status(400).json({ error: 'Preencha nome, CPF, e-mail e senha.' });
+  }
+
+  const cleanCpf = String(cpf).replace(/\D/g, '');
+  const existingRes = await pool.query(
+    `SELECT 1 FROM users WHERE regexp_replace(cpf, '[^0-9]', '', 'g') = $1`,
+    [cleanCpf]
+  );
+  if (existingRes.rows.length > 0) {
+    return res.status(400).json({ error: 'Já existe um cadastro com este CPF.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const userId = `user_${Date.now()}`;
+    const username = await uniqueUsername(client, slugify(fullName));
+    await client.query(
+      `INSERT INTO users (id, email, username, full_name, avatar_url, bio, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, cpf, password_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+      [userId, email, username, fullName, DEFAULT_AVATAR, 'Atleta federado do G&G Competições.', true, new Date().toISOString().split('T')[0], 'member', false, currentUser.clubId, false, cpf, hashPassword(password)]
+    );
+    await client.query('COMMIT');
+
+    const fullUserRes = await pool.query(
+      `SELECT u.*, '[]'::json as followers, '[]'::json as following FROM users u WHERE id = $1`,
+      [userId]
+    );
+    res.status(201).json({ user: mapUser(fullUserRes.rows[0]) });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('Admin create member database error:', e);
+    res.status(500).json({ error: 'Erro ao cadastrar membro.' });
+  } finally {
+    client.release();
+  }
+});
+
 // 1b. Document uploads (RG/CNH, CR, Declaração de filiação for members;
 // Cartão CNPJ, CR, Alvará for clubs) — stored in MinIO, only a boolean
 // "uploaded" flag is ever exposed to the client, never the storage key.
@@ -484,7 +536,7 @@ const CLUB_DOC_KIND_COLUMNS: Record<string, string> = {
 
 app.post('/api/uploads', requireAuth, handleUpload, async (req, res) => {
   const currentUser = (req as any).user as User;
-  const { kind, target } = req.body as { kind?: string; target?: string };
+  const { kind, target, targetUserId } = req.body as { kind?: string; target?: string; targetUserId?: string };
   const file = (req as any).file as Express.Multer.File | undefined;
 
   if (!storageEnabled) {
@@ -503,7 +555,17 @@ app.post('/api/uploads', requireAuth, handleUpload, async (req, res) => {
 
   let recordId: string;
   let table: 'users' | 'clubs';
-  if (isClubTarget) {
+  if (targetUserId) {
+    if (!ADMIN_ROLES.includes(currentUser.role) || !currentUser.clubId) {
+      return res.status(403).json({ error: 'Apenas administradores do clube podem enviar documentos por um membro.' });
+    }
+    const memberCheck = await pool.query('SELECT club_id FROM users WHERE id = $1', [targetUserId]);
+    if (memberCheck.rows.length === 0 || memberCheck.rows[0].club_id !== currentUser.clubId) {
+      return res.status(403).json({ error: 'Este membro não pertence ao seu clube.' });
+    }
+    recordId = targetUserId;
+    table = 'users';
+  } else if (isClubTarget) {
     if (currentUser.role !== 'club_admin' || !currentUser.clubId) {
       return res.status(403).json({ error: 'Apenas o administrador do clube pode enviar estes documentos.' });
     }
@@ -598,38 +660,67 @@ const USER_PROFILE_COLUMNS: Record<string, string> = {
   state: 'state',
 };
 
-app.patch('/api/users/me/profile', requireAuth, async (req, res) => {
-  const currentUser = (req as any).user as User;
+// Shared by a member editing their own "Meu Cadastro" and a club admin
+// completing a member's profile on their behalf — same column whitelist,
+// same live-recomputed completeness.
+async function applyUserProfileFields(userId: string, body: Record<string, unknown>) {
   const updates: string[] = [];
   const values: unknown[] = [];
 
   for (const [key, column] of Object.entries(USER_PROFILE_COLUMNS)) {
-    if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+    if (Object.prototype.hasOwnProperty.call(body, key)) {
       updates.push(`${column} = $${updates.length + 1}`);
-      values.push(req.body[key] || null);
+      values.push(body[key] || null);
     }
   }
 
-  if (updates.length === 0) {
-    return res.status(400).json({ error: 'Nenhum campo para atualizar.' });
-  }
+  if (updates.length === 0) return null;
 
+  values.push(userId);
+  await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${values.length}`, values);
+  await recomputeUserProfileComplete(pool, userId);
+
+  const fullUserRes = await pool.query(
+    `SELECT u.*,
+      COALESCE((SELECT json_agg(follower_id) FROM follows WHERE following_id = u.id), '[]'::json) as followers,
+      COALESCE((SELECT json_agg(following_id) FROM follows WHERE follower_id = u.id), '[]'::json) as following
+    FROM users u WHERE id = $1`,
+    [userId]
+  );
+  return fullUserRes.rows[0] ? mapUser(fullUserRes.rows[0]) : null;
+}
+
+app.patch('/api/users/me/profile', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
   try {
-    values.push(currentUser.id);
-    await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${values.length}`, values);
-    await recomputeUserProfileComplete(pool, currentUser.id);
-
-    const fullUserRes = await pool.query(
-      `SELECT u.*,
-        COALESCE((SELECT json_agg(follower_id) FROM follows WHERE following_id = u.id), '[]'::json) as followers,
-        COALESCE((SELECT json_agg(following_id) FROM follows WHERE follower_id = u.id), '[]'::json) as following
-      FROM users u WHERE id = $1`,
-      [currentUser.id]
-    );
-    res.json({ user: mapUser(fullUserRes.rows[0]) });
+    const user = await applyUserProfileFields(currentUser.id, req.body);
+    if (!user) return res.status(400).json({ error: 'Nenhum campo para atualizar.' });
+    res.json({ user });
   } catch (err) {
     console.error('Update profile database error:', err);
     res.status(500).json({ error: 'Erro ao salvar cadastro.' });
+  }
+});
+
+app.patch('/api/admin/members/:id/profile', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const memberId = req.params.id;
+
+  try {
+    const memberCheck = await pool.query('SELECT club_id FROM users WHERE id = $1', [memberId]);
+    if (memberCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Membro não encontrado.' });
+    }
+    if (memberCheck.rows[0].club_id !== currentUser.clubId) {
+      return res.status(403).json({ error: 'Este membro não pertence ao seu clube.' });
+    }
+
+    const user = await applyUserProfileFields(memberId, req.body);
+    if (!user) return res.status(400).json({ error: 'Nenhum campo para atualizar.' });
+    res.json({ user });
+  } catch (err) {
+    console.error('Admin update member profile database error:', err);
+    res.status(500).json({ error: 'Erro ao salvar cadastro do membro.' });
   }
 });
 

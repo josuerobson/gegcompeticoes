@@ -508,6 +508,68 @@ export default function App() {
     return ok;
   };
 
+  // Club-admin "Cadastrar Membros" flow — creating and progressively
+  // completing a member's profile on their behalf, without logging the admin
+  // in as that member.
+  const handleCreateMember = async (fields: { fullName: string; cpf: string; email: string; password: string }): Promise<{ user?: User; error?: string }> => {
+    if (!currentUser) return { error: 'Não autenticado.' };
+    try {
+      const res = await fetch('/api/admin/members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify(fields)
+      });
+      const data = await res.json();
+      if (res.ok && data.user) {
+        await syncWithBackend();
+        return { user: data.user };
+      }
+      return { error: data.error || 'Erro ao cadastrar membro.' };
+    } catch (err) {
+      console.error('Erro ao cadastrar membro:', err);
+      return { error: 'Erro ao cadastrar membro.' };
+    }
+  };
+
+  const handleUpdateMemberProfile = async (memberId: string, fields: Record<string, unknown>): Promise<boolean> => {
+    if (!currentUser) return false;
+    try {
+      const res = await fetch(`/api/admin/members/${memberId}/profile`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify(fields)
+      });
+      if (res.ok) {
+        await syncWithBackend();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Erro ao salvar cadastro do membro:', err);
+      return false;
+    }
+  };
+
+  const handleUploadMemberDocument = async (memberId: string, kind: string, file: File): Promise<boolean> => {
+    if (!currentUser) return false;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('kind', kind);
+    formData.append('targetUserId', memberId);
+    try {
+      const res = await fetch('/api/uploads', {
+        method: 'POST',
+        headers: { 'x-user-id': currentUser.id },
+        body: formData
+      });
+      if (res.ok) await syncWithBackend();
+      return res.ok;
+    } catch (err) {
+      console.error(`Erro ao enviar documento do membro (${kind}):`, err);
+      return false;
+    }
+  };
+
   const handleAddPost = async (content: string, imageUrl?: string, targetScore?: ShootingResult) => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {
@@ -1495,6 +1557,9 @@ export default function App() {
               onRemoveWeapon={handleRemoveWeapon}
               settings={settings}
               onSaveSetting={handleSaveSetting}
+              onCreateMember={handleCreateMember}
+              onUpdateMemberProfile={handleUpdateMemberProfile}
+              onUploadMemberDocument={handleUploadMemberDocument}
             />
           )}
 
