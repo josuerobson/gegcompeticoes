@@ -6,7 +6,7 @@ import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
 import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon } from './src/types.js';
 import { pool, initDB } from './src/db.js';
-import { verifyPassword } from './src/auth.js';
+import { hashPassword, verifyPassword } from './src/auth.js';
 
 const app = express();
 const PORT = 3000;
@@ -33,6 +33,22 @@ function mapUser(u: any): User {
     cpf: u.cpf || undefined,
     rg: u.rg || undefined,
     phone: u.phone || undefined,
+    birthDate: u.birth_date || undefined,
+    sex: u.sex || undefined,
+    rgIssuer: u.rg_issuer || undefined,
+    rgIssueDate: u.rg_issue_date || undefined,
+    fatherName: u.father_name || undefined,
+    motherName: u.mother_name || undefined,
+    crValidity: u.cr_validity || undefined,
+    militaryRegion: u.military_region || undefined,
+    nationality: u.nationality || undefined,
+    cep: u.cep || undefined,
+    address: u.address || undefined,
+    addressNumber: u.address_number || undefined,
+    complement: u.complement || undefined,
+    neighborhood: u.neighborhood || undefined,
+    city: u.city || undefined,
+    state: u.state || undefined,
   };
 }
 
@@ -46,6 +62,16 @@ function mapClub(c: any): Club {
     phone: c.phone || undefined,
     isPremium: c.is_premium,
     createdAt: c.created_at,
+    crNumber: c.cr_number || undefined,
+    responsibleName: c.responsible_name || undefined,
+    email: c.email || undefined,
+    cep: c.cep || undefined,
+    address: c.address || undefined,
+    addressNumber: c.address_number || undefined,
+    complement: c.complement || undefined,
+    neighborhood: c.neighborhood || undefined,
+    city: c.city || undefined,
+    state: c.state || undefined,
   };
 }
 
@@ -254,6 +280,141 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (err) {
     console.error('Login database error:', err);
     res.status(500).json({ error: 'Erro interno ao realizar login.' });
+  }
+});
+
+const COMBINING_DIACRITICS_PATTERN = new RegExp('[' + String.fromCharCode(0x0300) + '-' + String.fromCharCode(0x036f) + ']', 'g');
+
+function slugify(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .normalize('NFD').replace(COMBINING_DIACRITICS_PATTERN, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'atleta';
+}
+
+async function uniqueUsername(client: any, base: string): Promise<string> {
+  let candidate = base;
+  let suffix = 1;
+  while (true) {
+    const res = await client.query('SELECT 1 FROM users WHERE username = $1', [candidate]);
+    if (res.rows.length === 0) return candidate;
+    suffix += 1;
+    candidate = `${base}_${suffix}`;
+  }
+}
+
+const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
+
+app.post('/api/auth/register', async (req, res) => {
+  const { type } = req.body;
+
+  try {
+    if (type === 'clube') {
+      const {
+        name, crNumber, responsibleName, phone, email,
+        cep, address, addressNumber, complement, neighborhood, city, state,
+        cnpj, password
+      } = req.body;
+
+      if (!name || !responsibleName || !email || !cnpj || !password) {
+        return res.status(400).json({ error: 'Preencha todos os campos obrigatórios do cadastro de clube.' });
+      }
+
+      const cleanCnpj = String(cnpj).replace(/\D/g, '');
+      const existingRes = await pool.query(
+        `SELECT 1 FROM users WHERE regexp_replace(cpf, '[^0-9]', '', 'g') = $1`,
+        [cleanCnpj]
+      );
+      if (existingRes.rows.length > 0) {
+        return res.status(400).json({ error: 'Já existe um cadastro com este CNPJ.' });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const clubId = `club_${Date.now()}`;
+        await client.query(
+          `INSERT INTO clubs (id, name, cnpj, phone, is_premium, created_at, cr_number, responsible_name, email, cep, address, address_number, complement, neighborhood, city, state)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+          [clubId, name, cnpj, phone || null, false, new Date().toISOString().split('T')[0], crNumber || null, responsibleName, email, cep || null, address || null, addressNumber || null, complement || null, neighborhood || null, city || null, state || null]
+        );
+
+        const userId = `user_${Date.now()}`;
+        const username = await uniqueUsername(client, slugify(name));
+        await client.query(
+          `INSERT INTO users (id, email, username, full_name, avatar_url, bio, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, cpf, phone, password_hash)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+          [userId, email, username, responsibleName, DEFAULT_AVATAR, `Administrador do clube ${name}.`, true, new Date().toISOString().split('T')[0], 'club_admin', false, clubId, true, cnpj, phone || null, hashPassword(password)]
+        );
+        await client.query('COMMIT');
+
+        const fullUserRes = await client.query(
+          `SELECT u.*, '[]'::json as followers, '[]'::json as following FROM users u WHERE id = $1`,
+          [userId]
+        );
+        return res.status(201).json({ user: mapUser(fullUserRes.rows[0]) });
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+    }
+
+    // type === 'membro' (default)
+    const {
+      fullName, birthDate, sex, rg, rgIssuer, rgIssueDate, fatherName, motherName,
+      crNumber, crValidity, militaryRegion, nationality, phone, email,
+      cep, address, addressNumber, complement, neighborhood, city, state,
+      cpf, password, clubId
+    } = req.body;
+
+    if (!fullName || !email || !cpf || !password || !clubId) {
+      return res.status(400).json({ error: 'Preencha todos os campos obrigatórios do cadastro.' });
+    }
+
+    const cleanCpf = String(cpf).replace(/\D/g, '');
+    const existingRes = await pool.query(
+      `SELECT 1 FROM users WHERE regexp_replace(cpf, '[^0-9]', '', 'g') = $1`,
+      [cleanCpf]
+    );
+    if (existingRes.rows.length > 0) {
+      return res.status(400).json({ error: 'Já existe um cadastro com este CPF.' });
+    }
+
+    const clubCheckRes = await pool.query('SELECT 1 FROM clubs WHERE id = $1', [clubId]);
+    if (clubCheckRes.rows.length === 0) {
+      return res.status(400).json({ error: 'Clube selecionado não encontrado.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const userId = `user_${Date.now()}`;
+      const username = await uniqueUsername(client, slugify(fullName));
+      await client.query(
+        `INSERT INTO users (id, email, username, full_name, avatar_url, bio, cr_number, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, cpf, rg, phone, password_hash, birth_date, sex, rg_issuer, rg_issue_date, father_name, mother_name, cr_validity, military_region, nationality, cep, address, address_number, complement, neighborhood, city, state)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)`,
+        [userId, email, username, fullName, DEFAULT_AVATAR, 'Atleta federado do G&G Competições.', crNumber || null, true, new Date().toISOString().split('T')[0], 'member', false, clubId, true, cpf, rg || null, phone || null, hashPassword(password), birthDate || null, sex || null, rgIssuer || null, rgIssueDate || null, fatherName || null, motherName || null, crValidity || null, militaryRegion || null, nationality || null, cep || null, address || null, addressNumber || null, complement || null, neighborhood || null, city || null, state || null]
+      );
+      await client.query('COMMIT');
+
+      const fullUserRes = await client.query(
+        `SELECT u.*, '[]'::json as followers, '[]'::json as following FROM users u WHERE id = $1`,
+        [userId]
+      );
+      res.status(201).json({ user: mapUser(fullUserRes.rows[0]) });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Register database error:', err);
+    res.status(500).json({ error: 'Erro ao realizar cadastro.' });
   }
 });
 
@@ -614,6 +775,10 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
 
   if (!modalityId || !stageId || !weaponId || !crNumber || !paymentMethod) {
     return res.status(400).json({ error: 'Inscrição requer modalidade, etapa, arma, CR válido e meio de pagamento.' });
+  }
+
+  if (!currentUser.isProfileComplete) {
+    return res.status(403).json({ error: 'Complete seu cadastro antes de se inscrever em campeonatos.' });
   }
 
   try {

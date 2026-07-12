@@ -18,6 +18,22 @@ export interface User {
   cpf?: string;
   rg?: string;
   phone?: string;
+  birthDate?: string;
+  sex?: string;
+  rgIssuer?: string;
+  rgIssueDate?: string;
+  fatherName?: string;
+  motherName?: string;
+  crValidity?: string;
+  militaryRegion?: string;
+  nationality?: string;
+  cep?: string;
+  address?: string;
+  addressNumber?: string;
+  complement?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
 }
 
 export interface Club {
@@ -29,6 +45,16 @@ export interface Club {
   phone?: string;
   isPremium: boolean;
   createdAt: string;
+  crNumber?: string;
+  responsibleName?: string;
+  email?: string;
+  cep?: string;
+  address?: string;
+  addressNumber?: string;
+  complement?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
 }
 
 export interface Comment {

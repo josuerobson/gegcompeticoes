@@ -10,6 +10,27 @@ import shootingDarkBg from '@/assets/shooting_dark_bg.png';
 import shootingBanner from '@/assets/shooting_banner.png';
 import logoGgCompeticoes from '@/assets/logo_gg_competicoes.png';
 
+// Small reusable labeled input for the long Membro/Clube registration forms — avoids
+// repeating the same theme-aware className/label markup for ~25 near-identical fields.
+function AuthField({ label, theme, required, ...inputProps }: {
+  label: string;
+  theme: 'light' | 'dark';
+  required?: boolean;
+} & React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <div className="space-y-1.5">
+      <label className={`text-[10px] font-bold uppercase tracking-wider block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+        {label}{required && ' *'}
+      </label>
+      <input
+        required={required}
+        className={`w-full border outline-none px-4 py-3 rounded-2xl text-xs font-semibold focus:ring-1 transition ${theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-blue-600 focus:ring-blue-600' : 'bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:ring-blue-500'}`}
+        {...inputProps}
+      />
+    </div>
+  );
+}
+
 export default function App() {
   // Theme State
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -48,6 +69,19 @@ export default function App() {
   const [selectedProfileUser, setSelectedProfileUser] = useState<User | null>(null);
   const [loginCpf, setLoginCpf] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [authView, setAuthView] = useState<'login' | 'membro' | 'clube'>('login');
+  const [membroForm, setMembroForm] = useState({
+    fullName: '', birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
+    fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', nationality: 'Brasileira',
+    phone: '', email: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '',
+    cpf: '', password: '', confirmPassword: '', clubId: '', termsAccepted: false
+  });
+  const [clubeForm, setClubeForm] = useState({
+    name: '', crNumber: '', responsibleName: '', phone: '', email: '',
+    cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '',
+    cnpj: '', password: '', confirmPassword: '', termsAccepted: false
+  });
+  const [registerSubmitting, setRegisterSubmitting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [booting, setBooting] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -328,6 +362,34 @@ export default function App() {
     localStorage.removeItem('gg_user_id');
     setSelectedProfileUser(null);
     setActiveTab('feed');
+  };
+
+  const handleRegister = async (payload: Record<string, unknown>): Promise<boolean> => {
+    setRegisterSubmitting(true);
+    setLoginModalMessage('');
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (res.ok && data.user) {
+        setCurrentUser(data.user);
+        localStorage.setItem('gg_user_id', data.user.id);
+        await syncWithBackend(data.user.id);
+        setActiveTab('championships');
+        return true;
+      }
+      setLoginModalMessage(data.error || 'Erro ao realizar cadastro.');
+      return false;
+    } catch (err) {
+      console.error(err);
+      setLoginModalMessage('Erro ao tentar cadastrar. Tente novamente.');
+      return false;
+    } finally {
+      setRegisterSubmitting(false);
+    }
   };
 
   const handleAddPost = async (content: string, imageUrl?: string, targetScore?: ShootingResult) => {
@@ -914,7 +976,7 @@ export default function App() {
             onClick={() => { setShowLoginModal(false); setLoginModalMessage(''); }}
           >
             <div
-              className={`max-w-md w-full p-6 sm:p-8 rounded-3xl space-y-6 relative shadow-2xl animate-scale-up transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-900 border border-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-800'}`}
+              className={`${authView === 'login' ? 'max-w-md' : 'max-w-2xl'} w-full p-6 sm:p-8 rounded-3xl space-y-6 relative shadow-2xl animate-scale-up transition-colors duration-300 max-h-[85vh] overflow-y-auto ${theme === 'dark' ? 'bg-slate-900 border border-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-800'}`}
               style={{ border: theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.05)' : '1px solid rgba(0, 0, 0, 0.05)' }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -933,7 +995,7 @@ export default function App() {
                   <img src={logoGgCompeticoes} alt="G&G Competições" className="h-16 w-auto object-contain" />
                 </div>
                 <h3 className={`font-display font-black text-xl tracking-wider bg-gradient-to-r bg-clip-text text-transparent uppercase mt-4 ${theme === 'dark' ? 'from-blue-100 to-sky-400' : 'from-blue-700 to-sky-600'}`}>
-                  Entrar no Clube G&G
+                  {authView === 'login' ? 'Entrar no Clube G&G' : authView === 'membro' ? 'Cadastro de Membro' : 'Cadastro de Clube'}
                 </h3>
                 {loginModalMessage ? (
                   <p className={`text-[11px] leading-normal max-w-xs mx-auto p-2.5 rounded-xl border ${theme === 'dark' ? 'text-amber-400 bg-amber-500/5 border-amber-500/10' : 'text-amber-600 bg-amber-50/50 border-amber-200'}`}>
@@ -941,55 +1003,203 @@ export default function App() {
                   </p>
                 ) : (
                   <p className={`text-xs leading-normal max-w-xs mx-auto ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Faça login para se inscrever nos campeonatos e interagir na rede social.
+                    {authView === 'login' ? 'Faça login para se inscrever nos campeonatos e interagir na rede social.' : 'Preencha seus dados para se cadastrar no clube.'}
                   </p>
                 )}
               </div>
 
-              {/* Form */}
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const ok = await handleLogin(loginCpf, loginPassword);
-                  if (ok) {
-                    setShowLoginModal(false);
-                    setLoginCpf('');
-                    setLoginPassword('');
-                  }
-                }}
-                className="space-y-4"
-              >
-                <div className="space-y-1.5">
-                  <label className={`text-[10px] font-bold uppercase tracking-wider block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>CPF</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: 000.000.000-00"
-                    value={loginCpf}
-                    onChange={(e) => setLoginCpf(e.target.value)}
-                    className={`w-full border outline-none px-4 py-3 rounded-2xl text-xs font-semibold focus:ring-1 transition ${theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-blue-600 focus:ring-blue-600' : 'bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:ring-blue-500'}`}
-                  />
-                </div>
+              {/* Auth view toggle */}
+              <div className={`flex rounded-2xl p-1 text-[10px] font-bold uppercase ${theme === 'dark' ? 'bg-slate-950' : 'bg-slate-100'}`}>
+                {([
+                  ['login', 'Já tenho cadastro'],
+                  ['membro', 'Novo cadastro'],
+                  ['clube', 'Cadastrar Clube'],
+                ] as const).map(([view, label]) => (
+                  <button
+                    key={view}
+                    type="button"
+                    onClick={() => { setAuthView(view); setLoginModalMessage(''); }}
+                    className={`flex-1 py-2 rounded-xl transition ${authView === view ? 'bg-blue-600 text-white shadow' : theme === 'dark' ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-800'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
 
-                <div className="space-y-1.5">
-                  <label className={`text-[10px] font-bold uppercase tracking-wider block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Senha</label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="••••••••"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    className={`w-full border outline-none px-4 py-3 rounded-2xl text-xs font-semibold focus:ring-1 transition ${theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-blue-600 focus:ring-blue-600' : 'bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:ring-blue-500'}`}
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl text-xs transition uppercase shadow-lg shadow-blue-500/10 flex items-center justify-center gap-2 cursor-pointer"
+              {authView === 'login' && (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const ok = await handleLogin(loginCpf, loginPassword);
+                    if (ok) {
+                      setShowLoginModal(false);
+                      setLoginCpf('');
+                      setLoginPassword('');
+                    }
+                  }}
+                  className="space-y-4"
                 >
-                  Iniciar Sessão Atleta
-                </button>
-              </form>
+                  <AuthField label="CPF" theme={theme} required type="text" placeholder="Ex: 000.000.000-00" value={loginCpf} onChange={(e) => setLoginCpf(e.target.value)} />
+                  <AuthField label="Senha" theme={theme} required type="password" placeholder="••••••••" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} />
+                  <button
+                    type="submit"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl text-xs transition uppercase shadow-lg shadow-blue-500/10 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    Iniciar Sessão Atleta
+                  </button>
+                </form>
+              )}
+
+              {authView === 'membro' && (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (membroForm.password !== membroForm.confirmPassword) {
+                      setLoginModalMessage('As senhas não coincidem.');
+                      return;
+                    }
+                    if (!membroForm.termsAccepted) {
+                      setLoginModalMessage('É necessário aceitar os termos e condições.');
+                      return;
+                    }
+                    const { confirmPassword, termsAccepted, ...payload } = membroForm;
+                    const ok = await handleRegister({ type: 'membro', ...payload });
+                    if (ok) setShowLoginModal(false);
+                  }}
+                  className="space-y-4"
+                >
+                  <p className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Dados Cadastrais</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="sm:col-span-2"><AuthField label="Nome completo" theme={theme} required value={membroForm.fullName} onChange={(e) => setMembroForm({ ...membroForm, fullName: e.target.value })} /></div>
+                    <AuthField label="Data de nascimento" theme={theme} type="date" value={membroForm.birthDate} onChange={(e) => setMembroForm({ ...membroForm, birthDate: e.target.value })} />
+                    <AuthField label="Sexo" theme={theme} value={membroForm.sex} onChange={(e) => setMembroForm({ ...membroForm, sex: e.target.value })} />
+                    <AuthField label="RG" theme={theme} value={membroForm.rg} onChange={(e) => setMembroForm({ ...membroForm, rg: e.target.value })} />
+                    <AuthField label="Órgão emissor RG" theme={theme} value={membroForm.rgIssuer} onChange={(e) => setMembroForm({ ...membroForm, rgIssuer: e.target.value })} />
+                    <AuthField label="Data emissão RG" theme={theme} type="date" value={membroForm.rgIssueDate} onChange={(e) => setMembroForm({ ...membroForm, rgIssueDate: e.target.value })} />
+                    <AuthField label="Nome do pai" theme={theme} value={membroForm.fatherName} onChange={(e) => setMembroForm({ ...membroForm, fatherName: e.target.value })} />
+                    <AuthField label="Nome da mãe" theme={theme} value={membroForm.motherName} onChange={(e) => setMembroForm({ ...membroForm, motherName: e.target.value })} />
+                    <AuthField label="CR" theme={theme} placeholder="Ex: CR-102938-DF" value={membroForm.crNumber} onChange={(e) => setMembroForm({ ...membroForm, crNumber: e.target.value })} />
+                    <AuthField label="Validade CR" theme={theme} type="date" value={membroForm.crValidity} onChange={(e) => setMembroForm({ ...membroForm, crValidity: e.target.value })} />
+                    <AuthField label="Região Militar" theme={theme} value={membroForm.militaryRegion} onChange={(e) => setMembroForm({ ...membroForm, militaryRegion: e.target.value })} />
+                    <AuthField label="Nacionalidade" theme={theme} value={membroForm.nationality} onChange={(e) => setMembroForm({ ...membroForm, nationality: e.target.value })} />
+                  </div>
+
+                  <p className={`text-[10px] font-bold uppercase tracking-wider pt-2 ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Dados de Contato</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <AuthField label="Celular" theme={theme} required type="tel" value={membroForm.phone} onChange={(e) => setMembroForm({ ...membroForm, phone: e.target.value })} />
+                    <AuthField label="E-mail" theme={theme} required type="email" value={membroForm.email} onChange={(e) => setMembroForm({ ...membroForm, email: e.target.value })} />
+                  </div>
+
+                  <p className={`text-[10px] font-bold uppercase tracking-wider pt-2 ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Endereço</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <AuthField label="CEP" theme={theme} value={membroForm.cep} onChange={(e) => setMembroForm({ ...membroForm, cep: e.target.value })} />
+                    <AuthField label="Endereço" theme={theme} value={membroForm.address} onChange={(e) => setMembroForm({ ...membroForm, address: e.target.value })} />
+                    <AuthField label="Número" theme={theme} value={membroForm.addressNumber} onChange={(e) => setMembroForm({ ...membroForm, addressNumber: e.target.value })} />
+                    <AuthField label="Complemento" theme={theme} value={membroForm.complement} onChange={(e) => setMembroForm({ ...membroForm, complement: e.target.value })} />
+                    <AuthField label="Bairro" theme={theme} value={membroForm.neighborhood} onChange={(e) => setMembroForm({ ...membroForm, neighborhood: e.target.value })} />
+                    <AuthField label="Cidade" theme={theme} value={membroForm.city} onChange={(e) => setMembroForm({ ...membroForm, city: e.target.value })} />
+                    <AuthField label="Estado" theme={theme} value={membroForm.state} onChange={(e) => setMembroForm({ ...membroForm, state: e.target.value })} />
+                  </div>
+
+                  <p className={`text-[10px] font-bold uppercase tracking-wider pt-2 ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Vínculo e Acesso</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className={`text-[10px] font-bold uppercase tracking-wider block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Clube *</label>
+                      <select
+                        required
+                        value={membroForm.clubId}
+                        onChange={(e) => setMembroForm({ ...membroForm, clubId: e.target.value })}
+                        className={`w-full border outline-none px-4 py-3 rounded-2xl text-xs font-semibold focus:ring-1 transition ${theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white focus:border-blue-600 focus:ring-blue-600' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-blue-500 focus:ring-blue-500'}`}
+                      >
+                        <option value="">Selecione seu clube</option>
+                        {clubs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <AuthField label="CPF" theme={theme} required placeholder="Ex: 000.000.000-00" value={membroForm.cpf} onChange={(e) => setMembroForm({ ...membroForm, cpf: e.target.value })} />
+                    <div />
+                    <AuthField label="Senha" theme={theme} required type="password" value={membroForm.password} onChange={(e) => setMembroForm({ ...membroForm, password: e.target.value })} />
+                    <AuthField label="Repita a senha" theme={theme} required type="password" value={membroForm.confirmPassword} onChange={(e) => setMembroForm({ ...membroForm, confirmPassword: e.target.value })} />
+                  </div>
+
+                  <label className={`flex items-center gap-2 text-[11px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <input type="checkbox" checked={membroForm.termsAccepted} onChange={(e) => setMembroForm({ ...membroForm, termsAccepted: e.target.checked })} />
+                    Eu aceito os termos e condições
+                  </label>
+
+                  <button
+                    type="submit"
+                    disabled={registerSubmitting}
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold py-3.5 rounded-2xl text-xs transition uppercase shadow-lg shadow-blue-500/10 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {registerSubmitting ? 'Salvando...' : 'Concluir Cadastro'}
+                  </button>
+                </form>
+              )}
+
+              {authView === 'clube' && (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (clubeForm.password !== clubeForm.confirmPassword) {
+                      setLoginModalMessage('As senhas não coincidem.');
+                      return;
+                    }
+                    if (!clubeForm.termsAccepted) {
+                      setLoginModalMessage('É necessário aceitar os termos e condições.');
+                      return;
+                    }
+                    const { confirmPassword, termsAccepted, ...payload } = clubeForm;
+                    const ok = await handleRegister({ type: 'clube', ...payload });
+                    if (ok) setShowLoginModal(false);
+                  }}
+                  className="space-y-4"
+                >
+                  <p className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Dados Cadastrais</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="sm:col-span-2"><AuthField label="Razão Social" theme={theme} required value={clubeForm.name} onChange={(e) => setClubeForm({ ...clubeForm, name: e.target.value })} /></div>
+                    <AuthField label="CR" theme={theme} value={clubeForm.crNumber} onChange={(e) => setClubeForm({ ...clubeForm, crNumber: e.target.value })} />
+                    <AuthField label="Nome do responsável" theme={theme} required value={clubeForm.responsibleName} onChange={(e) => setClubeForm({ ...clubeForm, responsibleName: e.target.value })} />
+                  </div>
+
+                  <p className={`text-[10px] font-bold uppercase tracking-wider pt-2 ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Dados de Contato</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <AuthField label="Telefone" theme={theme} type="tel" value={clubeForm.phone} onChange={(e) => setClubeForm({ ...clubeForm, phone: e.target.value })} />
+                    <AuthField label="E-mail" theme={theme} required type="email" value={clubeForm.email} onChange={(e) => setClubeForm({ ...clubeForm, email: e.target.value })} />
+                  </div>
+
+                  <p className={`text-[10px] font-bold uppercase tracking-wider pt-2 ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Endereço</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <AuthField label="CEP" theme={theme} value={clubeForm.cep} onChange={(e) => setClubeForm({ ...clubeForm, cep: e.target.value })} />
+                    <AuthField label="Endereço" theme={theme} value={clubeForm.address} onChange={(e) => setClubeForm({ ...clubeForm, address: e.target.value })} />
+                    <AuthField label="Número" theme={theme} value={clubeForm.addressNumber} onChange={(e) => setClubeForm({ ...clubeForm, addressNumber: e.target.value })} />
+                    <AuthField label="Complemento" theme={theme} value={clubeForm.complement} onChange={(e) => setClubeForm({ ...clubeForm, complement: e.target.value })} />
+                    <AuthField label="Bairro" theme={theme} value={clubeForm.neighborhood} onChange={(e) => setClubeForm({ ...clubeForm, neighborhood: e.target.value })} />
+                    <AuthField label="Cidade" theme={theme} value={clubeForm.city} onChange={(e) => setClubeForm({ ...clubeForm, city: e.target.value })} />
+                    <AuthField label="Estado" theme={theme} value={clubeForm.state} onChange={(e) => setClubeForm({ ...clubeForm, state: e.target.value })} />
+                  </div>
+
+                  <p className={`text-[10px] font-bold uppercase tracking-wider pt-2 ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Dados de Acesso</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <AuthField label="CNPJ" theme={theme} required placeholder="Ex: 00.000.000/0000-00" value={clubeForm.cnpj} onChange={(e) => setClubeForm({ ...clubeForm, cnpj: e.target.value })} />
+                    <div />
+                    <AuthField label="Senha" theme={theme} required type="password" value={clubeForm.password} onChange={(e) => setClubeForm({ ...clubeForm, password: e.target.value })} />
+                    <AuthField label="Repita a senha" theme={theme} required type="password" value={clubeForm.confirmPassword} onChange={(e) => setClubeForm({ ...clubeForm, confirmPassword: e.target.value })} />
+                  </div>
+
+                  <label className={`flex items-center gap-2 text-[11px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <input type="checkbox" checked={clubeForm.termsAccepted} onChange={(e) => setClubeForm({ ...clubeForm, termsAccepted: e.target.checked })} />
+                    Eu aceito os termos e condições
+                  </label>
+
+                  <button
+                    type="submit"
+                    disabled={registerSubmitting}
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold py-3.5 rounded-2xl text-xs transition uppercase shadow-lg shadow-blue-500/10 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {registerSubmitting ? 'Salvando...' : 'Cadastrar Clube'}
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         )}

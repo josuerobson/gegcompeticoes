@@ -34,8 +34,34 @@ export async function initDB() {
         cnpj TEXT,
         phone TEXT,
         is_premium BOOLEAN NOT NULL DEFAULT FALSE,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        cr_number TEXT,
+        responsible_name TEXT,
+        email TEXT,
+        cep TEXT,
+        address TEXT,
+        address_number TEXT,
+        complement TEXT,
+        neighborhood TEXT,
+        city TEXT,
+        state TEXT
       );
+    `);
+
+    // Defensive column backfill: this table may already exist from an earlier schema
+    // version (CREATE TABLE IF NOT EXISTS above won't add missing columns to it).
+    await client.query(`
+      ALTER TABLE clubs
+        ADD COLUMN IF NOT EXISTS cr_number TEXT,
+        ADD COLUMN IF NOT EXISTS responsible_name TEXT,
+        ADD COLUMN IF NOT EXISTS email TEXT,
+        ADD COLUMN IF NOT EXISTS cep TEXT,
+        ADD COLUMN IF NOT EXISTS address TEXT,
+        ADD COLUMN IF NOT EXISTS address_number TEXT,
+        ADD COLUMN IF NOT EXISTS complement TEXT,
+        ADD COLUMN IF NOT EXISTS neighborhood TEXT,
+        ADD COLUMN IF NOT EXISTS city TEXT,
+        ADD COLUMN IF NOT EXISTS state TEXT;
     `);
 
     await client.query(`
@@ -57,7 +83,23 @@ export async function initDB() {
         cpf TEXT,
         rg TEXT,
         phone TEXT,
-        password_hash TEXT
+        password_hash TEXT,
+        birth_date TEXT,
+        sex TEXT,
+        rg_issuer TEXT,
+        rg_issue_date TEXT,
+        father_name TEXT,
+        mother_name TEXT,
+        cr_validity TEXT,
+        military_region TEXT,
+        nationality TEXT,
+        cep TEXT,
+        address TEXT,
+        address_number TEXT,
+        complement TEXT,
+        neighborhood TEXT,
+        city TEXT,
+        state TEXT
       );
     `);
 
@@ -71,7 +113,23 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS cpf TEXT,
         ADD COLUMN IF NOT EXISTS rg TEXT,
         ADD COLUMN IF NOT EXISTS phone TEXT,
-        ADD COLUMN IF NOT EXISTS password_hash TEXT;
+        ADD COLUMN IF NOT EXISTS password_hash TEXT,
+        ADD COLUMN IF NOT EXISTS birth_date TEXT,
+        ADD COLUMN IF NOT EXISTS sex TEXT,
+        ADD COLUMN IF NOT EXISTS rg_issuer TEXT,
+        ADD COLUMN IF NOT EXISTS rg_issue_date TEXT,
+        ADD COLUMN IF NOT EXISTS father_name TEXT,
+        ADD COLUMN IF NOT EXISTS mother_name TEXT,
+        ADD COLUMN IF NOT EXISTS cr_validity TEXT,
+        ADD COLUMN IF NOT EXISTS military_region TEXT,
+        ADD COLUMN IF NOT EXISTS nationality TEXT,
+        ADD COLUMN IF NOT EXISTS cep TEXT,
+        ADD COLUMN IF NOT EXISTS address TEXT,
+        ADD COLUMN IF NOT EXISTS address_number TEXT,
+        ADD COLUMN IF NOT EXISTS complement TEXT,
+        ADD COLUMN IF NOT EXISTS neighborhood TEXT,
+        ADD COLUMN IF NOT EXISTS city TEXT,
+        ADD COLUMN IF NOT EXISTS state TEXT;
     `);
 
     // The role CHECK constraint on a pre-existing users table may still be the old

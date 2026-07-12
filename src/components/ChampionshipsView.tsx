@@ -52,6 +52,7 @@ export default function ChampionshipsView({
   const [showAddWeapon, setShowAddWeapon] = useState(false);
   const [newWeapon, setNewWeapon] = useState({ manufacturer: '', model: '', caliber: '', serialNumber: '', weaponType: 'Pistola' });
   const [savingWeapon, setSavingWeapon] = useState(false);
+  const [showProfileIncompleteNotice, setShowProfileIncompleteNotice] = useState(false);
 
   const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
   const eligibleWeapons = weapons.filter(w => w.ownerId === currentUser?.id || (currentUser?.clubId && w.ownerId === currentUser.clubId));
@@ -381,6 +382,10 @@ export default function ChampionshipsView({
                         ) : (
                           <button
                             onClick={() => {
+                              if (currentUser && !currentUser.isProfileComplete) {
+                                setShowProfileIncompleteNotice(true);
+                                return;
+                              }
                               setSelectedChampReg(champ);
                               setSelectedModalityId(champ.modalities[0]);
                               const firstStage = stages.find(s => s.championshipId === champ.id);
@@ -828,6 +833,34 @@ export default function ChampionshipsView({
                   </button>
                 </div>
               )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Profile incomplete notice */}
+      <AnimatePresence>
+        {showProfileIncompleteNotice && (
+          <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white max-w-sm w-full rounded-2xl smooth-shadow overflow-hidden text-slate-800 p-6 text-center space-y-4"
+            >
+              <div className="bg-amber-50 text-amber-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto">
+                <Shield className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">Cadastro incompleto</h4>
+                <p className="text-xs text-slate-500 mt-1">Complete seu cadastro para se inscrever em campeonatos. Saia da conta e finalize o cadastro na tela de entrada.</p>
+              </div>
+              <button
+                onClick={() => setShowProfileIncompleteNotice(false)}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-semibold text-xs transition"
+              >
+                Entendi
+              </button>
             </motion.div>
           </div>
         )}
