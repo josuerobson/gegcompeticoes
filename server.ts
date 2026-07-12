@@ -13,6 +13,17 @@ import multer from 'multer';
 const app = express();
 const PORT = 3000;
 
+// Fields a member profile needs to be considered complete for championship
+// registration. Computed live from the row on every read (not trusted from
+// the stored is_profile_complete column) so accounts that predate this check
+// — or were seeded/migrated with the flag hardcoded true — show their real
+// state immediately, without needing a backfill migration.
+const USER_PROFILE_REQUIRED_COLUMNS = ['full_name', 'email', 'cpf', 'club_id', 'rg', 'phone', 'birth_date', 'address', 'city', 'state'];
+
+function isUserRowProfileComplete(u: any): boolean {
+  return USER_PROFILE_REQUIRED_COLUMNS.every(col => u[col] !== null && u[col] !== undefined && u[col] !== '');
+}
+
 // Mapping functions to convert PostgreSQL row format to client/React expected format
 function mapUser(u: any): User {
   return {
@@ -31,7 +42,7 @@ function mapUser(u: any): User {
     hasPaidSignature: u.has_paid_signature,
     signatureExpiry: u.signature_expiry || undefined,
     clubId: u.club_id || undefined,
-    isProfileComplete: u.is_profile_complete || false,
+    isProfileComplete: isUserRowProfileComplete(u),
     cpf: u.cpf || undefined,
     rg: u.rg || undefined,
     phone: u.phone || undefined,
@@ -315,11 +326,8 @@ async function uniqueUsername(client: any, base: string): Promise<string> {
 
 const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
 
-// Fields a member profile needs to be considered complete for championship
-// registration — shared between initial registration and later "Meu cadastro"
-// edits so the flag means the same thing regardless of which path filled it in.
-const USER_PROFILE_REQUIRED_COLUMNS = ['full_name', 'email', 'cpf', 'club_id', 'rg', 'phone', 'birth_date', 'address', 'city', 'state'];
-
+// Keeps the stored is_profile_complete column in sync too, in case anything
+// ever queries it directly — mapUser above no longer relies on it for reads.
 async function recomputeUserProfileComplete(client: { query: (text: string, params?: unknown[]) => Promise<any> }, userId: string): Promise<void> {
   const checkRes = await client.query(
     `SELECT (${USER_PROFILE_REQUIRED_COLUMNS.map(c => `${c} IS NOT NULL AND ${c} != ''`).join(' AND ')}) as complete FROM users WHERE id = $1`,
