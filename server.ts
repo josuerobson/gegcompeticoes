@@ -7,7 +7,7 @@ import { defaultChampionships, shootingImages } from './src/data/mockData.js';
 import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon } from './src/types.js';
 import { pool, initDB } from './src/db.js';
 import { hashPassword, verifyPassword } from './src/auth.js';
-import { uploadDocument, getDocumentDownloadUrl, storageEnabled } from './src/storage.js';
+import { uploadDocument, getDocumentStream, storageEnabled } from './src/storage.js';
 import multer from 'multer';
 
 const app = express();
@@ -536,11 +536,16 @@ app.get('/api/uploads/:kind', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Documento não encontrado.' });
     }
 
-    const url = await getDocumentDownloadUrl(objectKey);
-    res.json({ url });
+    const stream = await getDocumentStream(objectKey);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    stream.on('error', (streamErr) => {
+      console.error('Document stream error:', streamErr);
+      if (!res.headersSent) res.status(500).json({ error: 'Erro ao baixar documento.' });
+    });
+    stream.pipe(res);
   } catch (err) {
-    console.error('Get document URL error:', err);
-    res.status(500).json({ error: 'Erro ao gerar link de download.' });
+    console.error('Get document error:', err);
+    res.status(500).json({ error: 'Erro ao baixar documento.' });
   }
 });
 

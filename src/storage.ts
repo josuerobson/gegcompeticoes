@@ -32,7 +32,10 @@ export async function uploadDocument(objectKey: string, buffer: Buffer, mimeType
   await minioClient.putObject(MINIO_BUCKET, objectKey, buffer, buffer.length, { 'Content-Type': mimeType });
 }
 
-export async function getDocumentDownloadUrl(objectKey: string): Promise<string> {
+// Streams the object through our own server instead of handing out a presigned URL —
+// MinIO's internal Docker hostname isn't reachable from outside the project network,
+// and keeping it that way (no public domain on the storage service) is the point.
+export async function getDocumentStream(objectKey: string) {
   if (!minioClient) throw new Error('Armazenamento de documentos não está configurado.');
-  return minioClient.presignedGetObject(MINIO_BUCKET, objectKey, 5 * 60);
+  return minioClient.getObject(MINIO_BUCKET, objectKey);
 }
