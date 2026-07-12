@@ -239,6 +239,16 @@ export default function MemberProfile({
   const isClubAdmin = selectedUser.role === 'club_admin';
   const myClub = clubs.find(c => c.id === selectedUser.clubId);
 
+  // users.is_profile_complete is always true for club_admin accounts (it only
+  // gates the admin's own championship registration, which doesn't apply to
+  // how they act) — so for a club, "complete" has to be judged from the
+  // club's own data instead of that flag.
+  const isClubDataComplete = Boolean(
+    myClub?.crNumber && myClub?.responsibleName && myClub?.phone && myClub?.email &&
+    myClub?.address && myClub?.city && myClub?.state
+  );
+  const isRegistrationComplete = isClubAdmin ? isClubDataComplete : Boolean(selectedUser.isProfileComplete);
+
   const [profileForm, setProfileForm] = useState({
     fullName: '', birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
     fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', nationality: '',
@@ -782,7 +792,7 @@ export default function MemberProfile({
                   <h4 className="font-display font-bold text-slate-800 text-sm uppercase">Meu Cadastro</h4>
                   <p className="text-[11px] text-slate-450 mt-0.5">Complete seus dados quando puder — cada seção é salva de forma independente.</p>
                 </div>
-                {selectedUser.isProfileComplete ? (
+                {isRegistrationComplete ? (
                   <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Cadastro completo
                   </span>
