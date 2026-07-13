@@ -500,6 +500,58 @@ app.post('/api/admin/members', requireAdmin, async (req, res) => {
   }
 });
 
+// 1a3. Diretor-initiated club registration ("Novo Clube" in Painel Diretor >
+// Gerenciamento Plataforma) — same shape as the public self-registration
+// (type: 'clube') above: creates the club plus its club_admin login in one
+// step, without logging the current admin in as that account. The rest of
+// the club's profile (endereço, documentos) is completed afterwards through
+// PATCH /api/clubs/:id, same as a club editing its own data.
+app.post('/api/admin/clubs', requireAdmin, async (req, res) => {
+  const { name, cnpj, responsibleName, email, password, phone, crNumber, city, state } = req.body;
+
+  if (!name || !cnpj || !responsibleName || !email || !password) {
+    return res.status(400).json({ error: 'Preencha nome, CNPJ, responsável, e-mail e senha.' });
+  }
+
+  const cleanCnpj = String(cnpj).replace(/\D/g, '');
+  const existingRes = await pool.query(
+    `SELECT 1 FROM clubs WHERE regexp_replace(cnpj, '[^0-9]', '', 'g') = $1`,
+    [cleanCnpj]
+  );
+  if (existingRes.rows.length > 0) {
+    return res.status(400).json({ error: 'Já existe um clube cadastrado com este CNPJ.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const clubId = `club_${Date.now()}`;
+    await client.query(
+      `INSERT INTO clubs (id, name, cnpj, phone, is_premium, created_at, cr_number, responsible_name, email, city, state)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [clubId, name, cnpj, phone || null, false, new Date().toISOString().split('T')[0], crNumber || null, responsibleName, email, city || null, state || null]
+    );
+
+    const userId = `user_${Date.now()}`;
+    const username = await uniqueUsername(client, slugify(name));
+    await client.query(
+      `INSERT INTO users (id, email, username, full_name, avatar_url, bio, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, cpf, phone, password_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+      [userId, email, username, responsibleName, DEFAULT_AVATAR, `Administrador do clube ${name}.`, true, new Date().toISOString().split('T')[0], 'club_admin', false, clubId, true, cnpj, phone || null, hashPassword(password)]
+    );
+    await client.query('COMMIT');
+
+    const clubRes = await client.query('SELECT * FROM clubs WHERE id = $1', [clubId]);
+    res.status(201).json({ club: mapClub(clubRes.rows[0]) });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('Admin create club database error:', e);
+    res.status(500).json({ error: 'Erro ao cadastrar clube.' });
+  } finally {
+    client.release();
+  }
+});
+
 // 1b. Document uploads (RG/CNH, CR, Declaração de filiação for members;
 // Cartão CNPJ, CR, Alvará for clubs) — stored in MinIO, only a boolean
 // "uploaded" flag is ever exposed to the client, never the storage key.

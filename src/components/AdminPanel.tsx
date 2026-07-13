@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Championship, Registration, User, StageScore, Weapon, Modality } from '../types';
+import { Championship, Registration, User, StageScore, Weapon, Modality, Club } from '../types';
 import { 
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
@@ -61,6 +61,8 @@ interface AdminPanelProps {
   onCreateMember: (fields: { fullName: string; cpf: string; email: string; password: string }) => Promise<{ user?: User; error?: string }>;
   onUpdateMemberProfile: (memberId: string, fields: Record<string, unknown>) => Promise<boolean>;
   onUploadMemberDocument: (memberId: string, kind: string, file: File) => Promise<boolean>;
+  clubs: Club[];
+  onCreateClub: (fields: { name: string; cnpj: string; responsibleName: string; email: string; password: string; phone?: string; crNumber?: string; city?: string; state?: string }) => Promise<{ club?: Club; error?: string }>;
 }
 
 // Labeled input matching this panel's existing form style (see the
@@ -179,7 +181,9 @@ export default function AdminPanel({
   onSaveSetting,
   onCreateMember,
   onUpdateMemberProfile,
-  onUploadMemberDocument
+  onUploadMemberDocument,
+  clubs,
+  onCreateClub
 }: AdminPanelProps) {
   const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
   const [newClubWeapon, setNewClubWeapon] = useState({ manufacturer: '', model: '', caliber: '', serialNumber: '', weaponType: 'Pistola' });
@@ -365,6 +369,31 @@ export default function AdminPanel({
     }
   };
 
+  // "Novo Clube" (Gerenciamento Plataforma) — quick-create a club plus its
+  // club_admin login; the club later completes endereço/documentos itself
+  // through the same PATCH /api/clubs/:id used by "Meu Cadastro".
+  const [createClubForm, setCreateClubForm] = useState({
+    name: '', cnpj: '', responsibleName: '', email: '', password: '', phone: '', crNumber: '', city: '', state: ''
+  });
+  const [creatingClub, setCreatingClub] = useState(false);
+  const [createClubError, setCreateClubError] = useState('');
+  const [createClubSuccess, setCreateClubSuccess] = useState(false);
+
+  const handleCreateClubSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateClubError('');
+    setCreatingClub(true);
+    const result = await onCreateClub(createClubForm);
+    setCreatingClub(false);
+    if (result.club) {
+      setCreateClubForm({ name: '', cnpj: '', responsibleName: '', email: '', password: '', phone: '', crNumber: '', city: '', state: '' });
+      setCreateClubSuccess(true);
+      setTimeout(() => setCreateClubSuccess(false), 2500);
+    } else {
+      setCreateClubError(result.error || 'Erro ao cadastrar clube.');
+    }
+  };
+
   const saveMemberSection = async (sectionId: string, fields: Record<string, string>) => {
     if (!selectedMemberId) return;
     setMemberSavingSection(sectionId);
@@ -382,14 +411,6 @@ export default function AdminPanel({
     await onUploadMemberDocument(selectedMemberId, kind, file);
   };
 
-  // "Novo Clube" (Gerenciamento Plataforma) is still a decorative mock form,
-  // unrelated to the real member registration flow above.
-  const [novoClubeSuccess, setNovoClubeSuccess] = useState(false);
-  const handleNovoClubeSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setNovoClubeSuccess(true);
-    setTimeout(() => setNovoClubeSuccess(false), 2500);
-  };
 
   // Weapon Concession
   const [cessaoAtletaName, setCessaoAtletaName] = useState('');
@@ -1283,70 +1304,77 @@ export default function AdminPanel({
     switch (plataformaMenu) {
       case 'novo_clube':
         return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-display font-bold text-slate-900 text-base">Cadastrar Novo Clube Filiado</h3>
-                <p className="text-xs text-slate-400">Adicionar uma nova unidade ou clube filiado na rede nacional G&G.</p>
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="font-display font-bold text-slate-900 text-base">Cadastrar Novo Clube Filiado</h3>
+                  <p className="text-xs text-slate-400">Adicionar uma nova unidade ou clube filiado na rede nacional G&G. Cria o clube e o login do administrador local; endereço e documentos são completados depois pelo próprio clube.</p>
+                </div>
+                <Landmark className="w-5 h-5 text-blue-600" />
               </div>
-              <Landmark className="w-5 h-5 text-blue-600" />
+
+              {createClubSuccess && (
+                <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
+                  <CheckCircle className="w-5 h-5 text-emerald-600" />
+                  Unidade filiada integrada ao sistema nacional G&G!
+                </div>
+              )}
+              {createClubError && (
+                <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{createClubError}</div>
+              )}
+
+              <form onSubmit={handleCreateClubSubmit} className="space-y-4 text-slate-805">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <MemberField label="Nome do Estande/Clube" value={createClubForm.name} onChange={v => setCreateClubForm({ ...createClubForm, name: v })} placeholder="Ex: G&G Sobradinho Estande de Precisão" />
+                  </div>
+                  <MemberField label="CNPJ Entidade" value={createClubForm.cnpj} onChange={v => setCreateClubForm({ ...createClubForm, cnpj: v })} placeholder="Ex: 45.981.042/0002-99" />
+                  <MemberField label="Diretor Presidente Responsável" value={createClubForm.responsibleName} onChange={v => setCreateClubForm({ ...createClubForm, responsibleName: v })} placeholder="Ex: Gabriel Guedes" />
+                  <MemberField label="E-mail de Contato" type="email" value={createClubForm.email} onChange={v => setCreateClubForm({ ...createClubForm, email: v })} placeholder="contato@clube.com" />
+                  <MemberField label="Senha Inicial (Login do Clube)" type="password" value={createClubForm.password} onChange={v => setCreateClubForm({ ...createClubForm, password: v })} />
+                  <MemberField label="Telefone" value={createClubForm.phone} onChange={v => setCreateClubForm({ ...createClubForm, phone: v })} placeholder="Ex: (61) 99123-4567" />
+                  <MemberField label="CR do Clube" value={createClubForm.crNumber} onChange={v => setCreateClubForm({ ...createClubForm, crNumber: v })} placeholder="Opcional" />
+                  <MemberField label="Cidade" value={createClubForm.city} onChange={v => setCreateClubForm({ ...createClubForm, city: v })} placeholder="Ex: Sobradinho" />
+                  <MemberField label="UF" value={createClubForm.state} onChange={v => setCreateClubForm({ ...createClubForm, state: v })} placeholder="Ex: DF" />
+                </div>
+                <div className="flex justify-end pt-3 border-t border-slate-100">
+                  <button
+                    type="submit"
+                    disabled={creatingClub}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg shadow-blue-100 cursor-pointer"
+                  >
+                    {creatingClub ? 'Salvando...' : 'Registrar Unidade'}
+                  </button>
+                </div>
+              </form>
             </div>
 
-            {novoClubeSuccess && (
-              <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 mb-4 text-xs font-semibold">
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
-                Unidade filiada integrada ao sistema nacional G&G!
-              </div>
-            )}
-
-            <form onSubmit={handleNovoClubeSubmit} className="space-y-4 text-slate-805">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Nome do Estande/Clube</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: G&G Sobradinho Estande de Precisão"
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                  />
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+              <h4 className="font-display font-bold text-slate-900 text-sm">Clubes Cadastrados ({clubs.length})</h4>
+              {clubs.length === 0 ? (
+                <p className="text-xs text-slate-400">Nenhum clube filiado cadastrado ainda.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-3">
+                  {clubs.map((club) => (
+                    <div key={club.id} className="border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-2 bg-slate-50/50">
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-slate-900 text-sm">{club.name}</h4>
+                        <p className="text-xs text-slate-500">
+                          {club.cnpj || 'CNPJ não informado'} • {club.city ? `${club.city}${club.state ? ' - ' + club.state : ''}` : 'Cidade não informada'}
+                        </p>
+                        <p className="text-[10px] text-slate-450">
+                          Diretor: {club.responsibleName || 'Não informado'} • {club.phone || 'Telefone não informado'}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono whitespace-nowrap">
+                        Cadastrado em {new Date(club.createdAt).toLocaleDateString('pt-BR')}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">CNPJ Entidade</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: 45.981.042/0002-99"
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-mono"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Cidade / UF</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Sobradinho - DF"
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Diretor Presidente Responsável</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Gabriel Guedes"
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end pt-3 border-t border-slate-100">
-                <button
-                  type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg shadow-blue-100 cursor-pointer"
-                >
-                  Registrar Unidade
-                </button>
-              </div>
-            </form>
+              )}
+            </div>
           </div>
         );
 
