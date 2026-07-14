@@ -1291,6 +1291,42 @@ app.get('/api/modalities', async (req, res) => {
   }
 });
 
+app.post('/api/modalities', requireAdmin, async (req, res) => {
+  const { name, discipline, targetPreview, seriesCount, shotsPerSeries, timePerSeriesMinutes, evaluationType } = req.body;
+  if (!name || !discipline) {
+    return res.status(400).json({ error: 'Nome e categoria/disciplina são obrigatórios.' });
+  }
+
+  const id = `mod_${Date.now()}`;
+  try {
+    const result = await pool.query(
+      `INSERT INTO modalities (id, name, discipline, target_preview, series_count, shots_per_series, time_per_series_minutes, evaluation_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [id, name, discipline, targetPreview || null, seriesCount || null, shotsPerSeries || null, timePerSeriesMinutes || null, evaluationType || null]
+    );
+    res.status(201).json({ modality: mapModality(result.rows[0]) });
+  } catch (err) {
+    console.error('Create modality database error:', err);
+    res.status(500).json({ error: 'Erro ao cadastrar modalidade.' });
+  }
+});
+
+app.delete('/api/modalities/:id', requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM modalities WHERE id = $1 RETURNING id', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Modalidade não encontrada.' });
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    if (err.code === '23503') {
+      return res.status(400).json({ error: 'Não é possível remover: esta modalidade já está em uso em inscrições ou campeonatos.' });
+    }
+    console.error('Delete modality database error:', err);
+    res.status(500).json({ error: 'Erro ao remover modalidade.' });
+  }
+});
+
 app.get('/api/stages', async (req, res) => {
   try {
     const { championshipId } = req.query;

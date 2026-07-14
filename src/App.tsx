@@ -727,6 +727,43 @@ export default function App() {
     }
   };
 
+  const handleAddModality = async (modality: { name: string; discipline: string; targetPreview?: string; seriesCount?: number; shotsPerSeries?: number; timePerSeriesMinutes?: number; evaluationType?: string }) => {
+    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentUser) {
+      authHeaders['x-user-id'] = currentUser.id;
+    }
+
+    const res = await fetch('/api/modalities', {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify(modality)
+    });
+    if (res.ok) {
+      await syncWithBackend();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Erro ao cadastrar modalidade.');
+    }
+  };
+
+  const handleRemoveModality = async (modalityId: string) => {
+    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentUser) {
+      authHeaders['x-user-id'] = currentUser.id;
+    }
+
+    const res = await fetch(`/api/modalities/${modalityId}`, {
+      method: 'DELETE',
+      headers: authHeaders
+    });
+    if (res.ok) {
+      await syncWithBackend();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Erro ao remover modalidade.');
+    }
+  };
+
   const handleCreateChampionshipAdmin = async (data: {
     title: string;
     description: string;
@@ -1575,6 +1612,8 @@ export default function App() {
               onToggleAdminDemo={handleToggleAdminDemo}
               onAddWeapon={handleAddWeapon}
               onRemoveWeapon={handleRemoveWeapon}
+              onAddModality={handleAddModality}
+              onRemoveModality={handleRemoveModality}
               settings={settings}
               onSaveSetting={handleSaveSetting}
               onCreateMember={handleCreateMember}

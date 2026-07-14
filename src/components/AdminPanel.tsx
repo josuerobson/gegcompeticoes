@@ -28,6 +28,8 @@ interface AdminPanelProps {
   modalities: Modality[];
   onAddWeapon: (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; serialNumber: string; weaponType: string }) => Promise<void>;
   onRemoveWeapon: (weaponId: string) => Promise<void>;
+  onAddModality: (modality: { name: string; discipline: string; targetPreview?: string; seriesCount?: number; shotsPerSeries?: number; timePerSeriesMinutes?: number; evaluationType?: string }) => Promise<void>;
+  onRemoveModality: (modalityId: string) => Promise<void>;
   onCreateChampionship: (data: {
     title: string;
     description: string;
@@ -173,6 +175,8 @@ export default function AdminPanel({
   modalities,
   onAddWeapon,
   onRemoveWeapon,
+  onAddModality,
+  onRemoveModality,
   onCreateChampionship,
   onUpdateChampionship,
   onRecordScore,
@@ -197,6 +201,33 @@ export default function AdminPanel({
       setNewClubWeapon({ manufacturer: '', model: '', caliber: '', serialNumber: '', weaponType: 'Pistola' });
     } finally {
       setSavingClubWeapon(false);
+    }
+  };
+
+  const [newModality, setNewModality] = useState({ name: '', discipline: '' });
+  const [savingModality, setSavingModality] = useState(false);
+  const [modalityError, setModalityError] = useState('');
+
+  const handleSaveModality = async () => {
+    if (!newModality.name || !newModality.discipline) return;
+    setSavingModality(true);
+    setModalityError('');
+    try {
+      await onAddModality(newModality);
+      setNewModality({ name: '', discipline: '' });
+    } catch (err: any) {
+      setModalityError(err.message || 'Erro ao cadastrar modalidade.');
+    } finally {
+      setSavingModality(false);
+    }
+  };
+
+  const handleDeleteModality = async (modalityId: string) => {
+    setModalityError('');
+    try {
+      await onRemoveModality(modalityId);
+    } catch (err: any) {
+      setModalityError(err.message || 'Erro ao remover modalidade.');
     }
   };
   // Main tabs: 'clube' | 'plataforma' | 'master'
@@ -1958,24 +1989,51 @@ export default function AdminPanel({
         return (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
             <h3 className="font-display font-bold text-slate-900 text-base">Gerenciamento de Modalidades de Tiro</h3>
-            
+
+            {modalityError && (
+              <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{modalityError}</div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Add category mock */}
+              {/* Add category */}
               <div className="border border-slate-100 p-4 rounded-xl bg-slate-50/50 space-y-3">
                 <h4 className="font-bold text-xs">Nova Disciplina</h4>
                 <div className="space-y-2">
-                  <input type="text" placeholder="Nome: Ex: IPSC Rifle Open" className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
-                  <input type="text" placeholder="Categoria: Ex: Fuzil" className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
+                  <input
+                    type="text"
+                    placeholder="Nome: Ex: IPSC Rifle Open"
+                    value={newModality.name}
+                    onChange={(e) => setNewModality({ ...newModality, name: e.target.value })}
+                    className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Categoria: Ex: Fuzil"
+                    value={newModality.discipline}
+                    onChange={(e) => setNewModality({ ...newModality, discipline: e.target.value })}
+                    className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs"
+                  />
                 </div>
-                <button className="w-full bg-blue-600 text-white text-xs py-2 rounded-lg font-bold">Adicionar</button>
+                <button
+                  onClick={handleSaveModality}
+                  disabled={savingModality || !newModality.name || !newModality.discipline}
+                  className="w-full bg-blue-600 disabled:opacity-60 text-white text-xs py-2 rounded-lg font-bold"
+                >
+                  {savingModality ? 'Salvando...' : 'Adicionar'}
+                </button>
               </div>
 
               {/* List */}
               <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                {['IPSC Handgun Standard', 'IPSC Handgun Production', 'Carabina Mira Aberta 10m', 'Trap Americano'].map((m, i) => (
-                  <div key={i} className="flex justify-between items-center bg-slate-100/50 p-2.5 rounded-lg text-xs font-semibold">
-                    <span>{m}</span>
-                    <button className="text-red-500 hover:text-red-700">Excluir</button>
+                {modalities.length === 0 ? (
+                  <p className="text-xs text-slate-400 p-2.5">Nenhuma modalidade cadastrada ainda.</p>
+                ) : modalities.map((m) => (
+                  <div key={m.id} className="flex justify-between items-center bg-slate-100/50 p-2.5 rounded-lg text-xs font-semibold">
+                    <div>
+                      <span className="block">{m.name}</span>
+                      <span className="block text-[10px] text-slate-450 font-normal">{m.discipline}</span>
+                    </div>
+                    <button onClick={() => handleDeleteModality(m.id)} className="text-red-500 hover:text-red-700">Excluir</button>
                   </div>
                 ))}
               </div>
