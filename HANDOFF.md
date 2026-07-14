@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `f3e1cb1` |
-| Mensagem | `feat: remove seeds automaticos de campeonatos modalidades etapas e inscricoes` |
-| Data/hora | 2026-07-14T19:29:00-03:00 |
+| Hash | `0d33590` |
+| Mensagem | `fix: corrige validacao da taxa de homologacao zerada no backend` |
+| Data/hora | 2026-07-14T20:11:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ✅ Sim (disparado via Webhook) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `f3e1cb1` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `0d33590` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all

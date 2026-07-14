@@ -1241,7 +1241,7 @@ const CHAMPIONSHIP_EXTRA_COLUMNS: Record<string, string> = {
 app.post('/api/championships', requireAdmin, async (req, res) => {
   const { title, description, startDate, endDate, registrationFee, modalities, stagesCount, bannerUrl, clubId, type } = req.body;
 
-  if (!title || !description || !registrationFee || !modalities || !stagesCount) {
+  if (!title || !description || registrationFee === undefined || registrationFee === null || !modalities || !stagesCount) {
     return res.status(400).json({ error: 'Preencha todos os campos obrigatórios do campeonato.' });
   }
 
@@ -1303,7 +1303,7 @@ app.put('/api/championships/:id', requireAdmin, async (req, res) => {
   const champId = req.params.id;
   const { title, description, startDate, endDate, registrationFee, modalities, stagesCount, bannerUrl } = req.body;
 
-  if (!title || !description || !registrationFee || !modalities || !stagesCount) {
+  if (!title || !description || registrationFee === undefined || registrationFee === null || !modalities || !stagesCount) {
     return res.status(400).json({ error: 'Preencha todos os campos obrigatórios.' });
   }
 
