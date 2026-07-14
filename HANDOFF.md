@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `a408b04` |
+| Hash | `5a14a6e` |
 | Mensagem | `feat: altera campo sexo para select de Masculino/Feminino nos cadastros` |
 | Data/hora | 2026-07-14T18:24:00-03:00 |
 | Push feito? | ✅ Sim |
-| Deploy EasyPanel confirmado? | ⏳ Pendente |
+| Deploy EasyPanel confirmado? | ✅ Sim (disparado via Webhook) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `a408b04` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `5a14a6e` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
