@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `3721efc` |
-| Mensagem | `feat: adiciona opcao de exclusao de campeonatos sem inscricoes` |
-| Data/hora | 2026-07-14T18:52:00-03:00 |
+| Hash | `b8b0bcd` |
+| Mensagem | `feat: simplifica campos do formulario de campeonatos e reordena banner` |
+| Data/hora | 2026-07-14T19:22:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ✅ Sim (disparado via Webhook) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `3721efc` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `b8b0bcd` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all

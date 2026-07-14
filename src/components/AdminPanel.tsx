@@ -1566,14 +1566,14 @@ export default function AdminPanel({
   const handleCreateChamp = async (e: React.FormEvent) => {
     e.preventDefault();
     setChampError('');
-    if (!champTitle || !champDesc || selectedMods.length === 0) return;
+    if (!champTitle || selectedMods.length === 0) return;
 
     const result = await onCreateChampionship({
       title: champTitle,
-      description: champDesc,
-      startDate: champStart,
-      endDate: champEnd,
-      registrationFee: Number(champFee),
+      description: champTitle,
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
+      registrationFee: 0,
       modalities: selectedMods,
       stagesCount: Number(champStages),
       bannerUrl: champBanner || undefined,
@@ -1602,14 +1602,14 @@ export default function AdminPanel({
   const handleUpdateChamp = async (e: React.FormEvent) => {
     e.preventDefault();
     setEditChampError('');
-    if (!editingChampId || !editChampTitle || !editChampDesc || editSelectedMods.length === 0 || !onUpdateChampionship) return;
+    if (!editingChampId || !editChampTitle || editSelectedMods.length === 0 || !onUpdateChampionship) return;
 
     const result = await onUpdateChampionship(editingChampId, {
       title: editChampTitle,
-      description: editChampDesc,
-      startDate: editChampStart,
-      endDate: editChampEnd,
-      registrationFee: Number(editChampFee),
+      description: editChampTitle,
+      startDate: editChampStart || new Date().toISOString().split('T')[0],
+      endDate: editChampEnd || new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
+      registrationFee: 0,
       modalities: editSelectedMods,
       stagesCount: Number(editChampStages),
       bannerUrl: editChampBanner || undefined,
@@ -2539,50 +2539,6 @@ export default function AdminPanel({
                         />
                       </div>
 
-                      <div className="space-y-1 sm:col-span-2">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Regras & Descrição Oficial do Torneio</label>
-                        <textarea
-                          rows={3}
-                          required
-                          value={editChampDesc}
-                          onChange={(e) => setEditChampDesc(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Data Inicial</label>
-                        <input
-                          type="date"
-                          required
-                          value={editChampStart}
-                          onChange={(e) => setEditChampStart(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Data Limite / Final</label>
-                        <input
-                          type="date"
-                          required
-                          value={editChampEnd}
-                          onChange={(e) => setEditChampEnd(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Taxa de Homologação (R$)</label>
-                        <input
-                          type="number"
-                          required
-                          value={editChampFee}
-                          onChange={(e) => setEditChampFee(Number(e.target.value))}
-                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-mono"
-                        />
-                      </div>
-
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 uppercase block">Quantidade Estágios (Stages)</label>
                         <input
@@ -2624,7 +2580,39 @@ export default function AdminPanel({
                         </div>
                       </div>
 
-                      <div className="space-y-2 sm:col-span-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Regulamento (PDF)</label>
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={(e) => setEditChampRegulamentoFile(e.target.files?.[0] || null)}
+                          className="w-full text-[11px] text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                        />
+                        {editChampRegulamentoFile ? (
+                          <p className="text-[10px] text-emerald-600">Novo arquivo selecionado: {editChampRegulamentoFile.name}</p>
+                        ) : editingChamp?.regulamentoUploaded ? (
+                          <p className="text-[10px] text-emerald-600">Já enviado.</p>
+                        ) : null}
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Súmula (PDF)</label>
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={(e) => setEditChampSumulaFile(e.target.files?.[0] || null)}
+                          className="w-full text-[11px] text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                        />
+                        {editChampSumulaFile ? (
+                          <p className="text-[10px] text-emerald-600">Novo arquivo selecionado: {editChampSumulaFile.name}</p>
+                        ) : editingChamp?.sumulaUploaded ? (
+                          <p className="text-[10px] text-emerald-600">Já enviado.</p>
+                        ) : null}
+                      </div>
+                      <ChampField label="Valor de X" type="number" value={editChampExtra.valorX} onChange={v => setEditChampExtra({ ...editChampExtra, valorX: v })} />
+
+                      <ChampExtraFields values={editChampExtra} onChange={patch => setEditChampExtra({ ...editChampExtra, ...patch })} />
+
+                      <div className="space-y-2 sm:col-span-2 pt-4 border-t border-slate-100">
                         <label className="text-[10px] font-bold text-slate-500 uppercase block">Imagem de Capa (Banner)</label>
                         <div className="flex flex-wrap gap-2 mb-2">
                           <button
@@ -2714,38 +2702,6 @@ export default function AdminPanel({
                           </div>
                         )}
                       </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Regulamento (PDF)</label>
-                        <input
-                          type="file"
-                          accept="application/pdf"
-                          onChange={(e) => setEditChampRegulamentoFile(e.target.files?.[0] || null)}
-                          className="w-full text-[11px] text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-                        />
-                        {editChampRegulamentoFile ? (
-                          <p className="text-[10px] text-emerald-600">Novo arquivo selecionado: {editChampRegulamentoFile.name}</p>
-                        ) : editingChamp?.regulamentoUploaded ? (
-                          <p className="text-[10px] text-emerald-600">Já enviado.</p>
-                        ) : null}
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Súmula (PDF)</label>
-                        <input
-                          type="file"
-                          accept="application/pdf"
-                          onChange={(e) => setEditChampSumulaFile(e.target.files?.[0] || null)}
-                          className="w-full text-[11px] text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-                        />
-                        {editChampSumulaFile ? (
-                          <p className="text-[10px] text-emerald-600">Novo arquivo selecionado: {editChampSumulaFile.name}</p>
-                        ) : editingChamp?.sumulaUploaded ? (
-                          <p className="text-[10px] text-emerald-600">Já enviado.</p>
-                        ) : null}
-                      </div>
-                      <ChampField label="Valor de X" type="number" value={editChampExtra.valorX} onChange={v => setEditChampExtra({ ...editChampExtra, valorX: v })} />
-
-                      <ChampExtraFields values={editChampExtra} onChange={patch => setEditChampExtra({ ...editChampExtra, ...patch })} />
                     </div>
 
                     {editChampError && (
@@ -2804,51 +2760,6 @@ export default function AdminPanel({
                         />
                       </div>
 
-                      <div className="space-y-1 sm:col-span-2">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Regras & Descrição Oficial do Torneio</label>
-                        <textarea
-                          rows={3}
-                          required
-                          placeholder="Especifique as categorias permitidas, as premiações das etapas e os critérios de desempate técnicos..."
-                          value={champDesc}
-                          onChange={(e) => setChampDesc(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Data Inicial</label>
-                        <input
-                          type="date"
-                          required
-                          value={champStart}
-                          onChange={(e) => setChampStart(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Data Limite / Final</label>
-                        <input
-                          type="date"
-                          required
-                          value={champEnd}
-                          onChange={(e) => setChampEnd(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Taxa de Homologação (R$)</label>
-                        <input
-                          type="number"
-                          required
-                          value={champFee}
-                          onChange={(e) => setChampFee(Number(e.target.value))}
-                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-mono"
-                        />
-                      </div>
-
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 uppercase block">Quantidade Estágios (Stages)</label>
                         <input
@@ -2890,7 +2801,31 @@ export default function AdminPanel({
                         </div>
                       </div>
 
-                      <div className="space-y-2 sm:col-span-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Regulamento (PDF)</label>
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={(e) => setChampRegulamentoFile(e.target.files?.[0] || null)}
+                          className="w-full text-[11px] text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                        />
+                        {champRegulamentoFile && <p className="text-[10px] text-emerald-600">Selecionado: {champRegulamentoFile.name}</p>}
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Súmula (PDF)</label>
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={(e) => setChampSumulaFile(e.target.files?.[0] || null)}
+                          className="w-full text-[11px] text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                        />
+                        {champSumulaFile && <p className="text-[10px] text-emerald-600">Selecionado: {champSumulaFile.name}</p>}
+                      </div>
+                      <ChampField label="Valor de X" type="number" value={champExtra.valorX} onChange={v => setChampExtra({ ...champExtra, valorX: v })} />
+
+                      <ChampExtraFields values={champExtra} onChange={patch => setChampExtra({ ...champExtra, ...patch })} />
+
+                      <div className="space-y-2 sm:col-span-2 pt-4 border-t border-slate-100">
                         <label className="text-[10px] font-bold text-slate-500 uppercase block">Imagem de Capa (Banner)</label>
                         <div className="flex flex-wrap gap-2 mb-2">
                           <button
@@ -2980,30 +2915,6 @@ export default function AdminPanel({
                           </div>
                         )}
                       </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Regulamento (PDF)</label>
-                        <input
-                          type="file"
-                          accept="application/pdf"
-                          onChange={(e) => setChampRegulamentoFile(e.target.files?.[0] || null)}
-                          className="w-full text-[11px] text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-                        />
-                        {champRegulamentoFile && <p className="text-[10px] text-emerald-600">Selecionado: {champRegulamentoFile.name}</p>}
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Súmula (PDF)</label>
-                        <input
-                          type="file"
-                          accept="application/pdf"
-                          onChange={(e) => setChampSumulaFile(e.target.files?.[0] || null)}
-                          className="w-full text-[11px] text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-                        />
-                        {champSumulaFile && <p className="text-[10px] text-emerald-600">Selecionado: {champSumulaFile.name}</p>}
-                      </div>
-                      <ChampField label="Valor de X" type="number" value={champExtra.valorX} onChange={v => setChampExtra({ ...champExtra, valorX: v })} />
-
-                      <ChampExtraFields values={champExtra} onChange={patch => setChampExtra({ ...champExtra, ...patch })} />
                     </div>
 
                     {champError && (
