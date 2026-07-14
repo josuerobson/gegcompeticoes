@@ -158,7 +158,7 @@ export async function initDB() {
       CREATE TABLE IF NOT EXISTS modalities (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        discipline TEXT NOT NULL,
+        discipline TEXT,
         target_preview TEXT,
         series_count INTEGER,
         shots_per_series INTEGER,
@@ -169,12 +169,15 @@ export async function initDB() {
 
     // Defensive column backfill: this table may already exist from an earlier schema
     // version (CREATE TABLE IF NOT EXISTS above won't add missing columns to it).
+    // discipline was originally NOT NULL but the real "Cadastrar Modalidades" form
+    // (per legacy system spec) has no category field, so it's now optional/unused.
     await client.query(`
       ALTER TABLE modalities
         ADD COLUMN IF NOT EXISTS series_count INTEGER,
         ADD COLUMN IF NOT EXISTS shots_per_series INTEGER,
         ADD COLUMN IF NOT EXISTS time_per_series_minutes INTEGER,
-        ADD COLUMN IF NOT EXISTS evaluation_type TEXT;
+        ADD COLUMN IF NOT EXISTS evaluation_type TEXT,
+        ALTER COLUMN discipline DROP NOT NULL;
     `);
 
     await client.query(`
@@ -202,6 +205,61 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'individual';
     `);
 
+    // Cadastro completo de campeonato (legacy system parity): documents, PIX,
+    // registration pricing, revenue/prize percentage splits and medal thresholds.
+    // All additive/optional so existing championships keep working untouched.
+    await client.query(`
+      ALTER TABLE championships
+        ADD COLUMN IF NOT EXISTS regulamento_key TEXT,
+        ADD COLUMN IF NOT EXISTS sumula_key TEXT,
+        ADD COLUMN IF NOT EXISTS valor_x DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS valor_inscricao_clube DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS valor_inscricao_individual DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_clube DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS valor_reinscricao DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS tipo_pix TEXT,
+        ADD COLUMN IF NOT EXISTS chave_pix TEXT,
+        ADD COLUMN IF NOT EXISTS nome_exibido_pix TEXT,
+        ADD COLUMN IF NOT EXISTS whatsapp_comprovante TEXT,
+        ADD COLUMN IF NOT EXISTS formato_pagamento TEXT,
+        ADD COLUMN IF NOT EXISTS limite_equipes_clube INTEGER,
+        ADD COLUMN IF NOT EXISTS qtd_atletas_por_equipe INTEGER,
+        ADD COLUMN IF NOT EXISTS formato_insercao TEXT,
+        ADD COLUMN IF NOT EXISTS alcance_campeonato TEXT,
+        ADD COLUMN IF NOT EXISTS nivel_campeonato INTEGER,
+        ADD COLUMN IF NOT EXISTS percentual_tributos DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_organizacao DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_clubes DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_premiacao_atleta DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_premiacao_clube DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_premiacao_todas_etapas DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS premiacao_adicional_todas_etapas DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS qtd_etapas_consideradas INTEGER,
+        ADD COLUMN IF NOT EXISTS qtd_piores_descartar INTEGER,
+        ADD COLUMN IF NOT EXISTS qtd_melhores_descartar INTEGER,
+        ADD COLUMN IF NOT EXISTS percentual_pos1_todas_etapas DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_pos2_todas_etapas DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_pos3_todas_etapas DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_pos4_todas_etapas DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_pos5_todas_etapas DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_ouro DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_prata DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_bronze DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_pos1_medalha DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_pos2_medalha DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_pos3_medalha DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_pos4_medalha DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS percentual_pos5_medalha DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS pontuacao_minima_atleta_ouro DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS pontuacao_minima_atleta_prata DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS pontuacao_minima_atleta_bronze DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS pontuacao_minima_equipe_ouro DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS pontuacao_minima_equipe_prata DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS pontuacao_minima_equipe_bronze DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS ordem_exibicao INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS aberto_outros_clubes TEXT DEFAULT 'sim';
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS stages (
         id TEXT PRIMARY KEY,
@@ -212,6 +270,21 @@ export async function initDB() {
         regulations_file TEXT,
         scorecard_file TEXT
       );
+    `);
+
+    // Cadastro completo de etapas (legacy system parity) — additive/optional so
+    // any pre-existing stage rows keep working untouched.
+    await client.query(`
+      ALTER TABLE stages
+        ADD COLUMN IF NOT EXISTS description TEXT,
+        ADD COLUMN IF NOT EXISTS end_date TEXT,
+        ADD COLUMN IF NOT EXISTS sexo TEXT DEFAULT 'masculino',
+        ADD COLUMN IF NOT EXISTS homologar_resultado TEXT DEFAULT 'nao',
+        ADD COLUMN IF NOT EXISTS aberto_para_resultados TEXT DEFAULT 'sim',
+        ADD COLUMN IF NOT EXISTS gerar_certificados TEXT DEFAULT 'sim',
+        ADD COLUMN IF NOT EXISTS fator_multiplicacao_resultados DOUBLE PRECISION DEFAULT 1.00,
+        ADD COLUMN IF NOT EXISTS exibir_inscritos_pagina_inicial TEXT DEFAULT 'sim',
+        ADD COLUMN IF NOT EXISTS incluir_na_soma_pagina_inicial TEXT DEFAULT 'sim';
     `);
 
     await client.query(`
@@ -239,6 +312,66 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS class TEXT,
         ADD COLUMN IF NOT EXISTS permission_status TEXT;
     `);
+
+    // Cadastro completo de armas (legacy system parity): "Tipo de arma" isn't
+    // part of the real form, so it's now optional; "Arma é" (Sigma/Sinarm) is new.
+    await client.query(`
+      ALTER TABLE weapons
+        ALTER COLUMN weapon_type DROP NOT NULL,
+        ADD COLUMN IF NOT EXISTS registry_system TEXT;
+    `);
+
+    // Managed dropdown lists for the weapon form (Classe, Modelo, Calibre,
+    // Fabricante, Arma é, Status de permissão) — only master_admin can add/edit/
+    // remove items (see requireMasterAdmin in server.ts); club admins just pick
+    // from whatever exists when registering a weapon.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS weapon_lookup_options (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('classe', 'modelo', 'calibre', 'fabricante', 'tipo_arma', 'permissao_arma')),
+        label TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS weapon_lookup_options_kind_label_idx ON weapon_lookup_options (kind, label);
+    `);
+
+    const weaponLookupCountRes = await client.query('SELECT COUNT(*)::int as count FROM weapon_lookup_options');
+    if (weaponLookupCountRes.rows[0].count === 0) {
+      const seedLookups: { kind: string; label: string }[] = [
+        ...['Espingarda', 'Pistola', 'Revólver', 'Carabina / Rifle / Fuzil', 'Carabina de Pressão'].map(label => ({ kind: 'classe', label })),
+        ...['Sigma', 'Sinarm'].map(label => ({ kind: 'tipo_arma', label })),
+        ...['Permitida', 'Restrita'].map(label => ({ kind: 'permissao_arma', label })),
+        ...['380 Auto', '9mm', '38 SPL', '454', '40 S&W', '12', '44 Mag', '22', '22 LR', '308', '45 ACP', '357 Mag', '22 Magnum', '5.56', '7.62', '44 S&W', '5.5', '4.5', '6.0', '38TPC', '6.35', '32', '38TCP'].map(label => ({ kind: 'calibre', label })),
+        ...['IMBEL', 'TAURUS', 'BOITO', 'ROSSI', 'CBC', 'GLOCK', 'Sig Sauer', 'Arex', 'Ceska Zbrojovka CZ', 'Stoeger', 'Smith & Wesson', 'MARLIN', 'IWI', 'Beretta', 'BRIGADE', 'WALTHER', 'ZASTAVA ARMS', 'SPRINGFIELD', 'BERSA', 'Browning', 'Fire Eagle'].map(label => ({ kind: 'fabricante', label })),
+        ...[
+          'RT 889', 'G17', 'G19', 'GC MD2', 'GC MD7', 'GC MD1', 'PT 838', 'PT 845', 'PT 92 INOX', 'CZ O 07 Kadet',
+          'TH 380', 'TS 9', 'PT 92', 'RT 357H', 'RT454 8 3/8', 'CZ 75 SP 01 Shadow', 'RT 88', 'RT 85', 'RT 85S', 'CZ O 09 KUG',
+          'RT 82S', 'RT 838', 'RT 856', 'RT 817', 'G43X', 'PT 917C', 'P320 M17 Coyote', 'SC MD1', 'G2C', 'G3 TORO',
+          'G3C', 'GX4', 'PT100', 'PT1911 Clássica', 'PT1911 Government', 'PT1911 Tatical', 'TH 40', 'TH 9', 'TX 22', 'TC MD6',
+          'Arex Delta', 'Arex Delta Gen 2 FDE', 'Arex Delta M Gen 2', 'Arex Delta L Gen 2', 'Arex Delta L Gen 2 FDE', 'Arex ZERO 1 C', 'Arex ZERO 1 Gen 2 C', 'P320 Compacto Nitron', 'P320 Compacto Coyote',
+          'CT40', 'CTT 9mm', 'G21', 'PUMP', 'Puma 20', '8021', 'CZ 75 CZechmate', 'Rifle 8122 BOLT ACTION', 'Rifle 7022', 'Fuzil 308',
+          'P365 XL', 'PT1911 Officer', 'PUMA 24', 'CZ Shedow 2 OR', 'CZ Shedow 2 SA', 'CZ Shedow 2', 'CZ 75 Orange', 'CZ Shedow 2 Orange', 'CZ Shedow 2 Urban Grey', 'Revólver 38 6 Tiros',
+          'CZ O 07 Kadet Urban Grey', 'P365 SAS', 'PT 59', 'PT 58', 'GC MD6', '605', 'M911 A1', 'T4', 'Tatical 7022', 'P365XL',
+          'TH 9 C', 'TX22', 'PT 59S', '7022 0X MED', 'RT 627', '7022 WAY', 'DELTA NEW FRAME', 'PUMP MILITARY 3.0', 'TR 886', 'THC9',
+          '7022 Tactical', 'RT 605', 'G 3', 'TH40C', 'PT138', 'MD1', 'PT 938', 'RT 608', 'STR-9', 'SW/WD9 VE CAPACITY',
+          '8122', 'MD2 A2', 'Golden 39AS', '8022', 'G25', 'Jericho', 'CZ1', 'RT66', 'Rex1S', 'DIONE',
+          '941', 'APX', 'REX ZERO 1', 'BMF9', 'P320 XFULL', 'P22', '457 LUX', 'MD5', 'MP22', 'MP17',
+          '7022 Delta', 'PT809C', 'XD-M ELITE', 'G22', 'ERA2001', 'GES M B H', 'THUNDER', '457 Premium', 'Special Streel', 'RT8566',
+          'RIO BRAVO', 'MOD. 5', 'Revólver', 'RT856', 'GX4 CARRY', 'F F 914', 'TCP 38'
+        ].map(label => ({ kind: 'modelo', label })),
+      ];
+      let seedIdx = 0;
+      for (const item of seedLookups) {
+        seedIdx += 1;
+        await client.query(
+          `INSERT INTO weapon_lookup_options (id, kind, label, created_at) VALUES ($1, $2, $3, $4) ON CONFLICT (kind, label) DO NOTHING`,
+          [`wlo_${item.kind}_${seedIdx}`, item.kind, item.label, new Date().toISOString().split('T')[0]]
+        );
+      }
+      console.log(`Seeded ${seedLookups.length} weapon lookup option(s).`);
+    }
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS registrations (

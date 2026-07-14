@@ -98,7 +98,7 @@ export interface Post {
 export interface Modality {
   id: string;
   name: string; // e.g., "IPSC Handgun", "Trap Americano", "Carabina Mira Aberta 10m"
-  discipline: string; // e.g., "IPSC", "IDSC", "Tiro de Precisão"
+  discipline?: string; // legacy/unused field, not part of the real Cadastrar Modalidades form
   targetPreview?: string;
   seriesCount?: number;
   shotsPerSeries?: number;
@@ -114,7 +114,18 @@ export interface Stage {
   date: string;
   regulationsFile?: string;
   scorecardFile?: string;
+  description?: string;
+  endDate?: string;
+  sexo?: 'masculino' | 'feminino' | 'misto';
+  homologarResultado?: 'sim' | 'nao';
+  abertoParaResultados?: 'sim' | 'nao';
+  gerarCertificados?: 'sim' | 'nao';
+  fatorMultiplicacaoResultados?: number;
+  exibirInscritosPaginaInicial?: 'sim' | 'nao';
+  incluirNaSomaPaginaInicial?: 'sim' | 'nao';
 }
+
+export type StageInput = Pick<Stage, 'championshipId' | 'title' | 'date'> & Partial<Omit<Stage, 'id' | 'championshipId' | 'title' | 'date' | 'stageNum'>>;
 
 export interface Weapon {
   id: string;
@@ -123,11 +134,22 @@ export interface Weapon {
   model: string;
   caliber: string;
   serialNumber: string;
-  weaponType: string;
+  weaponType?: string; // legacy/unused field, not part of the real Cadastro de Armas form
   weaponNumber?: string; // "Número da arma" from the club registry
   sigmaNumber?: string; // Exército "Número Sigma"
   weaponClass?: string; // "Classe"
-  permissionStatus?: string; // "Status de permissão"
+  permissionStatus?: string; // "Status de permissão" (Permitida/Restrita)
+  registrySystem?: string; // "Arma é" (Sigma/Sinarm)
+}
+
+// Managed dropdown option for the weapon form's Classe/Modelo/Calibre/
+// Fabricante/Arma é/Status de permissão selects — only master_admin can
+// create/edit/remove these (see requireMasterAdmin on the server).
+export interface WeaponLookupOption {
+  id: string;
+  kind: 'classe' | 'modelo' | 'calibre' | 'fabricante' | 'tipo_arma' | 'permissao_arma';
+  label: string;
+  createdAt: string;
 }
 
 export interface Championship {
@@ -144,7 +166,60 @@ export interface Championship {
   bannerUrl: string;
   clubId?: string;
   type: 'individual' | 'clube';
+  regulamentoUploaded?: boolean;
+  sumulaUploaded?: boolean;
+  valorX?: number;
+  valorInscricaoClube?: number;
+  valorInscricaoIndividual?: number;
+  percentualClube?: number;
+  valorReinscricao?: number;
+  tipoPix?: string;
+  chavePix?: string;
+  nomeExibidoPix?: string;
+  whatsappComprovante?: string;
+  formatoPagamento?: 'campeonato' | 'etapa';
+  limiteEquipesClube?: number;
+  qtdAtletasPorEquipe?: number;
+  formatoInsercao?: 'por_etapa' | 'todas_etapas';
+  alcanceCampeonato?: 'local_distrital' | 'regional' | 'estadual' | 'nacional';
+  nivelCampeonato?: number;
+  percentualTributos?: number;
+  percentualOrganizacao?: number;
+  percentualClubes?: number;
+  percentualPremiacaoAtleta?: number;
+  percentualPremiacaoClube?: number;
+  percentualPremiacaoTodasEtapas?: number;
+  premiacaoAdicionalTodasEtapas?: number;
+  qtdEtapasConsideradas?: number;
+  qtdPioresDescartar?: number;
+  qtdMelhoresDescartar?: number;
+  percentualPos1TodasEtapas?: number;
+  percentualPos2TodasEtapas?: number;
+  percentualPos3TodasEtapas?: number;
+  percentualPos4TodasEtapas?: number;
+  percentualPos5TodasEtapas?: number;
+  percentualOuro?: number;
+  percentualPrata?: number;
+  percentualBronze?: number;
+  percentualPos1Medalha?: number;
+  percentualPos2Medalha?: number;
+  percentualPos3Medalha?: number;
+  percentualPos4Medalha?: number;
+  percentualPos5Medalha?: number;
+  pontuacaoMinimaAtletaOuro?: number;
+  pontuacaoMinimaAtletaPrata?: number;
+  pontuacaoMinimaAtletaBronze?: number;
+  pontuacaoMinimaEquipeOuro?: number;
+  pontuacaoMinimaEquipePrata?: number;
+  pontuacaoMinimaEquipeBronze?: number;
+  ordemExibicao?: number;
+  abertoOutrosClubes?: 'sim' | 'nao';
 }
+
+// Payload shape for creating/editing a championship — the required "quick create"
+// fields plus every optional cadastro-completo field from Championship.
+export type ChampionshipInput = Pick<Championship, 'title' | 'description' | 'startDate' | 'endDate' | 'registrationFee' | 'modalities' | 'stagesCount'> &
+  Partial<Omit<Championship, 'id' | 'title' | 'description' | 'startDate' | 'endDate' | 'registrationFee' | 'modalities' | 'stagesCount' | 'status' | 'currentStage' | 'regulamentoUploaded' | 'sumulaUploaded'>>;
 
 export interface Registration {
   id: string;

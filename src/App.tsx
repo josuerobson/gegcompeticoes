@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Post, Championship, Registration, StageScore, RankingItem, ShootingResult, Club, Modality, Stage, Weapon } from './types';
+import { User, Post, Championship, ChampionshipInput, Registration, StageScore, RankingItem, ShootingResult, Club, Modality, Stage, StageInput, Weapon, WeaponLookupOption } from './types';
 import FeedView from './components/FeedView';
 import ChampionshipsView from './components/ChampionshipsView';
 import AdminPanel from './components/AdminPanel';
@@ -103,6 +103,7 @@ export default function App() {
   const [modalities, setModalities] = useState<Modality[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [weapons, setWeapons] = useState<Weapon[]>([]);
+  const [weaponLookupOptions, setWeaponLookupOptions] = useState<WeaponLookupOption[]>([]);
   const [globalRankings, setGlobalRankings] = useState<RankingItem[]>([]);
   const [selectedRankingModality, setSelectedRankingModality] = useState('');
   const [settings, setSettings] = useState<{ [key: string]: string }>({
@@ -209,6 +210,10 @@ export default function App() {
       const weaponsRes = await fetch('/api/weapons', { headers: authHeaders });
       const weaponsData = await weaponsRes.json();
       setWeapons(weaponsData.weapons || []);
+
+      const weaponLookupsRes = await fetch('/api/weapon-lookups', { headers: authHeaders });
+      const weaponLookupsData = await weaponLookupsRes.json();
+      setWeaponLookupOptions(weaponLookupsData.options || []);
 
       // 7. Fetch Site Settings
       const settingsRes = await fetch('/api/settings', { headers: authHeaders });
@@ -425,6 +430,27 @@ export default function App() {
       return res.ok;
     } catch (err) {
       console.error(`Erro ao enviar documento (${kind}):`, err);
+      return false;
+    }
+  };
+
+  const handleUploadChampionshipDocument = async (championshipId: string, kind: string, file: File): Promise<boolean> => {
+    if (!currentUser) return false;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('kind', kind);
+    formData.append('target', 'championship');
+    formData.append('targetChampionshipId', championshipId);
+    try {
+      const res = await fetch('/api/uploads', {
+        method: 'POST',
+        headers: { 'x-user-id': currentUser.id },
+        body: formData
+      });
+      if (res.ok) await syncWithBackend();
+      return res.ok;
+    } catch (err) {
+      console.error(`Erro ao enviar documento do campeonato (${kind}):`, err);
       return false;
     }
   };
@@ -693,7 +719,7 @@ export default function App() {
     }
   };
 
-  const handleAddWeapon = async (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; serialNumber: string; weaponType: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string }) => {
+  const handleAddWeapon = async (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; serialNumber?: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string }) => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {
       authHeaders['x-user-id'] = currentUser.id;
@@ -712,6 +738,77 @@ export default function App() {
     }
   };
 
+  const handleAddWeaponLookup = async (kind: string, label: string): Promise<{ error?: string }> => {
+    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentUser) {
+      authHeaders['x-user-id'] = currentUser.id;
+    }
+
+    try {
+      const res = await fetch('/api/weapon-lookups', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ kind, label })
+      });
+      if (res.ok) {
+        await syncWithBackend();
+        return {};
+      }
+      const data = await res.json().catch(() => ({}));
+      return { error: data.error || 'Erro ao cadastrar item.' };
+    } catch (err) {
+      console.error(err);
+      return { error: 'Erro ao cadastrar item.' };
+    }
+  };
+
+  const handleUpdateWeaponLookup = async (id: string, label: string): Promise<{ error?: string }> => {
+    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentUser) {
+      authHeaders['x-user-id'] = currentUser.id;
+    }
+
+    try {
+      const res = await fetch(`/api/weapon-lookups/${id}`, {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify({ label })
+      });
+      if (res.ok) {
+        await syncWithBackend();
+        return {};
+      }
+      const data = await res.json().catch(() => ({}));
+      return { error: data.error || 'Erro ao atualizar item.' };
+    } catch (err) {
+      console.error(err);
+      return { error: 'Erro ao atualizar item.' };
+    }
+  };
+
+  const handleRemoveWeaponLookup = async (id: string): Promise<{ error?: string }> => {
+    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentUser) {
+      authHeaders['x-user-id'] = currentUser.id;
+    }
+
+    try {
+      const res = await fetch(`/api/weapon-lookups/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders
+      });
+      if (res.ok) {
+        await syncWithBackend();
+        return {};
+      }
+      const data = await res.json().catch(() => ({}));
+      return { error: data.error || 'Erro ao remover item.' };
+    } catch (err) {
+      console.error(err);
+      return { error: 'Erro ao remover item.' };
+    }
+  };
+
   const handleRemoveWeapon = async (weaponId: string) => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {
@@ -727,7 +824,78 @@ export default function App() {
     }
   };
 
-  const handleAddModality = async (modality: { name: string; discipline: string; targetPreview?: string; seriesCount?: number; shotsPerSeries?: number; timePerSeriesMinutes?: number; evaluationType?: string }) => {
+  const handleAddStage = async (data: StageInput): Promise<{ stage?: Stage; error?: string }> => {
+    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentUser) {
+      authHeaders['x-user-id'] = currentUser.id;
+    }
+
+    try {
+      const res = await fetch('/api/stages', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify(data)
+      });
+      const resData = await res.json().catch(() => ({}));
+      if (res.ok && resData.stage) {
+        await syncWithBackend();
+        return { stage: resData.stage };
+      }
+      return { error: resData.error || 'Erro ao cadastrar etapa.' };
+    } catch (err) {
+      console.error(err);
+      return { error: 'Erro ao cadastrar etapa.' };
+    }
+  };
+
+  const handleUpdateStage = async (id: string, data: StageInput): Promise<{ stage?: Stage; error?: string }> => {
+    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentUser) {
+      authHeaders['x-user-id'] = currentUser.id;
+    }
+
+    try {
+      const res = await fetch(`/api/stages/${id}`, {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify(data)
+      });
+      const resData = await res.json().catch(() => ({}));
+      if (res.ok && resData.stage) {
+        await syncWithBackend();
+        return { stage: resData.stage };
+      }
+      return { error: resData.error || 'Erro ao atualizar etapa.' };
+    } catch (err) {
+      console.error(err);
+      return { error: 'Erro ao atualizar etapa.' };
+    }
+  };
+
+  const handleRemoveStage = async (stageId: string): Promise<{ error?: string }> => {
+    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentUser) {
+      authHeaders['x-user-id'] = currentUser.id;
+    }
+
+    try {
+      const res = await fetch(`/api/stages/${stageId}`, {
+        method: 'DELETE',
+        headers: authHeaders
+      });
+      if (res.ok) {
+        await syncWithBackend();
+        return {};
+      }
+      const data = await res.json().catch(() => ({}));
+      return { error: data.error || 'Erro ao remover etapa.' };
+    } catch (err) {
+      console.error(err);
+      return { error: 'Erro ao remover etapa.' };
+    }
+  };
+
+  const handleAddModality = async (modality: { name: string; seriesCount?: number; shotsPerSeries?: number; timePerSeriesMinutes?: number; evaluationType?: string }) => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {
       authHeaders['x-user-id'] = currentUser.id;
@@ -764,16 +932,7 @@ export default function App() {
     }
   };
 
-  const handleCreateChampionshipAdmin = async (data: {
-    title: string;
-    description: string;
-    startDate: string;
-    endDate: string;
-    registrationFee: number;
-    modalities: string[];
-    stagesCount: number;
-    bannerUrl?: string;
-  }) => {
+  const handleCreateChampionshipAdmin = async (data: ChampionshipInput): Promise<{ championship?: Championship; error?: string }> => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {
       authHeaders['x-user-id'] = currentUser.id;
@@ -785,24 +944,19 @@ export default function App() {
         headers: authHeaders,
         body: JSON.stringify(data)
       });
-      if (res.ok) {
+      const resData = await res.json().catch(() => ({}));
+      if (res.ok && resData.championship) {
         await syncWithBackend();
+        return { championship: resData.championship };
       }
+      return { error: resData.error || 'Erro ao criar campeonato.' };
     } catch (err) {
       console.error(err);
+      return { error: 'Erro ao criar campeonato.' };
     }
   };
 
-  const handleUpdateChampionshipAdmin = async (id: string, data: {
-    title: string;
-    description: string;
-    startDate: string;
-    endDate: string;
-    registrationFee: number;
-    modalities: string[];
-    stagesCount: number;
-    bannerUrl?: string;
-  }) => {
+  const handleUpdateChampionshipAdmin = async (id: string, data: ChampionshipInput): Promise<{ championship?: Championship; error?: string }> => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {
       authHeaders['x-user-id'] = currentUser.id;
@@ -814,11 +968,15 @@ export default function App() {
         headers: authHeaders,
         body: JSON.stringify(data)
       });
-      if (res.ok) {
+      const resData = await res.json().catch(() => ({}));
+      if (res.ok && resData.championship) {
         await syncWithBackend();
+        return { championship: resData.championship };
       }
+      return { error: resData.error || 'Erro ao atualizar campeonato.' };
     } catch (err) {
       console.error(err);
+      return { error: 'Erro ao atualizar campeonato.' };
     }
   };
 
@@ -1603,15 +1761,24 @@ export default function App() {
               championships={championships}
               registrations={registrations}
               stageScores={stageScores}
+              stages={stages}
               users={users}
               weapons={weapons}
+              weaponLookupOptions={weaponLookupOptions}
               modalities={modalities}
               onCreateChampionship={handleCreateChampionshipAdmin}
               onUpdateChampionship={handleUpdateChampionshipAdmin}
+              onUploadChampionshipDocument={handleUploadChampionshipDocument}
+              onAddStage={handleAddStage}
+              onUpdateStage={handleUpdateStage}
+              onRemoveStage={handleRemoveStage}
               onRecordScore={handleRecordScoreAdmin}
               onToggleAdminDemo={handleToggleAdminDemo}
               onAddWeapon={handleAddWeapon}
               onRemoveWeapon={handleRemoveWeapon}
+              onAddWeaponLookup={handleAddWeaponLookup}
+              onUpdateWeaponLookup={handleUpdateWeaponLookup}
+              onRemoveWeaponLookup={handleRemoveWeaponLookup}
               onAddModality={handleAddModality}
               onRemoveModality={handleRemoveModality}
               settings={settings}

@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
-import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon } from './src/types.js';
+import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption } from './src/types.js';
 import { pool, initDB } from './src/db.js';
 import { hashPassword, verifyPassword } from './src/auth.js';
 import { uploadDocument, getDocumentStream, storageEnabled } from './src/storage.js';
@@ -98,7 +98,7 @@ function mapModality(m: any): Modality {
   return {
     id: m.id,
     name: m.name,
-    discipline: m.discipline,
+    discipline: m.discipline || undefined,
     targetPreview: m.target_preview || undefined,
     seriesCount: m.series_count ?? undefined,
     shotsPerSeries: m.shots_per_series ?? undefined,
@@ -116,6 +116,15 @@ function mapStage(s: any): Stage {
     date: s.date,
     regulationsFile: s.regulations_file || undefined,
     scorecardFile: s.scorecard_file || undefined,
+    description: s.description || undefined,
+    endDate: s.end_date || undefined,
+    sexo: s.sexo || undefined,
+    homologarResultado: s.homologar_resultado || undefined,
+    abertoParaResultados: s.aberto_para_resultados || undefined,
+    gerarCertificados: s.gerar_certificados || undefined,
+    fatorMultiplicacaoResultados: num(s.fator_multiplicacao_resultados),
+    exibirInscritosPaginaInicial: s.exibir_inscritos_pagina_inicial || undefined,
+    incluirNaSomaPaginaInicial: s.incluir_na_soma_pagina_inicial || undefined,
   };
 }
 
@@ -127,12 +136,17 @@ function mapWeapon(w: any): Weapon {
     model: w.model,
     caliber: w.caliber,
     serialNumber: w.serial_number,
-    weaponType: w.weapon_type,
+    weaponType: w.weapon_type || undefined,
     weaponNumber: w.weapon_number || undefined,
     sigmaNumber: w.sigma_number || undefined,
     weaponClass: w.class || undefined,
     permissionStatus: w.permission_status || undefined,
+    registrySystem: w.registry_system || undefined,
   };
+}
+
+function num(v: any): number | undefined {
+  return v === null || v === undefined ? undefined : Number(v);
 }
 
 function mapChampionship(c: any): Championship {
@@ -149,6 +163,54 @@ function mapChampionship(c: any): Championship {
     bannerUrl: c.banner_url,
     clubId: c.club_id || undefined,
     type: (c.type as 'individual' | 'clube') || 'individual',
+    regulamentoUploaded: Boolean(c.regulamento_key),
+    sumulaUploaded: Boolean(c.sumula_key),
+    valorX: num(c.valor_x),
+    valorInscricaoClube: num(c.valor_inscricao_clube),
+    valorInscricaoIndividual: num(c.valor_inscricao_individual),
+    percentualClube: num(c.percentual_clube),
+    valorReinscricao: num(c.valor_reinscricao),
+    tipoPix: c.tipo_pix || undefined,
+    chavePix: c.chave_pix || undefined,
+    nomeExibidoPix: c.nome_exibido_pix || undefined,
+    whatsappComprovante: c.whatsapp_comprovante || undefined,
+    formatoPagamento: c.formato_pagamento || undefined,
+    limiteEquipesClube: num(c.limite_equipes_clube),
+    qtdAtletasPorEquipe: num(c.qtd_atletas_por_equipe),
+    formatoInsercao: c.formato_insercao || undefined,
+    alcanceCampeonato: c.alcance_campeonato || undefined,
+    nivelCampeonato: num(c.nivel_campeonato),
+    percentualTributos: num(c.percentual_tributos),
+    percentualOrganizacao: num(c.percentual_organizacao),
+    percentualClubes: num(c.percentual_clubes),
+    percentualPremiacaoAtleta: num(c.percentual_premiacao_atleta),
+    percentualPremiacaoClube: num(c.percentual_premiacao_clube),
+    percentualPremiacaoTodasEtapas: num(c.percentual_premiacao_todas_etapas),
+    premiacaoAdicionalTodasEtapas: num(c.premiacao_adicional_todas_etapas),
+    qtdEtapasConsideradas: num(c.qtd_etapas_consideradas),
+    qtdPioresDescartar: num(c.qtd_piores_descartar),
+    qtdMelhoresDescartar: num(c.qtd_melhores_descartar),
+    percentualPos1TodasEtapas: num(c.percentual_pos1_todas_etapas),
+    percentualPos2TodasEtapas: num(c.percentual_pos2_todas_etapas),
+    percentualPos3TodasEtapas: num(c.percentual_pos3_todas_etapas),
+    percentualPos4TodasEtapas: num(c.percentual_pos4_todas_etapas),
+    percentualPos5TodasEtapas: num(c.percentual_pos5_todas_etapas),
+    percentualOuro: num(c.percentual_ouro),
+    percentualPrata: num(c.percentual_prata),
+    percentualBronze: num(c.percentual_bronze),
+    percentualPos1Medalha: num(c.percentual_pos1_medalha),
+    percentualPos2Medalha: num(c.percentual_pos2_medalha),
+    percentualPos3Medalha: num(c.percentual_pos3_medalha),
+    percentualPos4Medalha: num(c.percentual_pos4_medalha),
+    percentualPos5Medalha: num(c.percentual_pos5_medalha),
+    pontuacaoMinimaAtletaOuro: num(c.pontuacao_minima_atleta_ouro),
+    pontuacaoMinimaAtletaPrata: num(c.pontuacao_minima_atleta_prata),
+    pontuacaoMinimaAtletaBronze: num(c.pontuacao_minima_atleta_bronze),
+    pontuacaoMinimaEquipeOuro: num(c.pontuacao_minima_equipe_ouro),
+    pontuacaoMinimaEquipePrata: num(c.pontuacao_minima_equipe_prata),
+    pontuacaoMinimaEquipeBronze: num(c.pontuacao_minima_equipe_bronze),
+    ordemExibicao: num(c.ordem_exibicao),
+    abertoOutrosClubes: (c.aberto_outros_clubes as 'sim' | 'nao') || undefined,
   };
 }
 
@@ -252,6 +314,15 @@ const ADMIN_ROLES = ['admin', 'master_admin', 'club_admin'];
 const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (!(req as any).user || !ADMIN_ROLES.includes((req as any).user.role)) {
     return res.status(403).json({ error: 'Acesso restrito para administradores do G&G.' });
+  }
+  next();
+};
+
+// Gerenciamento das listas de armas (Classe/Modelo/Calibre/Fabricante/Arma é/
+// Status de permissão) é exclusivo do Administrador Master.
+const requireMasterAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (!(req as any).user || (req as any).user.role !== 'master_admin') {
+    return res.status(403).json({ error: 'Acesso restrito ao Administrador Master.' });
   }
   next();
 };
@@ -586,9 +657,17 @@ const CLUB_DOC_KIND_COLUMNS: Record<string, string> = {
   alvara: 'doc_alvara_key',
 };
 
+// Regulamento/súmula PDFs — unlike user/club compliance docs, these need to be
+// readable by any athlete (not just the uploader), so they're streamed through
+// a separate public-ish endpoint below instead of the ownership-gated one.
+const CHAMPIONSHIP_DOC_KIND_COLUMNS: Record<string, string> = {
+  regulamento: 'regulamento_key',
+  sumula: 'sumula_key',
+};
+
 app.post('/api/uploads', requireAuth, handleUpload, async (req, res) => {
   const currentUser = (req as any).user as User;
-  const { kind, target, targetUserId } = req.body as { kind?: string; target?: string; targetUserId?: string };
+  const { kind, target, targetUserId, targetChampionshipId } = req.body as { kind?: string; target?: string; targetUserId?: string; targetChampionshipId?: string };
   const file = (req as any).file as Express.Multer.File | undefined;
 
   if (!storageEnabled) {
@@ -599,15 +678,26 @@ app.post('/api/uploads', requireAuth, handleUpload, async (req, res) => {
   }
 
   const isClubTarget = target === 'club';
-  const columnMap = isClubTarget ? CLUB_DOC_KIND_COLUMNS : USER_DOC_KIND_COLUMNS;
+  const isChampionshipTarget = target === 'championship';
+  const columnMap = isChampionshipTarget ? CHAMPIONSHIP_DOC_KIND_COLUMNS : isClubTarget ? CLUB_DOC_KIND_COLUMNS : USER_DOC_KIND_COLUMNS;
   const column = kind ? columnMap[kind] : undefined;
   if (!column) {
     return res.status(400).json({ error: 'Tipo de documento inválido.' });
   }
 
   let recordId: string;
-  let table: 'users' | 'clubs';
-  if (targetUserId) {
+  let table: 'users' | 'clubs' | 'championships';
+  if (isChampionshipTarget) {
+    if (!targetChampionshipId) {
+      return res.status(400).json({ error: 'Campeonato não informado.' });
+    }
+    const champCheck = await pool.query('SELECT 1 FROM championships WHERE id = $1', [targetChampionshipId]);
+    if (champCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Campeonato não encontrado.' });
+    }
+    recordId = targetChampionshipId;
+    table = 'championships';
+  } else if (targetUserId) {
     if (!ADMIN_ROLES.includes(currentUser.role) || !currentUser.clubId) {
       return res.status(403).json({ error: 'Apenas administradores do clube podem enviar documentos por um membro.' });
     }
@@ -637,6 +727,38 @@ app.post('/api/uploads', requireAuth, handleUpload, async (req, res) => {
   } catch (err) {
     console.error('Upload document error:', err);
     res.status(500).json({ error: 'Erro ao enviar documento.' });
+  }
+});
+
+app.get('/api/championships/:id/documents/:kind', requireAuth, async (req, res) => {
+  const { id, kind } = req.params;
+
+  if (!storageEnabled) {
+    return res.status(503).json({ error: 'Armazenamento de documentos não está configurado neste ambiente.' });
+  }
+
+  const column = CHAMPIONSHIP_DOC_KIND_COLUMNS[kind];
+  if (!column) {
+    return res.status(400).json({ error: 'Tipo de documento inválido.' });
+  }
+
+  try {
+    const r = await pool.query(`SELECT ${column} as key FROM championships WHERE id = $1`, [id]);
+    const objectKey = r.rows[0]?.key || null;
+    if (!objectKey) {
+      return res.status(404).json({ error: 'Documento não encontrado.' });
+    }
+
+    const stream = await getDocumentStream(objectKey);
+    res.setHeader('Content-Type', 'application/pdf');
+    stream.on('error', (streamErr) => {
+      console.error('Championship document stream error:', streamErr);
+      if (!res.headersSent) res.status(500).json({ error: 'Erro ao baixar documento.' });
+    });
+    stream.pipe(res);
+  } catch (err) {
+    console.error('Get championship document error:', err);
+    res.status(500).json({ error: 'Erro ao baixar documento.' });
   }
 });
 
@@ -1044,6 +1166,58 @@ app.get('/api/championships', async (req, res) => {
   }
 });
 
+// Cadastro completo de campeonato — every field beyond the "quick create" basics
+// (title/description/dates/fee/modalities/stagesCount/banner/club/type), all
+// optional and dynamically inserted/updated so partial submissions never fail.
+const CHAMPIONSHIP_EXTRA_COLUMNS: Record<string, string> = {
+  valorX: 'valor_x',
+  valorInscricaoClube: 'valor_inscricao_clube',
+  valorInscricaoIndividual: 'valor_inscricao_individual',
+  percentualClube: 'percentual_clube',
+  valorReinscricao: 'valor_reinscricao',
+  tipoPix: 'tipo_pix',
+  chavePix: 'chave_pix',
+  nomeExibidoPix: 'nome_exibido_pix',
+  whatsappComprovante: 'whatsapp_comprovante',
+  formatoPagamento: 'formato_pagamento',
+  limiteEquipesClube: 'limite_equipes_clube',
+  qtdAtletasPorEquipe: 'qtd_atletas_por_equipe',
+  formatoInsercao: 'formato_insercao',
+  alcanceCampeonato: 'alcance_campeonato',
+  nivelCampeonato: 'nivel_campeonato',
+  percentualTributos: 'percentual_tributos',
+  percentualOrganizacao: 'percentual_organizacao',
+  percentualClubes: 'percentual_clubes',
+  percentualPremiacaoAtleta: 'percentual_premiacao_atleta',
+  percentualPremiacaoClube: 'percentual_premiacao_clube',
+  percentualPremiacaoTodasEtapas: 'percentual_premiacao_todas_etapas',
+  premiacaoAdicionalTodasEtapas: 'premiacao_adicional_todas_etapas',
+  qtdEtapasConsideradas: 'qtd_etapas_consideradas',
+  qtdPioresDescartar: 'qtd_piores_descartar',
+  qtdMelhoresDescartar: 'qtd_melhores_descartar',
+  percentualPos1TodasEtapas: 'percentual_pos1_todas_etapas',
+  percentualPos2TodasEtapas: 'percentual_pos2_todas_etapas',
+  percentualPos3TodasEtapas: 'percentual_pos3_todas_etapas',
+  percentualPos4TodasEtapas: 'percentual_pos4_todas_etapas',
+  percentualPos5TodasEtapas: 'percentual_pos5_todas_etapas',
+  percentualOuro: 'percentual_ouro',
+  percentualPrata: 'percentual_prata',
+  percentualBronze: 'percentual_bronze',
+  percentualPos1Medalha: 'percentual_pos1_medalha',
+  percentualPos2Medalha: 'percentual_pos2_medalha',
+  percentualPos3Medalha: 'percentual_pos3_medalha',
+  percentualPos4Medalha: 'percentual_pos4_medalha',
+  percentualPos5Medalha: 'percentual_pos5_medalha',
+  pontuacaoMinimaAtletaOuro: 'pontuacao_minima_atleta_ouro',
+  pontuacaoMinimaAtletaPrata: 'pontuacao_minima_atleta_prata',
+  pontuacaoMinimaAtletaBronze: 'pontuacao_minima_atleta_bronze',
+  pontuacaoMinimaEquipeOuro: 'pontuacao_minima_equipe_ouro',
+  pontuacaoMinimaEquipePrata: 'pontuacao_minima_equipe_prata',
+  pontuacaoMinimaEquipeBronze: 'pontuacao_minima_equipe_bronze',
+  ordemExibicao: 'ordem_exibicao',
+  abertoOutrosClubes: 'aberto_outros_clubes',
+};
+
 app.post('/api/championships', requireAdmin, async (req, res) => {
   const { title, description, startDate, endDate, registrationFee, modalities, stagesCount, bannerUrl, clubId, type } = req.body;
 
@@ -1051,41 +1225,28 @@ app.post('/api/championships', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Preencha todos os campos obrigatórios do campeonato.' });
   }
 
-  const newChamp: Championship = {
-    id: `champ_${Date.now()}`,
-    title,
-    description,
-    startDate,
-    endDate,
-    registrationFee: Number(registrationFee),
-    modalities: Array.isArray(modalities) ? modalities : [modalities],
-    stagesCount: Number(stagesCount),
-    status: 'open',
-    bannerUrl: bannerUrl || 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80',
-    clubId: clubId || undefined,
-    type: type === 'clube' ? 'clube' : 'individual'
-  };
+  const id = `champ_${Date.now()}`;
+  const columns = ['id', 'title', 'description', 'start_date', 'end_date', 'registration_fee', 'modalities', 'stages_count', 'status', 'banner_url', 'club_id', 'type'];
+  const values: unknown[] = [
+    id, title, description, startDate, endDate, Number(registrationFee),
+    JSON.stringify(Array.isArray(modalities) ? modalities : [modalities]),
+    Number(stagesCount), 'open',
+    bannerUrl || 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80',
+    clubId || null, type === 'clube' ? 'clube' : 'individual'
+  ];
+
+  for (const [key, column] of Object.entries(CHAMPIONSHIP_EXTRA_COLUMNS)) {
+    if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+      columns.push(column);
+      values.push(req.body[key] === '' ? null : req.body[key]);
+    }
+  }
 
   try {
-    await pool.query(
-      `INSERT INTO championships (id, title, description, start_date, end_date, registration_fee, modalities, stages_count, status, banner_url, club_id, type)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-      [
-        newChamp.id,
-        newChamp.title,
-        newChamp.description,
-        newChamp.startDate,
-        newChamp.endDate,
-        newChamp.registrationFee,
-        JSON.stringify(newChamp.modalities),
-        newChamp.stagesCount,
-        newChamp.status,
-        newChamp.bannerUrl,
-        newChamp.clubId || null,
-        newChamp.type
-      ]
-    );
-    res.status(201).json({ championship: newChamp });
+    const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+    await pool.query(`INSERT INTO championships (${columns.join(', ')}) VALUES (${placeholders})`, values);
+    const champRes = await pool.query('SELECT * FROM championships WHERE id = $1', [id]);
+    res.status(201).json({ championship: mapChampionship(champRes.rows[0]) });
   } catch (err) {
     console.error('Create championship database error:', err);
     res.status(500).json({ error: 'Erro ao criar campeonato.' });
@@ -1134,24 +1295,27 @@ app.put('/api/championships/:id', requireAdmin, async (req, res) => {
 
     const currentBanner = champRes.rows[0].banner_url;
 
-    await pool.query(
-      `UPDATE championships
-       SET title = $1, description = $2, start_date = $3, end_date = $4, registration_fee = $5, modalities = $6, stages_count = $7, banner_url = $8
-       WHERE id = $9`,
-      [
-        title,
-        description,
-        startDate,
-        endDate,
-        Number(registrationFee),
-        JSON.stringify(Array.isArray(modalities) ? modalities : [modalities]),
-        Number(stagesCount),
-        bannerUrl || currentBanner || 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80',
-        champId
-      ]
-    );
+    const columns = ['title', 'description', 'start_date', 'end_date', 'registration_fee', 'modalities', 'stages_count', 'banner_url'];
+    const values: unknown[] = [
+      title, description, startDate, endDate, Number(registrationFee),
+      JSON.stringify(Array.isArray(modalities) ? modalities : [modalities]),
+      Number(stagesCount),
+      bannerUrl || currentBanner || 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80'
+    ];
 
-    res.json({ success: true, message: 'Campeonato atualizado com sucesso.' });
+    for (const [key, column] of Object.entries(CHAMPIONSHIP_EXTRA_COLUMNS)) {
+      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+        columns.push(column);
+        values.push(req.body[key] === '' ? null : req.body[key]);
+      }
+    }
+
+    values.push(champId);
+    const setClause = columns.map((col, i) => `${col} = $${i + 1}`).join(', ');
+    await pool.query(`UPDATE championships SET ${setClause} WHERE id = $${values.length}`, values);
+
+    const updatedRes = await pool.query('SELECT * FROM championships WHERE id = $1', [champId]);
+    res.json({ success: true, championship: mapChampionship(updatedRes.rows[0]) });
   } catch (err) {
     console.error('Update championship database error:', err);
     res.status(500).json({ error: 'Erro ao atualizar campeonato.' });
@@ -1292,17 +1456,17 @@ app.get('/api/modalities', async (req, res) => {
 });
 
 app.post('/api/modalities', requireAdmin, async (req, res) => {
-  const { name, discipline, targetPreview, seriesCount, shotsPerSeries, timePerSeriesMinutes, evaluationType } = req.body;
-  if (!name || !discipline) {
-    return res.status(400).json({ error: 'Nome e categoria/disciplina são obrigatórios.' });
+  const { name, seriesCount, shotsPerSeries, timePerSeriesMinutes, evaluationType } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'Nome da modalidade é obrigatório.' });
   }
 
   const id = `mod_${Date.now()}`;
   try {
     const result = await pool.query(
-      `INSERT INTO modalities (id, name, discipline, target_preview, series_count, shots_per_series, time_per_series_minutes, evaluation_type)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [id, name, discipline, targetPreview || null, seriesCount || null, shotsPerSeries || null, timePerSeriesMinutes || null, evaluationType || null]
+      `INSERT INTO modalities (id, name, series_count, shots_per_series, time_per_series_minutes, evaluation_type)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [id, name, seriesCount || null, shotsPerSeries || null, timePerSeriesMinutes || null, evaluationType || null]
     );
     res.status(201).json({ modality: mapModality(result.rows[0]) });
   } catch (err) {
@@ -1340,6 +1504,107 @@ app.get('/api/stages', async (req, res) => {
   }
 });
 
+// Cadastro completo de etapas — every field beyond campeonato/título/data de
+// início, all optional and dynamically inserted/updated.
+const STAGE_EXTRA_COLUMNS: Record<string, string> = {
+  description: 'description',
+  endDate: 'end_date',
+  sexo: 'sexo',
+  homologarResultado: 'homologar_resultado',
+  abertoParaResultados: 'aberto_para_resultados',
+  gerarCertificados: 'gerar_certificados',
+  fatorMultiplicacaoResultados: 'fator_multiplicacao_resultados',
+  exibirInscritosPaginaInicial: 'exibir_inscritos_pagina_inicial',
+  incluirNaSomaPaginaInicial: 'incluir_na_soma_pagina_inicial',
+};
+
+app.post('/api/stages', requireAdmin, async (req, res) => {
+  const { championshipId, title, date } = req.body;
+  if (!championshipId || !title || !date) {
+    return res.status(400).json({ error: 'Selecione o campeonato, título e data de início.' });
+  }
+
+  try {
+    const champCheck = await pool.query('SELECT 1 FROM championships WHERE id = $1', [championshipId]);
+    if (champCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Campeonato não encontrado.' });
+    }
+
+    const numRes = await pool.query('SELECT COALESCE(MAX(stage_num), 0) + 1 as next FROM stages WHERE championship_id = $1', [championshipId]);
+    const stageNum = numRes.rows[0].next;
+    const id = `stage_${Date.now()}`;
+
+    const columns = ['id', 'championship_id', 'stage_num', 'title', 'date'];
+    const values: unknown[] = [id, championshipId, stageNum, title, date];
+
+    for (const [key, column] of Object.entries(STAGE_EXTRA_COLUMNS)) {
+      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+        columns.push(column);
+        values.push(req.body[key] === '' ? null : req.body[key]);
+      }
+    }
+
+    const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+    await pool.query(`INSERT INTO stages (${columns.join(', ')}) VALUES (${placeholders})`, values);
+    const stageRes = await pool.query('SELECT * FROM stages WHERE id = $1', [id]);
+    res.status(201).json({ stage: mapStage(stageRes.rows[0]) });
+  } catch (err) {
+    console.error('Create stage database error:', err);
+    res.status(500).json({ error: 'Erro ao cadastrar etapa.' });
+  }
+});
+
+app.put('/api/stages/:id', requireAdmin, async (req, res) => {
+  const stageId = req.params.id;
+  const { title, date } = req.body;
+  if (!title || !date) {
+    return res.status(400).json({ error: 'Preencha título e data de início.' });
+  }
+
+  try {
+    const stageCheck = await pool.query('SELECT 1 FROM stages WHERE id = $1', [stageId]);
+    if (stageCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Etapa não encontrada.' });
+    }
+
+    const columns = ['title', 'date'];
+    const values: unknown[] = [title, date];
+
+    for (const [key, column] of Object.entries(STAGE_EXTRA_COLUMNS)) {
+      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+        columns.push(column);
+        values.push(req.body[key] === '' ? null : req.body[key]);
+      }
+    }
+
+    values.push(stageId);
+    const setClause = columns.map((col, i) => `${col} = $${i + 1}`).join(', ');
+    await pool.query(`UPDATE stages SET ${setClause} WHERE id = $${values.length}`, values);
+
+    const updatedRes = await pool.query('SELECT * FROM stages WHERE id = $1', [stageId]);
+    res.json({ stage: mapStage(updatedRes.rows[0]) });
+  } catch (err) {
+    console.error('Update stage database error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar etapa.' });
+  }
+});
+
+app.delete('/api/stages/:id', requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM stages WHERE id = $1 RETURNING id', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Etapa não encontrada.' });
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    if (err.code === '23503') {
+      return res.status(400).json({ error: 'Não é possível remover: esta etapa já possui inscrições ou resultados vinculados.' });
+    }
+    console.error('Delete stage database error:', err);
+    res.status(500).json({ error: 'Erro ao remover etapa.' });
+  }
+});
+
 app.get('/api/weapons', async (req, res) => {
   try {
     const { ownerId } = req.query;
@@ -1355,14 +1620,28 @@ app.get('/api/weapons', async (req, res) => {
 
 app.post('/api/weapons', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
-  const { ownerId, manufacturer, model, caliber, serialNumber, weaponType, weaponNumber, sigmaNumber, weaponClass, permissionStatus } = req.body;
+  const { ownerId, manufacturer, model, caliber, serialNumber, weaponNumber, sigmaNumber, weaponClass, permissionStatus, registrySystem } = req.body;
 
-  if (!manufacturer || !model || !caliber || !serialNumber || !weaponType) {
-    return res.status(400).json({ error: 'Preencha fabricante, modelo, calibre, número de série e tipo da arma.' });
+  if (!manufacturer || !model || !caliber) {
+    return res.status(400).json({ error: 'Preencha fabricante, modelo e calibre.' });
   }
 
-  // Members can only register weapons for themselves; admins may register on behalf of their club.
-  const resolvedOwnerId = ownerId && ADMIN_ROLES.includes(currentUser.role) ? ownerId : currentUser.id;
+  // Members can only register weapons for themselves. Club admins may register
+  // on behalf of their own club — even if a different ownerId is sent, it's
+  // ignored and forced back to their club. Only master_admin can target an
+  // arbitrary owner via the request body.
+  let resolvedOwnerId = currentUser.id;
+  if (ownerId) {
+    if (currentUser.role === 'master_admin') {
+      resolvedOwnerId = ownerId;
+    } else if (ADMIN_ROLES.includes(currentUser.role) && currentUser.clubId) {
+      resolvedOwnerId = currentUser.clubId;
+    }
+  }
+
+  // "Registro" isn't part of the real Cadastro de Armas form — derive it from
+  // whichever identifier the club actually filled in.
+  const resolvedSerialNumber = serialNumber || sigmaNumber || weaponNumber || `SIGMA-${Date.now()}`;
 
   const newWeapon: Weapon = {
     id: `weapon_${Date.now()}`,
@@ -1370,17 +1649,17 @@ app.post('/api/weapons', requireAuth, async (req, res) => {
     manufacturer,
     model,
     caliber,
-    serialNumber,
-    weaponType,
+    serialNumber: resolvedSerialNumber,
     weaponNumber: weaponNumber || undefined,
     sigmaNumber: sigmaNumber || undefined,
     weaponClass: weaponClass || undefined,
     permissionStatus: permissionStatus || undefined,
+    registrySystem: registrySystem || undefined,
   };
 
   try {
     await pool.query(
-      `INSERT INTO weapons (id, owner_id, manufacturer, model, caliber, serial_number, weapon_type, weapon_number, sigma_number, class, permission_status)
+      `INSERT INTO weapons (id, owner_id, manufacturer, model, caliber, serial_number, weapon_number, sigma_number, class, permission_status, registry_system)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         newWeapon.id,
@@ -1389,11 +1668,11 @@ app.post('/api/weapons', requireAuth, async (req, res) => {
         newWeapon.model,
         newWeapon.caliber,
         newWeapon.serialNumber,
-        newWeapon.weaponType,
         newWeapon.weaponNumber || null,
         newWeapon.sigmaNumber || null,
         newWeapon.weaponClass || null,
-        newWeapon.permissionStatus || null
+        newWeapon.permissionStatus || null,
+        newWeapon.registrySystem || null
       ]
     );
     res.status(201).json({ weapon: newWeapon });
@@ -1424,6 +1703,87 @@ app.delete('/api/weapons/:id', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Delete weapon database error:', err);
     res.status(500).json({ error: 'Erro ao remover arma.' });
+  }
+});
+
+// Managed dropdown lists for the weapon form (Classe/Modelo/Calibre/Fabricante/
+// Arma é/Status de permissão). Reading is open (club admins need it to populate
+// the weapon form); writing is restricted to master_admin.
+function mapWeaponLookupOption(o: any): WeaponLookupOption {
+  return { id: o.id, kind: o.kind, label: o.label, createdAt: o.created_at };
+}
+
+app.get('/api/weapon-lookups', async (req, res) => {
+  try {
+    const { kind } = req.query;
+    const result = kind
+      ? await pool.query('SELECT * FROM weapon_lookup_options WHERE kind = $1 ORDER BY label ASC', [kind])
+      : await pool.query('SELECT * FROM weapon_lookup_options ORDER BY kind ASC, label ASC');
+    res.json({ options: result.rows.map(mapWeaponLookupOption) });
+  } catch (err) {
+    console.error('Fetch weapon lookup options database error:', err);
+    res.status(500).json({ error: 'Erro ao buscar listas de armas.' });
+  }
+});
+
+const WEAPON_LOOKUP_KINDS = ['classe', 'modelo', 'calibre', 'fabricante', 'tipo_arma', 'permissao_arma'];
+
+app.post('/api/weapon-lookups', requireMasterAdmin, async (req, res) => {
+  const { kind, label } = req.body;
+  if (!kind || !WEAPON_LOOKUP_KINDS.includes(kind) || !label) {
+    return res.status(400).json({ error: 'Informe a lista (kind) e o nome do item.' });
+  }
+
+  const id = `wlo_${Date.now()}`;
+  try {
+    const result = await pool.query(
+      `INSERT INTO weapon_lookup_options (id, kind, label, created_at) VALUES ($1, $2, $3, $4) RETURNING *`,
+      [id, kind, label, new Date().toISOString().split('T')[0]]
+    );
+    res.status(201).json({ option: mapWeaponLookupOption(result.rows[0]) });
+  } catch (err: any) {
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'Este item já existe nesta lista.' });
+    }
+    console.error('Create weapon lookup option database error:', err);
+    res.status(500).json({ error: 'Erro ao cadastrar item.' });
+  }
+});
+
+app.put('/api/weapon-lookups/:id', requireMasterAdmin, async (req, res) => {
+  const { label } = req.body;
+  if (!label) {
+    return res.status(400).json({ error: 'Informe o nome do item.' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE weapon_lookup_options SET label = $1 WHERE id = $2 RETURNING *`,
+      [label, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Item não encontrado.' });
+    }
+    res.json({ option: mapWeaponLookupOption(result.rows[0]) });
+  } catch (err: any) {
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'Este item já existe nesta lista.' });
+    }
+    console.error('Update weapon lookup option database error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar item.' });
+  }
+});
+
+app.delete('/api/weapon-lookups/:id', requireMasterAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM weapon_lookup_options WHERE id = $1 RETURNING id', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Item não encontrado.' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete weapon lookup option database error:', err);
+    res.status(500).json({ error: 'Erro ao remover item.' });
   }
 });
 

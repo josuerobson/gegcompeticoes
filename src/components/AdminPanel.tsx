@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Championship, Registration, User, StageScore, Weapon, Modality, Club } from '../types';
+import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club } from '../types';
 import { 
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
@@ -23,33 +23,24 @@ interface AdminPanelProps {
   championships: Championship[];
   registrations: Registration[];
   stageScores: StageScore[];
+  stages: Stage[];
   users: User[];
   weapons: Weapon[];
+  weaponLookupOptions: WeaponLookupOption[];
   modalities: Modality[];
-  onAddWeapon: (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; serialNumber: string; weaponType: string }) => Promise<void>;
+  onAddWeapon: (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string }) => Promise<void>;
   onRemoveWeapon: (weaponId: string) => Promise<void>;
-  onAddModality: (modality: { name: string; discipline: string; targetPreview?: string; seriesCount?: number; shotsPerSeries?: number; timePerSeriesMinutes?: number; evaluationType?: string }) => Promise<void>;
+  onAddWeaponLookup: (kind: string, label: string) => Promise<{ error?: string }>;
+  onUpdateWeaponLookup: (id: string, label: string) => Promise<{ error?: string }>;
+  onRemoveWeaponLookup: (id: string) => Promise<{ error?: string }>;
+  onAddModality: (modality: { name: string; seriesCount?: number; shotsPerSeries?: number; timePerSeriesMinutes?: number; evaluationType?: string }) => Promise<void>;
   onRemoveModality: (modalityId: string) => Promise<void>;
-  onCreateChampionship: (data: {
-    title: string;
-    description: string;
-    startDate: string;
-    endDate: string;
-    registrationFee: number;
-    modalities: string[];
-    stagesCount: number;
-    bannerUrl?: string;
-  }) => Promise<void>;
-  onUpdateChampionship?: (id: string, data: {
-    title: string;
-    description: string;
-    startDate: string;
-    endDate: string;
-    registrationFee: number;
-    modalities: string[];
-    stagesCount: number;
-    bannerUrl?: string;
-  }) => Promise<void>;
+  onCreateChampionship: (data: ChampionshipInput) => Promise<{ championship?: Championship; error?: string }>;
+  onUpdateChampionship?: (id: string, data: ChampionshipInput) => Promise<{ championship?: Championship; error?: string }>;
+  onUploadChampionshipDocument: (championshipId: string, kind: string, file: File) => Promise<boolean>;
+  onAddStage: (data: StageInput) => Promise<{ stage?: Stage; error?: string }>;
+  onUpdateStage: (id: string, data: StageInput) => Promise<{ stage?: Stage; error?: string }>;
+  onRemoveStage: (stageId: string) => Promise<{ error?: string }>;
   onRecordScore: (data: {
     championshipId: string;
     registrationId: string;
@@ -165,20 +156,371 @@ function MemberFileField({ label, onUpload }: { label: string; onUpload: (file: 
   );
 }
 
+// Cadastro completo de campeonato — every field beyond the "quick create" basics
+// (title/description/dates/fee/modalities/stagesCount/banner), shared by both the
+// create and edit forms so the ~40 fields aren't declared/rendered twice.
+interface ChampExtraState {
+  type: 'individual' | 'clube';
+  valorX: string;
+  valorInscricaoClube: string;
+  valorInscricaoIndividual: string;
+  percentualClube: string;
+  valorReinscricao: string;
+  tipoPix: string;
+  chavePix: string;
+  nomeExibidoPix: string;
+  whatsappComprovante: string;
+  formatoPagamento: string;
+  limiteEquipesClube: string;
+  qtdAtletasPorEquipe: string;
+  formatoInsercao: string;
+  alcanceCampeonato: string;
+  nivelCampeonato: string;
+  percentualTributos: string;
+  percentualOrganizacao: string;
+  percentualClubes: string;
+  percentualPremiacaoAtleta: string;
+  percentualPremiacaoClube: string;
+  percentualPremiacaoTodasEtapas: string;
+  premiacaoAdicionalTodasEtapas: string;
+  qtdEtapasConsideradas: string;
+  qtdPioresDescartar: string;
+  qtdMelhoresDescartar: string;
+  percentualPos1TodasEtapas: string;
+  percentualPos2TodasEtapas: string;
+  percentualPos3TodasEtapas: string;
+  percentualPos4TodasEtapas: string;
+  percentualPos5TodasEtapas: string;
+  percentualOuro: string;
+  percentualPrata: string;
+  percentualBronze: string;
+  percentualPos1Medalha: string;
+  percentualPos2Medalha: string;
+  percentualPos3Medalha: string;
+  percentualPos4Medalha: string;
+  percentualPos5Medalha: string;
+  pontuacaoMinimaAtletaOuro: string;
+  pontuacaoMinimaAtletaPrata: string;
+  pontuacaoMinimaAtletaBronze: string;
+  pontuacaoMinimaEquipeOuro: string;
+  pontuacaoMinimaEquipePrata: string;
+  pontuacaoMinimaEquipeBronze: string;
+  ordemExibicao: string;
+  abertoOutrosClubes: 'sim' | 'nao';
+}
+
+const DEFAULT_CHAMP_EXTRA: ChampExtraState = {
+  type: 'individual', valorX: '', valorInscricaoClube: '', valorInscricaoIndividual: '', percentualClube: '',
+  valorReinscricao: '', tipoPix: '', chavePix: '', nomeExibidoPix: '', whatsappComprovante: '',
+  formatoPagamento: '', limiteEquipesClube: '', qtdAtletasPorEquipe: '', formatoInsercao: '',
+  alcanceCampeonato: '', nivelCampeonato: '', percentualTributos: '', percentualOrganizacao: '',
+  percentualClubes: '', percentualPremiacaoAtleta: '', percentualPremiacaoClube: '',
+  percentualPremiacaoTodasEtapas: '', premiacaoAdicionalTodasEtapas: '', qtdEtapasConsideradas: '',
+  qtdPioresDescartar: '', qtdMelhoresDescartar: '', percentualPos1TodasEtapas: '', percentualPos2TodasEtapas: '',
+  percentualPos3TodasEtapas: '', percentualPos4TodasEtapas: '', percentualPos5TodasEtapas: '',
+  percentualOuro: '', percentualPrata: '', percentualBronze: '', percentualPos1Medalha: '', percentualPos2Medalha: '',
+  percentualPos3Medalha: '', percentualPos4Medalha: '', percentualPos5Medalha: '',
+  pontuacaoMinimaAtletaOuro: '', pontuacaoMinimaAtletaPrata: '', pontuacaoMinimaAtletaBronze: '',
+  pontuacaoMinimaEquipeOuro: '', pontuacaoMinimaEquipePrata: '', pontuacaoMinimaEquipeBronze: '',
+  ordemExibicao: '', abertoOutrosClubes: 'sim'
+};
+
+function championshipToExtraState(c: Championship): ChampExtraState {
+  const n = (v?: number) => (v === undefined || v === null ? '' : String(v));
+  return {
+    type: c.type,
+    valorX: n(c.valorX),
+    valorInscricaoClube: n(c.valorInscricaoClube),
+    valorInscricaoIndividual: n(c.valorInscricaoIndividual),
+    percentualClube: n(c.percentualClube),
+    valorReinscricao: n(c.valorReinscricao),
+    tipoPix: c.tipoPix || '',
+    chavePix: c.chavePix || '',
+    nomeExibidoPix: c.nomeExibidoPix || '',
+    whatsappComprovante: c.whatsappComprovante || '',
+    formatoPagamento: c.formatoPagamento || '',
+    limiteEquipesClube: n(c.limiteEquipesClube),
+    qtdAtletasPorEquipe: n(c.qtdAtletasPorEquipe),
+    formatoInsercao: c.formatoInsercao || '',
+    alcanceCampeonato: c.alcanceCampeonato || '',
+    nivelCampeonato: n(c.nivelCampeonato),
+    percentualTributos: n(c.percentualTributos),
+    percentualOrganizacao: n(c.percentualOrganizacao),
+    percentualClubes: n(c.percentualClubes),
+    percentualPremiacaoAtleta: n(c.percentualPremiacaoAtleta),
+    percentualPremiacaoClube: n(c.percentualPremiacaoClube),
+    percentualPremiacaoTodasEtapas: n(c.percentualPremiacaoTodasEtapas),
+    premiacaoAdicionalTodasEtapas: n(c.premiacaoAdicionalTodasEtapas),
+    qtdEtapasConsideradas: n(c.qtdEtapasConsideradas),
+    qtdPioresDescartar: n(c.qtdPioresDescartar),
+    qtdMelhoresDescartar: n(c.qtdMelhoresDescartar),
+    percentualPos1TodasEtapas: n(c.percentualPos1TodasEtapas),
+    percentualPos2TodasEtapas: n(c.percentualPos2TodasEtapas),
+    percentualPos3TodasEtapas: n(c.percentualPos3TodasEtapas),
+    percentualPos4TodasEtapas: n(c.percentualPos4TodasEtapas),
+    percentualPos5TodasEtapas: n(c.percentualPos5TodasEtapas),
+    percentualOuro: n(c.percentualOuro),
+    percentualPrata: n(c.percentualPrata),
+    percentualBronze: n(c.percentualBronze),
+    percentualPos1Medalha: n(c.percentualPos1Medalha),
+    percentualPos2Medalha: n(c.percentualPos2Medalha),
+    percentualPos3Medalha: n(c.percentualPos3Medalha),
+    percentualPos4Medalha: n(c.percentualPos4Medalha),
+    percentualPos5Medalha: n(c.percentualPos5Medalha),
+    pontuacaoMinimaAtletaOuro: n(c.pontuacaoMinimaAtletaOuro),
+    pontuacaoMinimaAtletaPrata: n(c.pontuacaoMinimaAtletaPrata),
+    pontuacaoMinimaAtletaBronze: n(c.pontuacaoMinimaAtletaBronze),
+    pontuacaoMinimaEquipeOuro: n(c.pontuacaoMinimaEquipeOuro),
+    pontuacaoMinimaEquipePrata: n(c.pontuacaoMinimaEquipePrata),
+    pontuacaoMinimaEquipeBronze: n(c.pontuacaoMinimaEquipeBronze),
+    ordemExibicao: n(c.ordemExibicao),
+    abertoOutrosClubes: c.abertoOutrosClubes || 'sim',
+  };
+}
+
+function extraStateToPayload(e: ChampExtraState): Partial<ChampionshipInput> {
+  const num = (v: string) => (v === '' ? undefined : Number(v));
+  return {
+    type: e.type,
+    valorX: num(e.valorX),
+    valorInscricaoClube: num(e.valorInscricaoClube),
+    valorInscricaoIndividual: num(e.valorInscricaoIndividual),
+    percentualClube: num(e.percentualClube),
+    valorReinscricao: num(e.valorReinscricao),
+    tipoPix: e.tipoPix || undefined,
+    chavePix: e.chavePix || undefined,
+    nomeExibidoPix: e.nomeExibidoPix || undefined,
+    whatsappComprovante: e.whatsappComprovante || undefined,
+    formatoPagamento: (e.formatoPagamento || undefined) as ChampionshipInput['formatoPagamento'],
+    limiteEquipesClube: num(e.limiteEquipesClube),
+    qtdAtletasPorEquipe: num(e.qtdAtletasPorEquipe),
+    formatoInsercao: (e.formatoInsercao || undefined) as ChampionshipInput['formatoInsercao'],
+    alcanceCampeonato: (e.alcanceCampeonato || undefined) as ChampionshipInput['alcanceCampeonato'],
+    nivelCampeonato: num(e.nivelCampeonato),
+    percentualTributos: num(e.percentualTributos),
+    percentualOrganizacao: num(e.percentualOrganizacao),
+    percentualClubes: num(e.percentualClubes),
+    percentualPremiacaoAtleta: num(e.percentualPremiacaoAtleta),
+    percentualPremiacaoClube: num(e.percentualPremiacaoClube),
+    percentualPremiacaoTodasEtapas: num(e.percentualPremiacaoTodasEtapas),
+    premiacaoAdicionalTodasEtapas: num(e.premiacaoAdicionalTodasEtapas),
+    qtdEtapasConsideradas: num(e.qtdEtapasConsideradas),
+    qtdPioresDescartar: num(e.qtdPioresDescartar),
+    qtdMelhoresDescartar: num(e.qtdMelhoresDescartar),
+    percentualPos1TodasEtapas: num(e.percentualPos1TodasEtapas),
+    percentualPos2TodasEtapas: num(e.percentualPos2TodasEtapas),
+    percentualPos3TodasEtapas: num(e.percentualPos3TodasEtapas),
+    percentualPos4TodasEtapas: num(e.percentualPos4TodasEtapas),
+    percentualPos5TodasEtapas: num(e.percentualPos5TodasEtapas),
+    percentualOuro: num(e.percentualOuro),
+    percentualPrata: num(e.percentualPrata),
+    percentualBronze: num(e.percentualBronze),
+    percentualPos1Medalha: num(e.percentualPos1Medalha),
+    percentualPos2Medalha: num(e.percentualPos2Medalha),
+    percentualPos3Medalha: num(e.percentualPos3Medalha),
+    percentualPos4Medalha: num(e.percentualPos4Medalha),
+    percentualPos5Medalha: num(e.percentualPos5Medalha),
+    pontuacaoMinimaAtletaOuro: num(e.pontuacaoMinimaAtletaOuro),
+    pontuacaoMinimaAtletaPrata: num(e.pontuacaoMinimaAtletaPrata),
+    pontuacaoMinimaAtletaBronze: num(e.pontuacaoMinimaAtletaBronze),
+    pontuacaoMinimaEquipeOuro: num(e.pontuacaoMinimaEquipeOuro),
+    pontuacaoMinimaEquipePrata: num(e.pontuacaoMinimaEquipePrata),
+    pontuacaoMinimaEquipeBronze: num(e.pontuacaoMinimaEquipeBronze),
+    ordemExibicao: num(e.ordemExibicao),
+    abertoOutrosClubes: e.abertoOutrosClubes,
+  };
+}
+
+// Small helper for the percentage-group subtotal hints (e.g. "100% ✓" / "92% (falta 8%)").
+function PercentSumHint({ label, values }: { label: string; values: string[] }) {
+  const total = values.reduce((sum, v) => sum + (v === '' ? 0 : Number(v)), 0);
+  const hasAny = values.some(v => v !== '');
+  if (!hasAny) return null;
+  const isComplete = Math.abs(total - 100) < 0.01;
+  return (
+    <p className={`text-[10px] font-bold sm:col-span-2 ${isComplete ? 'text-emerald-600' : 'text-amber-600'}`}>
+      {label}: {total}% {isComplete ? '✓' : `(deveria somar 100%)`}
+    </p>
+  );
+}
+
+function ChampField({ label, value, onChange, type = 'text', placeholder }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="text-[10px] font-bold text-slate-500 uppercase block">{label}</label>
+      <input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+      />
+    </div>
+  );
+}
+
+function ChampSelect({ label, value, onChange, options }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="text-[10px] font-bold text-slate-500 uppercase block">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+      >
+        <option value="">Selecione...</option>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function ChampExtraFields({ values, onChange }: { values: ChampExtraState; onChange: (patch: Partial<ChampExtraState>) => void }) {
+  return (
+    <>
+      <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+        <h4 className="font-bold text-xs text-slate-700 uppercase tracking-wider">Valores de Inscrição por Modalidade</h4>
+      </div>
+      <ChampField label="Valor Inscrição Clube (R$)" type="number" value={values.valorInscricaoClube} onChange={v => onChange({ valorInscricaoClube: v })} />
+      <ChampField label="Valor Inscrição Individual (R$)" type="number" value={values.valorInscricaoIndividual} onChange={v => onChange({ valorInscricaoIndividual: v })} />
+      <ChampField label="Percentual Clube (%)" type="number" value={values.percentualClube} onChange={v => onChange({ percentualClube: v })} />
+      <ChampField label="Valor Re-inscrição (R$)" type="number" value={values.valorReinscricao} onChange={v => onChange({ valorReinscricao: v })} placeholder="Cobrado quando o atleta se inscreve de novo na mesma etapa/modalidade" />
+
+      <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+        <h4 className="font-bold text-xs text-slate-700 uppercase tracking-wider">Dados para Pagamento</h4>
+      </div>
+      <ChampSelect label="Tipo de PIX" value={values.tipoPix} onChange={v => onChange({ tipoPix: v })} options={[
+        { value: 'celular', label: 'Celular' }, { value: 'cpf', label: 'CPF' }, { value: 'cnpj', label: 'CNPJ' }, { value: 'aleatoria', label: 'Chave Aleatória' }
+      ]} />
+      <ChampField label="Chave PIX" value={values.chavePix} onChange={v => onChange({ chavePix: v })} />
+      <ChampField label="Nome Exibido" value={values.nomeExibidoPix} onChange={v => onChange({ nomeExibidoPix: v })} />
+      <ChampField label="Whatsapp Comprovante (ddd+número)" value={values.whatsappComprovante} onChange={v => onChange({ whatsappComprovante: v })} placeholder="Ex: 61991234567" />
+
+      <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+        <h4 className="font-bold text-xs text-slate-700 uppercase tracking-wider">Tipo de Campeonato</h4>
+      </div>
+      <ChampSelect label="Tipo de campeonato" value={values.type} onChange={v => onChange({ type: (v || 'individual') as 'individual' | 'clube' })} options={[
+        { value: 'clube', label: 'Clubes' }, { value: 'individual', label: 'Individual' }
+      ]} />
+      <ChampSelect label="Formato de pagamento" value={values.formatoPagamento} onChange={v => onChange({ formatoPagamento: v })} options={[
+        { value: 'campeonato', label: 'Pagamento para o campeonato' }, { value: 'etapa', label: 'Pagamento por etapa' }
+      ]} />
+      {values.type === 'clube' && (
+        <>
+          <ChampField label="Limite de equipes por clube" type="number" value={values.limiteEquipesClube} onChange={v => onChange({ limiteEquipesClube: v })} />
+          <ChampField label="Quantidade de atletas por equipe" type="number" value={values.qtdAtletasPorEquipe} onChange={v => onChange({ qtdAtletasPorEquipe: v })} />
+        </>
+      )}
+      <ChampSelect label="Formato de Inscrição" value={values.formatoInsercao} onChange={v => onChange({ formatoInsercao: v })} options={[
+        { value: 'por_etapa', label: 'Inscrição por etapa' }, { value: 'todas_etapas', label: 'Inscrição para todas as etapas' }
+      ]} />
+      <ChampSelect label="Alcance do campeonato" value={values.alcanceCampeonato} onChange={v => onChange({ alcanceCampeonato: v })} options={[
+        { value: 'local_distrital', label: 'Local/Distrital' }, { value: 'regional', label: 'Regional' }, { value: 'estadual', label: 'Estadual' }, { value: 'nacional', label: 'Nacional' }
+      ]} />
+      <ChampSelect label="Nível do campeonato" value={values.nivelCampeonato} onChange={v => onChange({ nivelCampeonato: v })} options={[
+        { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }
+      ]} />
+
+      <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+        <h4 className="font-bold text-xs text-slate-700 uppercase tracking-wider">Definições de Valores</h4>
+      </div>
+      <ChampField label="% Tributos" type="number" value={values.percentualTributos} onChange={v => onChange({ percentualTributos: v })} />
+      <ChampField label="% Organização" type="number" value={values.percentualOrganizacao} onChange={v => onChange({ percentualOrganizacao: v })} />
+      <ChampField label="% Clubes" type="number" value={values.percentualClubes} onChange={v => onChange({ percentualClubes: v })} />
+      <ChampField label="% Premiação Atleta" type="number" value={values.percentualPremiacaoAtleta} onChange={v => onChange({ percentualPremiacaoAtleta: v })} />
+      <ChampField label="% Premiação Clube" type="number" value={values.percentualPremiacaoClube} onChange={v => onChange({ percentualPremiacaoClube: v })} />
+      <PercentSumHint label="Soma dos 5 percentuais" values={[values.percentualTributos, values.percentualOrganizacao, values.percentualClubes, values.percentualPremiacaoAtleta, values.percentualPremiacaoClube]} />
+
+      <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+        <h4 className="font-bold text-xs text-slate-700 uppercase tracking-wider">Premiações Todas as Etapas</h4>
+        <p className="text-[10px] text-slate-400">Fatia (dentro do % Premiação Atleta) reservada ao ranking somado de todas as etapas.</p>
+      </div>
+      <ChampField label="% Premiação Atleta Todas as Etapas" type="number" value={values.percentualPremiacaoTodasEtapas} onChange={v => onChange({ percentualPremiacaoTodasEtapas: v })} />
+      <ChampField label="Premiação Adicional Todas as Etapas (R$)" type="number" value={values.premiacaoAdicionalTodasEtapas} onChange={v => onChange({ premiacaoAdicionalTodasEtapas: v })} />
+      <ChampField label="Quantidade de Etapas" type="number" value={values.qtdEtapasConsideradas} onChange={v => onChange({ qtdEtapasConsideradas: v })} />
+      <ChampField label="Qtd. Piores Resultados a Não Computar" type="number" value={values.qtdPioresDescartar} onChange={v => onChange({ qtdPioresDescartar: v })} />
+      <ChampField label="Qtd. Melhores Resultados a Não Computar" type="number" value={values.qtdMelhoresDescartar} onChange={v => onChange({ qtdMelhoresDescartar: v })} />
+      <ChampField label="% 1º lugar" type="number" value={values.percentualPos1TodasEtapas} onChange={v => onChange({ percentualPos1TodasEtapas: v })} />
+      <ChampField label="% 2º lugar" type="number" value={values.percentualPos2TodasEtapas} onChange={v => onChange({ percentualPos2TodasEtapas: v })} />
+      <ChampField label="% 3º lugar" type="number" value={values.percentualPos3TodasEtapas} onChange={v => onChange({ percentualPos3TodasEtapas: v })} />
+      <ChampField label="% 4º lugar" type="number" value={values.percentualPos4TodasEtapas} onChange={v => onChange({ percentualPos4TodasEtapas: v })} />
+      <ChampField label="% 5º lugar" type="number" value={values.percentualPos5TodasEtapas} onChange={v => onChange({ percentualPos5TodasEtapas: v })} />
+      <PercentSumHint label="Soma 1º ao 5º (Todas as Etapas)" values={[values.percentualPos1TodasEtapas, values.percentualPos2TodasEtapas, values.percentualPos3TodasEtapas, values.percentualPos4TodasEtapas, values.percentualPos5TodasEtapas]} />
+
+      <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+        <h4 className="font-bold text-xs text-slate-700 uppercase tracking-wider">Premiações Atleta / Clube</h4>
+        <p className="text-[10px] text-slate-400">Restante do % Premiação Atleta, dividido em Ouro/Prata/Bronze. A curva 1º-5º abaixo é reaplicada dentro de cada uma das três.</p>
+      </div>
+      <ChampField label="% Ouro" type="number" value={values.percentualOuro} onChange={v => onChange({ percentualOuro: v })} />
+      <ChampField label="% Prata" type="number" value={values.percentualPrata} onChange={v => onChange({ percentualPrata: v })} />
+      <ChampField label="% Bronze" type="number" value={values.percentualBronze} onChange={v => onChange({ percentualBronze: v })} />
+      <PercentSumHint label="Soma Todas Etapas + Ouro + Prata + Bronze" values={[values.percentualPremiacaoTodasEtapas, values.percentualOuro, values.percentualPrata, values.percentualBronze]} />
+      <ChampField label="% 1º lugar" type="number" value={values.percentualPos1Medalha} onChange={v => onChange({ percentualPos1Medalha: v })} />
+      <ChampField label="% 2º lugar" type="number" value={values.percentualPos2Medalha} onChange={v => onChange({ percentualPos2Medalha: v })} />
+      <ChampField label="% 3º lugar" type="number" value={values.percentualPos3Medalha} onChange={v => onChange({ percentualPos3Medalha: v })} />
+      <ChampField label="% 4º lugar" type="number" value={values.percentualPos4Medalha} onChange={v => onChange({ percentualPos4Medalha: v })} />
+      <ChampField label="% 5º lugar" type="number" value={values.percentualPos5Medalha} onChange={v => onChange({ percentualPos5Medalha: v })} />
+      <PercentSumHint label="Soma 1º ao 5º (Ouro/Prata/Bronze)" values={[values.percentualPos1Medalha, values.percentualPos2Medalha, values.percentualPos3Medalha, values.percentualPos4Medalha, values.percentualPos5Medalha]} />
+
+      <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+        <h4 className="font-bold text-xs text-slate-700 uppercase tracking-wider">Pontuação Mínima Atleta — Ouro, Prata e Bronze</h4>
+      </div>
+      <ChampField label="Pontuação Mínima Ouro" type="number" value={values.pontuacaoMinimaAtletaOuro} onChange={v => onChange({ pontuacaoMinimaAtletaOuro: v })} />
+      <ChampField label="Pontuação Mínima Prata" type="number" value={values.pontuacaoMinimaAtletaPrata} onChange={v => onChange({ pontuacaoMinimaAtletaPrata: v })} />
+      <ChampField label="Pontuação Mínima Bronze" type="number" value={values.pontuacaoMinimaAtletaBronze} onChange={v => onChange({ pontuacaoMinimaAtletaBronze: v })} />
+
+      <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+        <h4 className="font-bold text-xs text-slate-700 uppercase tracking-wider">Pontuação Mínima Equipe — Ouro, Prata e Bronze</h4>
+      </div>
+      <ChampField label="Pontuação Mínima Ouro" type="number" value={values.pontuacaoMinimaEquipeOuro} onChange={v => onChange({ pontuacaoMinimaEquipeOuro: v })} />
+      <ChampField label="Pontuação Mínima Prata" type="number" value={values.pontuacaoMinimaEquipePrata} onChange={v => onChange({ pontuacaoMinimaEquipePrata: v })} />
+      <ChampField label="Pontuação Mínima Bronze" type="number" value={values.pontuacaoMinimaEquipeBronze} onChange={v => onChange({ pontuacaoMinimaEquipeBronze: v })} />
+
+      <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+        <h4 className="font-bold text-xs text-slate-700 uppercase tracking-wider">Ordem de Exibição e Visibilidade</h4>
+      </div>
+      <ChampField label="Ordem" type="number" value={values.ordemExibicao} onChange={v => onChange({ ordemExibicao: v })} />
+      <ChampSelect label="Aberto para outros clubes" value={values.abertoOutrosClubes} onChange={v => onChange({ abertoOutrosClubes: (v || 'sim') as 'sim' | 'nao' })} options={[
+        { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
+      ]} />
+    </>
+  );
+}
+
 export default function AdminPanel({
   currentUser,
   championships,
   registrations,
   stageScores,
+  stages,
   users,
   weapons,
+  weaponLookupOptions,
   modalities,
   onAddWeapon,
   onRemoveWeapon,
+  onAddWeaponLookup,
+  onUpdateWeaponLookup,
+  onRemoveWeaponLookup,
   onAddModality,
   onRemoveModality,
   onCreateChampionship,
   onUpdateChampionship,
+  onUploadChampionshipDocument,
+  onAddStage,
+  onUpdateStage,
+  onRemoveStage,
   onRecordScore,
   onToggleAdminDemo,
   settings = {},
@@ -190,31 +532,40 @@ export default function AdminPanel({
   onCreateClub
 }: AdminPanelProps) {
   const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
-  const [newClubWeapon, setNewClubWeapon] = useState({ manufacturer: '', model: '', caliber: '', serialNumber: '', weaponType: 'Pistola' });
+  const DEFAULT_CLUB_WEAPON = { weaponNumber: '', sigmaNumber: '', weaponClass: '', model: '', caliber: '', manufacturer: '', registrySystem: '', permissionStatus: '' };
+  const [newClubWeapon, setNewClubWeapon] = useState(DEFAULT_CLUB_WEAPON);
   const [savingClubWeapon, setSavingClubWeapon] = useState(false);
 
   const handleSaveClubWeapon = async () => {
-    if (!newClubWeapon.manufacturer || !newClubWeapon.model || !currentUser?.clubId) return;
+    if (!newClubWeapon.manufacturer || !newClubWeapon.model || !newClubWeapon.caliber || !currentUser?.clubId) return;
     setSavingClubWeapon(true);
     try {
-      await onAddWeapon({ ownerId: currentUser.clubId, ...newClubWeapon, serialNumber: newClubWeapon.serialNumber || `SIGMA-${Date.now()}` });
-      setNewClubWeapon({ manufacturer: '', model: '', caliber: '', serialNumber: '', weaponType: 'Pistola' });
+      await onAddWeapon({ ownerId: currentUser.clubId, ...newClubWeapon });
+      setNewClubWeapon(DEFAULT_CLUB_WEAPON);
     } finally {
       setSavingClubWeapon(false);
     }
   };
 
-  const [newModality, setNewModality] = useState({ name: '', discipline: '' });
+  const weaponLookup = (kind: string) => weaponLookupOptions.filter(o => o.kind === kind);
+
+  const [newModality, setNewModality] = useState({ name: '', seriesCount: '', shotsPerSeries: '', timePerSeriesMinutes: '', evaluationType: '' });
   const [savingModality, setSavingModality] = useState(false);
   const [modalityError, setModalityError] = useState('');
 
   const handleSaveModality = async () => {
-    if (!newModality.name || !newModality.discipline) return;
+    if (!newModality.name) return;
     setSavingModality(true);
     setModalityError('');
     try {
-      await onAddModality(newModality);
-      setNewModality({ name: '', discipline: '' });
+      await onAddModality({
+        name: newModality.name,
+        seriesCount: newModality.seriesCount ? Number(newModality.seriesCount) : undefined,
+        shotsPerSeries: newModality.shotsPerSeries ? Number(newModality.shotsPerSeries) : undefined,
+        timePerSeriesMinutes: newModality.timePerSeriesMinutes ? Number(newModality.timePerSeriesMinutes) : undefined,
+        evaluationType: newModality.evaluationType || undefined
+      });
+      setNewModality({ name: '', seriesCount: '', shotsPerSeries: '', timePerSeriesMinutes: '', evaluationType: '' });
     } catch (err: any) {
       setModalityError(err.message || 'Erro ao cadastrar modalidade.');
     } finally {
@@ -230,6 +581,82 @@ export default function AdminPanel({
       setModalityError(err.message || 'Erro ao remover modalidade.');
     }
   };
+
+  // Cadastro completo de etapas — one form reused for both create and edit
+  // (select a stage from the list below to load it back into the form).
+  const DEFAULT_STAGE_FORM = {
+    championshipId: '', title: '', description: '', date: '', endDate: '', sexo: '',
+    homologarResultado: '', abertoParaResultados: '', gerarCertificados: '',
+    fatorMultiplicacaoResultados: '1', exibirInscritosPaginaInicial: '', incluirNaSomaPaginaInicial: ''
+  };
+  const [stageForm, setStageForm] = useState(DEFAULT_STAGE_FORM);
+  const [editingStageId, setEditingStageId] = useState<string | null>(null);
+  const [savingStage, setSavingStage] = useState(false);
+  const [stageError, setStageError] = useState('');
+
+  const handleSubmitStage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStageError('');
+    if (!stageForm.championshipId || !stageForm.title || !stageForm.date) return;
+    setSavingStage(true);
+    try {
+      const payload = {
+        championshipId: stageForm.championshipId,
+        title: stageForm.title,
+        date: stageForm.date,
+        description: stageForm.description || undefined,
+        endDate: stageForm.endDate || undefined,
+        sexo: (stageForm.sexo || undefined) as any,
+        homologarResultado: (stageForm.homologarResultado || undefined) as any,
+        abertoParaResultados: (stageForm.abertoParaResultados || undefined) as any,
+        gerarCertificados: (stageForm.gerarCertificados || undefined) as any,
+        fatorMultiplicacaoResultados: stageForm.fatorMultiplicacaoResultados ? Number(stageForm.fatorMultiplicacaoResultados) : undefined,
+        exibirInscritosPaginaInicial: (stageForm.exibirInscritosPaginaInicial || undefined) as any,
+        incluirNaSomaPaginaInicial: (stageForm.incluirNaSomaPaginaInicial || undefined) as any,
+      };
+      const result = editingStageId ? await onUpdateStage(editingStageId, payload) : await onAddStage(payload);
+      if (!result.stage) {
+        setStageError(result.error || 'Erro ao salvar etapa.');
+        return;
+      }
+      setStageForm(DEFAULT_STAGE_FORM);
+      setEditingStageId(null);
+    } finally {
+      setSavingStage(false);
+    }
+  };
+
+  const startEditingStage = (s: Stage) => {
+    setEditingStageId(s.id);
+    setStageForm({
+      championshipId: s.championshipId,
+      title: s.title,
+      description: s.description || '',
+      date: s.date.split('T')[0],
+      endDate: (s.endDate || '').split('T')[0],
+      sexo: s.sexo || '',
+      homologarResultado: s.homologarResultado || '',
+      abertoParaResultados: s.abertoParaResultados || '',
+      gerarCertificados: s.gerarCertificados || '',
+      fatorMultiplicacaoResultados: s.fatorMultiplicacaoResultados !== undefined ? String(s.fatorMultiplicacaoResultados) : '1',
+      exibirInscritosPaginaInicial: s.exibirInscritosPaginaInicial || '',
+      incluirNaSomaPaginaInicial: s.incluirNaSomaPaginaInicial || '',
+    });
+    setStageError('');
+  };
+
+  const cancelEditingStage = () => {
+    setEditingStageId(null);
+    setStageForm(DEFAULT_STAGE_FORM);
+    setStageError('');
+  };
+
+  const handleDeleteStage = async (stageId: string) => {
+    setStageError('');
+    const result = await onRemoveStage(stageId);
+    if (result.error) setStageError(result.error);
+  };
+
   // Main tabs: 'clube' | 'plataforma' | 'master'
   const [mainTab, setMainTab] = useState<'clube' | 'plataforma' | 'master'>('clube');
 
@@ -241,6 +668,58 @@ export default function AdminPanel({
 
   // Sidebar Menu selection for Master
   const [masterMenu, setMasterMenu] = useState<string>('gerenciar_clubes');
+
+  // Gerenciar Listas de Armas (Administrador master only)
+  const WEAPON_LOOKUP_KINDS: { value: WeaponLookupOption['kind']; label: string }[] = [
+    { value: 'classe', label: 'Classe' },
+    { value: 'modelo', label: 'Modelo' },
+    { value: 'calibre', label: 'Calibre' },
+    { value: 'fabricante', label: 'Fabricante' },
+    { value: 'tipo_arma', label: 'Arma é' },
+    { value: 'permissao_arma', label: 'Status de permissão' },
+  ];
+  const [lookupKind, setLookupKind] = useState<WeaponLookupOption['kind']>('classe');
+  const [newLookupLabel, setNewLookupLabel] = useState('');
+  const [savingLookup, setSavingLookup] = useState(false);
+  const [lookupError, setLookupError] = useState('');
+  const [editingLookupId, setEditingLookupId] = useState<string | null>(null);
+  const [editingLookupLabel, setEditingLookupLabel] = useState('');
+
+  const handleAddLookupItem = async () => {
+    if (!newLookupLabel.trim()) return;
+    setSavingLookup(true);
+    setLookupError('');
+    const result = await onAddWeaponLookup(lookupKind, newLookupLabel.trim());
+    setSavingLookup(false);
+    if (result.error) {
+      setLookupError(result.error);
+    } else {
+      setNewLookupLabel('');
+    }
+  };
+
+  const startEditingLookup = (o: WeaponLookupOption) => {
+    setEditingLookupId(o.id);
+    setEditingLookupLabel(o.label);
+    setLookupError('');
+  };
+
+  const handleSaveLookupEdit = async () => {
+    if (!editingLookupId || !editingLookupLabel.trim()) return;
+    const result = await onUpdateWeaponLookup(editingLookupId, editingLookupLabel.trim());
+    if (result.error) {
+      setLookupError(result.error);
+    } else {
+      setEditingLookupId(null);
+      setEditingLookupLabel('');
+    }
+  };
+
+  const handleDeleteLookupItem = async (id: string) => {
+    setLookupError('');
+    const result = await onRemoveWeaponLookup(id);
+    if (result.error) setLookupError(result.error);
+  };
 
   // Master mock states
   const [masterClubs, setMasterClubs] = useState([
@@ -303,11 +782,15 @@ export default function AdminPanel({
   const [champStart, setChampStart] = useState('2026-07-01');
   const [champEnd, setChampEnd] = useState('2026-09-15');
   const [champFee, setChampFee] = useState(120);
-  const [selectedMods, setSelectedMods] = useState<string[]>(['IPSC Handgun Standard']);
+  const [selectedMods, setSelectedMods] = useState<string[]>([]);
   const [champStages, setChampStages] = useState(4);
   const [champBanner, setChampBanner] = useState('');
   const [champImageSourceMode, setChampImageSourceMode] = useState<'url' | 'upload' | 'gallery'>('gallery');
   const [createSuccess, setCreateSuccess] = useState(false);
+  const [champExtra, setChampExtra] = useState<ChampExtraState>(DEFAULT_CHAMP_EXTRA);
+  const [champRegulamentoFile, setChampRegulamentoFile] = useState<File | null>(null);
+  const [champSumulaFile, setChampSumulaFile] = useState<File | null>(null);
+  const [champError, setChampError] = useState('');
 
   // Edit championship state (functional)
   const [editingChampId, setEditingChampId] = useState<string | null>(null);
@@ -321,6 +804,10 @@ export default function AdminPanel({
   const [editChampBanner, setEditChampBanner] = useState('');
   const [editChampImageSourceMode, setEditChampImageSourceMode] = useState<'url' | 'upload' | 'gallery'>('gallery');
   const [editSuccess, setEditSuccess] = useState(false);
+  const [editChampExtra, setEditChampExtra] = useState<ChampExtraState>(DEFAULT_CHAMP_EXTRA);
+  const [editChampRegulamentoFile, setEditChampRegulamentoFile] = useState<File | null>(null);
+  const [editChampSumulaFile, setEditChampSumulaFile] = useState<File | null>(null);
+  const [editChampError, setEditChampError] = useState('');
 
   // Default image settings state (functional)
   const [defaultImageSourceMode, setDefaultImageSourceMode] = useState<'url' | 'upload' | 'gallery'>('gallery');
@@ -467,9 +954,10 @@ export default function AdminPanel({
 
   const handleCreateChamp = async (e: React.FormEvent) => {
     e.preventDefault();
+    setChampError('');
     if (!champTitle || !champDesc || selectedMods.length === 0) return;
 
-    await onCreateChampionship({
+    const result = await onCreateChampionship({
       title: champTitle,
       description: champDesc,
       startDate: champStart,
@@ -477,21 +965,35 @@ export default function AdminPanel({
       registrationFee: Number(champFee),
       modalities: selectedMods,
       stagesCount: Number(champStages),
-      bannerUrl: champBanner || undefined
+      bannerUrl: champBanner || undefined,
+      ...extraStateToPayload(champExtra)
     });
+
+    if (!result.championship) {
+      setChampError(result.error || 'Erro ao criar campeonato.');
+      return;
+    }
+
+    if (champRegulamentoFile) await onUploadChampionshipDocument(result.championship.id, 'regulamento', champRegulamentoFile);
+    if (champSumulaFile) await onUploadChampionshipDocument(result.championship.id, 'sumula', champSumulaFile);
 
     setCreateSuccess(true);
     setChampTitle('');
     setChampDesc('');
     setChampBanner('');
+    setSelectedMods([]);
+    setChampExtra(DEFAULT_CHAMP_EXTRA);
+    setChampRegulamentoFile(null);
+    setChampSumulaFile(null);
     setTimeout(() => setCreateSuccess(false), 3000);
   };
 
   const handleUpdateChamp = async (e: React.FormEvent) => {
     e.preventDefault();
+    setEditChampError('');
     if (!editingChampId || !editChampTitle || !editChampDesc || editSelectedMods.length === 0 || !onUpdateChampionship) return;
 
-    await onUpdateChampionship(editingChampId, {
+    const result = await onUpdateChampionship(editingChampId, {
       title: editChampTitle,
       description: editChampDesc,
       startDate: editChampStart,
@@ -499,12 +1001,23 @@ export default function AdminPanel({
       registrationFee: Number(editChampFee),
       modalities: editSelectedMods,
       stagesCount: Number(editChampStages),
-      bannerUrl: editChampBanner || undefined
+      bannerUrl: editChampBanner || undefined,
+      ...extraStateToPayload(editChampExtra)
     });
+
+    if (!result.championship) {
+      setEditChampError(result.error || 'Erro ao atualizar campeonato.');
+      return;
+    }
+
+    if (editChampRegulamentoFile) await onUploadChampionshipDocument(editingChampId, 'regulamento', editChampRegulamentoFile);
+    if (editChampSumulaFile) await onUploadChampionshipDocument(editingChampId, 'sumula', editChampSumulaFile);
 
     setEditSuccess(true);
     setEditingChampId(null);
     setEditChampBanner('');
+    setEditChampRegulamentoFile(null);
+    setEditChampSumulaFile(null);
     setTimeout(() => setEditSuccess(false), 3000);
   };
 
@@ -518,6 +1031,8 @@ export default function AdminPanel({
   };
 
 
+  const editingChamp = championships.find(c => c.id === editingChampId) || null;
+
   const startEditingChamp = (champ: Championship) => {
     setEditingChampId(champ.id);
     setEditChampTitle(champ.title);
@@ -528,6 +1043,10 @@ export default function AdminPanel({
     setEditSelectedMods(champ.modalities);
     setEditChampStages(champ.stagesCount);
     setEditChampBanner(champ.bannerUrl || '');
+    setEditChampExtra(championshipToExtraState(champ));
+    setEditChampRegulamentoFile(null);
+    setEditChampSumulaFile(null);
+    setEditChampError('');
   };
 
   const handleRecordScoreSubmit = async (e: React.FormEvent) => {
@@ -1544,24 +2063,27 @@ export default function AdminPanel({
                       </div>
 
                       <div className="space-y-1 sm:col-span-2">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Injetar Estágio / Modalidade Ativa</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Conjunto de Modalidades e Regras</label>
+                        <p className="text-[10px] text-slate-400 mb-1">Selecione as modalidades já cadastradas. Séries/tiros/tempo/avaliação vêm da própria modalidade e só podem ser alterados na tela "Modalidades".</p>
                         <div className="flex flex-wrap gap-2">
-                          {['IPSC Handgun Standard', 'IPSC Handgun Production', 'Carabina Mira Aberta 10m', 'Trap Americano Sênior'].map((dis, i) => {
-                            const isSel = editSelectedMods.includes(dis);
+                          {modalities.length === 0 ? (
+                            <p className="text-xs text-slate-400">Nenhuma modalidade cadastrada. Cadastre em "Modalidades" primeiro.</p>
+                          ) : modalities.map((m) => {
+                            const isSel = editSelectedMods.includes(m.id);
                             return (
                               <button
-                                key={i}
+                                key={m.id}
                                 type="button"
                                 onClick={() => {
                                   if (isSel) {
-                                    setEditSelectedMods(editSelectedMods.filter(m => m !== dis));
+                                    setEditSelectedMods(editSelectedMods.filter(id => id !== m.id));
                                   } else {
-                                    setEditSelectedMods([...editSelectedMods, dis]);
+                                    setEditSelectedMods([...editSelectedMods, m.id]);
                                   }
                                 }}
                                 className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${isSel ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650'}`}
                               >
-                                {dis}
+                                {m.name}
                               </button>
                             );
                           })}
@@ -1659,7 +2181,42 @@ export default function AdminPanel({
                         )}
                       </div>
 
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Regulamento (PDF)</label>
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={(e) => setEditChampRegulamentoFile(e.target.files?.[0] || null)}
+                          className="w-full text-[11px] text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                        />
+                        {editChampRegulamentoFile ? (
+                          <p className="text-[10px] text-emerald-600">Novo arquivo selecionado: {editChampRegulamentoFile.name}</p>
+                        ) : editingChamp?.regulamentoUploaded ? (
+                          <p className="text-[10px] text-emerald-600">Já enviado.</p>
+                        ) : null}
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Súmula (PDF)</label>
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={(e) => setEditChampSumulaFile(e.target.files?.[0] || null)}
+                          className="w-full text-[11px] text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                        />
+                        {editChampSumulaFile ? (
+                          <p className="text-[10px] text-emerald-600">Novo arquivo selecionado: {editChampSumulaFile.name}</p>
+                        ) : editingChamp?.sumulaUploaded ? (
+                          <p className="text-[10px] text-emerald-600">Já enviado.</p>
+                        ) : null}
+                      </div>
+                      <ChampField label="Valor de X" type="number" value={editChampExtra.valorX} onChange={v => setEditChampExtra({ ...editChampExtra, valorX: v })} />
+
+                      <ChampExtraFields values={editChampExtra} onChange={patch => setEditChampExtra({ ...editChampExtra, ...patch })} />
                     </div>
+
+                    {editChampError && (
+                      <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{editChampError}</div>
+                    )}
 
                     <div className="pt-4 border-t border-slate-100 flex justify-end gap-2">
                       <button
@@ -1772,24 +2329,27 @@ export default function AdminPanel({
                       </div>
 
                       <div className="space-y-1 sm:col-span-2">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Injetar Estágio / Modalidade Ativa</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Conjunto de Modalidades e Regras</label>
+                        <p className="text-[10px] text-slate-400 mb-1">Selecione as modalidades já cadastradas. Séries/tiros/tempo/avaliação vêm da própria modalidade e só podem ser alterados na tela "Modalidades".</p>
                         <div className="flex flex-wrap gap-2">
-                          {['IPSC Handgun Standard', 'IPSC Handgun Production', 'Carabina Mira Aberta 10m', 'Trap Americano Sênior'].map((dis, i) => {
-                            const isSel = selectedMods.includes(dis);
+                          {modalities.length === 0 ? (
+                            <p className="text-xs text-slate-400">Nenhuma modalidade cadastrada. Cadastre em "Modalidades" primeiro.</p>
+                          ) : modalities.map((m) => {
+                            const isSel = selectedMods.includes(m.id);
                             return (
                               <button
-                                key={i}
+                                key={m.id}
                                 type="button"
                                 onClick={() => {
                                   if (isSel) {
-                                    setSelectedMods(selectedMods.filter(m => m !== dis));
+                                    setSelectedMods(selectedMods.filter(id => id !== m.id));
                                   } else {
-                                    setSelectedMods([...selectedMods, dis]);
+                                    setSelectedMods([...selectedMods, m.id]);
                                   }
                                 }}
                                 className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${isSel ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650'}`}
                               >
-                                {dis}
+                                {m.name}
                               </button>
                             );
                           })}
@@ -1887,7 +2447,34 @@ export default function AdminPanel({
                         )}
                       </div>
 
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Regulamento (PDF)</label>
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={(e) => setChampRegulamentoFile(e.target.files?.[0] || null)}
+                          className="w-full text-[11px] text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                        />
+                        {champRegulamentoFile && <p className="text-[10px] text-emerald-600">Selecionado: {champRegulamentoFile.name}</p>}
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Súmula (PDF)</label>
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={(e) => setChampSumulaFile(e.target.files?.[0] || null)}
+                          className="w-full text-[11px] text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                        />
+                        {champSumulaFile && <p className="text-[10px] text-emerald-600">Selecionado: {champSumulaFile.name}</p>}
+                      </div>
+                      <ChampField label="Valor de X" type="number" value={champExtra.valorX} onChange={v => setChampExtra({ ...champExtra, valorX: v })} />
+
+                      <ChampExtraFields values={champExtra} onChange={patch => setChampExtra({ ...champExtra, ...patch })} />
                     </div>
+
+                    {champError && (
+                      <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{champError}</div>
+                    )}
 
                     <div className="pt-4 border-t border-slate-100 flex justify-end">
                       <button
@@ -1965,22 +2552,135 @@ export default function AdminPanel({
 
       case 'etapas':
         return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
-            <h3 className="font-display font-bold text-slate-900 text-base">Controle de Etapas do Circuito</h3>
-            <p className="text-xs text-slate-500">Permite abrir e finalizar etapas ativas nos torneios oficiais do clube.</p>
-            <div className="space-y-3 pt-2">
-              {championships.map(c => (
-                <div key={c.id} className="border border-slate-100 rounded-xl p-4 flex justify-between items-center bg-slate-50/50">
-                  <div>
-                    <h4 className="font-bold text-slate-805 text-xs">{c.title}</h4>
-                    <span className="text-[10px] text-slate-400 font-mono">Etapas: {c.stagesCount}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold text-[10px] px-3 py-1.5 rounded transition">Avançar Etapa</button>
-                    <button className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] px-3 py-1.5 rounded transition">Encerrar</button>
-                  </div>
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+              <h3 className="font-display font-bold text-slate-900 text-base">
+                {editingStageId ? 'Editar Etapa' : 'Cadastro de Etapas'}
+              </h3>
+
+              {stageError && (
+                <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{stageError}</div>
+              )}
+
+              <form onSubmit={handleSubmitStage} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Campeonato</label>
+                  <select
+                    value={stageForm.championshipId}
+                    onChange={(e) => setStageForm({ ...stageForm, championshipId: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                  >
+                    <option value="">Selecione...</option>
+                    {championships.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                  </select>
                 </div>
-              ))}
+
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Título</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Etapa 1"
+                    value={stageForm.title}
+                    onChange={(e) => setStageForm({ ...stageForm, title: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                  />
+                </div>
+
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Descrição</label>
+                  <textarea
+                    rows={3}
+                    value={stageForm.description}
+                    onChange={(e) => setStageForm({ ...stageForm, description: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                  />
+                </div>
+
+                <ChampField label="Data Início" type="date" value={stageForm.date} onChange={v => setStageForm({ ...stageForm, date: v })} />
+                <ChampField label="Data Encerramento" type="date" value={stageForm.endDate} onChange={v => setStageForm({ ...stageForm, endDate: v })} />
+
+                <ChampSelect label="Sexo" value={stageForm.sexo} onChange={v => setStageForm({ ...stageForm, sexo: v })} options={[
+                  { value: 'masculino', label: 'Masculino' }, { value: 'feminino', label: 'Feminino' }, { value: 'misto', label: 'Misto' }
+                ]} />
+                <ChampSelect label="Homologar Resultado" value={stageForm.homologarResultado} onChange={v => setStageForm({ ...stageForm, homologarResultado: v })} options={[
+                  { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
+                ]} />
+                <ChampSelect label="Aberto para Resultados" value={stageForm.abertoParaResultados} onChange={v => setStageForm({ ...stageForm, abertoParaResultados: v })} options={[
+                  { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
+                ]} />
+                <ChampSelect label="Gerar Certificados" value={stageForm.gerarCertificados} onChange={v => setStageForm({ ...stageForm, gerarCertificados: v })} options={[
+                  { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
+                ]} />
+                <ChampField label="Fator de Multiplicação de Resultado" type="number" value={stageForm.fatorMultiplicacaoResultados} onChange={v => setStageForm({ ...stageForm, fatorMultiplicacaoResultados: v })} />
+                <ChampSelect label="Exibir Inscritos e Premiação Página Inicial" value={stageForm.exibirInscritosPaginaInicial} onChange={v => setStageForm({ ...stageForm, exibirInscritosPaginaInicial: v })} options={[
+                  { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
+                ]} />
+                <ChampSelect label="Incluir na Soma da Página Inicial" value={stageForm.incluirNaSomaPaginaInicial} onChange={v => setStageForm({ ...stageForm, incluirNaSomaPaginaInicial: v })} options={[
+                  { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
+                ]} />
+
+                <div className="sm:col-span-2 pt-3 border-t border-slate-100 flex justify-end gap-2">
+                  {editingStageId && (
+                    <button
+                      type="button"
+                      onClick={cancelEditingStage}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-5 py-3 rounded-xl font-bold transition cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={savingStage || !stageForm.championshipId || !stageForm.title || !stageForm.date}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg cursor-pointer"
+                  >
+                    {savingStage ? 'Salvando...' : editingStageId ? 'Salvar Alterações' : 'Salvar'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+              <h4 className="font-display font-bold text-slate-900 text-sm">Etapas Cadastradas ({stages.length})</h4>
+              {stages.length === 0 ? (
+                <p className="text-xs text-slate-400">Nenhuma etapa cadastrada ainda.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
+                        <th className="py-2 px-2">Campeonato</th>
+                        <th className="py-2 px-2">Título</th>
+                        <th className="py-2 px-2">Início</th>
+                        <th className="py-2 px-2">Encerramento</th>
+                        <th className="py-2 px-2 text-center">Homologar</th>
+                        <th className="py-2 px-2 text-center">Aberto</th>
+                        <th className="py-2 px-2 text-center">Certificados</th>
+                        <th className="py-2 px-2 text-center">Fator</th>
+                        <th className="py-2 px-2 text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {stages.map(s => (
+                        <tr key={s.id} className="hover:bg-slate-50/50">
+                          <td className="py-2 px-2 font-semibold">{championships.find(c => c.id === s.championshipId)?.title || s.championshipId}</td>
+                          <td className="py-2 px-2">{s.title}</td>
+                          <td className="py-2 px-2 font-mono">{new Date(s.date).toLocaleDateString('pt-BR')}</td>
+                          <td className="py-2 px-2 font-mono">{s.endDate ? new Date(s.endDate).toLocaleDateString('pt-BR') : '-'}</td>
+                          <td className="py-2 px-2 text-center">{s.homologarResultado === 'sim' ? 'Sim' : 'Não'}</td>
+                          <td className="py-2 px-2 text-center">{s.abertoParaResultados === 'sim' ? 'Sim' : 'Não'}</td>
+                          <td className="py-2 px-2 text-center">{s.gerarCertificados === 'sim' ? 'Sim' : 'Não'}</td>
+                          <td className="py-2 px-2 text-center font-mono">{s.fatorMultiplicacaoResultados ?? 1}</td>
+                          <td className="py-2 px-2 text-right whitespace-nowrap">
+                            <button onClick={() => startEditingStage(s)} className="text-blue-600 hover:text-blue-800 font-bold text-[10px] mr-3">Editar</button>
+                            <button onClick={() => handleDeleteStage(s.id)} className="text-red-500 hover:text-red-700 font-bold text-[10px]">Excluir</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         );
@@ -1995,43 +2695,88 @@ export default function AdminPanel({
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Add category */}
+              {/* Cadastrar Modalidades */}
               <div className="border border-slate-100 p-4 rounded-xl bg-slate-50/50 space-y-3">
-                <h4 className="font-bold text-xs">Nova Disciplina</h4>
+                <h4 className="font-bold text-xs">Cadastrar Modalidade</h4>
                 <div className="space-y-2">
-                  <input
-                    type="text"
-                    placeholder="Nome: Ex: IPSC Rifle Open"
-                    value={newModality.name}
-                    onChange={(e) => setNewModality({ ...newModality, name: e.target.value })}
-                    className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Categoria: Ex: Fuzil"
-                    value={newModality.discipline}
-                    onChange={(e) => setNewModality({ ...newModality, discipline: e.target.value })}
-                    className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs"
-                  />
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade</label>
+                    <input
+                      type="text"
+                      value={newModality.name}
+                      onChange={(e) => setNewModality({ ...newModality, name: e.target.value })}
+                      className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Quantidade de séries</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={newModality.seriesCount}
+                      onChange={(e) => setNewModality({ ...newModality, seriesCount: e.target.value })}
+                      className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Tiros por série</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={newModality.shotsPerSeries}
+                      onChange={(e) => setNewModality({ ...newModality, shotsPerSeries: e.target.value })}
+                      className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Tempo por série em minutos</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={newModality.timePerSeriesMinutes}
+                      onChange={(e) => setNewModality({ ...newModality, timePerSeriesMinutes: e.target.value })}
+                      className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Tipo de avaliação</label>
+                    <select
+                      value={newModality.evaluationType}
+                      onChange={(e) => setNewModality({ ...newModality, evaluationType: e.target.value })}
+                      className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs"
+                    >
+                      <option value="">Selecione...</option>
+                      <option value="pontuacao">Pontuação</option>
+                      <option value="pontuacao_tempo">Pontuação + Tempo</option>
+                      <option value="tempo">Tempo</option>
+                    </select>
+                  </div>
                 </div>
                 <button
                   onClick={handleSaveModality}
-                  disabled={savingModality || !newModality.name || !newModality.discipline}
+                  disabled={savingModality || !newModality.name}
                   className="w-full bg-blue-600 disabled:opacity-60 text-white text-xs py-2 rounded-lg font-bold"
                 >
-                  {savingModality ? 'Salvando...' : 'Adicionar'}
+                  {savingModality ? 'Salvando...' : 'Salvar'}
                 </button>
               </div>
 
               {/* List */}
-              <div className="space-y-2 max-h-[200px] overflow-y-auto">
+              <div className="space-y-2 max-h-[420px] overflow-y-auto">
                 {modalities.length === 0 ? (
                   <p className="text-xs text-slate-400 p-2.5">Nenhuma modalidade cadastrada ainda.</p>
                 ) : modalities.map((m) => (
                   <div key={m.id} className="flex justify-between items-center bg-slate-100/50 p-2.5 rounded-lg text-xs font-semibold">
                     <div>
                       <span className="block">{m.name}</span>
-                      <span className="block text-[10px] text-slate-450 font-normal">{m.discipline}</span>
+                      <span className="block text-[10px] text-slate-450 font-normal">
+                        {[
+                          m.seriesCount ? `${m.seriesCount} séries` : null,
+                          m.shotsPerSeries ? `${m.shotsPerSeries} tiros/série` : null,
+                          m.timePerSeriesMinutes ? `${m.timePerSeriesMinutes} min/série` : null,
+                          m.evaluationType === 'pontuacao' ? 'Pontuação' : m.evaluationType === 'pontuacao_tempo' ? 'Pontuação + Tempo' : m.evaluationType === 'tempo' ? 'Tempo' : null
+                        ].filter(Boolean).join(' • ') || 'Sem detalhes cadastrados'}
+                      </span>
                     </div>
                     <button onClick={() => handleDeleteModality(m.id)} className="text-red-500 hover:text-red-700">Excluir</button>
                   </div>
@@ -2083,22 +2828,44 @@ export default function AdminPanel({
         const clubWeapons = weapons.filter(w => w.ownerId === currentUser?.clubId);
         return (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-805">
-            <h3 className="font-display font-bold text-slate-900 text-base">Controle de Acervo de Material Bélico</h3>
+            <h3 className="font-display font-bold text-slate-900 text-base">Cadastro de Armas do Clube</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-xl space-y-3">
                 <h4 className="font-bold text-xs">Registrar Arma no Estande</h4>
                 <div className="space-y-2">
-                  <input type="text" placeholder="Fabricante: Ex: Glock" value={newClubWeapon.manufacturer} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, manufacturer: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
-                  <input type="text" placeholder="Modelo: Ex: G17 Gen 5" value={newClubWeapon.model} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, model: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
-                  <input type="text" placeholder="Calibre: Ex: 9mm" value={newClubWeapon.caliber} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, caliber: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
-                  <input type="text" placeholder="Registro SIGMA/SINARM" value={newClubWeapon.serialNumber} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, serialNumber: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
+                  <input type="text" placeholder="Número da arma" value={newClubWeapon.weaponNumber} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, weaponNumber: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
+                  <input type="text" placeholder="Número Sigma" value={newClubWeapon.sigmaNumber} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, sigmaNumber: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
+                  <select value={newClubWeapon.weaponClass} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, weaponClass: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs">
+                    <option value="">Classe...</option>
+                    {weaponLookup('classe').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                  </select>
+                  <select value={newClubWeapon.model} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, model: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs">
+                    <option value="">Modelo...</option>
+                    {weaponLookup('modelo').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                  </select>
+                  <select value={newClubWeapon.caliber} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, caliber: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs">
+                    <option value="">Calibre...</option>
+                    {weaponLookup('calibre').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                  </select>
+                  <select value={newClubWeapon.manufacturer} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, manufacturer: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs">
+                    <option value="">Fabricante...</option>
+                    {weaponLookup('fabricante').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                  </select>
+                  <select value={newClubWeapon.registrySystem} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, registrySystem: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs">
+                    <option value="">Arma é...</option>
+                    {weaponLookup('tipo_arma').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                  </select>
+                  <select value={newClubWeapon.permissionStatus} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, permissionStatus: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs">
+                    <option value="">Status de permissão...</option>
+                    {weaponLookup('permissao_arma').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                  </select>
                 </div>
                 <button
                   onClick={handleSaveClubWeapon}
-                  disabled={savingClubWeapon || !newClubWeapon.manufacturer || !newClubWeapon.model || !currentUser?.clubId}
+                  disabled={savingClubWeapon || !newClubWeapon.manufacturer || !newClubWeapon.model || !newClubWeapon.caliber || !currentUser?.clubId}
                   className="w-full bg-blue-600 disabled:opacity-60 text-white text-xs py-2 rounded-lg font-bold"
                 >
-                  {savingClubWeapon ? 'Salvando...' : 'Salvar Arma'}
+                  {savingClubWeapon ? 'Salvando...' : 'Salvar'}
                 </button>
               </div>
 
@@ -2110,7 +2877,9 @@ export default function AdminPanel({
                   <div key={w.id} className="bg-slate-100/50 p-2.5 rounded-lg text-xs flex justify-between items-center leading-tight">
                     <div>
                       <span className="font-bold text-slate-800 block">{w.manufacturer} {w.model} {w.caliber}</span>
-                      <span className="text-[10px] text-slate-450 font-mono">Registro: {w.serialNumber}</span>
+                      <span className="text-[10px] text-slate-450 font-mono block">
+                        {[w.weaponNumber && `Nº ${w.weaponNumber}`, w.sigmaNumber && `Sigma ${w.sigmaNumber}`, w.weaponClass, w.registrySystem, w.permissionStatus].filter(Boolean).join(' • ')}
+                      </span>
                     </div>
                     <button onClick={() => onRemoveWeapon(w.id)} className="text-red-500 hover:text-red-700">Remover</button>
                   </div>
@@ -2501,6 +3270,84 @@ export default function AdminPanel({
           </div>
         );
 
+      case 'gerenciar_armas':
+        return (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800 text-left">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="font-display font-bold text-slate-900 text-base">Gerenciar Listas de Armas</h3>
+                <p className="text-xs text-slate-400">Classe, Modelo, Calibre, Fabricante, Arma é e Status de permissão — usados no cadastro de armas dos clubes.</p>
+              </div>
+              <Database className="w-5 h-5 text-blue-600" />
+            </div>
+
+            {lookupError && (
+              <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{lookupError}</div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              {WEAPON_LOOKUP_KINDS.map(k => (
+                <button
+                  key={k.value}
+                  type="button"
+                  onClick={() => { setLookupKind(k.value); setEditingLookupId(null); setLookupError(''); }}
+                  className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${lookupKind === k.value ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650'}`}
+                >
+                  {k.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder={`Novo item em "${WEAPON_LOOKUP_KINDS.find(k => k.value === lookupKind)?.label}"`}
+                value={newLookupLabel}
+                onChange={(e) => setNewLookupLabel(e.target.value)}
+                className="flex-1 bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+              />
+              <button
+                onClick={handleAddLookupItem}
+                disabled={savingLookup || !newLookupLabel.trim()}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-4 py-2.5 rounded-xl font-bold transition cursor-pointer"
+              >
+                {savingLookup ? 'Salvando...' : 'Adicionar'}
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-[360px] overflow-y-auto">
+              {weaponLookupOptions.filter(o => o.kind === lookupKind).length === 0 ? (
+                <p className="text-xs text-slate-400">Nenhum item cadastrado nesta lista ainda.</p>
+              ) : weaponLookupOptions.filter(o => o.kind === lookupKind).map(o => (
+                <div key={o.id} className="flex justify-between items-center bg-slate-50 border border-slate-100 p-2.5 rounded-lg text-xs">
+                  {editingLookupId === o.id ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editingLookupLabel}
+                        onChange={(e) => setEditingLookupLabel(e.target.value)}
+                        className="flex-1 bg-white border border-slate-200 outline-none p-1.5 rounded-lg text-xs mr-2"
+                      />
+                      <div className="flex gap-2 shrink-0">
+                        <button onClick={handleSaveLookupEdit} className="text-emerald-600 hover:text-emerald-800 font-bold text-[10px]">Salvar</button>
+                        <button onClick={() => setEditingLookupId(null)} className="text-slate-500 hover:text-slate-700 font-bold text-[10px]">Cancelar</button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-semibold text-slate-800">{o.label}</span>
+                      <div className="flex gap-3 shrink-0">
+                        <button onClick={() => startEditingLookup(o)} className="text-blue-600 hover:text-blue-800 font-bold text-[10px]">Editar</button>
+                        <button onClick={() => handleDeleteLookupItem(o.id)} className="text-red-500 hover:text-red-700 font-bold text-[10px]">Excluir</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
       default:
         return null;
     }
@@ -2711,7 +3558,8 @@ export default function AdminPanel({
               <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider px-3 mb-2">Menus Master</h4>
               {[
                 { id: 'gerenciar_clubes', label: 'Gerenciar Clubes', icon: Landmark },
-                { id: 'gestao_cobrancas', label: 'Gestão de Cobranças', icon: CreditCard }
+                { id: 'gestao_cobrancas', label: 'Gestão de Cobranças', icon: CreditCard },
+                ...(currentUser?.role === 'master_admin' ? [{ id: 'gerenciar_armas', label: 'Listas de Armas', icon: Database }] : [])
               ].map((item) => {
                 const Icon = item.icon;
                 const active = masterMenu === item.id;
