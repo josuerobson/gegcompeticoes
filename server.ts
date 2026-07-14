@@ -1,4 +1,4 @@
-﻿import 'dotenv/config';
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -1339,6 +1339,27 @@ app.put('/api/championships/:id', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('Update championship database error:', err);
     res.status(500).json({ error: 'Erro ao atualizar campeonato.' });
+  }
+});
+
+app.delete('/api/championships/:id', requireAdmin, async (req, res) => {
+  const championshipId = req.params.id;
+  try {
+    const regsCheck = await pool.query('SELECT COUNT(*) FROM registrations WHERE championship_id = $1', [championshipId]);
+    const regsCount = parseInt(regsCheck.rows[0].count, 10);
+    if (regsCount > 0) {
+      return res.status(400).json({ error: 'Não é possível excluir um campeonato que possui inscrições de atletas.' });
+    }
+
+    const deleteRes = await pool.query('DELETE FROM championships WHERE id = $1', [championshipId]);
+    if (deleteRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Campeonato não encontrado.' });
+    }
+
+    res.json({ message: 'Campeonato excluído com sucesso.' });
+  } catch (err) {
+    console.error('Delete championship database error:', err);
+    res.status(500).json({ error: 'Erro ao excluir campeonato no banco de dados.' });
   }
 });
 

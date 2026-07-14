@@ -961,6 +961,24 @@ export default function App() {
     }
   };
 
+  const handleRemoveChampionship = async (championshipId: string) => {
+    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentUser) {
+      authHeaders['x-user-id'] = currentUser.id;
+    }
+
+    const res = await fetch(`/api/championships/${championshipId}`, {
+      method: 'DELETE',
+      headers: authHeaders
+    });
+    if (res.ok) {
+      await syncWithBackend();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Erro ao remover campeonato.');
+    }
+  };
+
   const handleCreateChampionshipAdmin = async (data: ChampionshipInput): Promise<{ championship?: Championship; error?: string }> => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {
@@ -1806,6 +1824,7 @@ export default function App() {
               modalities={modalities}
               onCreateChampionship={handleCreateChampionshipAdmin}
               onUpdateChampionship={handleUpdateChampionshipAdmin}
+              onRemoveChampionship={handleRemoveChampionship}
               onUploadChampionshipDocument={handleUploadChampionshipDocument}
               onAddStage={handleAddStage}
               onUpdateStage={handleUpdateStage}

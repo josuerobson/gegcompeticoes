@@ -37,6 +37,7 @@ interface AdminPanelProps {
   onRemoveModality: (modalityId: string) => Promise<void>;
   onCreateChampionship: (data: ChampionshipInput) => Promise<{ championship?: Championship; error?: string }>;
   onUpdateChampionship?: (id: string, data: ChampionshipInput) => Promise<{ championship?: Championship; error?: string }>;
+  onRemoveChampionship: (id: string) => Promise<void>;
   onUploadChampionshipDocument: (championshipId: string, kind: string, file: File) => Promise<boolean>;
   onAddStage: (data: StageInput) => Promise<{ stage?: Stage; error?: string }>;
   onUpdateStage: (id: string, data: StageInput) => Promise<{ stage?: Stage; error?: string }>;
@@ -1126,6 +1127,7 @@ export default function AdminPanel({
   onRemoveModality,
   onCreateChampionship,
   onUpdateChampionship,
+  onRemoveChampionship,
   onUploadChampionshipDocument,
   onAddStage,
   onUpdateStage,
@@ -1728,6 +1730,7 @@ export default function AdminPanel({
                     <th className="py-3 px-2 text-center">Etapas</th>
                     <th className="py-3 px-2 text-right">Inscrição</th>
                     <th className="py-3 px-2 text-center">Status</th>
+                    <th className="py-3 px-2 w-16"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1748,6 +1751,25 @@ export default function AdminPanel({
                           <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${isCompleted ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-800'}`}>
                             {isCompleted ? 'Finalizado' : 'Aberto'}
                           </span>
+                        </td>
+                        <td className="py-3 px-2 text-center">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (confirm(`Deseja realmente excluir o campeonato "${champ.title}"?\nEsta ação é irreversível e excluirá as etapas vazias vinculadas.`)) {
+                                try {
+                                  await onRemoveChampionship(champ.id);
+                                  alert('Campeonato excluído com sucesso!');
+                                } catch (err: any) {
+                                  alert(err.message || 'Erro ao excluir campeonato.');
+                                }
+                              }
+                            }}
+                            className="text-red-500 hover:text-red-700 transition p-1.5 hover:bg-red-50 rounded-lg cursor-pointer inline-flex items-center justify-center"
+                            title="Excluir Campeonato"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </td>
                       </tr>
                     );
