@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `a9541ac` |
-| Mensagem | `feat: modalidade e inscricao em lote, melhor serie por zona, reinscricoes` |
-| Data/hora | 2026-07-14T16:10:00-03:00 |
+| Hash | `a408b04` |
+| Mensagem | `feat: altera campo sexo para select de Masculino/Feminino nos cadastros` |
+| Data/hora | 2026-07-14T18:24:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Pendente |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `a9541ac` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `a408b04` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all

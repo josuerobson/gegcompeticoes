@@ -50,6 +50,30 @@ function ProfileField({ label, value, onChange, type = 'text', placeholder }: {
   );
 }
 
+function ProfileSelect({ label, value, onChange, options }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div>
+      <label className="block text-[10px] text-slate-450 font-bold uppercase mb-1">{label}</label>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-blue-500 text-slate-800"
+      >
+        <option value="">Selecione...</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+
 // Labeled file input for the document-completion section, same 1MB cap the
 // upload endpoint enforces server-side.
 function ProfileFileField({ label, onUpload }: { label: string; onUpload: (file: File) => Promise<void> }) {
@@ -940,7 +964,15 @@ export default function MemberProfile({
                   >
                     <div className="sm:col-span-2"><ProfileField label="Nome completo" value={profileForm.fullName} onChange={v => setProfileForm({ ...profileForm, fullName: v })} /></div>
                     <ProfileField label="Data de nascimento" type="date" value={profileForm.birthDate} onChange={v => setProfileForm({ ...profileForm, birthDate: v })} />
-                    <ProfileField label="Sexo" value={profileForm.sex} onChange={v => setProfileForm({ ...profileForm, sex: v })} />
+                    <ProfileSelect
+                      label="Sexo"
+                      value={profileForm.sex || ''}
+                      onChange={v => setProfileForm({ ...profileForm, sex: v })}
+                      options={[
+                        { value: 'masculino', label: 'Masculino' },
+                        { value: 'feminino', label: 'Feminino' }
+                      ]}
+                    />
                     <ProfileField label="RG" value={profileForm.rg} onChange={v => setProfileForm({ ...profileForm, rg: v })} />
                     <ProfileField label="Órgão emissor RG" value={profileForm.rgIssuer} onChange={v => setProfileForm({ ...profileForm, rgIssuer: v })} />
                     <ProfileField label="Data emissão RG" type="date" value={profileForm.rgIssueDate} onChange={v => setProfileForm({ ...profileForm, rgIssueDate: v })} />

@@ -31,6 +31,35 @@ function AuthField({ label, theme, required, ...inputProps }: {
   );
 }
 
+function AuthSelect({ label, theme, required, value, onChange, options }: {
+  label: string;
+  theme: 'light' | 'dark';
+  required?: boolean;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className={`text-[10px] font-bold uppercase tracking-wider block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+        {label}{required && ' *'}
+      </label>
+      <select
+        required={required}
+        value={value}
+        onChange={onChange}
+        className={`w-full border outline-none px-4 py-3 rounded-2xl text-xs font-semibold focus:ring-1 transition ${theme === 'dark' ? 'bg-slate-950 border-slate-800 text-white focus:border-blue-600 focus:ring-blue-600' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-blue-500 focus:ring-blue-500'}`}
+      >
+        <option value="">Selecione...</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+
 // Labeled file input for the document upload steps of the Membro/Clube registration
 // forms (RG/CNH, CR, Declaração de filiação, Cartão CNPJ, Alvará) — enforces the 1MB
 // limit client-side to match the server's multer config and the legacy system's own limit.
@@ -1470,7 +1499,16 @@ export default function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="sm:col-span-2"><AuthField label="Nome completo" theme={theme} required value={membroForm.fullName} onChange={(e) => setMembroForm({ ...membroForm, fullName: e.target.value })} /></div>
                     <AuthField label="Data de nascimento" theme={theme} type="date" value={membroForm.birthDate} onChange={(e) => setMembroForm({ ...membroForm, birthDate: e.target.value })} />
-                    <AuthField label="Sexo" theme={theme} value={membroForm.sex} onChange={(e) => setMembroForm({ ...membroForm, sex: e.target.value })} />
+                    <AuthSelect
+                      label="Sexo"
+                      theme={theme}
+                      value={membroForm.sex}
+                      onChange={(e) => setMembroForm({ ...membroForm, sex: e.target.value })}
+                      options={[
+                        { value: 'masculino', label: 'Masculino' },
+                        { value: 'feminino', label: 'Feminino' }
+                      ]}
+                     />
                     <AuthField label="RG" theme={theme} value={membroForm.rg} onChange={(e) => setMembroForm({ ...membroForm, rg: e.target.value })} />
                     <AuthField label="Órgão emissor RG" theme={theme} value={membroForm.rgIssuer} onChange={(e) => setMembroForm({ ...membroForm, rgIssuer: e.target.value })} />
                     <AuthField label="Data emissão RG" theme={theme} type="date" value={membroForm.rgIssueDate} onChange={(e) => setMembroForm({ ...membroForm, rgIssueDate: e.target.value })} />

@@ -81,6 +81,30 @@ function MemberField({ label, value, onChange, type = 'text', placeholder }: {
   );
 }
 
+function MemberSelect({ label, value, onChange, options }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="text-[10px] font-bold text-slate-500 uppercase block">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+      >
+        <option value="">Selecione...</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+
 // A section of the member's profile that saves independently — the director
 // fills in whatever part they have on hand and comes back later for the rest,
 // same progressive pattern as the athlete's own "Meu Cadastro".
@@ -1988,7 +2012,15 @@ export default function AdminPanel({
                   >
                     <div className="sm:col-span-2"><MemberField label="Nome completo" value={memberEditForm.fullName} onChange={v => setMemberEditForm({ ...memberEditForm, fullName: v })} /></div>
                     <MemberField label="Data de nascimento" type="date" value={memberEditForm.birthDate} onChange={v => setMemberEditForm({ ...memberEditForm, birthDate: v })} />
-                    <MemberField label="Sexo" value={memberEditForm.sex} onChange={v => setMemberEditForm({ ...memberEditForm, sex: v })} />
+                    <MemberSelect
+                      label="Sexo"
+                      value={memberEditForm.sex || ''}
+                      onChange={v => setMemberEditForm({ ...memberEditForm, sex: v })}
+                      options={[
+                        { value: 'masculino', label: 'Masculino' },
+                        { value: 'feminino', label: 'Feminino' }
+                      ]}
+                    />
                     <MemberField label="RG" value={memberEditForm.rg} onChange={v => setMemberEditForm({ ...memberEditForm, rg: v })} />
                     <MemberField label="Órgão emissor RG" value={memberEditForm.rgIssuer} onChange={v => setMemberEditForm({ ...memberEditForm, rgIssuer: v })} />
                     <MemberField label="Data emissão RG" type="date" value={memberEditForm.rgIssueDate} onChange={v => setMemberEditForm({ ...memberEditForm, rgIssueDate: v })} />
