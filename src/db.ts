@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { defaultUsers, defaultChampionships, defaultRegistrations, defaultStageScores, defaultPosts, defaultClubs, defaultModalities, defaultStages, defaultWeapons } from './data/mockData.js';
+import { defaultUsers, defaultPosts, defaultClubs, defaultWeapons } from './data/mockData.js';
 import { hashPassword } from './auth.js';
 import { ensureBucket } from './storage.js';
 
@@ -562,14 +562,6 @@ export async function initDB() {
       );
     }
 
-    for (const m of defaultModalities) {
-      await client.query(
-        `INSERT INTO modalities (id, name, discipline, target_preview, series_count, shots_per_series, time_per_series_minutes, evaluation_type)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, discipline = EXCLUDED.discipline, target_preview = EXCLUDED.target_preview, series_count = EXCLUDED.series_count, shots_per_series = EXCLUDED.shots_per_series, time_per_series_minutes = EXCLUDED.time_per_series_minutes, evaluation_type = EXCLUDED.evaluation_type`,
-        [m.id, m.name, m.discipline, m.targetPreview || null, m.seriesCount || null, m.shotsPerSeries || null, m.timePerSeriesMinutes || null, m.evaluationType || null]
-      );
-    }
 
     // Converge the known demo/seed accounts (by id) to mockData.ts, regardless of whatever
     // partial/legacy state they already carry (rows from an earlier schema version, or a
@@ -608,42 +600,6 @@ export async function initDB() {
           );
         }
       }
-    }
-
-    for (const c of defaultChampionships) {
-      await client.query(
-        `INSERT INTO championships (id, title, description, start_date, end_date, registration_fee, modalities, stages_count, status, banner_url, club_id, type)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-         ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date, registration_fee = EXCLUDED.registration_fee, modalities = EXCLUDED.modalities, stages_count = EXCLUDED.stages_count, status = EXCLUDED.status, banner_url = EXCLUDED.banner_url, club_id = EXCLUDED.club_id, type = EXCLUDED.type`,
-        [c.id, c.title, c.description, c.startDate, c.endDate, c.registrationFee, JSON.stringify(c.modalities), c.stagesCount, c.status, c.bannerUrl, c.clubId || null, c.type]
-      );
-    }
-
-    for (const s of defaultStages) {
-      await client.query(
-        `INSERT INTO stages (id, championship_id, stage_num, title, date, regulations_file, scorecard_file)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (id) DO UPDATE SET championship_id = EXCLUDED.championship_id, stage_num = EXCLUDED.stage_num, title = EXCLUDED.title, date = EXCLUDED.date, regulations_file = EXCLUDED.regulations_file, scorecard_file = EXCLUDED.scorecard_file`,
-        [s.id, s.championshipId, s.stageNum, s.title, s.date, s.regulationsFile || null, s.scorecardFile || null]
-      );
-    }
-
-    for (const r of defaultRegistrations) {
-      await client.query(
-        `INSERT INTO registrations (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number, payment_method, payment_status, completion_status, registered_at, approved_at, tx_id, score_details, total_points, idsc_total_seconds, disqualified, penalty)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-         ON CONFLICT (id) DO NOTHING`,
-        [r.id, r.championshipId, r.userId, r.clubId || null, r.modalityId, r.stageId, r.weaponId, r.crNumber, r.paymentMethod, r.paymentStatus, r.completionStatus, r.registeredAt, r.approvedAt || null, r.txId || null, r.scoreDetails ? JSON.stringify(r.scoreDetails) : null, r.totalPoints ?? null, r.idscTotalSeconds ?? null, r.disqualified, r.penalty]
-      );
-    }
-
-    for (const s of defaultStageScores) {
-      await client.query(
-        `INSERT INTO stage_scores (id, championship_id, registration_id, user_id, shooter_name, modality, stage_num, score, time_seconds, hit_factor, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         ON CONFLICT (id) DO NOTHING`,
-        [s.id, s.championshipId, s.registrationId, s.userId, s.shooterName, s.modality, s.stageNum, s.score, s.timeSeconds || null, s.hitFactor || null, s.createdAt]
-      );
     }
 
     if (await isEmpty('posts')) {
