@@ -1,4 +1,4 @@
-import 'dotenv/config';
+﻿import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -226,7 +226,7 @@ function mapRegistration(r: any): Registration {
     crNumber: r.cr_number,
     paymentMethod: r.payment_method as 'pix' | 'credit_card',
     paymentStatus: r.payment_status as 'pending' | 'approved',
-    completionStatus: (r.completion_status as 'pending' | 'completed') || 'pending',
+    completionStatus: (r.completion_status as 'pending' | 'completed' | 'absent') || 'pending',
     registeredAt: r.registered_at,
     approvedAt: r.approved_at || undefined,
     txId: r.tx_id || undefined,
@@ -235,6 +235,26 @@ function mapRegistration(r: any): Registration {
     idscTotalSeconds: r.idsc_total_seconds ?? undefined,
     disqualified: r.disqualified || false,
     penalty: r.penalty || 0,
+    registeredByUserId: r.registered_by_user_id || undefined,
+    registrationType: (r.registration_type as 'normal' | 'reinscrição') || 'normal',
+    valorPago: r.valor_pago != null ? Number(r.valor_pago) : undefined,
+    dataPagamento: r.data_pagamento || undefined,
+    scoreX: r.score_x ?? 0, scoreP10: r.score_p10 ?? 0, scoreP9: r.score_p9 ?? 0,
+    scoreP8: r.score_p8 ?? 0, scoreP7: r.score_p7 ?? 0, scoreP6: r.score_p6 ?? 0,
+    scoreP5: r.score_p5 ?? 0, scoreP4: r.score_p4 ?? 0, scoreP3: r.score_p3 ?? 0,
+    scoreP2: r.score_p2 ?? 0, scoreP1: r.score_p1 ?? 0, scoreP0: r.score_p0 ?? 0,
+    idsc0: r.idsc_0 ?? 0, idsc2: r.idsc_2 ?? 0, idsc5: r.idsc_5 ?? 0,
+    idscMisses: r.idsc_misses ?? 0, idscNoshoot: r.idsc_noshoot ?? 0,
+    idscTempoPista: r.idsc_tempo_pista ?? undefined,
+    idscTempoPistaExibe: r.idsc_tempo_pista_exibe || undefined,
+    idscTotalSegundosExibe: r.idsc_total_segundos_exibe || undefined,
+    dataExecucao: r.data_execucao || undefined,
+    horaExecucao: r.hora_execucao || undefined,
+    totalMinutos: r.total_minutos || undefined,
+    totalMilesegundos: r.total_milesegundos ?? 0,
+    seriesPontos: r.series_pontos || undefined,
+    seriesTempos: r.series_tempos || undefined,
+    codigoInscricao: r.codigo_inscricao ?? undefined,
   };
 }
 
@@ -1787,6 +1807,184 @@ app.delete('/api/weapon-lookups/:id', requireMasterAdmin, async (req, res) => {
   }
 });
 
+// ---- NEW: Weapon search by serial/sigma number ----
+app.get('/api/weapons/search', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const q = (req.query.q as string || '').trim();
+  if (!q || q.length < 2) return res.json({ weapons: [] });
+  try {
+    let rows;
+    if (['master_admin', 'admin'].includes(currentUser.role)) {
+      // master_admin can search all weapons
+      const r = await pool.query(
+        `SELECT w.*, u.full_name as owner_name, c.name as club_name FROM weapons w
+         LEFT JOIN users u ON u.id = w.owner_id
+         LEFT JOIN clubs c ON c.id = u.club_id
+         WHERE w.sigma_number ILIKE $1 OR w.weapon_number ILIKE $1
+         ORDER BY w.sigma_number LIMIT 20`,
+        [`%${q}%`]
+      );
+      rows = r.rows;
+    } else {
+      // club_admin: only weapons owned by athletes in their club
+      const r = await pool.query(
+        `SELECT w.*, u.full_name as owner_name, c.name as club_name FROM weapons w
+         JOIN users u ON u.id = w.owner_id
+         LEFT JOIN clubs c ON c.id = u.club_id
+         WHERE u.club_id = $1 AND (w.sigma_number ILIKE $2 OR w.weapon_number ILIKE $2)
+         ORDER BY w.sigma_number LIMIT 20`,
+        [currentUser.clubId, `%${q}%`]
+      );
+      rows = r.rows;
+    }
+    res.json({ weapons: rows.map(mapWeapon) });
+  } catch (err) {
+    console.error('Weapon search error:', err);
+    res.status(500).json({ error: 'Erro ao buscar armas.' });
+  }
+});
+
+// ---- NEW: List club members with their weapons (for bulk registration) ----
+app.get('/api/club-members', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  try {
+    const clubId = currentUser.role === 'master_admin'
+      ? (req.query.clubId as string)
+      : currentUser.clubId;
+    if (!clubId) return res.status(400).json({ error: 'Club ID obrigatório.' });
+
+    const usersRes = await pool.query(
+      `SELECT u.*,
+        COALESCE((SELECT json_agg(follower_id) FROM follows WHERE following_id = u.id), '[]'::json) as followers,
+        COALESCE((SELECT json_agg(following_id) FROM follows WHERE follower_id = u.id), '[]'::json) as following
+       FROM users u WHERE u.club_id = $1 AND u.role = 'member' ORDER BY u.full_name`,
+      [clubId]
+    );
+    const members = usersRes.rows.map(mapUser);
+
+    // Attach weapons for each member
+    const weaponsRes = await pool.query(
+      `SELECT w.* FROM weapons w
+       JOIN users u ON u.id = w.owner_id
+       WHERE u.club_id = $1`,
+      [clubId]
+    );
+    const weapons = weaponsRes.rows.map(mapWeapon);
+
+    res.json({ members, weapons });
+  } catch (err) {
+    console.error('Club members error:', err);
+    res.status(500).json({ error: 'Erro ao buscar membros.' });
+  }
+});
+
+// ---- NEW: List registrations (enriched) for admin result entry ----
+app.get('/api/registrations', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { championshipId, stageId, modalityId } = req.query;
+  try {
+    let query = `SELECT r.*,
+      u.full_name as athlete_name, u.cr_number as athlete_cr,
+      c.name as club_name,
+      m.name as modality_name, m.series_count, m.shots_per_series, m.evaluation_type,
+      w.model as weapon_model, w.serial_number as weapon_serial, w.sigma_number
+      FROM registrations r
+      LEFT JOIN users u ON u.id = r.user_id
+      LEFT JOIN clubs c ON c.id = r.club_id
+      LEFT JOIN modalities m ON m.id = r.modality_id
+      LEFT JOIN weapons w ON w.id = r.weapon_id
+      WHERE 1=1`;
+    const params: any[] = [];
+    let idx = 1;
+    if (championshipId) { query += ` AND r.championship_id = $${idx++}`; params.push(championshipId); }
+    if (stageId)        { query += ` AND r.stage_id = $${idx++}`;        params.push(stageId); }
+    if (modalityId)     { query += ` AND r.modality_id = $${idx++}`;     params.push(modalityId); }
+    // club_admin sees only their club's registrations
+    if (currentUser.role === 'club_admin') {
+      query += ` AND r.club_id = $${idx++}`;
+      params.push(currentUser.clubId);
+    }
+    query += ' ORDER BY u.full_name';
+    const result = await pool.query(query, params);
+    const registrations = result.rows.map(r => ({
+      ...mapRegistration(r),
+      athleteName: r.athlete_name,
+      athleteCr: r.athlete_cr,
+      clubName: r.club_name,
+      modalityName: r.modality_name,
+      seriesCount: r.series_count,
+      shotsPerSeries: r.shots_per_series,
+      evaluationType: r.evaluation_type,
+      weaponModel: r.weapon_model,
+      weaponSerial: r.weapon_serial,
+      weaponSigma: r.sigma_number,
+    }));
+    res.json({ registrations });
+  } catch (err) {
+    console.error('Fetch registrations error:', err);
+    res.status(500).json({ error: 'Erro ao buscar inscrições.' });
+  }
+});
+
+// ---- NEW: Bulk registration by club admin ----
+app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) => {
+  const championshipId = req.params.id;
+  const { stageId, modalityId, athletes } = req.body as {
+    stageId: string;
+    modalityId: string;
+    athletes: Array<{ userId: string; weaponId: string; crNumber: string }>;
+  };
+  const currentUser = (req as any).user as User;
+
+  if (!stageId || !modalityId || !Array.isArray(athletes) || athletes.length === 0) {
+    return res.status(400).json({ error: 'stageId, modalityId e athletes são obrigatórios.' });
+  }
+
+  const champRes = await pool.query('SELECT * FROM championships WHERE id = $1', [championshipId]);
+  if (champRes.rows.length === 0) return res.status(404).json({ error: 'Campeonato não encontrado.' });
+  const champ = mapChampionship(champRes.rows[0]);
+
+  const results: Array<{ userId: string; status: 'inscrito' | 'reinscrito' | 'erro'; message?: string }> = [];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const athlete of athletes) {
+      try {
+        const existing = await client.query(
+          'SELECT id FROM registrations WHERE championship_id=$1 AND user_id=$2 AND modality_id=$3 AND stage_id=$4',
+          [championshipId, athlete.userId, modalityId, stageId]
+        );
+        const isReinscricao = existing.rows.length > 0;
+        const regType = isReinscricao ? 'reinscrição' : 'normal';
+        const userRes = await client.query('SELECT club_id FROM users WHERE id = $1', [athlete.userId]);
+        const clubId = userRes.rows[0]?.club_id || currentUser.clubId;
+
+        await client.query(
+          `INSERT INTO registrations
+            (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
+             payment_method, payment_status, completion_status, registered_at, approved_at,
+             registered_by_user_id, registration_type, disqualified, penalty)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','approved','pending',$9,$9,$10,$11,false,0)`,
+          [
+            `reg_${Date.now()}_${athlete.userId.slice(-4)}`,
+            championshipId, athlete.userId, clubId, modalityId, stageId, athlete.weaponId,
+            athlete.crNumber, new Date().toISOString(), currentUser.id, regType
+          ]
+        );
+        results.push({ userId: athlete.userId, status: isReinscricao ? 'reinscrito' : 'inscrito' });
+      } catch (e: any) {
+        results.push({ userId: athlete.userId, status: 'erro', message: e.message });
+      }
+    }
+    await client.query('COMMIT');
+    res.status(201).json({ success: true, results });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+});
 // 6. Record Championship Stage Scores (Admin Only)
 app.get('/api/scores', async (req, res) => {
   try {
@@ -1801,129 +1999,157 @@ app.get('/api/scores', async (req, res) => {
 
 app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
   const championshipId = req.params.id;
-  const { registrationId, stageNum, score, timeSeconds } = req.body;
+  const {
+    registrationId, acao,
+    dataExecucao, horaExecucao,
+    series, penalidade,
+    // Legacy single-score fallback (stageNum + score + timeSeconds)
+    stageNum, score, timeSeconds
+  } = req.body;
 
-  if (!registrationId || !stageNum || score === undefined) {
-    return res.status(400).json({ error: 'Dados pontuais incompletos.' });
+  if (!registrationId) return res.status(400).json({ error: 'registrationId obrigatório.' });
+  if (!acao || !['salvar', 'nao_participou', 'desclassificar'].includes(acao)) {
+    return res.status(400).json({ error: "acao deve ser 'salvar', 'nao_participou' ou 'desclassificar'." });
   }
 
   try {
     const regRes = await pool.query('SELECT * FROM registrations WHERE id = $1', [registrationId]);
-    if (regRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Inscrição federativa não localizada.' });
-    }
+    if (regRes.rows.length === 0) return res.status(404).json({ error: 'Inscrição não localizada.' });
     const reg = mapRegistration(regRes.rows[0]);
 
     const shooterRes = await pool.query('SELECT * FROM users WHERE id = $1', [reg.userId]);
-    if (shooterRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Atirador de cadastro não localizado.' });
-    }
+    if (shooterRes.rows.length === 0) return res.status(404).json({ error: 'Atleta não localizado.' });
     const shooter = mapUser(shooterRes.rows[0]);
 
     const modalityRes = await pool.query('SELECT * FROM modalities WHERE id = $1', [reg.modalityId]);
-    const modalityName = modalityRes.rows.length > 0 ? mapModality(modalityRes.rows[0]).name : reg.modalityId;
-
-    let hitFactor: number | undefined;
-    if (timeSeconds && Number(timeSeconds) > 0) {
-      hitFactor = Number((Number(score) / Number(timeSeconds)).toFixed(4));
-    }
-
-    const newScore: StageScore = {
-      id: `score_${Date.now()}`,
-      championshipId,
-      registrationId,
-      userId: reg.userId,
-      shooterName: shooter.fullName,
-      modality: modalityName,
-      stageNum: Number(stageNum),
-      score: Number(score),
-      timeSeconds: timeSeconds ? Number(timeSeconds) : undefined,
-      hitFactor,
-      createdAt: new Date().toISOString()
-    };
+    const modalityRow = modalityRes.rows[0];
+    const modalityName = modalityRow ? mapModality(modalityRow).name : reg.modalityId;
+    const evaluationType = modalityRow?.evaluation_type || 'pontuacao';
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query(
-        `DELETE FROM stage_scores WHERE championship_id = $1 AND registration_id = $2 AND stage_num = $3`,
-        [championshipId, registrationId, Number(stageNum)]
-      );
 
-      await client.query(
-        `INSERT INTO stage_scores (id, championship_id, registration_id, user_id, shooter_name, modality, stage_num, score, time_seconds, hit_factor, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      // ---- Ação: Não Participou ----
+      if (acao === 'nao_participou') {
+        await client.query(
+          `UPDATE registrations SET completion_status='absent', data_execucao=$1, hora_execucao=$2 WHERE id=$3`,
+          [dataExecucao || null, horaExecucao || null, registrationId]
+        );
+        await client.query('COMMIT');
+        return res.json({ success: true, acao: 'nao_participou' });
+      }
+
+      // ---- Ação: Desclassificar ----
+      if (acao === 'desclassificar') {
+        await client.query(
+          `UPDATE registrations SET disqualified=true, completion_status='completed', data_execucao=$1, hora_execucao=$2 WHERE id=$3`,
+          [dataExecucao || null, horaExecucao || null, registrationId]
+        );
+        await client.query('COMMIT');
+        return res.json({ success: true, acao: 'desclassificar' });
+      }
+
+      // ---- Ação: Salvar Resultados ----
+      // Supports two modes:
+      // a) New mode: series[] array with zone breakdown per series
+      // b) Legacy fallback: single score + timeSeconds (old UI still works)
+
+      let bestSerie: any = null;
+      let totalPontos = 0;
+      let seriesPontos: any[] = [];
+      let seriesTempos: any[] = [];
+      let idscTotalSeg: number | undefined;
+
+      if (Array.isArray(series) && series.length > 0) {
+        // a) New per-series mode
+        seriesPontos = series.map((s: any, idx: number) => {
+          const zones = ['x','p10','p9','p8','p7','p6','p5','p4','p3','p2','p1','p0'];
+          const total = (Number(s.x)||0)*10 + (Number(s.p10)||0)*10 + (Number(s.p9)||0)*9
+            + (Number(s.p8)||0)*8 + (Number(s.p7)||0)*7 + (Number(s.p6)||0)*6
+            + (Number(s.p5)||0)*5 + (Number(s.p4)||0)*4 + (Number(s.p3)||0)*3
+            + (Number(s.p2)||0)*2 + (Number(s.p1)||0)*1;
+          return { serie: idx+1, total, ...Object.fromEntries(zones.map(z => [z, Number(s[z])||0])) };
+        });
+        seriesTempos = series.map((s: any, idx: number) => ({
+          serie: idx+1, tempo_ms: Number(s.tempo_ms)||0
+        }));
+        // Best series = highest total
+        bestSerie = seriesPontos.reduce((best: any, cur: any) => cur.total > best.total ? cur : best, seriesPontos[0]);
+        totalPontos = bestSerie.total;
+        const totalMs = seriesTempos.reduce((sum: number, t: any) => sum + (t.tempo_ms||0), 0);
+        if (evaluationType === 'pontuacao_tempo' || evaluationType === 'tempo') {
+          idscTotalSeg = totalMs / 1000;
+        }
+      } else {
+        // b) Legacy single score fallback
+        totalPontos = Number(score) || 0;
+        bestSerie = { total: totalPontos, x:0, p10:Math.round(totalPontos/10), p9:0, p8:0, p7:0, p6:0, p5:0, p4:0, p3:0, p2:0, p1:0, p0:0 };
+        if (timeSeconds) idscTotalSeg = Number(timeSeconds);
+      }
+
+      const penValue = Number(penalidade) || 0;
+
+      // Update registration with full score breakdown
+      await client.query(`
+        UPDATE registrations SET
+          completion_status = 'completed',
+          total_points = $1,
+          score_x = $2, score_p10 = $3, score_p9 = $4, score_p8 = $5, score_p7 = $6,
+          score_p6 = $7, score_p5 = $8, score_p4 = $9, score_p3 = $10,
+          score_p2 = $11, score_p1 = $12, score_p0 = $13,
+          idsc_total_seconds = $14,
+          penalty = $15,
+          data_execucao = $16, hora_execucao = $17,
+          series_pontos = $18, series_tempos = $19,
+          disqualified = false
+        WHERE id = $20`,
         [
-          newScore.id,
-          newScore.championshipId,
-          newScore.registrationId,
-          newScore.userId,
-          newScore.shooterName,
-          newScore.modality,
-          newScore.stageNum,
-          newScore.score,
-          newScore.timeSeconds || null,
-          newScore.hitFactor || null,
-          newScore.createdAt
+          totalPontos,
+          bestSerie.x||0, bestSerie.p10||0, bestSerie.p9||0, bestSerie.p8||0, bestSerie.p7||0,
+          bestSerie.p6||0, bestSerie.p5||0, bestSerie.p4||0, bestSerie.p3||0,
+          bestSerie.p2||0, bestSerie.p1||0, bestSerie.p0||0,
+          idscTotalSeg || null,
+          penValue,
+          dataExecucao || null, horaExecucao || null,
+          seriesPontos.length > 0 ? JSON.stringify(seriesPontos) : null,
+          seriesTempos.length > 0 ? JSON.stringify(seriesTempos) : null,
+          registrationId
         ]
       );
 
-      const hasResultPost = Math.random() > 0.5;
-      if (hasResultPost) {
-        const champRes = await client.query('SELECT banner_url FROM championships WHERE id = $1', [championshipId]);
-        const bannerUrl = champRes.rows[0]?.banner_url || defaultChampionships.find(c => c.id === championshipId)?.bannerUrl || shootingImages.paper_target;
+      // Also maintain stage_scores table for rankings compatibility
+      const effectiveStageNum = stageNum || 1;
+      const hitFactor = idscTotalSeg && idscTotalSeg > 0
+        ? Number((totalPontos / idscTotalSeg).toFixed(4)) : undefined;
 
-        const newPost: Post = {
-          id: `post_result_${Date.now()}`,
-          userId: shooter.id,
-          username: shooter.username,
-          userAvatar: shooter.avatarUrl,
-          content: `🎯 Medalha na Etapa ${stageNum} do campeonato! Minha pontuação oficial cadastrada foi de ${score} pontos na G&G Competições. Foco total nas próximas etapas! 💪🔫`,
-          imageUrl: bannerUrl,
-          targetScore: {
-            hits: Math.floor(score / 10),
-            shots: Math.floor(score / 10) + 1,
-            score: score,
-            distance: modalityName.includes('10m') ? 10 : (modalityName.includes('25m') ? 25 : 15),
-            gunModel: "Imbel GC MD2 LX",
-            caliber: modalityName.includes('IPSC') ? "380 ACP" : ".22 LR",
-            discipline: modalityName
-          },
-          likes: [],
-          comments: [],
-          createdAt: new Date().toISOString()
-        };
+      await client.query(
+        `DELETE FROM stage_scores WHERE championship_id=$1 AND registration_id=$2`,
+        [championshipId, registrationId]
+      );
+      await client.query(
+        `INSERT INTO stage_scores (id, championship_id, registration_id, user_id, shooter_name, modality, stage_num, score, time_seconds, hit_factor, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [
+          `score_${Date.now()}`, championshipId, registrationId, reg.userId,
+          shooter.fullName, modalityName, Number(effectiveStageNum),
+          totalPontos, idscTotalSeg || null, hitFactor || null, new Date().toISOString()
+        ]
+      );
 
-        await client.query(
-          `INSERT INTO posts (id, user_id, username, user_avatar, content, image_url, target_score, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [
-            newPost.id,
-            newPost.userId,
-            newPost.username,
-            newPost.userAvatar,
-            newPost.content,
-            newPost.imageUrl || null,
-            JSON.stringify(newPost.targetScore),
-            newPost.createdAt
-          ]
-        );
-      }
       await client.query('COMMIT');
+      res.status(201).json({ success: true, totalPontos, bestSerie, acao: 'salvar' });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
     } finally {
       client.release();
     }
-
-    res.status(201).json({ success: true, score: newScore });
   } catch (err) {
     console.error('Post score database error:', err);
     res.status(500).json({ error: 'Erro ao cadastrar pontuação.' });
   }
 });
-
 // 7. Rankings Calculation API
 app.get('/api/rankings', async (req, res) => {
   const { championshipId, modality } = req.query;

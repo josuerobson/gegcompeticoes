@@ -498,6 +498,591 @@ function ChampExtraFields({ values, onChange }: { values: ChampExtraState; onCha
   );
 }
 
+// =============================================================================
+// InscricaoClubePanel — Inscrição em lote para atletas do clube
+// =============================================================================
+interface InscricaoClubePanelProps {
+  championships: Championship[];
+  stages: Stage[];
+  modalities: Modality[];
+  currentUser: User | null;
+}
+
+function InscricaoClubePanel({ championships, stages, modalities, currentUser }: InscricaoClubePanelProps) {
+  const [champId, setChampId] = React.useState('');
+  const [stageId, setStageId] = React.useState('');
+  const [modalityId, setModalityId] = React.useState('');
+  const [members, setMembers] = React.useState<User[]>([]);
+  const [clubWeapons, setClubWeapons] = React.useState<Weapon[]>([]);
+  const [loadingMembers, setLoadingMembers] = React.useState(false);
+  const [selectedAthletes, setSelectedAthletes] = React.useState<Record<string, { weaponId: string; checked: boolean }>>({});
+  const [searchQueries, setSearchQueries] = React.useState<Record<string, string>>({});
+  const [searchResults, setSearchResults] = React.useState<Record<string, Weapon[]>>({});
+  const [searchingWeapon, setSearchingWeapon] = React.useState<Record<string, boolean>>({});
+  const [saving, setSaving] = React.useState(false);
+  const [success, setSuccess] = React.useState<{ userId: string; status: string; message?: string }[] | null>(null);
+  const [error, setError] = React.useState('');
+
+  const champStages = stages.filter(s => s.championshipId === champId);
+
+  React.useEffect(() => {
+    if (!champId || !stageId || !modalityId || !currentUser) return;
+    setLoadingMembers(true);
+    setError('');
+    setSuccess(null);
+    setSelectedAthletes({});
+    
+    const clubId = currentUser.role === 'master_admin' 
+      ? championships.find(c => c.id === champId)?.clubId || currentUser.clubId 
+      : currentUser.clubId;
+
+    if (!clubId) {
+      setError('ID do clube não identificado.');
+      setLoadingMembers(false);
+      return;
+    }
+
+    fetch(`/api/club-members?clubId=${clubId}`, {
+      headers: { 'x-user-id': currentUser.id }
+    })
+      .then(r => {
+        if (!r.ok) throw new Error('Falha ao buscar membros');
+        return r.json();
+      })
+      .then(data => {
+        setMembers(data.members || []);
+        setClubWeapons(data.weapons || []);
+      })
+      .catch(err => setError(err.message))
+      .finally(() => setLoadingMembers(false));
+  }, [champId, stageId, modalityId, currentUser]);
+
+  const handleToggleAthlete = (userId: string) => {
+    setSelectedAthletes(prev => {
+      const current = prev[userId] || { weaponId: '', checked: false };
+      return {
+        ...prev,
+        [userId]: { ...current, checked: !current.checked }
+      };
+    });
+  };
+
+  const handleSelectWeapon = (userId: string, weaponId: string) => {
+    setSelectedAthletes(prev => {
+      const current = prev[userId] || { weaponId: '', checked: false };
+      return {
+        ...prev,
+        [userId]: { ...current, weaponId }
+      };
+    });
+  };
+
+  const handleSearchWeapon = async (userId: string, q: string) => {
+    setSearchQueries(prev => ({ ...prev, [userId]: q }));
+    if (q.trim().length < 2) {
+      setSearchResults(prev => ({ ...prev, [userId]: [] }));
+      return;
+    }
+    setSearchingWeapon(prev => ({ ...prev, [userId]: true }));
+    try {
+      const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(q)}`, {
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      const data = await r.json();
+      setSearchResults(prev => ({ ...prev, [userId]: data.weapons || [] }));
+    } catch {
+      setSearchResults(prev => ({ ...prev, [userId]: [] }));
+    } finally {
+      setSearchingWeapon(prev => ({ ...prev, [userId]: false }));
+    }
+  };
+
+  const handleRegisterBulk = async () => {
+    if (!champId || !stageId || !modalityId || !currentUser) return;
+    
+    const selectedList = Object.entries(selectedAthletes)
+      .filter(([_, data]) => (data as any).checked)
+      .map(([userId, data]) => {
+        const member = members.find(m => m.id === userId);
+        return {
+          userId,
+          weaponId: (data as any).weaponId,
+          crNumber: member?.crNumber || 'N/A'
+        };
+      });
+
+    if (selectedList.length === 0) {
+      setError('Selecione pelo menos um atleta.');
+      return;
+    }
+
+    const missingWeapon = selectedList.some(item => !item.weaponId);
+    if (missingWeapon) {
+      setError('Selecione uma arma para cada atleta marcado.');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    setSuccess(null);
+
+    try {
+      const res = await fetch(`/api/championships/${champId}/register-bulk`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser.id
+        },
+        body: JSON.stringify({
+          stageId,
+          modalityId,
+          athletes: selectedList
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro na inscrição em lote');
+      
+      setSuccess(data.results || []);
+      setSelectedAthletes({});
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
+      <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+        <div>
+          <h3 className="font-display font-bold text-slate-900 text-base">Inscrição em Lote (Clube)</h3>
+          <p className="text-xs text-slate-400">Inscrever múltiplos atletas do clube de forma rápida.</p>
+        </div>
+        <Users className="w-5 h-5 text-blue-600" />
+      </div>
+
+      {error && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{error}</div>}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Campeonato</label>
+          <select value={champId} onChange={e => { setChampId(e.target.value); setStageId(''); setModalityId(''); }}
+            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
+            <option value="">Selecione...</option>
+            {championships.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Etapa</label>
+          <select value={stageId} onChange={e => setStageId(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!champId}>
+            <option value="">Selecione...</option>
+            {champStages.map(s => <option key={s.id} value={s.id}>Etapa {s.stageNum} — {s.title}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade</label>
+          <select value={modalityId} onChange={e => setModalityId(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!stageId}>
+            <option value="">Selecione...</option>
+            {modalities.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {success && (
+        <div className="bg-emerald-50 text-emerald-800 p-4 rounded-xl space-y-2 text-xs">
+          <h4 className="font-bold flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-emerald-600" /> Resultados do Lote:</h4>
+          <ul className="list-disc pl-4 space-y-1 font-semibold">
+            {success.map((res, i) => {
+              const athlete = members.find(m => m.id === res.userId);
+              return (
+                <li key={i}>
+                  {athlete?.fullName}: <span className={res.status === 'erro' ? 'text-red-600' : 'text-emerald-700'}>
+                    {res.status === 'inscrito' ? 'Inscrito com sucesso' : res.status === 'reinscrito' ? 'Reinscrição efetuada' : `Erro - ${res.message}`}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {loadingMembers && <p className="text-xs text-slate-400 text-center py-4">Buscando sócios do estande...</p>}
+
+      {!loadingMembers && members.length > 0 && (
+        <div className="space-y-4">
+          <p className="text-xs font-semibold text-slate-600">Selecione os atletas para inscrição e defina a arma:</p>
+          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
+                  <th className="py-2.5 px-3 w-10">Sel</th>
+                  <th className="py-2.5 px-3">Atleta</th>
+                  <th className="py-2.5 px-3">CR</th>
+                  <th className="py-2.5 px-3">Arma do Atleta / Busca por Sigma</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {members.map(member => {
+                  const state = selectedAthletes[member.id] || { weaponId: '', checked: false };
+                  const athleteWeapons = clubWeapons.filter(w => w.ownerId === member.id);
+                  const searchInput = searchQueries[member.id] || '';
+                  const results = searchResults[member.id] || [];
+                  const searching = searchingWeapon[member.id] || false;
+
+                  return (
+                    <tr key={member.id} className={state.checked ? 'bg-blue-50/20' : 'hover:bg-slate-50/50'}>
+                      <td className="py-3 px-3">
+                        <input type="checkbox" checked={state.checked} onChange={() => handleToggleAthlete(member.id)}
+                          className="w-4 h-4 text-blue-600 border-slate-350 rounded-sm cursor-pointer" />
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="font-bold text-slate-800 block">{member.fullName}</span>
+                        <span className="text-[10px] text-slate-400 font-mono block">CPF: {member.cpf || 'N/A'}</span>
+                      </td>
+                      <td className="py-3 px-3 font-mono text-[11px] font-bold text-slate-655">{member.crNumber || 'N/A'}</td>
+                      <td className="py-3 px-3">
+                        {state.checked ? (
+                          <div className="space-y-2 max-w-xs">
+                            <select value={state.weaponId} onChange={e => handleSelectWeapon(member.id, e.target.value)}
+                              className="w-full bg-white border border-slate-200 p-2 rounded-xl text-xs text-slate-700 font-semibold outline-none focus:border-blue-400">
+                              <option value="">Selecione a arma...</option>
+                              {athleteWeapons.map(w => (
+                                <option key={w.id} value={w.id}>
+                                  {w.model} {w.caliber} (Sigma: {w.sigmaNumber || 'N/A'})
+                                </option>
+                              ))}
+                              {state.weaponId && !athleteWeapons.some(w => w.id === state.weaponId) && (
+                                <option value={state.weaponId}>
+                                  Arma selecionada via busca
+                                </option>
+                              )}
+                            </select>
+
+                            <div className="relative">
+                              <input
+                                type="text"
+                                placeholder="Ou busque por Sigma/Série..."
+                                value={searchInput}
+                                onChange={e => handleSearchWeapon(member.id, e.target.value)}
+                                className="w-full bg-white border border-slate-200 p-2 rounded-xl text-[11px] text-slate-700 outline-none focus:border-blue-400 font-mono"
+                              />
+                              {searching && <span className="absolute right-3 top-2.5 text-[9px] text-slate-400 font-semibold">Buscando...</span>}
+                              
+                              {results.length > 0 && (
+                                <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-40 overflow-y-auto divide-y divide-slate-100">
+                                  {results.map(w => (
+                                    <button
+                                      key={w.id}
+                                      onClick={() => {
+                                        handleSelectWeapon(member.id, w.id);
+                                        setSearchResults(prev => ({ ...prev, [member.id]: [] }));
+                                        setSearchQueries(prev => ({ ...prev, [member.id]: `${w.model} (Sigma: ${w.sigmaNumber || 'N/A'})` }));
+                                      }}
+                                      className="w-full text-left px-3 py-2 text-[11px] text-slate-700 hover:bg-blue-50 font-mono"
+                                    >
+                                      {w.model} {w.caliber} - Sigma: {w.sigmaNumber || 'N/A'} (Série: {w.serialNumber})
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">Marque para vincular arma</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="pt-2 flex justify-end">
+            <button
+              onClick={handleRegisterBulk}
+              disabled={saving}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-350 text-white text-xs px-6 py-3 rounded-xl font-bold transition flex items-center gap-1.5 shadow-md cursor-pointer"
+            >
+              <FileCheck className="w-4 h-4" />
+              {saving ? 'Registrando lote...' : 'Inscrever Atletas Selecionados'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!loadingMembers && members.length === 0 && champId && stageId && modalityId && (
+        <p className="text-xs text-slate-400 text-center py-6 border border-dashed border-slate-200 rounded-xl">
+          Nenhum filiado associado a este estande.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// CadastrarResultadosPanel — Lançamento de resultados com grid de séries × zonas
+// =============================================================================
+interface CadastrarResultadosPanelProps {
+  championships: Championship[];
+  stages: Stage[];
+  modalities: Modality[];
+  currentUser: User | null;
+  onRecordScore: (data: {
+    championshipId: string;
+    registrationId: string;
+    stageNum: number;
+    score: number;
+    timeSeconds?: number;
+  }) => Promise<void>;
+}
+
+type EnrichedRegistration = {
+  id: string; userId: string; modalityId: string; stageId: string;
+  completionStatus: string; disqualified: boolean;
+  athleteName?: string; athleteCr?: string; clubName?: string;
+  modalityName?: string; seriesCount?: number; shotsPerSeries?: number;
+  evaluationType?: string; weaponModel?: string; weaponSerial?: string; weaponSigma?: string;
+  totalPoints?: number; dataExecucao?: string; horaExecucao?: string;
+  seriesPontos?: any[]; seriesTempos?: any[];
+};
+
+const ZONES = ['x','p10','p9','p8','p7','p6','p5','p4','p3','p2','p1','p0'] as const;
+const ZONE_LABELS: Record<string, string> = { x:'X', p10:'10', p9:'9', p8:'8', p7:'7', p6:'6', p5:'5', p4:'4', p3:'3', p2:'2', p1:'1', p0:'0' };
+const ZONE_POINTS: Record<string, number> = { x:10, p10:10, p9:9, p8:8, p7:7, p6:6, p5:5, p4:4, p3:3, p2:2, p1:1, p0:0 };
+
+function calcSeriePts(s: Record<string,number>): number {
+  return ZONES.reduce((acc, z) => acc + (Number(s[z])||0) * ZONE_POINTS[z], 0);
+}
+
+function CadastrarResultadosPanel({ championships, stages, modalities, currentUser, onRecordScore }: CadastrarResultadosPanelProps) {
+  const [champId, setChampId] = React.useState('');
+  const [stageId, setStageId] = React.useState('');
+  const [modalityId, setModalityId] = React.useState('');
+  const [registrations, setRegistrations] = React.useState<EnrichedRegistration[]>([]);
+  const [loadingRegs, setLoadingRegs] = React.useState(false);
+  const [selectedReg, setSelectedReg] = React.useState<EnrichedRegistration | null>(null);
+  const [dataExec, setDataExec] = React.useState('');
+  const [horaExec, setHoraExec] = React.useState('');
+  const [penalidade, setPenalidade] = React.useState('0');
+  const [seriesData, setSeriesData] = React.useState<Array<Record<string,string>>>([]);
+  const [saving, setSaving] = React.useState(false);
+  const [success, setSuccess] = React.useState('');
+  const [error, setError] = React.useState('');
+
+  const champStages = stages.filter(s => s.championshipId === champId);
+
+  React.useEffect(() => {
+    if (!champId || !stageId || !modalityId) { setRegistrations([]); return; }
+    setLoadingRegs(true);
+    fetch(`/api/registrations?championshipId=${champId}&stageId=${stageId}&modalityId=${modalityId}`, {
+      headers: { 'x-user-id': currentUser?.id || '' }
+    })
+      .then(r => r.json())
+      .then(d => setRegistrations(d.registrations || []))
+      .catch(() => setRegistrations([]))
+      .finally(() => setLoadingRegs(false));
+  }, [champId, stageId, modalityId]);
+
+  const selectReg = (reg: EnrichedRegistration) => {
+    setSelectedReg(reg);
+    setError(''); setSuccess('');
+    const n = reg.seriesCount || 1;
+    if (reg.seriesPontos && reg.seriesPontos.length > 0) {
+      setSeriesData(reg.seriesPontos.map((s: any) =>
+        Object.fromEntries(ZONES.map(z => [z, String(s[z]||0)]))
+      ));
+    } else {
+      setSeriesData(Array.from({length: n}, () => Object.fromEntries(ZONES.map(z => [z,'0']))));
+    }
+    setDataExec(reg.dataExecucao || '');
+    setHoraExec(reg.horaExecucao || '');
+  };
+
+  const updateCell = (serieIdx: number, zone: string, val: string) => {
+    setSeriesData(prev => prev.map((s, i) => i === serieIdx ? {...s, [zone]: val} : s));
+  };
+
+  const serieTotals = seriesData.map(s => calcSeriePts(Object.fromEntries(Object.entries(s).map(([k,v]) => [k, Number(v)||0]))));
+  const bestIdx = serieTotals.indexOf(Math.max(...serieTotals));
+
+  const handleSubmit = async (acao: 'salvar'|'nao_participou'|'desclassificar') => {
+    if (!selectedReg) return;
+    setSaving(true); setError(''); setSuccess('');
+    try {
+      const series = seriesData.map(s => Object.fromEntries(Object.entries(s).map(([k,v]) => [k, Number(v)||0])));
+      const res = await fetch(`/api/championships/${champId}/scores`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
+        body: JSON.stringify({
+          registrationId: selectedReg.id,
+          acao, dataExecucao: dataExec, horaExecucao: horaExec,
+          series, penalidade: Number(penalidade)||0,
+          stageNum: champStages.find(s => s.id === stageId)?.stageNum || 1
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar');
+      const msgs = { salvar: `✅ Resultado gravado! Melhor série: ${data.totalPontos ?? 0} pts`, nao_participou: '✅ Atleta marcado como Não Participou.', desclassificar: '✅ Atleta desclassificado.' };
+      setSuccess(msgs[acao]);
+      setSelectedReg(null);
+      
+      const r2 = await fetch(`/api/registrations?championshipId=${champId}&stageId=${stageId}&modalityId=${modalityId}`, { headers: { 'x-user-id': currentUser?.id||'' } });
+      const d2 = await r2.json();
+      setRegistrations(d2.registrations || []);
+    } catch(e: any) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const statusBadge = (reg: EnrichedRegistration) => {
+    if (reg.disqualified) return <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">DQ</span>;
+    if (reg.completionStatus === 'completed') return <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{reg.totalPoints ?? 0}pts ✓</span>;
+    if (reg.completionStatus === 'absent') return <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">NP</span>;
+    return <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Pendente</span>;
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
+      <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+        <div>
+          <h3 className="font-display font-bold text-slate-900 text-base">Lançar Notas e Homologar Tempos</h3>
+          <p className="text-xs text-slate-400">Inserir pontuação por série no banco de dados.</p>
+        </div>
+        <Target className="w-5 h-5 text-blue-600" />
+      </div>
+
+      {success && <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl text-xs font-semibold flex gap-2"><CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />{success}</div>}
+      {error && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{error}</div>}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Campeonato</label>
+          <select value={champId} onChange={e => { setChampId(e.target.value); setStageId(''); setModalityId(''); setSelectedReg(null); }}
+            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
+            <option value="">Selecione...</option>
+            {championships.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Etapa</label>
+          <select value={stageId} onChange={e => { setStageId(e.target.value); setSelectedReg(null); }}
+            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!champId}>
+            <option value="">Selecione...</option>
+            {champStages.map(s => <option key={s.id} value={s.id}>Etapa {s.stageNum} — {s.title}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade</label>
+          <select value={modalityId} onChange={e => { setModalityId(e.target.value); setSelectedReg(null); }}
+            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!stageId}>
+            <option value="">Selecione...</option>
+            {modalities.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {loadingRegs && <p className="text-xs text-slate-400 text-center py-4">Carregando inscrições...</p>}
+      {!loadingRegs && registrations.length > 0 && !selectedReg && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-600">{registrations.length} atleta(s) inscrito(s) — clique para lançar resultado:</p>
+          <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+            {registrations.map(reg => (
+              <button key={reg.id} onClick={() => selectReg(reg)}
+                className="w-full text-left px-4 py-3 hover:bg-blue-50 transition flex justify-between items-center gap-2">
+                <div>
+                  <span className="font-semibold text-xs text-slate-800">{reg.athleteName}</span>
+                  <span className="text-[10px] text-slate-450 ml-2">CR: {reg.athleteCr} | {reg.weaponModel} {reg.weaponSigma ? `(Sigma ${reg.weaponSigma})` : ''}</span>
+                </div>
+                {statusBadge(reg)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {!loadingRegs && registrations.length === 0 && champId && stageId && modalityId && (
+        <p className="text-xs text-slate-400 text-center py-6 border border-dashed border-slate-200 rounded-xl">Nenhum atleta inscrito nesta seleção.</p>
+      )}
+
+      {selectedReg && (
+        <div className="space-y-5 bg-slate-50 rounded-2xl p-5 border border-slate-200">
+          <div className="flex justify-between items-start">
+            <div>
+              <h4 className="font-bold text-slate-800 text-sm">{selectedReg.athleteName}</h4>
+              <p className="text-[10px] text-slate-400">{selectedReg.modalityName} · {selectedReg.seriesCount ?? 1} série(s) × {selectedReg.shotsPerSeries ?? 0} tiros</p>
+            </div>
+            <button onClick={() => setSelectedReg(null)} className="text-xs text-slate-400 hover:text-red-500 transition font-bold">← Voltar</button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase">Data de Execução</label>
+              <input type="date" value={dataExec} onChange={e => setDataExec(e.target.value)}
+                className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase">Hora de Execução</label>
+              <input type="time" value={horaExec} onChange={e => setHoraExec(e.target.value)}
+                className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700" />
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {seriesData.map((serie, si) => (
+              <div key={si} className={`rounded-xl border p-3 ${si === bestIdx ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] font-bold text-slate-600 uppercase font-mono">Série {si+1}</span>
+                  {si === bestIdx && seriesData.length > 1 && (
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">⭐ Melhor Série</span>
+                  )}
+                  <span className="text-xs font-mono font-bold text-slate-700">
+                    Total: {calcSeriePts(Object.fromEntries(Object.entries(serie).map(([k,v]) => [k, Number(v)||0])))} pts
+                  </span>
+                </div>
+                <div className="grid grid-cols-6 sm:grid-cols-12 gap-1">
+                  {ZONES.map(z => (
+                    <div key={z} className="space-y-0.5 text-center">
+                      <label className={`text-[9px] font-bold block ${z === 'x' ? 'text-amber-500' : z === 'p10' ? 'text-blue-500' : 'text-slate-450'}`}>{ZONE_LABELS[z]}</label>
+                      <input
+                        type="number" min="0" max={selectedReg.shotsPerSeries ?? 60}
+                        value={serie[z]}
+                        onChange={e => updateCell(si, z, e.target.value)}
+                        className="w-full text-center bg-white border border-slate-200 rounded-lg p-1 text-xs font-mono focus:border-blue-400 outline-none"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-1 max-w-[120px]">
+            <label className="text-[10px] font-bold text-slate-500 uppercase">Penalidade (pts)</label>
+            <input type="number" min="0" value={penalidade} onChange={e => setPenalidade(e.target.value)}
+              className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono" />
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200">
+            <button onClick={() => handleSubmit('salvar')} disabled={saving}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-350 text-white text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
+              <Save className="w-4 h-4" />{saving ? 'Salvando...' : 'Salvar Resultado'}
+            </button>
+            <button onClick={() => handleSubmit('nao_participou')} disabled={saving}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
+              <AlertCircle className="w-4 h-4 text-amber-500" />Não Participou
+            </button>
+            <button onClick={() => handleSubmit('desclassificar')} disabled={saving}
+              className="bg-red-50 hover:bg-red-100 text-red-700 text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
+              <ShieldAlert className="w-4 h-4" />Desclassificar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPanel({
   currentUser,
   championships,
@@ -1306,127 +1891,22 @@ export default function AdminPanel({
         );
 
       case 'cadastrar_resultados':
-        return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-display font-bold text-slate-900 text-base">Lançar Notas e Homologar Tempos</h3>
-                <p className="text-xs text-slate-400">Inserir pontuação de passagem de pista oficial no banco de dados.</p>
-              </div>
-              <PlusCircle className="w-5 h-5 text-blue-600" />
-            </div>
+        return <CadastrarResultadosPanel
+          championships={championships}
+          stages={stages}
+          modalities={modalities}
+          currentUser={currentUser}
+          onRecordScore={onRecordScore}
+        />;
 
-            {scoreSuccess && (
-              <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl flex items-center gap-2 mb-4 text-xs font-semibold">
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
-                Pontuação gravada, calculada e sincronizada no feed esportivo do clube!
-              </div>
-            )}
+      case 'inscricao_clube':
+        return <InscricaoClubePanel
+          championships={championships}
+          stages={stages}
+          modalities={modalities}
+          currentUser={currentUser}
+        />;
 
-            <form onSubmit={handleRecordScoreSubmit} className="space-y-4 text-slate-800">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                
-                {/* Select championship */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Selecione o Campeonato</label>
-                  <select
-                    value={selectedChampId}
-                    onChange={(e) => {
-                      setSelectedChampId(e.target.value);
-                      setSelectedRegId('');
-                    }}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
-                  >
-                    <option value="" disabled>Selecione...</option>
-                    {championships.map((c) => (
-                      <option key={c.id} value={c.id}>{c.title}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Select Stage */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block font-sans">Etapa Correspondente</label>
-                  <select
-                    value={selectedStageNum}
-                    onChange={(e) => setSelectedStageNum(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
-                  >
-                    {[1, 2, 3, 4].map(num => (
-                      <option key={num} value={num}>Etapa {num}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Select Athlete / Registration */}
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Atleta Inscrito / Matrícula Regulamentar</label>
-                  <select
-                    value={selectedRegId}
-                    onChange={(e) => setSelectedRegId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                    required
-                  >
-                    <option value="">Selecione o Atleta do Clube...</option>
-                    {filteredRegs.map((reg) => {
-                      const athlete = users.find(u => u.id === reg.userId);
-                      return (
-                        <option key={reg.id} value={reg.id}>
-                          {athlete?.fullName} | CR: {reg.crNumber} ({modalityName(reg.modalityId)})
-                        </option>
-                      );
-                    })}
-                  </select>
-                  {filteredRegs.length === 0 && (
-                    <span className="text-[10px] text-red-500 font-semibold block pt-1">
-                      Nenhum atleta homologado (pago) para este torneio no momento.
-                    </span>
-                  )}
-                </div>
-
-                {/* Score Input */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Pontos brutos do cartão</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    placeholder="Ex: 95.50"
-                    value={scoreInput}
-                    onChange={(e) => setScoreInput(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-mono"
-                  />
-                </div>
-
-                {/* Time Input for dynamic factor (IPSC) */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block font-sans">Tempo de Pista em Segundos (Opcional)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Ex: 15.42 (Deixe vazio para tiro de precisão)"
-                    value={timeInput}
-                    onChange={(e) => setTimeInput(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-mono"
-                  />
-                </div>
-
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 flex justify-end">
-                <button
-                  type="submit"
-                  disabled={filteredRegs.length === 0}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white text-xs px-6 py-3 rounded-xl font-bold transition flex items-center gap-1.5 shadow-md cursor-pointer"
-                >
-                  <Save className="w-4 h-4" />
-                  Salvar e Homologar Pontos
-                </button>
-              </div>
-
-            </form>
-          </div>
-        );
 
       case 'certificados':
         return (
@@ -3420,6 +3900,7 @@ export default function AdminPanel({
                 { id: 'resultados', label: 'Resultados', icon: Target },
                 { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
                 { id: 'cadastrar_resultados', label: 'Cadastrar Resultados', icon: PlusCircle },
+                { id: 'inscricao_clube', label: 'Inscrição Clube', icon: FileCheck },
                 { id: 'certificados', label: 'Certificados', icon: Award },
                 { id: 'cadastrar_membros', label: 'Cadastrar Membros', icon: UserPlus },
                 { id: 'cessao_armas', label: 'Cessão de Armas', icon: FileSignature },

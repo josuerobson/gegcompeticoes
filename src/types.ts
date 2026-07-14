@@ -1,4 +1,4 @@
-export interface User {
+﻿export interface User {
   id: string;
   email: string;
   username: string;
@@ -232,15 +232,29 @@ export interface Registration {
   crNumber: string;
   paymentMethod: 'pix' | 'credit_card';
   paymentStatus: 'pending' | 'approved';
-  completionStatus: 'pending' | 'completed';
+  completionStatus: 'pending' | 'completed' | 'absent';
   registeredAt: string;
   approvedAt?: string;
-  txId?: string; // transaction hash/ID representation
+  txId?: string;
   scoreDetails?: Record<string, unknown>;
   totalPoints?: number;
   idscTotalSeconds?: number;
   disqualified: boolean;
   penalty: number;
+  registeredByUserId?: string;
+  registrationType?: 'normal' | 'reinscrição';
+  valorPago?: number;
+  dataPagamento?: string;
+  scoreX?: number; scoreP10?: number; scoreP9?: number; scoreP8?: number;
+  scoreP7?: number; scoreP6?: number; scoreP5?: number; scoreP4?: number;
+  scoreP3?: number; scoreP2?: number; scoreP1?: number; scoreP0?: number;
+  idsc0?: number; idsc2?: number; idsc5?: number;
+  idscMisses?: number; idscNoshoot?: number;
+  idscTempoPista?: number; idscTempoPistaExibe?: string; idscTotalSegundosExibe?: string;
+  dataExecucao?: string; horaExecucao?: string;
+  totalMinutos?: string; totalMilesegundos?: number;
+  seriesPontos?: any[]; seriesTempos?: any[];
+  codigoInscricao?: number;
 }
 
 export interface StageScore {

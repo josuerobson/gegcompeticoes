@@ -54,8 +54,46 @@ export default function ChampionshipsView({
   const [savingWeapon, setSavingWeapon] = useState(false);
   const [showProfileIncompleteNotice, setShowProfileIncompleteNotice] = useState(false);
 
+  // Weapon search states
+  const [weaponSearchQuery, setWeaponSearchQuery] = useState('');
+  const [weaponSearchResults, setWeaponSearchResults] = useState<Weapon[]>([]);
+  const [searchingWeapon, setSearchingWeapon] = useState(false);
+
+  const handleSearchWeapon = async (q: string) => {
+    setWeaponSearchQuery(q);
+    if (q.trim().length < 2) {
+      setWeaponSearchResults([]);
+      return;
+    }
+    setSearchingWeapon(true);
+    try {
+      const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(q)}`, {
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      const data = await r.json();
+      setWeaponSearchResults(data.weapons || []);
+    } catch {
+      setWeaponSearchResults([]);
+    } finally {
+      setSearchingWeapon(false);
+    }
+  };
+
   const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
   const eligibleWeapons = weapons.filter(w => w.ownerId === currentUser?.id || (currentUser?.clubId && w.ownerId === currentUser.clubId));
+
+  const isAlreadyRegistered = registrations.some(
+    r => r.userId === currentUser?.id &&
+         r.championshipId === selectedChampReg?.id &&
+         r.stageId === selectedStageId &&
+         r.modalityId === selectedModalityId
+  );
+
+  const registrationPrice = selectedChampReg 
+    ? (isAlreadyRegistered 
+        ? (selectedChampReg.valorReinscricao ?? selectedChampReg.registrationFee)
+        : (selectedChampReg.valorInscricaoIndividual ?? selectedChampReg.registrationFee))
+    : 0;
 
   // Selected Certificate to show print preview
   const [activeCertificate, setActiveCertificate] = useState<{
@@ -605,9 +643,16 @@ export default function ChampionshipsView({
 
               {paymentStep === 'form' && (
                 <form onSubmit={handleRegisterSubmit} className="p-5 space-y-4">
-                  <div className="bg-blue-50 p-3 rounded-lg flex items-center justify-between text-xs">
-                    <span className="text-blue-900 font-semibold">{selectedChampReg.title}</span>
-                    <span className="text-blue-600 font-bold">R$ {selectedChampReg.registrationFee}</span>
+                  <div className="bg-blue-50 p-3 rounded-lg flex flex-col gap-1 text-xs">
+                    <div className="flex items-center justify-between text-blue-900">
+                      <span className="font-semibold">{selectedChampReg.title}</span>
+                      <span className="font-bold">R$ {registrationPrice.toFixed(2)}</span>
+                    </div>
+                    {isAlreadyRegistered && (
+                      <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider block mt-0.5">
+                        ✨ Reinscrição (Tarifa Promocional)
+                      </span>
+                    )}
                   </div>
 
                   {registerError && (
@@ -657,28 +702,66 @@ export default function ChampionshipsView({
 
                   <div className="space-y-1">
                     <label className="text-[10px] text-slate-500 uppercase block font-semibold">Arma a ser utilizada</label>
-                    {eligibleWeapons.length > 0 && !showAddWeapon && (
-                      <select
-                        value={selectedWeaponId}
-                        onChange={(e) => setSelectedWeaponId(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
-                      >
-                        <option value="">Selecione a arma</option>
-                        {eligibleWeapons.map(w => (
-                          <option key={w.id} value={w.id}>{w.manufacturer} {w.model} — {w.caliber}</option>
-                        ))}
-                      </select>
-                    )}
-                    {eligibleWeapons.length === 0 && !showAddWeapon && (
-                      <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2">Nenhuma arma cadastrada pelo seu clube ainda. Cadastre a sua abaixo para poder se inscrever.</p>
+                    {!showAddWeapon && (
+                      <div className="space-y-2">
+                        {eligibleWeapons.length > 0 ? (
+                          <select
+                            value={selectedWeaponId}
+                            onChange={(e) => setSelectedWeaponId(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
+                          >
+                            <option value="">Selecione a arma</option>
+                            {eligibleWeapons.map(w => (
+                              <option key={w.id} value={w.id}>{w.manufacturer} {w.model} — {w.caliber} {w.sigmaNumber ? `(Sigma ${w.sigmaNumber})` : ''}</option>
+                            ))}
+                            {selectedWeaponId && !eligibleWeapons.some(w => w.id === selectedWeaponId) && (
+                              <option value={selectedWeaponId}>Arma selecionada via busca</option>
+                            )}
+                          </select>
+                        ) : (
+                          <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2">
+                            Nenhuma arma vinculada automaticamente. Use a busca abaixo ou cadastre uma nova.
+                          </p>
+                        )}
+
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Ou busque pelo número Sigma/Série..."
+                            value={weaponSearchQuery}
+                            onChange={(e) => handleSearchWeapon(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-mono"
+                          />
+                          {searchingWeapon && <span className="absolute right-3 top-3 text-[9px] text-slate-400 font-semibold">Buscando...</span>}
+                          
+                          {weaponSearchResults.length > 0 && (
+                            <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-40 overflow-y-auto divide-y divide-slate-100">
+                              {weaponSearchResults.map(w => (
+                                <button
+                                  key={w.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedWeaponId(w.id);
+                                    setWeaponSearchResults([]);
+                                    setWeaponSearchQuery(`${w.manufacturer} ${w.model} (Sigma: ${w.sigmaNumber || 'N/A'})`);
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-[11px] text-slate-700 hover:bg-blue-50 font-mono"
+                                >
+                                  {w.manufacturer} {w.model} {w.caliber} - Sigma: {w.sigmaNumber || 'N/A'} (Série: {w.serialNumber})
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     )}
                     {!showAddWeapon && (
                       <button
                         type="button"
                         onClick={() => setShowAddWeapon(true)}
-                        className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1"
+                        className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 mt-1"
                       >
-                        <PlusCircle className="w-3 h-3" /> Adicionar arma
+                        <PlusCircle className="w-3 h-3" /> Adicionar nova arma
                       </button>
                     )}
                     {showAddWeapon && (
@@ -784,7 +867,7 @@ export default function ChampionshipsView({
                   {/* PIX instructions if selected */}
                   {paymentMethod === 'pix' ? (
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-left space-y-2 text-xs font-mono">
-                      <span className="text-[10px] text-slate-400 font-sans block text-center uppercase font-bold">FAÇA O PIX DO VALOR DE R$ {selectedChampReg.registrationFee}</span>
+                      <span className="text-[10px] text-slate-400 font-sans block text-center uppercase font-bold">FAÇA O PIX DO VALOR DE R$ {registrationPrice.toFixed(2)}</span>
                       
                       {/* Dynamic Mock QR Code */}
                       <div className="w-28 h-28 mx-auto bg-white border border-slate-200 p-1 rounded-lg">

@@ -413,6 +413,59 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS penalty INTEGER NOT NULL DEFAULT 0;
     `);
 
+    // Legacy system parity (inscricao_modalidades): full score breakdown, IDSC fields,
+    // execution date/time, per-series JSON, and registration tracking.
+    // All additive — existing registrations keep working untouched.
+    await client.query(`
+      ALTER TABLE registrations
+        -- Who performed the registration (the athlete themselves or a club admin)
+        ADD COLUMN IF NOT EXISTS registered_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        -- 'normal' (first time) or 'reinscrição' (re-entry, lower fee)
+        ADD COLUMN IF NOT EXISTS registration_type TEXT DEFAULT 'normal',
+        -- Payment details for import compatibility
+        ADD COLUMN IF NOT EXISTS valor_pago DECIMAL(10,2),
+        ADD COLUMN IF NOT EXISTS data_pagamento TEXT,
+        -- Best series scores per target zone (mirrors legacy p0..p10, x columns)
+        ADD COLUMN IF NOT EXISTS score_x INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS score_p10 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS score_p9 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS score_p8 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS score_p7 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS score_p6 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS score_p5 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS score_p4 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS score_p3 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS score_p2 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS score_p1 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS score_p0 INTEGER DEFAULT 0,
+        -- IDSC-specific fields (speed/dynamic shooting disciplines)
+        ADD COLUMN IF NOT EXISTS idsc_0 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS idsc_2 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS idsc_5 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS idsc_misses INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS idsc_noshoot INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS idsc_tempo_pista FLOAT,
+        ADD COLUMN IF NOT EXISTS idsc_tempo_pista_exibe TEXT,
+        ADD COLUMN IF NOT EXISTS idsc_total_segundos_exibe TEXT,
+        -- Execution metadata
+        ADD COLUMN IF NOT EXISTS data_execucao TEXT,
+        ADD COLUMN IF NOT EXISTS hora_execucao TEXT,
+        ADD COLUMN IF NOT EXISTS total_minutos TEXT,
+        ADD COLUMN IF NOT EXISTS total_milesegundos INTEGER DEFAULT 0,
+        -- Full series detail JSON (all series, for re-editing results later)
+        ADD COLUMN IF NOT EXISTS series_pontos JSONB,
+        ADD COLUMN IF NOT EXISTS series_tempos JSONB,
+        -- Legacy import compatibility code (corresponds to 'codigo' in inscricao_modalidades)
+        ADD COLUMN IF NOT EXISTS codigo_inscricao INTEGER;
+    `);
+
+    // Relax completion_status CHECK to accept 'absent' (Não Participou) in addition to
+    // 'pending' and 'completed'. PostgreSQL doesn't support ALTER COLUMN ... ADD CONSTRAINT
+    // conditionally, so we drop and re-add the constraint.
+    await client.query(`ALTER TABLE registrations DROP CONSTRAINT IF EXISTS registrations_completion_status_check`);
+    await client.query(`ALTER TABLE registrations ADD CONSTRAINT registrations_completion_status_check CHECK (completion_status IN ('pending', 'completed', 'absent'))`);
+
+
     // The legacy free-text `modality` column (unused by this app) may still exist with a
     // NOT NULL constraint from an earlier schema version, which would reject every new
     // insert that doesn't set it. Relax the constraint without touching the column or its
