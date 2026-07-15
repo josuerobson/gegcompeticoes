@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `0c083fb` |
-| Mensagem | `fix: corrige redirecionamento tardio para campeonatos apos o login` |
-| Data/hora | 2026-07-15T07:51:00-03:00 |
+| Hash | `55f367b` |
+| Mensagem | `feat: lista inscritos por campeonato e etapa e exibe nomes dos atletas` |
+| Data/hora | 2026-07-15T07:59:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ✅ Sim (disparado via Webhook) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `0c083fb` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `55f367b` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all

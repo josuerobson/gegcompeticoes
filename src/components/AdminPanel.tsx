@@ -900,9 +900,13 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
   const champStages = stages.filter(s => s.championshipId === champId);
 
   React.useEffect(() => {
-    if (!champId || !stageId || !modalityId) { setRegistrations([]); return; }
+    if (!champId || !stageId) { setRegistrations([]); return; }
     setLoadingRegs(true);
-    fetch(`/api/registrations?championshipId=${champId}&stageId=${stageId}&modalityId=${modalityId}`, {
+    let url = `/api/admin/registrations?championshipId=${champId}&stageId=${stageId}`;
+    if (modalityId) {
+      url += `&modalityId=${modalityId}`;
+    }
+    fetch(url, {
       headers: { 'x-user-id': currentUser?.id || '' }
     })
       .then(r => r.json())
@@ -954,7 +958,11 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
       setSuccess(msgs[acao]);
       setSelectedReg(null);
       
-      const r2 = await fetch(`/api/registrations?championshipId=${champId}&stageId=${stageId}&modalityId=${modalityId}`, { headers: { 'x-user-id': currentUser?.id||'' } });
+      let refreshUrl = `/api/admin/registrations?championshipId=${champId}&stageId=${stageId}`;
+      if (modalityId) {
+        refreshUrl += `&modalityId=${modalityId}`;
+      }
+      const r2 = await fetch(refreshUrl, { headers: { 'x-user-id': currentUser?.id||'' } });
       const d2 = await r2.json();
       setRegistrations(d2.registrations || []);
     } catch(e: any) { setError(e.message); }
@@ -1026,7 +1034,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
           </div>
         </div>
       )}
-      {!loadingRegs && registrations.length === 0 && champId && stageId && modalityId && (
+      {!loadingRegs && registrations.length === 0 && champId && stageId && (
         <p className="text-xs text-slate-400 text-center py-6 border border-dashed border-slate-200 rounded-xl">Nenhum atleta inscrito nesta seleção.</p>
       )}
 

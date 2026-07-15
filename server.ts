@@ -1900,7 +1900,7 @@ app.get('/api/club-members', requireAdmin, async (req, res) => {
 });
 
 // ---- NEW: List registrations (enriched) for admin result entry ----
-app.get('/api/registrations', requireAdmin, async (req, res) => {
+app.get('/api/admin/registrations', requireAdmin, async (req, res) => {
   const currentUser = (req as any).user as User;
   const { championshipId, stageId, modalityId } = req.query;
   try {
