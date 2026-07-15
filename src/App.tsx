@@ -425,8 +425,8 @@ export default function App() {
       if (res.ok && data.user) {
         setCurrentUser(data.user);
         localStorage.setItem('gg_user_id', data.user.id);
-        await syncWithBackend(data.user.id);
         setActiveTab('championships');
+        await syncWithBackend(data.user.id);
         return true;
       }
       setLoginModalMessage(data.error || 'CPF ou senha inválidos.');
@@ -501,8 +501,8 @@ export default function App() {
         }
         setCurrentUser(data.user);
         localStorage.setItem('gg_user_id', data.user.id);
-        await syncWithBackend(data.user.id);
         setActiveTab('championships');
+        await syncWithBackend(data.user.id);
         return true;
       }
       setLoginModalMessage(data.error || 'Erro ao realizar cadastro.');
