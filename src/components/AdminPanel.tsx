@@ -1073,32 +1073,48 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
           </div>
 
           <div className="space-y-4">
-            {seriesData.map((serie, si) => (
-              <div key={si} className={`rounded-xl border p-3 ${si === bestIdx ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-[10px] font-bold text-slate-600 uppercase font-mono">Série {si+1}</span>
-                  {si === bestIdx && seriesData.length > 1 && (
-                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">⭐ Melhor Série</span>
-                  )}
-                  <span className="text-xs font-mono font-bold text-slate-700">
-                    Total: {calcSeriePts(Object.fromEntries(Object.entries(serie).map(([k,v]) => [k, Number(v)||0])))} pts
-                  </span>
-                </div>
-                <div className="grid grid-cols-6 sm:grid-cols-12 gap-1">
-                  {ZONES.map(z => (
-                    <div key={z} className="space-y-0.5 text-center">
-                      <label className={`text-[9px] font-bold block ${z === 'x' ? 'text-amber-500' : z === 'p10' ? 'text-blue-500' : 'text-slate-450'}`}>{ZONE_LABELS[z]}</label>
-                      <input
-                        type="number" min="0" max={selectedReg.shotsPerSeries ?? 60}
-                        value={serie[z]}
-                        onChange={e => updateCell(si, z, e.target.value)}
-                        className="w-full text-center bg-white border border-slate-200 rounded-lg p-1 text-xs font-mono focus:border-blue-400 outline-none"
-                      />
+            {seriesData.map((serie, si) => {
+              const currentShots = ZONES.reduce((acc, z) => acc + (Number(serie[z]) || 0), 0);
+              const expectedShots = selectedReg.shotsPerSeries || 0;
+              const hasExceeded = currentShots > expectedShots;
+
+              return (
+                <div key={si} className={`rounded-xl border p-3 ${si === bestIdx ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'} ${hasExceeded ? 'border-red-400 bg-red-50/20' : ''}`}>
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="flex items-center">
+                      <span className="text-[10px] font-bold text-slate-600 uppercase font-mono">Série {si+1}</span>
+                      <span className={`text-[9px] font-bold ml-3 px-1.5 py-0.5 rounded font-mono ${hasExceeded ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+                        Tiros: {currentShots} / {expectedShots}
+                      </span>
                     </div>
-                  ))}
+                    {si === bestIdx && seriesData.length > 1 && (
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">⭐ Melhor Série</span>
+                    )}
+                    <span className="text-xs font-mono font-bold text-slate-700">
+                      Total: {calcSeriePts(Object.fromEntries(Object.entries(serie).map(([k,v]) => [k, Number(v)||0])))} pts
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-6 sm:grid-cols-12 gap-1">
+                    {ZONES.map(z => (
+                      <div key={z} className="space-y-0.5 text-center">
+                        <label className={`text-[9px] font-bold block ${z === 'x' ? 'text-amber-500' : z === 'p10' ? 'text-blue-500' : 'text-slate-450'}`}>{ZONE_LABELS[z]}</label>
+                        <input
+                          type="number" min="0" max={selectedReg.shotsPerSeries ?? 60}
+                          value={serie[z]}
+                          onChange={e => updateCell(si, z, e.target.value)}
+                          className="w-full text-center bg-white border border-slate-200 rounded-lg p-1 text-xs font-mono focus:border-blue-400 outline-none"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  {hasExceeded && (
+                    <div className="mt-2 text-[10px] font-bold text-red-600 bg-red-50 border border-red-100 rounded-lg p-2 flex items-center gap-1.5 animate-pulse">
+                      <span>⚠️ Ultrapassou o limite de {expectedShots} tiros estabelecido para a modalidade!</span>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="space-y-1 max-w-[120px]">
