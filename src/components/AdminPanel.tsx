@@ -942,6 +942,17 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
     setSaving(true); setError(''); setSuccess('');
     try {
       const series = seriesData.map(s => Object.fromEntries(Object.entries(s).map(([k,v]) => [k, Number(v)||0])));
+      if (acao === 'salvar') {
+        const expectedShots = selectedReg.shotsPerSeries || 0;
+        if (expectedShots > 0) {
+          for (let i = 0; i < series.length; i++) {
+            const sum = ZONES.reduce((acc, z) => acc + (Number(series[i][z]) || 0), 0);
+            if (sum !== expectedShots) {
+              throw new Error(`A Série ${i + 1} possui ${sum} tiros informados, mas a modalidade exige exatamente ${expectedShots} tiros.`);
+            }
+          }
+        }
+      }
       const res = await fetch(`/api/championships/${champId}/scores`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },

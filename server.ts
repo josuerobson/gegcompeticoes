@@ -2083,6 +2083,22 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
       let idscTotalSeg: number | undefined;
 
       if (Array.isArray(series) && series.length > 0) {
+        // Validação da quantidade de tiros contra o shots_per_series da modalidade
+        const expectedShots = modalityRow?.shots_per_series || 0;
+        if (expectedShots > 0) {
+          const zones = ['x','p10','p9','p8','p7','p6','p5','p4','p3','p2','p1','p0'];
+          for (let i = 0; i < series.length; i++) {
+            const s = series[i];
+            const sum = zones.reduce((acc, z) => acc + (Number(s[z]) || 0), 0);
+            if (sum !== expectedShots) {
+              await client.query('ROLLBACK');
+              return res.status(400).json({
+                error: `A Série ${i + 1} possui ${sum} tiros informados, mas a modalidade exige exatamente ${expectedShots} tiros.`
+              });
+            }
+          }
+        }
+
         // a) New per-series mode
         seriesPontos = series.map((s: any, idx: number) => {
           const zones = ['x','p10','p9','p8','p7','p6','p5','p4','p3','p2','p1','p0'];
