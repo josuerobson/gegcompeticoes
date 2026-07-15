@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `0d33590` |
-| Mensagem | `fix: corrige validacao da taxa de homologacao zerada no backend` |
-| Data/hora | 2026-07-14T20:11:00-03:00 |
+| Hash | `cb4228d` |
+| Mensagem | `feat: adiciona opcao de exclusao de campeonato na listagem para edicao` |
+| Data/hora | 2026-07-15T06:57:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ✅ Sim (disparado via Webhook) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `0d33590` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `cb4228d` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all

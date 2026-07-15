@@ -2978,13 +2978,33 @@ export default function AdminPanel({
                         <td className="py-3 px-2 text-center font-bold font-mono">{champ.stagesCount}</td>
                         <td className="py-3 px-2 text-right font-bold font-mono text-slate-850">R$ {champ.registrationFee}</td>
                         <td className="py-3 px-2 text-center">
-                          <button
-                            onClick={() => startEditingChamp(champ)}
-                            className="bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-[10px] px-3 py-1.5 rounded-xl transition inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <Settings className="w-3.5 h-3.5" />
-                            Editar
-                          </button>
+                          <div className="flex justify-center items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => startEditingChamp(champ)}
+                              className="bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-[10px] px-3 py-1.5 rounded-xl transition inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Settings className="w-3.5 h-3.5" />
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (confirm(`Deseja realmente excluir o campeonato "${champ.title}"?\nEsta ação é irreversível e excluirá as etapas vazias vinculadas.`)) {
+                                  try {
+                                    await onRemoveChampionship(champ.id);
+                                    alert('Campeonato excluído com sucesso!');
+                                  } catch (err: any) {
+                                    alert(err.message || 'Erro ao excluir campeonato.');
+                                  }
+                                }
+                              }}
+                              className="text-red-500 hover:text-red-700 transition p-1.5 hover:bg-red-50 rounded-lg cursor-pointer inline-flex items-center justify-center"
+                              title="Excluir Campeonato"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
