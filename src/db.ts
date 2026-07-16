@@ -533,8 +533,12 @@ export async function initDB() {
       );
     `);
 
+    // Drop and recreate weapon_concessions to fix UUID→TEXT type mismatch
+    // (safe: table is new, no real data exists yet)
+    await client.query(`DROP TABLE IF EXISTS weapon_concessions`);
+
     await client.query(`
-      CREATE TABLE IF NOT EXISTS weapon_concessions (
+      CREATE TABLE weapon_concessions (
         id                 TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         concession_number  SERIAL,
         club_id            TEXT NOT NULL REFERENCES clubs(id),
@@ -545,6 +549,7 @@ export async function initDB() {
         created_at         TIMESTAMPTZ DEFAULT NOW()
       );
     `);
+
 
     await client.query('COMMIT');
 
