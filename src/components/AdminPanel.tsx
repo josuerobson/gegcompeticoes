@@ -1354,6 +1354,13 @@ export default function AdminPanel({
   // Sidebar Menu selection for Plataforma
   const [plataformaMenu, setPlataformaMenu] = useState<string>('novo_campeonato');
 
+  useEffect(() => {
+    if (plataformaMenu !== 'novo_campeonato') {
+      setShowCreateForm(false);
+      setEditingChampId(null);
+    }
+  }, [plataformaMenu]);
+
   // Sidebar Menu selection for Master
   const [masterMenu, setMasterMenu] = useState<string>('gerenciar_clubes');
 
@@ -1479,6 +1486,8 @@ export default function AdminPanel({
   const [champRegulamentoFile, setChampRegulamentoFile] = useState<File | null>(null);
   const [champSumulaFile, setChampSumulaFile] = useState<File | null>(null);
   const [champError, setChampError] = useState('');
+
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   // Edit championship state (functional)
   const [editingChampId, setEditingChampId] = useState<string | null>(null);
@@ -3066,13 +3075,24 @@ export default function AdminPanel({
       case 'novo_campeonato':
         return (
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs text-slate-800">
-              {editingChampId ? (
-                <>
-                  <h3 className="font-display font-bold text-slate-900 text-lg mb-4 flex items-center gap-2">
-                    <Settings className="w-5 h-5 text-amber-500 animate-spin-slow" />
-                    Editar Campeonato: <span className="text-blue-600">{editChampTitle}</span>
-                  </h3>
+            {(editingChampId || showCreateForm) && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs text-slate-800">
+                {editingChampId ? (
+                  <>
+                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setEditingChampId(null)}
+                        className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-850 transition cursor-pointer"
+                        title="Voltar para a lista"
+                      >
+                        <ArrowLeft className="w-4 h-4" />
+                      </button>
+                      <h3 className="font-display font-bold text-slate-900 text-lg flex items-center gap-2">
+                        <Settings className="w-5 h-5 text-amber-500 animate-spin-slow" />
+                        Editar Campeonato: <span className="text-blue-600">{editChampTitle}</span>
+                      </h3>
+                    </div>
 
                   {editSuccess && (
                     <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 mb-4 text-xs font-semibold">
@@ -3282,10 +3302,20 @@ export default function AdminPanel({
                 </>
               ) : (
                 <>
-                  <h3 className="font-display font-bold text-slate-900 text-lg mb-4 flex items-center gap-2">
-                    <PlusCircle className="w-5 h-5 text-blue-600" />
-                    Configurar Novo Campeonato
-                  </h3>
+                  <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateForm(false)}
+                      className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-850 transition cursor-pointer"
+                      title="Voltar para a lista"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                    </button>
+                    <h3 className="font-display font-bold text-slate-900 text-lg flex items-center gap-2">
+                      <PlusCircle className="w-5 h-5 text-blue-600" />
+                      Configurar Novo Campeonato
+                    </h3>
+                  </div>
 
                   {createSuccess && (
                     <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 mb-4 text-xs font-semibold">
@@ -3476,7 +3506,14 @@ export default function AdminPanel({
                       <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{champError}</div>
                     )}
 
-                    <div className="pt-4 border-t border-slate-100 flex justify-end">
+                    <div className="pt-4 border-t border-slate-100 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateForm(false)}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-5 py-3 rounded-xl font-bold transition cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
                       <button
                         type="submit"
                         className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg cursor-pointer"
@@ -3488,15 +3525,27 @@ export default function AdminPanel({
                 </>
               )}
             </div>
+            )}
 
             {/* List of Championships to select for Edit */}
+            {!editingChampId && !showCreateForm && (
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs text-slate-800">
               <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
                 <div>
                   <h3 className="font-display font-bold text-slate-900 text-base">Campeonatos Cadastrados para Edição</h3>
                   <p className="text-xs text-slate-400">Gerencie e altere dados das competições abaixo.</p>
                 </div>
-                <Trophy className="w-5 h-5 text-blue-600" />
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateForm(true)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3.5 py-2 rounded-xl font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    Novo Campeonato
+                  </button>
+                  <Trophy className="w-5 h-5 text-blue-600" />
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -3569,6 +3618,7 @@ export default function AdminPanel({
                 </table>
               </div>
             </div>
+            )}
           </div>
         );
 

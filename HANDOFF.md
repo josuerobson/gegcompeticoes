@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `5226be2` |
-| Mensagem | `fix: ajusta filtro de resultados para exibir campeonatos globais e do clube logado` |
-| Data/hora | 2026-07-16T15:30:00-03:00 |
+| Hash | `13daad9` |
+| Mensagem | `feat: minimiza o formulario de campeonato exibindo apenas sob demanda na aba Novo Campeonato` |
+| Data/hora | 2026-07-16T16:15:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Pendente (disparado via Webhook) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `5226be2` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `13daad9` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -73,6 +73,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Cadastro de Armas supports inline editing**: Club administrators and master admins can edit existing weapon entries directly from the list view via a new inline form. A backend PUT endpoint updates fields while respecting the same ownership validations as deletion.
 - **Championship List view shows "Inscritos" count instead of "Inscrição" fee**: The user pointed out that the single registration fee value shown in the table was incorrect (as championships have 3 different prices). Thus, the "Inscrição" column was replaced by "Inscritos", which displays the total count of registrations associated with that championship across all modalities and stages.
 - **Gerenciamento Clube > Resultados page layout is simplified into a 3-step select flow (Championship -> Stage -> Modality)**: The user requested that results are displayed only after selecting the Championship (via cards), the Stage, and the Modality, as stage results are independent per Modality and Stage. The view was rebuilt as a progressive funnel with robust tie-breaker calculations (sorting primarily by points/time/factor and then secondary checks on target zones X, 10, 9).
+- **Novo Campeonato (Championship creation/edition form) is minimized by default**: To clean up the interface, the create/edit forms on the 'novo_campeonato' tab are hidden by default, displaying only the list of registered championships. A prominent 'Novo Campeonato' button expands the creation form, and clicking 'Editar' on any championship loads that entry into the edit form. Cancel and Back buttons return to the clean list view.
 
 
 
