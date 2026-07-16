@@ -4,7 +4,7 @@ import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, Check, Trash2, Search, X, Pencil
+  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -1338,6 +1338,19 @@ export default function AdminPanel({
   // Sidebar Menu selection for Clube
   const [clubeMenu, setClubeMenu] = useState<string>('campeonatos');
 
+  // Seleção de filtros para a tela de resultados
+  const [selectedResultChampId, setSelectedResultChampId] = useState<string | null>(null);
+  const [selectedResultStageId, setSelectedResultStageId] = useState<string | null>(null);
+  const [selectedResultModalityId, setSelectedResultModalityId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (clubeMenu !== 'resultados') {
+      setSelectedResultChampId(null);
+      setSelectedResultStageId(null);
+      setSelectedResultModalityId(null);
+    }
+  }, [clubeMenu]);
+
   // Sidebar Menu selection for Plataforma
   const [plataformaMenu, setPlataformaMenu] = useState<string>('novo_campeonato');
 
@@ -1896,45 +1909,348 @@ export default function AdminPanel({
           </div>
         );
 
-      case 'resultados':
-        return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-display font-bold text-slate-900 text-base">Notas e Resultados Homologados</h3>
-                <p className="text-xs text-slate-400">Logs de passagens de pista e tempos homologados pelo Diretor.</p>
+      case 'resultados': {
+        const currentChamp = championships.find(c => c.id === selectedResultChampId);
+        const currentStage = stages.find(s => s.id === selectedResultStageId);
+        const currentMod = modalities.find(m => m.id === selectedResultModalityId);
+
+        // 1. Sem campeonato selecionado: exibe a lista de campeonatos em cards
+        if (!selectedResultChampId) {
+          // Filtra campeonatos do clube atual
+          const clubChamps = championships.filter(c => c.clubId === currentUser?.clubId);
+          return (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="font-display font-bold text-slate-900 text-base">Resultados de Campeonatos</h3>
+                  <p className="text-xs text-slate-400">Selecione um campeonato para visualizar notas, passagens de pista e rankings.</p>
+                </div>
+                <Trophy className="w-5 h-5 text-blue-600" />
               </div>
-              <Target className="w-5 h-5 text-blue-600" />
+
+              {clubChamps.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs">
+                  Nenhum campeonato cadastrado para este clube ainda.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {clubChamps.map((champ) => {
+                    const totalInscritos = registrations.filter(r => r.championshipId === champ.id).length;
+                    return (
+                      <div
+                        key={champ.id}
+                        onClick={() => setSelectedResultChampId(champ.id)}
+                        className="group border border-slate-200 rounded-xl overflow-hidden bg-slate-50/30 hover:bg-white hover:border-blue-400 hover:shadow-md transition duration-200 cursor-pointer flex flex-col"
+                      >
+                        <div className="h-28 overflow-hidden relative">
+                          <img
+                            src={champ.bannerUrl}
+                            alt=""
+                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80';
+                            }}
+                          />
+                          <div className="absolute top-2 right-2 bg-slate-900/80 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                            {champ.status === 'open' ? 'Aberto' : champ.status === 'completed' ? 'Finalizado' : 'Rascunho'}
+                          </div>
+                        </div>
+                        <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                          <div>
+                            <h4 className="font-bold text-slate-800 text-xs group-hover:text-blue-600 transition truncate">{champ.title}</h4>
+                            <p className="text-[10px] text-slate-400 line-clamp-2 mt-1">{champ.description}</p>
+                          </div>
+                          <div className="flex justify-between items-center text-[10px] text-slate-500 pt-2 border-t border-slate-100 font-mono">
+                            <span>Etapas: <strong className="text-slate-700">{champ.stagesCount}</strong></span>
+                            <span>Inscritos: <strong className="text-slate-700">{totalInscritos}</strong></span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // 2. Com campeonato selecionado, mas sem etapa selecionada: exibe a lista de etapas
+        if (!selectedResultStageId) {
+          const champStages = stages.filter(s => s.championshipId === selectedResultChampId);
+          return (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setSelectedResultChampId(null)}
+                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <div>
+                    <h3 className="font-display font-bold text-slate-900 text-base">Selecione a Etapa</h3>
+                    <p className="text-xs text-slate-400">Campeonato: <strong className="text-slate-700">{currentChamp?.title}</strong></p>
+                  </div>
+                </div>
+                <Calendar className="w-5 h-5 text-blue-600" />
+              </div>
+
+              {champStages.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs space-y-3">
+                  <p>Nenhuma etapa cadastrada para este campeonato ainda.</p>
+                  <button
+                    onClick={() => setSelectedResultChampId(null)}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3.5 py-1.5 rounded-lg font-bold transition cursor-pointer"
+                  >
+                    Voltar aos Campeonatos
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {champStages.map((stage) => (
+                    <div
+                      key={stage.id}
+                      onClick={() => setSelectedResultStageId(stage.id)}
+                      className="border border-slate-200 hover:border-blue-400 hover:bg-blue-50/5 rounded-xl p-4 transition duration-150 cursor-pointer space-y-2 flex flex-col justify-between"
+                    >
+                      <div>
+                        <span className="bg-blue-100 text-blue-800 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          Etapa {stage.stageNum}
+                        </span>
+                        <h4 className="font-bold text-slate-800 text-xs mt-2">{stage.title}</h4>
+                        {stage.description && (
+                          <p className="text-[10px] text-slate-400 mt-1 line-clamp-2">{stage.description}</p>
+                        )}
+                      </div>
+                      <div className="text-[9px] font-mono text-slate-500 pt-2 border-t border-slate-100 flex justify-between">
+                        <span>Realização:</span>
+                        <strong className="text-slate-700">{new Date(stage.date).toLocaleDateString()}</strong>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // 3. Com campeonato e etapa selecionados, mas sem modalidade: exibe a lista de modalidades
+        if (!selectedResultModalityId) {
+          // Extrair IDs de modalidades do campeonato
+          let champModIds = [];
+          if (currentChamp?.modalities) {
+            if (Array.isArray(currentChamp.modalities)) {
+              champModIds = currentChamp.modalities;
+            } else if (typeof currentChamp.modalities === 'string') {
+              try {
+                champModIds = JSON.parse(currentChamp.modalities);
+              } catch (_) {}
+            }
+          }
+          const champModalities = modalities.filter(m => champModIds.includes(m.id));
+
+          return (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setSelectedResultStageId(null)}
+                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <div>
+                    <h3 className="font-display font-bold text-slate-900 text-base">Selecione a Modalidade</h3>
+                    <p className="text-xs text-slate-400">
+                      Campeonato: <strong className="text-slate-700">{currentChamp?.title}</strong> • Etapa {currentStage?.stageNum}
+                    </p>
+                  </div>
+                </div>
+                <Activity className="w-5 h-5 text-blue-600" />
+              </div>
+
+              {champModalities.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs space-y-3">
+                  <p>Nenhuma modalidade vinculada a este campeonato ainda.</p>
+                  <button
+                    onClick={() => setSelectedResultStageId(null)}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3.5 py-1.5 rounded-lg font-bold transition cursor-pointer"
+                  >
+                    Voltar às Etapas
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {champModalities.map((mod) => (
+                    <div
+                      key={mod.id}
+                      onClick={() => setSelectedResultModalityId(mod.id)}
+                      className="border border-slate-200 hover:border-blue-400 hover:bg-blue-50/5 rounded-xl p-4 transition duration-150 cursor-pointer space-y-2 flex flex-col justify-between"
+                    >
+                      <div>
+                        <h4 className="font-bold text-slate-800 text-xs">{mod.name}</h4>
+                        {mod.discipline && (
+                          <p className="text-[10px] text-slate-400 mt-1">{mod.discipline}</p>
+                        )}
+                      </div>
+                      <div className="text-[9px] font-mono text-slate-500 pt-2 border-t border-slate-100 space-y-1">
+                        <div className="flex justify-between">
+                          <span>Avaliação:</span>
+                          <span className="font-bold text-slate-700 capitalize">
+                            {mod.evaluationType === 'pontuacao' ? 'Pontos' : mod.evaluationType === 'tempo' ? 'Tempo' : 'Fator (Pontos/Tempo)'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Séries / Tiros:</span>
+                          <span className="font-bold text-slate-700">
+                            {mod.seriesCount} séries × {mod.shotsPerSeries} tiros
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // 4. Com tudo selecionado: exibe a tabela de resultados com filtros e ordenação robusta
+        const filteredScores = stageScores.filter(score => 
+          score.championshipId === selectedResultChampId &&
+          score.stageNum === currentStage?.stageNum &&
+          score.modality === currentMod?.name
+        );
+
+        // Ordenação robusta de acordo com o tipo de avaliação
+        const sortedScores = [...filteredScores].sort((a, b) => {
+          if (currentMod?.evaluationType === 'tempo') {
+            return (a.timeSeconds || 0) - (b.timeSeconds || 0);
+          } else if (currentMod?.evaluationType === 'pontuacao_tempo') {
+            return (b.hitFactor || 0) - (a.hitFactor || 0);
+          } else {
+            // Precisão (Pontos): Maior pontuação ganha.
+            if (b.score !== a.score) {
+              return b.score - a.score;
+            }
+            // Critério de desempate oficial G&G: moscas (X), depois 10, depois 9...
+            const regA = registrations.find(r => r.id === a.registrationId);
+            const regB = registrations.find(r => r.id === b.registrationId);
+            if (regA && regB) {
+              if ((regB.scoreX || 0) !== (regA.scoreX || 0)) {
+                return (regB.scoreX || 0) - (regA.scoreX || 0);
+              }
+              if ((regB.scoreP10 || 0) !== (regA.scoreP10 || 0)) {
+                return (regB.scoreP10 || 0) - (regA.scoreP10 || 0);
+              }
+              if ((regB.scoreP9 || 0) !== (regA.scoreP9 || 0)) {
+                return (regB.scoreP9 || 0) - (regA.scoreP9 || 0);
+              }
+            }
+            return 0;
+          }
+        });
+
+        return (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
+            {/* Header / Breadcrumb navigation */}
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedResultModalityId(null)}
+                  className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+                  title="Voltar para modalidades"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <div>
+                  <h3 className="font-display font-bold text-slate-900 text-base">Resultados da Competição</h3>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-450 mt-0.5">
+                    <span className="hover:underline cursor-pointer" onClick={() => { setSelectedResultChampId(null); setSelectedResultStageId(null); setSelectedResultModalityId(null); }}>{currentChamp?.title}</span>
+                    <span>/</span>
+                    <span className="hover:underline cursor-pointer" onClick={() => { setSelectedResultStageId(null); setSelectedResultModalityId(null); }}>Etapa {currentStage?.stageNum}</span>
+                    <span>/</span>
+                    <span className="font-semibold text-slate-700">{currentMod?.name}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setSelectedResultChampId(null);
+                    setSelectedResultStageId(null);
+                    setSelectedResultModalityId(null);
+                  }}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer"
+                >
+                  Limpar Filtros
+                </button>
+              </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
-                    <th className="py-3 px-2">Atleta</th>
-                    <th className="py-3 px-2">Modalidade</th>
-                    <th className="py-3 px-2 text-center">Etapa</th>
-                    <th className="py-3 px-2 text-right">Tempo</th>
-                    <th className="py-3 px-2 text-right">Pontos</th>
-                    <th className="py-3 px-2 text-right">Fator</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {stageScores.slice().reverse().map((score) => (
-                    <tr key={score.id} className="hover:bg-slate-50/50">
-                      <td className="py-3 px-2 font-bold text-slate-800">{score.shooterName}</td>
-                      <td className="py-3 px-2 text-slate-500">{score.modality}</td>
-                      <td className="py-3 px-2 text-center font-bold text-blue-600">Etapa {score.stageNum}</td>
-                      <td className="py-3 px-2 text-right font-mono">{score.timeSeconds ? `${score.timeSeconds}s` : '-'}</td>
-                      <td className="py-3 px-2 text-right font-bold font-mono text-slate-850">{score.score}</td>
-                      <td className="py-3 px-2 text-right font-bold font-mono text-emerald-600">{score.hitFactor ? score.hitFactor.toFixed(3) : '-'}</td>
+            {/* Results Table */}
+            {sortedScores.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 text-xs">
+                Nenhum resultado homologado para este campeonato, etapa e modalidade ainda.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
+                      <th className="py-3 px-2 text-center w-12">Pos</th>
+                      <th className="py-3 px-2">Atleta</th>
+                      <th className="py-3 px-2 text-center">Clube</th>
+                      {currentMod?.evaluationType !== 'pontuacao' && (
+                        <th className="py-3 px-2 text-right">Tempo</th>
+                      )}
+                      <th className="py-3 px-2 text-right">Pontos</th>
+                      {currentMod?.evaluationType === 'pontuacao_tempo' && (
+                        <th className="py-3 px-2 text-right">Fator</th>
+                      )}
+                      <th className="py-3 px-2 text-center w-24">Desempates</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {sortedScores.map((score, index) => {
+                      const reg = registrations.find(r => r.id === score.registrationId);
+                      return (
+                        <tr key={score.id} className="hover:bg-slate-50/50">
+                          <td className="py-3 px-2 text-center font-bold font-mono">
+                            {index === 0 ? (
+                              <span className="inline-block bg-amber-100 text-amber-800 text-[10px] font-bold w-5 h-5 rounded-full leading-5 text-center">1º</span>
+                            ) : index === 1 ? (
+                              <span className="inline-block bg-slate-100 text-slate-800 text-[10px] font-bold w-5 h-5 rounded-full leading-5 text-center">2º</span>
+                            ) : index === 2 ? (
+                              <span className="inline-block bg-amber-50 text-amber-700 text-[10px] font-bold w-5 h-5 rounded-full leading-5 text-center">3º</span>
+                            ) : (
+                              `${index + 1}º`
+                            )}
+                          </td>
+                          <td className="py-3 px-2 font-bold text-slate-800">{score.shooterName}</td>
+                          <td className="py-3 px-2 text-center text-slate-500 font-mono text-[10px]">
+                            {clubs.find(c => c.id === (users.find(u => u.id === score.userId)?.clubId))?.name || '-'}
+                          </td>
+                          {currentMod?.evaluationType !== 'pontuacao' && (
+                            <td className="py-3 px-2 text-right font-mono">{score.timeSeconds ? `${score.timeSeconds}s` : '-'}</td>
+                          )}
+                          <td className="py-3 px-2 text-right font-bold font-mono text-slate-850">{score.score}</td>
+                          {currentMod?.evaluationType === 'pontuacao_tempo' && (
+                            <td className="py-3 px-2 text-right font-bold font-mono text-emerald-600">{score.hitFactor ? score.hitFactor.toFixed(4) : '-'}</td>
+                          )}
+                          <td className="py-3 px-2 text-center text-slate-400 font-mono text-[10px]">
+                            {reg ? `X:${reg.scoreX || 0} • 10:${reg.scoreP10 || 0} • 9:${reg.scoreP9 || 0}` : '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         );
+      }
 
       case 'financeiro':
         const confirmedRegs = registrations.filter(r => r.paymentStatus === 'approved');

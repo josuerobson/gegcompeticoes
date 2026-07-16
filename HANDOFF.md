@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `26b2786` |
-| Mensagem | `feat: substitui valor de inscricao por contagem total de inscritos na lista de campeonatos` |
-| Data/hora | 2026-07-16T15:05:00-03:00 |
+| Hash | `75286e5` |
+| Mensagem | `feat: implementa fluxo de 3 etapas no painel de resultados e desempates robustos` |
+| Data/hora | 2026-07-16T15:20:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Pendente (disparado via Webhook) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `26b2786` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `75286e5` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -72,6 +72,8 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Cessão de Armas uses CPF/name autocomplete, not a dropdown**: With 2500+ athletes, a full dropdown would be too slow to load. Instead, a debounced search input (min 3 chars) calls `GET /api/members/search?q=` which returns max 8 results. The concession is stored in a new `weapon_concessions` table with a `SERIAL` concession_number. The weapon is also searched via the existing `/api/weapons/search` endpoint (by sigma or weapon_number). The PDF generated matches the "Anexo N" official format (art. 34, Decreto 11.615/2023).
 - **Cadastro de Armas supports inline editing**: Club administrators and master admins can edit existing weapon entries directly from the list view via a new inline form. A backend PUT endpoint updates fields while respecting the same ownership validations as deletion.
 - **Championship List view shows "Inscritos" count instead of "Inscrição" fee**: The user pointed out that the single registration fee value shown in the table was incorrect (as championships have 3 different prices). Thus, the "Inscrição" column was replaced by "Inscritos", which displays the total count of registrations associated with that championship across all modalities and stages.
+- **Gerenciamento Clube > Resultados page layout is simplified into a 3-step select flow (Championship -> Stage -> Modality)**: The user requested that results are displayed only after selecting the Championship (via cards), the Stage, and the Modality, as stage results are independent per Modality and Stage. The view was rebuilt as a progressive funnel with robust tie-breaker calculations (sorting primarily by points/time/factor and then secondary checks on target zones X, 10, 9).
+
 
 
 
