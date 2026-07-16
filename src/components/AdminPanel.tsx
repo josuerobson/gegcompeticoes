@@ -1266,6 +1266,7 @@ export default function AdminPanel({
   };
   const [stageForm, setStageForm] = useState(DEFAULT_STAGE_FORM);
   const [editingStageId, setEditingStageId] = useState<string | null>(null);
+  const [showCreateStageForm, setShowCreateStageForm] = useState(false);
   const [savingStage, setSavingStage] = useState(false);
   const [stageError, setStageError] = useState('');
 
@@ -1296,6 +1297,7 @@ export default function AdminPanel({
       }
       setStageForm(DEFAULT_STAGE_FORM);
       setEditingStageId(null);
+      setShowCreateStageForm(false);
     } finally {
       setSavingStage(false);
     }
@@ -1322,6 +1324,7 @@ export default function AdminPanel({
 
   const cancelEditingStage = () => {
     setEditingStageId(null);
+    setShowCreateStageForm(false);
     setStageForm(DEFAULT_STAGE_FORM);
     setStageError('');
   };
@@ -1358,6 +1361,10 @@ export default function AdminPanel({
     if (plataformaMenu !== 'novo_campeonato') {
       setShowCreateForm(false);
       setEditingChampId(null);
+    }
+    if (plataformaMenu !== 'etapas') {
+      setShowCreateStageForm(false);
+      setEditingStageId(null);
     }
   }, [plataformaMenu]);
 
@@ -3625,135 +3632,177 @@ export default function AdminPanel({
       case 'etapas':
         return (
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
-              <h3 className="font-display font-bold text-slate-900 text-base">
-                {editingStageId ? 'Editar Etapa' : 'Cadastro de Etapas'}
-              </h3>
-
-              {stageError && (
-                <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{stageError}</div>
-              )}
-
-              <form onSubmit={handleSubmitStage} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Campeonato</label>
-                  <select
-                    value={stageForm.championshipId}
-                    onChange={(e) => setStageForm({ ...stageForm, championshipId: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+            {(editingStageId || showCreateStageForm) && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs text-slate-800">
+                <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+                  <button
+                    type="button"
+                    onClick={cancelEditingStage}
+                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-850 transition cursor-pointer"
+                    title="Voltar para a lista"
                   >
-                    <option value="">Selecione...</option>
-                    {championships.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-                  </select>
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <h3 className="font-display font-bold text-slate-900 text-base flex items-center gap-2">
+                    {editingStageId ? (
+                      <>
+                        <Settings className="w-5 h-5 text-amber-500 animate-spin-slow" />
+                        Editar Etapa: <span className="text-blue-600">{(stages.find(s => s.id === editingStageId)?.title || '')}</span>
+                      </>
+                    ) : (
+                      <>
+                        <PlusCircle className="w-5 h-5 text-blue-600" />
+                        Nova Etapa
+                      </>
+                    )}
+                  </h3>
                 </div>
 
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Título</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Etapa 1"
-                    value={stageForm.title}
-                    onChange={(e) => setStageForm({ ...stageForm, title: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                  />
-                </div>
+                {stageError && (
+                  <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{stageError}</div>
+                )}
 
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Descrição</label>
-                  <textarea
-                    rows={3}
-                    value={stageForm.description}
-                    onChange={(e) => setStageForm({ ...stageForm, description: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                  />
-                </div>
+                <form onSubmit={handleSubmitStage} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Campeonato</label>
+                    <select
+                      value={stageForm.championshipId}
+                      onChange={(e) => setStageForm({ ...stageForm, championshipId: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                    >
+                      <option value="">Selecione...</option>
+                      {championships.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                    </select>
+                  </div>
 
-                <ChampField label="Data Início" type="date" value={stageForm.date} onChange={v => setStageForm({ ...stageForm, date: v })} />
-                <ChampField label="Data Encerramento" type="date" value={stageForm.endDate} onChange={v => setStageForm({ ...stageForm, endDate: v })} />
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Título</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Etapa 1"
+                      value={stageForm.title}
+                      onChange={(e) => setStageForm({ ...stageForm, title: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                    />
+                  </div>
 
-                <ChampSelect label="Sexo" value={stageForm.sexo} onChange={v => setStageForm({ ...stageForm, sexo: v })} options={[
-                  { value: 'masculino', label: 'Masculino' }, { value: 'feminino', label: 'Feminino' }, { value: 'misto', label: 'Misto' }
-                ]} />
-                <ChampSelect label="Homologar Resultado" value={stageForm.homologarResultado} onChange={v => setStageForm({ ...stageForm, homologarResultado: v })} options={[
-                  { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
-                ]} />
-                <ChampSelect label="Aberto para Resultados" value={stageForm.abertoParaResultados} onChange={v => setStageForm({ ...stageForm, abertoParaResultados: v })} options={[
-                  { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
-                ]} />
-                <ChampSelect label="Gerar Certificados" value={stageForm.gerarCertificados} onChange={v => setStageForm({ ...stageForm, gerarCertificados: v })} options={[
-                  { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
-                ]} />
-                <ChampField label="Fator de Multiplicação de Resultado" type="number" value={stageForm.fatorMultiplicacaoResultados} onChange={v => setStageForm({ ...stageForm, fatorMultiplicacaoResultados: v })} />
-                <ChampSelect label="Exibir Inscritos e Premiação Página Inicial" value={stageForm.exibirInscritosPaginaInicial} onChange={v => setStageForm({ ...stageForm, exibirInscritosPaginaInicial: v })} options={[
-                  { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
-                ]} />
-                <ChampSelect label="Incluir na Soma da Página Inicial" value={stageForm.incluirNaSomaPaginaInicial} onChange={v => setStageForm({ ...stageForm, incluirNaSomaPaginaInicial: v })} options={[
-                  { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
-                ]} />
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Descrição</label>
+                    <textarea
+                      rows={3}
+                      value={stageForm.description}
+                      onChange={(e) => setStageForm({ ...stageForm, description: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                    />
+                  </div>
 
-                <div className="sm:col-span-2 pt-3 border-t border-slate-100 flex justify-end gap-2">
-                  {editingStageId && (
+                  <ChampField label="Data Início" type="date" value={stageForm.date} onChange={v => setStageForm({ ...stageForm, date: v })} />
+                  <ChampField label="Data Encerramento" type="date" value={stageForm.endDate} onChange={v => setStageForm({ ...stageForm, endDate: v })} />
+
+                  <ChampSelect label="Sexo" value={stageForm.sexo} onChange={v => setStageForm({ ...stageForm, sexo: v })} options={[
+                    { value: 'masculino', label: 'Masculino' }, { value: 'feminino', label: 'Feminino' }, { value: 'misto', label: 'Misto' }
+                  ]} />
+                  <ChampSelect label="Homologar Resultado" value={stageForm.homologarResultado} onChange={v => setStageForm({ ...stageForm, homologarResultado: v })} options={[
+                    { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
+                  ]} />
+                  <ChampSelect label="Aberto para Resultados" value={stageForm.abertoParaResultados} onChange={v => setStageForm({ ...stageForm, abertoParaResultados: v })} options={[
+                    { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
+                  ]} />
+                  <ChampSelect label="Gerar Certificados" value={stageForm.gerarCertificados} onChange={v => setStageForm({ ...stageForm, gerarCertificados: v })} options={[
+                    { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
+                  ]} />
+                  <ChampField label="Fator de Multiplicação de Resultado" type="number" value={stageForm.fatorMultiplicacaoResultados} onChange={v => setStageForm({ ...stageForm, fatorMultiplicacaoResultados: v })} />
+                  <ChampSelect label="Exibir Inscritos e Premiação Página Inicial" value={stageForm.exibirInscritosPaginaInicial} onChange={v => setStageForm({ ...stageForm, exibirInscritosPaginaInicial: v })} options={[
+                    { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
+                  ]} />
+                  <ChampSelect label="Incluir na Soma da Página Inicial" value={stageForm.incluirNaSomaPaginaInicial} onChange={v => setStageForm({ ...stageForm, incluirNaSomaPaginaInicial: v })} options={[
+                    { value: 'sim', label: 'Sim' }, { value: 'nao', label: 'Não' }
+                  ]} />
+
+                  <div className="sm:col-span-2 pt-3 border-t border-slate-100 flex justify-end gap-2">
                     <button
                       type="button"
                       onClick={cancelEditingStage}
                       className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-5 py-3 rounded-xl font-bold transition cursor-pointer"
                     >
-                      Cancelar
+                      Voltar para a Lista
                     </button>
-                  )}
-                  <button
-                    type="submit"
-                    disabled={savingStage || !stageForm.championshipId || !stageForm.title || !stageForm.date}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg cursor-pointer"
-                  >
-                    {savingStage ? 'Salvando...' : editingStageId ? 'Salvar Alterações' : 'Salvar'}
-                  </button>
-                </div>
-              </form>
-            </div>
+                    <button
+                      type="submit"
+                      disabled={savingStage || !stageForm.championshipId || !stageForm.title || !stageForm.date}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg cursor-pointer"
+                    >
+                      {savingStage ? 'Salvando...' : editingStageId ? 'Salvar Alterações' : 'Salvar'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
 
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
-              <h4 className="font-display font-bold text-slate-900 text-sm">Etapas Cadastradas ({stages.length})</h4>
-              {stages.length === 0 ? (
-                <p className="text-xs text-slate-400">Nenhuma etapa cadastrada ainda.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
-                        <th className="py-2 px-2">Campeonato</th>
-                        <th className="py-2 px-2">Título</th>
-                        <th className="py-2 px-2">Início</th>
-                        <th className="py-2 px-2">Encerramento</th>
-                        <th className="py-2 px-2 text-center">Homologar</th>
-                        <th className="py-2 px-2 text-center">Aberto</th>
-                        <th className="py-2 px-2 text-center">Certificados</th>
-                        <th className="py-2 px-2 text-center">Fator</th>
-                        <th className="py-2 px-2 text-right">Ação</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-slate-700">
-                      {stages.map(s => (
-                        <tr key={s.id} className="hover:bg-slate-50/50">
-                          <td className="py-2 px-2 font-semibold">{championships.find(c => c.id === s.championshipId)?.title || s.championshipId}</td>
-                          <td className="py-2 px-2">{s.title}</td>
-                          <td className="py-2 px-2 font-mono">{new Date(s.date).toLocaleDateString('pt-BR')}</td>
-                          <td className="py-2 px-2 font-mono">{s.endDate ? new Date(s.endDate).toLocaleDateString('pt-BR') : '-'}</td>
-                          <td className="py-2 px-2 text-center">{s.homologarResultado === 'sim' ? 'Sim' : 'Não'}</td>
-                          <td className="py-2 px-2 text-center">{s.abertoParaResultados === 'sim' ? 'Sim' : 'Não'}</td>
-                          <td className="py-2 px-2 text-center">{s.gerarCertificados === 'sim' ? 'Sim' : 'Não'}</td>
-                          <td className="py-2 px-2 text-center font-mono">{s.fatorMultiplicacaoResultados ?? 1}</td>
-                          <td className="py-2 px-2 text-right whitespace-nowrap">
-                            <button onClick={() => startEditingStage(s)} className="text-blue-600 hover:text-blue-800 font-bold text-[10px] mr-3">Editar</button>
-                            <button onClick={() => handleDeleteStage(s.id)} className="text-red-500 hover:text-red-700 font-bold text-[10px]">Excluir</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            {!editingStageId && !showCreateStageForm && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs text-slate-800">
+                <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+                  <div>
+                    <h3 className="font-display font-bold text-slate-900 text-base">Etapas Cadastradas ({stages.length})</h3>
+                    <p className="text-xs text-slate-400">Gerencie e altere dados das etapas abaixo.</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateStageForm(true)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3.5 py-2 rounded-xl font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <PlusCircle className="w-4 h-4" />
+                      Nova Etapa
+                    </button>
+                  </div>
                 </div>
-              )}
-            </div>
+
+                {stageError && (
+                  <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold mb-4">{stageError}</div>
+                )}
+
+                {stages.length === 0 ? (
+                  <p className="text-xs text-slate-400">Nenhuma etapa cadastrada ainda.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
+                          <th className="py-2 px-2">Campeonato</th>
+                          <th className="py-2 px-2">Título</th>
+                          <th className="py-2 px-2">Início</th>
+                          <th className="py-2 px-2">Encerramento</th>
+                          <th className="py-2 px-2 text-center">Homologar</th>
+                          <th className="py-2 px-2 text-center">Aberto</th>
+                          <th className="py-2 px-2 text-center">Certificados</th>
+                          <th className="py-2 px-2 text-center">Fator</th>
+                          <th className="py-2 px-2 text-right">Ação</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {stages.map(s => (
+                          <tr key={s.id} className="hover:bg-slate-50/50">
+                            <td className="py-2 px-2 font-semibold">{championships.find(c => c.id === s.championshipId)?.title || s.championshipId}</td>
+                            <td className="py-2 px-2">{s.title}</td>
+                            <td className="py-2 px-2 font-mono">{new Date(s.date).toLocaleDateString('pt-BR')}</td>
+                            <td className="py-2 px-2 font-mono">{s.endDate ? new Date(s.endDate).toLocaleDateString('pt-BR') : '-'}</td>
+                            <td className="py-2 px-2 text-center">{s.homologarResultado === 'sim' ? 'Sim' : 'Não'}</td>
+                            <td className="py-2 px-2 text-center">{s.abertoParaResultados === 'sim' ? 'Sim' : 'Não'}</td>
+                            <td className="py-2 px-2 text-center">{s.gerarCertificados === 'sim' ? 'Sim' : 'Não'}</td>
+                            <td className="py-2 px-2 text-center font-mono">{s.fatorMultiplicacaoResultados ?? 1}</td>
+                            <td className="py-2 px-2 text-right whitespace-nowrap">
+                              <button onClick={() => startEditingStage(s)} className="text-blue-600 hover:text-blue-800 font-bold text-[10px] mr-3">Editar</button>
+                              <button onClick={() => handleDeleteStage(s.id)} className="text-red-500 hover:text-red-700 font-bold text-[10px]">Excluir</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
 
