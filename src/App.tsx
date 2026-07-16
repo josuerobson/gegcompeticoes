@@ -853,6 +853,32 @@ export default function App() {
     }
   };
 
+  const handleUpdateWeapon = async (weaponId: string, updates: {
+    manufacturer?: string; model?: string; caliber?: string;
+    weaponNumber?: string; sigmaNumber?: string; weaponClass?: string;
+    permissionStatus?: string; registrySystem?: string;
+  }): Promise<{ error?: string }> => {
+    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentUser) authHeaders['x-user-id'] = currentUser.id;
+    try {
+      const res = await fetch(`/api/weapons/${weaponId}`, {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify(updates),
+      });
+      if (res.ok) {
+        await syncWithBackend();
+        return {};
+      }
+      const data = await res.json().catch(() => ({}));
+      return { error: data.error || 'Erro ao atualizar arma.' };
+    } catch {
+      return { error: 'Erro ao atualizar arma.' };
+    }
+  };
+
+
+
   const handleAddStage = async (data: StageInput): Promise<{ stage?: Stage; error?: string }> => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {
@@ -1833,6 +1859,7 @@ export default function App() {
               onToggleAdminDemo={handleToggleAdminDemo}
               onAddWeapon={handleAddWeapon}
               onRemoveWeapon={handleRemoveWeapon}
+              onUpdateWeapon={handleUpdateWeapon}
               onAddWeaponLookup={handleAddWeaponLookup}
               onUpdateWeaponLookup={handleUpdateWeaponLookup}
               onRemoveWeaponLookup={handleRemoveWeaponLookup}

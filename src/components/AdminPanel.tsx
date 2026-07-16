@@ -4,7 +4,7 @@ import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, Check, Trash2, Search, X
+  Eye, Check, Trash2, Search, X, Pencil
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -30,6 +30,7 @@ interface AdminPanelProps {
   modalities: Modality[];
   onAddWeapon: (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string }) => Promise<void>;
   onRemoveWeapon: (weaponId: string) => Promise<void>;
+  onUpdateWeapon: (weaponId: string, updates: { manufacturer?: string; model?: string; caliber?: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string }) => Promise<{ error?: string }>;
   onAddWeaponLookup: (kind: string, label: string) => Promise<{ error?: string }>;
   onUpdateWeaponLookup: (id: string, label: string) => Promise<{ error?: string }>;
   onRemoveWeaponLookup: (id: string) => Promise<{ error?: string }>;
@@ -1161,6 +1162,7 @@ export default function AdminPanel({
   modalities,
   onAddWeapon,
   onRemoveWeapon,
+  onUpdateWeapon,
   onAddWeaponLookup,
   onUpdateWeaponLookup,
   onRemoveWeaponLookup,
@@ -1198,6 +1200,27 @@ export default function AdminPanel({
       setSavingClubWeapon(false);
     }
   };
+
+  // Weapon edit inline
+  const [editingWeaponId, setEditingWeaponId] = useState<string | null>(null);
+  const [editWeaponData, setEditWeaponData] = useState(DEFAULT_CLUB_WEAPON);
+  const [savingWeaponEdit, setSavingWeaponEdit] = useState(false);
+  const [weaponEditError, setWeaponEditError] = useState('');
+
+  const handleSaveWeaponEdit = async () => {
+    if (!editingWeaponId) return;
+    setSavingWeaponEdit(true);
+    setWeaponEditError('');
+    const result = await onUpdateWeapon(editingWeaponId, editWeaponData);
+    setSavingWeaponEdit(false);
+    if (result.error) {
+      setWeaponEditError(result.error);
+    } else {
+      setEditingWeaponId(null);
+    }
+  };
+
+
 
   const weaponLookup = (kind: string) => weaponLookupOptions.filter(o => o.kind === kind);
 
@@ -3551,21 +3574,104 @@ export default function AdminPanel({
               </div>
 
               {/* Weapons list */}
-              <div className="space-y-2 max-h-[220px] overflow-y-auto">
+              <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
                 {clubWeapons.length === 0 ? (
                   <p className="text-xs text-slate-400 p-2.5">Nenhuma arma cadastrada para este clube ainda.</p>
                 ) : clubWeapons.map((w) => (
-                  <div key={w.id} className="bg-slate-100/50 p-2.5 rounded-lg text-xs flex justify-between items-center leading-tight">
-                    <div>
-                      <span className="font-bold text-slate-800 block">{w.manufacturer} {w.model} {w.caliber}</span>
-                      <span className="text-[10px] text-slate-450 font-mono block">
-                        {[w.weaponNumber && `Nº ${w.weaponNumber}`, w.sigmaNumber && `Sigma ${w.sigmaNumber}`, w.weaponClass, w.registrySystem, w.permissionStatus].filter(Boolean).join(' • ')}
-                      </span>
-                    </div>
-                    <button onClick={() => onRemoveWeapon(w.id)} className="text-red-500 hover:text-red-700">Remover</button>
+                  <div key={w.id} className="border border-slate-200 rounded-xl overflow-hidden">
+                    {editingWeaponId === w.id ? (
+                      /* ── EDIT MODE ── */
+                      <div className="bg-slate-50 p-3 space-y-2">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase">Editando arma</p>
+                        {weaponEditError && (
+                          <p className="text-[10px] text-red-600 font-semibold">{weaponEditError}</p>
+                        )}
+                        <input type="text" placeholder="Número da arma" value={editWeaponData.weaponNumber} onChange={(e) => setEditWeaponData({ ...editWeaponData, weaponNumber: e.target.value })} className="w-full bg-white border border-slate-200 p-2 rounded-lg text-xs" />
+                        <input type="text" placeholder="Número Sigma" value={editWeaponData.sigmaNumber} onChange={(e) => setEditWeaponData({ ...editWeaponData, sigmaNumber: e.target.value })} className="w-full bg-white border border-slate-200 p-2 rounded-lg text-xs" />
+                        <select value={editWeaponData.weaponClass} onChange={(e) => setEditWeaponData({ ...editWeaponData, weaponClass: e.target.value })} className="w-full bg-white border border-slate-200 p-2 rounded-lg text-xs">
+                          <option value="">Classe...</option>
+                          {weaponLookup('classe').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                        </select>
+                        <select value={editWeaponData.model} onChange={(e) => setEditWeaponData({ ...editWeaponData, model: e.target.value })} className="w-full bg-white border border-slate-200 p-2 rounded-lg text-xs">
+                          <option value="">Modelo...</option>
+                          {weaponLookup('modelo').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                        </select>
+                        <select value={editWeaponData.caliber} onChange={(e) => setEditWeaponData({ ...editWeaponData, caliber: e.target.value })} className="w-full bg-white border border-slate-200 p-2 rounded-lg text-xs">
+                          <option value="">Calibre...</option>
+                          {weaponLookup('calibre').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                        </select>
+                        <select value={editWeaponData.manufacturer} onChange={(e) => setEditWeaponData({ ...editWeaponData, manufacturer: e.target.value })} className="w-full bg-white border border-slate-200 p-2 rounded-lg text-xs">
+                          <option value="">Fabricante...</option>
+                          {weaponLookup('fabricante').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                        </select>
+                        <select value={editWeaponData.registrySystem} onChange={(e) => setEditWeaponData({ ...editWeaponData, registrySystem: e.target.value })} className="w-full bg-white border border-slate-200 p-2 rounded-lg text-xs">
+                          <option value="">Arma é...</option>
+                          {weaponLookup('tipo_arma').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                        </select>
+                        <select value={editWeaponData.permissionStatus} onChange={(e) => setEditWeaponData({ ...editWeaponData, permissionStatus: e.target.value })} className="w-full bg-white border border-slate-200 p-2 rounded-lg text-xs">
+                          <option value="">Status de permissão...</option>
+                          {weaponLookup('permissao_arma').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                        </select>
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            onClick={handleSaveWeaponEdit}
+                            disabled={savingWeaponEdit}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs py-2 rounded-lg font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            {savingWeaponEdit ? <><div className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Salvando...</> : <><Check className="w-3 h-3" /> Salvar alterações</>}
+                          </button>
+                          <button
+                            onClick={() => { setEditingWeaponId(null); setWeaponEditError(''); }}
+                            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-lg font-semibold transition cursor-pointer"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* ── VIEW MODE ── */
+                      <div className="bg-slate-50/50 p-2.5 flex justify-between items-start gap-2 text-xs leading-tight">
+                        <div className="min-w-0">
+                          <span className="font-bold text-slate-800 block truncate">{w.manufacturer} {w.model} {w.caliber}</span>
+                          <span className="text-[10px] text-slate-500 font-mono block truncate">
+                            {[w.weaponNumber && `Nº ${w.weaponNumber}`, w.sigmaNumber && `Sigma ${w.sigmaNumber}`, w.weaponClass, w.registrySystem, w.permissionStatus].filter(Boolean).join(' • ')}
+                          </span>
+                        </div>
+                        <div className="flex gap-1.5 shrink-0">
+                          <button
+                            onClick={() => {
+                              setEditingWeaponId(w.id);
+                              setWeaponEditError('');
+                              setEditWeaponData({
+                                weaponNumber: w.weaponNumber || '',
+                                sigmaNumber: w.sigmaNumber || '',
+                                weaponClass: w.weaponClass || '',
+                                model: w.model || '',
+                                caliber: w.caliber || '',
+                                manufacturer: w.manufacturer || '',
+                                registrySystem: w.registrySystem || '',
+                                permissionStatus: w.permissionStatus || '',
+                              });
+                            }}
+                            className="text-blue-500 hover:text-blue-700 transition p-1 rounded hover:bg-blue-50 cursor-pointer"
+                            title="Editar"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => onRemoveWeapon(w.id)}
+                            className="text-red-400 hover:text-red-600 transition p-1 rounded hover:bg-red-50 cursor-pointer"
+                            title="Remover"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
+
             </div>
           </div>
         );

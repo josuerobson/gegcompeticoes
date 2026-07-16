@@ -1747,6 +1747,48 @@ app.delete('/api/weapons/:id', requireAuth, async (req, res) => {
   }
 });
 
+app.put('/api/weapons/:id', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const weaponId = req.params.id;
+  const { manufacturer, model, caliber, weaponNumber, sigmaNumber, weaponClass, permissionStatus, registrySystem } = req.body;
+
+  try {
+    const weaponRes = await pool.query('SELECT * FROM weapons WHERE id = $1', [weaponId]);
+    if (weaponRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Arma não encontrada.' });
+    }
+    const weapon = mapWeapon(weaponRes.rows[0]);
+
+    const canEdit = weapon.ownerId === currentUser.id || (ADMIN_ROLES.includes(currentUser.role) && weapon.ownerId === currentUser.clubId);
+    if (!canEdit) {
+      return res.status(403).json({ error: 'Você não tem permissão para editar esta arma.' });
+    }
+
+    await pool.query(
+      `UPDATE weapons SET
+        manufacturer     = COALESCE($1, manufacturer),
+        model            = COALESCE($2, model),
+        caliber          = COALESCE($3, caliber),
+        weapon_number    = $4,
+        sigma_number     = $5,
+        weapon_class     = $6,
+        permission_status = $7,
+        registry_system  = $8
+       WHERE id = $9`,
+      [manufacturer, model, caliber, weaponNumber || null, sigmaNumber || null,
+       weaponClass || null, permissionStatus || null, registrySystem || null, weaponId]
+    );
+
+    const updated = await pool.query('SELECT * FROM weapons WHERE id = $1', [weaponId]);
+    res.json({ weapon: mapWeapon(updated.rows[0]) });
+  } catch (err) {
+    console.error('Update weapon error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar arma.' });
+  }
+});
+
+
+
 // Managed dropdown lists for the weapon form (Classe/Modelo/Calibre/Fabricante/
 // Arma é/Status de permissão). Reading is open (club admins need it to populate
 // the weapon form); writing is restricted to master_admin.
