@@ -535,11 +535,11 @@ export async function initDB() {
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS weapon_concessions (
-        id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        id                 TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         concession_number  SERIAL,
-        club_id            UUID NOT NULL REFERENCES clubs(id),
-        athlete_id         UUID NOT NULL REFERENCES users(id),
-        weapon_id          UUID NOT NULL REFERENCES weapons(id),
+        club_id            TEXT NOT NULL REFERENCES clubs(id),
+        athlete_id         TEXT NOT NULL REFERENCES users(id),
+        weapon_id          TEXT NOT NULL REFERENCES weapons(id),
         start_date         DATE NOT NULL,
         end_date           DATE NOT NULL,
         created_at         TIMESTAMPTZ DEFAULT NOW()
