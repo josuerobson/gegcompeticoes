@@ -1916,8 +1916,8 @@ export default function AdminPanel({
 
         // 1. Sem campeonato selecionado: exibe a lista de campeonatos em cards
         if (!selectedResultChampId) {
-          // Filtra campeonatos do clube atual
-          const clubChamps = championships.filter(c => c.clubId === currentUser?.clubId);
+          // Filtra campeonatos do clube atual ou globais (sem clube associado)
+          const clubChamps = championships.filter(c => !c.clubId || c.clubId === currentUser?.clubId);
           return (
             <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
               <div className="flex justify-between items-center pb-3 border-b border-slate-100">

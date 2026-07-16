@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `75286e5` |
-| Mensagem | `feat: implementa fluxo de 3 etapas no painel de resultados e desempates robustos` |
-| Data/hora | 2026-07-16T15:20:00-03:00 |
+| Hash | `5226be2` |
+| Mensagem | `fix: ajusta filtro de resultados para exibir campeonatos globais e do clube logado` |
+| Data/hora | 2026-07-16T15:30:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Pendente (disparado via Webhook) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `75286e5` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `5226be2` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
