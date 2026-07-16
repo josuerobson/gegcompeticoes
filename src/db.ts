@@ -533,6 +533,19 @@ export async function initDB() {
       );
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS weapon_concessions (
+        id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        concession_number  SERIAL,
+        club_id            UUID NOT NULL REFERENCES clubs(id),
+        athlete_id         UUID NOT NULL REFERENCES users(id),
+        weapon_id          UUID NOT NULL REFERENCES weapons(id),
+        start_date         DATE NOT NULL,
+        end_date           DATE NOT NULL,
+        created_at         TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
     await client.query('COMMIT');
 
     const settingsCountRes = await client.query("SELECT COUNT(*) FROM settings WHERE key = 'default_image'");

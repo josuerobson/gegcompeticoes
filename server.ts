@@ -2332,6 +2332,145 @@ app.post('/api/settings', requireAdmin, async (req, res) => {
 });
 
 // ==========================================
+// WEAPON CONCESSIONS
+// ==========================================
+
+// Search club members by CPF or name (debounced autocomplete — avoids loading 2500+ records at once)
+app.get('/api/members/search', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const q = (req.query.q as string || '').trim();
+  if (!q || q.length < 3) return res.json({ members: [] });
+  try {
+    const term = `%${q.replace(/\D/g, '') || q}%`;
+    const nameTerm = `%${q}%`;
+    let rows;
+    if (currentUser.role === 'master_admin') {
+      const r = await pool.query(
+        `SELECT id, full_name, cpf, cr_number FROM users
+         WHERE role = 'member'
+           AND (regexp_replace(cpf, '[^0-9]', '', 'g') ILIKE $1 OR full_name ILIKE $2)
+         ORDER BY full_name LIMIT 8`,
+        [term, nameTerm]
+      );
+      rows = r.rows;
+    } else {
+      const r = await pool.query(
+        `SELECT id, full_name, cpf, cr_number FROM users
+         WHERE role = 'member' AND club_id = $1
+           AND (regexp_replace(cpf, '[^0-9]', '', 'g') ILIKE $2 OR full_name ILIKE $3)
+         ORDER BY full_name LIMIT 8`,
+        [currentUser.clubId, term, nameTerm]
+      );
+      rows = r.rows;
+    }
+    res.json({ members: rows.map((u: any) => ({ id: u.id, fullName: u.full_name, cpf: u.cpf, crNumber: u.cr_number })) });
+  } catch (err) {
+    console.error('Member search error:', err);
+    res.status(500).json({ error: 'Erro ao buscar atletas.' });
+  }
+});
+
+// Create a weapon concession record
+app.post('/api/weapon-concessions', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { athleteId, weaponId, startDate, endDate } = req.body as {
+    athleteId: string;
+    weaponId: string;
+    startDate: string;
+    endDate: string;
+  };
+  if (!athleteId || !weaponId || !startDate || !endDate) {
+    return res.status(400).json({ error: 'athleteId, weaponId, startDate e endDate são obrigatórios.' });
+  }
+  let clubId = currentUser.clubId;
+  if (!clubId && currentUser.role === 'master_admin') {
+    const wRes = await pool.query(
+      `SELECT u.club_id FROM weapons w JOIN users u ON u.id = w.owner_id WHERE w.id = $1`,
+      [weaponId]
+    );
+    clubId = wRes.rows[0]?.club_id;
+  }
+  if (!clubId) return res.status(400).json({ error: 'Clube não identificado.' });
+  try {
+    const result = await pool.query(
+      `INSERT INTO weapon_concessions (club_id, athlete_id, weapon_id, start_date, end_date)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [clubId, athleteId, weaponId, startDate, endDate]
+    );
+    const row = result.rows[0];
+    const enriched = await pool.query(
+      `SELECT wc.*,
+         u.full_name as athlete_name, u.cpf as athlete_cpf, u.cr_number as athlete_cr,
+         w.model as weapon_model, w.caliber as weapon_caliber,
+         w.sigma_number as weapon_sigma, w.weapon_number as weapon_number,
+         w.manufacturer as weapon_manufacturer,
+         c.name as club_name, c.cnpj as club_cnpj, c.city as club_city, c.state as club_state
+       FROM weapon_concessions wc
+         JOIN users u ON u.id = wc.athlete_id
+         JOIN weapons w ON w.id = wc.weapon_id
+         JOIN clubs c ON c.id = wc.club_id
+       WHERE wc.id = $1`,
+      [row.id]
+    );
+    const e = enriched.rows[0];
+    res.status(201).json({
+      concession: {
+        id: e.id,
+        concessionNumber: e.concession_number,
+        clubId: e.club_id,
+        clubName: e.club_name,
+        clubCnpj: e.club_cnpj,
+        clubCity: e.club_city,
+        clubState: e.club_state,
+        athleteId: e.athlete_id,
+        athleteName: e.athlete_name,
+        athleteCpf: e.athlete_cpf,
+        athleteCr: e.athlete_cr,
+        weaponId: e.weapon_id,
+        weaponModel: e.weapon_model,
+        weaponCaliber: e.weapon_caliber,
+        weaponSigma: e.weapon_sigma,
+        weaponNumber: e.weapon_number,
+        weaponManufacturer: e.weapon_manufacturer,
+        startDate: e.start_date,
+        endDate: e.end_date,
+        createdAt: e.created_at,
+      }
+    });
+  } catch (err) {
+    console.error('Create concession error:', err);
+    res.status(500).json({ error: 'Erro ao registrar cessão.' });
+  }
+});
+
+// List weapon concessions for admin's club
+app.get('/api/weapon-concessions', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  try {
+    let query = `SELECT wc.*,
+         u.full_name as athlete_name, u.cpf as athlete_cpf,
+         w.model as weapon_model, w.sigma_number as weapon_sigma,
+         c.name as club_name
+       FROM weapon_concessions wc
+         JOIN users u ON u.id = wc.athlete_id
+         JOIN weapons w ON w.id = wc.weapon_id
+         JOIN clubs c ON c.id = wc.club_id`;
+    const params: any[] = [];
+    if (currentUser.role !== 'master_admin') {
+      query += ` WHERE wc.club_id = $1`;
+      params.push(currentUser.clubId);
+    }
+    query += ` ORDER BY wc.concession_number DESC LIMIT 50`;
+    const result = await pool.query(query, params);
+    res.json({ concessions: result.rows });
+  } catch (err) {
+    console.error('List concessions error:', err);
+    res.status(500).json({ error: 'Erro ao buscar cessões.' });
+  }
+});
+
+// ==========================================
 // VITE DEV SERVER AND PRODUCTION ASSET HANDLERS
 // ==========================================
 

@@ -47,10 +47,12 @@ Real (backed by actual DB tables/endpoints, tested end-to-end):
 - **Menus Clube > Cadastrar Resultados** — full result entry with series grid, target zones (X, 10, 9..0), automatic best series detection, penalties, execution metadata and status actions (Absent/DQ).
 - **Menus Clube > Inscrição Clube** — bulk registration for club members, allowing matching club weapons and real-time weapon search by Sigma/Serial number, using a backend bulk registration API.
 - **ChampionshipsView > Inscrição Individual** — athlete registration now supports real-time Sigma/serial weapon search and auto-detects re-entries to charge the promotional re-entry fee correctly.
+- **Gerenciamento Clube > Cessão de Arma** — real DB-backed form: CPF/name autocomplete (debounced, max 8 results, avoids loading 2500+ athletes), weapon search by sigma/weapon_number (reuses `/api/weapons/search`), start/end dates, stored in `weapon_concessions` table (SERIAL `concession_number`), PDF generation matching Anexo N format (art. 34, Decreto 11.615/2023).
 
 Still decorative/mock (local `useState` arrays, no backing table, don't trust the UI at face value):
 - **Administrador Master > Gerenciar Clubes** (`masterClubs`) and **Gestão de Cobranças** (`billingList`) — separate from the real "Novo Clube" list under Gerenciamento Plataforma.
 - Most of **ADM** beyond Cadastro de armas and Cadastrar Resultados (Munições, Filtro Resultados, Relatórios e declarações, Treinamento/competições, Validar treinamentos), all of **IDSC**, and all of **SITE** (banners, patrocinadores, vídeos, imagem padrão) haven't been converted from the original mock scaffold.
+- **Cessão de Arma** was decorative — now moved to Real list above (2026-07-15).
 
 ## Deploy
 

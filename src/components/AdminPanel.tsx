@@ -4,7 +4,7 @@ import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, Check, Trash2
+  Eye, Check, Trash2, Search, X
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -1582,14 +1582,19 @@ export default function AdminPanel({
   };
 
 
-  // Weapon Concession
-  const [cessaoAtletaName, setCessaoAtletaName] = useState('');
-  const [cessaoArmaModel, setCessaoArmaModel] = useState('');
-  const [cessaoCaliber, setCessaoCaliber] = useState('9mm');
-  const [cessaoSigma, setCessaoSigma] = useState('');
-  const [cessaoOwner, setCessaoOwner] = useState('G&G Escola de Tiro');
-  const [cessaoDurationDays, setCessaoDurationDays] = useState(1);
-  const [isCessaoPrintOpen, setIsCessaoPrintOpen] = useState(false);
+  // Weapon Concession — real form
+  const [cessaoAtletaQuery, setCessaoAtletaQuery] = useState('');
+  const [cessaoAtletaResults, setCessaoAtletaResults] = useState<Array<{id:string;fullName:string;cpf:string;crNumber:string}>>([]);
+  const [cessaoAtletaSelecionado, setCessaoAtletaSelecionado] = useState<{id:string;fullName:string;cpf:string;crNumber:string}|null>(null);
+  const [cessaoArmaQuery, setCessaoArmaQuery] = useState('');
+  const [cessaoArmaResults, setCessaoArmaResults] = useState<any[]>([]);
+  const [cessaoArmaSelecionada, setCessaoArmaSelecionada] = useState<any|null>(null);
+  const [cessaoDataInicio, setCessaoDataInicio] = useState('');
+  const [cessaoDataFim, setCessaoDataFim] = useState('');
+  const [cessaoSaving, setCessaoSaving] = useState(false);
+  const [cessaoSalva, setCessaoSalva] = useState<any|null>(null);
+  const [cessaoError, setCessaoError] = useState('');
+  const [cessaoPdfOpen, setCessaoPdfOpen] = useState(false);
 
   // Declarations
   const [decAthleteId, setDecAthleteId] = useState('');
@@ -2185,140 +2190,310 @@ export default function AdminPanel({
 
       case 'cessao_armas':
         return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-display font-bold text-slate-900 text-base">Termo de Cessão de Uso de Armamento</h3>
-                <p className="text-xs text-slate-400">Emissão de termo de empréstimo de arma de fogo para competições/treinos regulamentares.</p>
+          <div className="space-y-6">
+            {/* Form Card */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="font-display font-bold text-slate-900 text-base">Termo de Cessão de Uso de Armamento</h3>
+                  <p className="text-xs text-slate-400">Registro oficial conforme art. 34 do Decreto nº 11.615/2023 — os dados são salvos no banco de dados.</p>
+                </div>
+                <FileSignature className="w-5 h-5 text-blue-600" />
               </div>
-              <FileSignature className="w-5 h-5 text-blue-600" />
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-              {/* Form Input */}
-              <div className="space-y-4">
+              {cessaoError && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-4 py-3">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  {cessaoError}
+                </div>
+              )}
+
+              {cessaoSalva && (
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-xl px-4 py-3">
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  Cessão <strong>Nº {cessaoSalva.concessionNumber}</strong> registrada com sucesso!
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* ATLETA */}
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Nome do Atleta Recebedor</label>
-                  <select
-                    value={cessaoAtletaName}
-                    onChange={(e) => setCessaoAtletaName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
-                  >
-                    <option value="">Selecione o Atleta...</option>
-                    {users.map(u => (
-                      <option key={u.id} value={u.fullName}>{u.fullName}</option>
-                    ))}
-                  </select>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Atleta Recebedor</label>
+                  {cessaoAtletaSelecionado ? (
+                    <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                      <div>
+                        <p className="text-xs font-bold text-emerald-800">{cessaoAtletaSelecionado.fullName}</p>
+                        <p className="text-[10px] text-emerald-600 font-mono">{cessaoAtletaSelecionado.cpf}</p>
+                      </div>
+                      <button
+                        onClick={() => { setCessaoAtletaSelecionado(null); setCessaoAtletaQuery(''); setCessaoSalva(null); }}
+                        className="text-emerald-500 hover:text-emerald-700 transition"
+                      ><X className="w-4 h-4" /></button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Digite CPF ou nome do atleta (mín. 3 chars)..."
+                        value={cessaoAtletaQuery}
+                        onChange={async (e) => {
+                          const val = e.target.value;
+                          setCessaoAtletaQuery(val);
+                          setCessaoSalva(null);
+                          if (val.length < 3) { setCessaoAtletaResults([]); return; }
+                          try {
+                            const r = await fetch(`/api/members/search?q=${encodeURIComponent(val)}`, { headers: { 'x-user-id': currentUser?.id || '' } });
+                            const d = await r.json();
+                            setCessaoAtletaResults(d.members || []);
+                          } catch { setCessaoAtletaResults([]); }
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 pr-8"
+                      />
+                      <Search className="absolute right-3 top-3 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                      {cessaoAtletaResults.length > 0 && (
+                        <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                          {cessaoAtletaResults.map(m => (
+                            <button
+                              key={m.id}
+                              onClick={() => { setCessaoAtletaSelecionado(m); setCessaoAtletaResults([]); setCessaoAtletaQuery(''); }}
+                              className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition border-b border-slate-100 last:border-0"
+                            >
+                              <p className="text-xs font-semibold text-slate-800">{m.fullName}</p>
+                              <p className="text-[10px] font-mono text-slate-500">{m.cpf}</p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
+                {/* ARMA */}
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Arma Cedida</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Arma Cedida (busca por Nº ou SIGMA)</label>
+                  {cessaoArmaSelecionada ? (
+                    <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+                      <div>
+                        <p className="text-xs font-bold text-blue-800">{cessaoArmaSelecionada.model} — {cessaoArmaSelecionada.caliber}</p>
+                        <p className="text-[10px] font-mono text-blue-600">SIGMA: {cessaoArmaSelecionada.sigmaNumber || cessaoArmaSelecionada.weaponNumber || '—'}</p>
+                      </div>
+                      <button
+                        onClick={() => { setCessaoArmaSelecionada(null); setCessaoArmaQuery(''); setCessaoSalva(null); }}
+                        className="text-blue-500 hover:text-blue-700 transition"
+                      ><X className="w-4 h-4" /></button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Digite número da arma ou SIGMA (mín. 3 chars)..."
+                        value={cessaoArmaQuery}
+                        onChange={async (e) => {
+                          const val = e.target.value;
+                          setCessaoArmaQuery(val);
+                          setCessaoSalva(null);
+                          if (val.length < 3) { setCessaoArmaResults([]); return; }
+                          try {
+                            const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(val)}`, { headers: { 'x-user-id': currentUser?.id || '' } });
+                            const d = await r.json();
+                            setCessaoArmaResults(d.weapons || []);
+                          } catch { setCessaoArmaResults([]); }
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 pr-8"
+                      />
+                      <Search className="absolute right-3 top-3 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                      {cessaoArmaResults.length > 0 && (
+                        <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                          {cessaoArmaResults.map((w: any) => (
+                            <button
+                              key={w.id}
+                              onClick={() => { setCessaoArmaSelecionada(w); setCessaoArmaResults([]); setCessaoArmaQuery(''); }}
+                              className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition border-b border-slate-100 last:border-0"
+                            >
+                              <p className="text-xs font-semibold text-slate-800">{w.manufacturer} {w.model} — {w.caliber}</p>
+                              <p className="text-[10px] font-mono text-slate-500">SIGMA: {w.sigmaNumber || w.weaponNumber || '—'}</p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* DATA INÍCIO */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Data de Início da Cessão</label>
                   <input
-                    type="text"
-                    placeholder="Ex: Pistola Glock G25"
-                    value={cessaoArmaModel}
-                    onChange={(e) => setCessaoArmaModel(e.target.value)}
+                    type="date"
+                    value={cessaoDataInicio}
+                    onChange={(e) => { setCessaoDataInicio(e.target.value); setCessaoSalva(null); }}
                     className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Calibre</label>
-                    <select
-                      value={cessaoCaliber}
-                      onChange={(e) => setCessaoCaliber(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
-                    >
-                      <option value="9mm">9mm Luger</option>
-                      <option value=".380 ACP">.380 ACP</option>
-                      <option value=".22 LR">.22 LR</option>
-                      <option value="12 GA">12 GA</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Número Sigma / Registro</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: SIGMA-10293847"
-                      value={cessaoSigma}
-                      onChange={(e) => setCessaoSigma(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-750 font-mono"
-                    />
-                  </div>
+                {/* DATA FIM */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Data de Fim da Cessão</label>
+                  <input
+                    type="date"
+                    value={cessaoDataFim}
+                    onChange={(e) => { setCessaoDataFim(e.target.value); setCessaoSalva(null); }}
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                  />
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Proprietário Cedente</label>
-                    <input
-                      type="text"
-                      value={cessaoOwner}
-                      onChange={(e) => setCessaoOwner(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Validade em Dias</label>
-                    <input
-                      type="number"
-                      value={cessaoDurationDays}
-                      onChange={(e) => setCessaoDurationDays(Number(e.target.value))}
-                      className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-mono"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setIsCessaoPrintOpen(true)}
-                  disabled={!cessaoAtletaName || !cessaoArmaModel || !cessaoSigma}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 text-white text-xs py-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-blue-50"
-                >
-                  <Printer className="w-4 h-4" />
-                  Gerar e Visualizar Documento
-                </button>
               </div>
 
-              {/* Concession Document Preview */}
-              {cessaoAtletaName && cessaoArmaModel && cessaoSigma && (
-                <div className="border border-slate-250 p-6 rounded-xl bg-slate-50 font-mono text-[10px] text-slate-700 space-y-4">
-                  <div className="text-center font-bold border-b border-slate-200 pb-2">
-                    <p>TERMO DE CESSÃO DE USO TEMPORÁRIO DE ARMA DE FOGO</p>
-                    <p className="text-[8px] font-normal text-slate-500">HOMOLOGADO SFPC / COMANDO DO EXÉRCITO BRASILEIRO</p>
+              {/* ACTIONS */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={async () => {
+                    if (!cessaoAtletaSelecionado || !cessaoArmaSelecionada || !cessaoDataInicio || !cessaoDataFim) {
+                      setCessaoError('Preencha todos os campos: atleta, arma e datas de início e fim.');
+                      return;
+                    }
+                    if (cessaoDataFim < cessaoDataInicio) {
+                      setCessaoError('A data de fim deve ser igual ou posterior à data de início.');
+                      return;
+                    }
+                    setCessaoError('');
+                    setCessaoSaving(true);
+                    try {
+                      const r = await fetch('/api/weapon-concessions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
+                        body: JSON.stringify({
+                          athleteId: cessaoAtletaSelecionado.id,
+                          weaponId: cessaoArmaSelecionada.id,
+                          startDate: cessaoDataInicio,
+                          endDate: cessaoDataFim,
+                        }),
+                      });
+                      const d = await r.json();
+                      if (!r.ok) throw new Error(d.error || 'Erro ao registrar.');
+                      setCessaoSalva(d.concession);
+                      setCessaoPdfOpen(false);
+                    } catch (err: any) {
+                      setCessaoError(err.message || 'Erro ao registrar cessão.');
+                    } finally {
+                      setCessaoSaving(false);
+                    }
+                  }}
+                  disabled={cessaoSaving || !cessaoAtletaSelecionado || !cessaoArmaSelecionada || !cessaoDataInicio || !cessaoDataFim}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs py-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-blue-50"
+                >
+                  {cessaoSaving ? <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Registrando...</> : <><Save className="w-4 h-4" /> Registrar Cessão</>}
+                </button>
+
+                {cessaoSalva && (
+                  <button
+                    onClick={() => setCessaoPdfOpen(true)}
+                    className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-3 px-5 rounded-xl font-bold transition shadow-md shadow-emerald-50 cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4" />
+                    Gerar PDF
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* PDF MODAL */}
+            {cessaoPdfOpen && cessaoSalva && (
+              <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm p-4 overflow-auto">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
+                  {/* Modal header */}
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                    <h4 className="font-bold text-slate-800 text-sm">Pré-visualização — Cessão Nº {cessaoSalva.concessionNumber}</h4>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          const el = document.getElementById('cessao-pdf-content');
+                          if (!el) return;
+                          const w = window.open('', '_blank');
+                          if (!w) return;
+                          w.document.write(`<!DOCTYPE html><html><head><title>Cessão Nº ${cessaoSalva.concessionNumber}</title><style>body{font-family:Arial,sans-serif;font-size:11px;line-height:1.6;margin:30px}h1,h2,h3{text-align:center}table{width:100%;border-collapse:collapse;margin:8px 0}td,th{border:1px solid #333;padding:6px 10px}hr{margin:16px 0}@media print{button{display:none}}</style></head><body>${el.innerHTML}<script>window.print();<\/script></body></html>`);
+                          w.document.close();
+                        }}
+                        className="flex items-center gap-1 text-xs bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition cursor-pointer"
+                      ><Printer className="w-3.5 h-3.5" /> Imprimir / Salvar PDF</button>
+                      <button onClick={() => setCessaoPdfOpen(false)} className="text-slate-400 hover:text-slate-600 transition"><X className="w-5 h-5" /></button>
+                    </div>
                   </div>
-                  <div className="space-y-2 leading-relaxed">
-                    <p>
-                      Eu, <strong>{cessaoOwner}</strong>, na qualidade de proprietário legítimo e registrado, cedo o uso temporário do seguinte armamento:
-                    </p>
-                    <div className="bg-white p-2 border border-slate-200 space-y-1">
-                      <div><strong>Espécie/Modelo:</strong> {cessaoArmaModel}</div>
-                      <div><strong>Calibre:</strong> {cessaoCaliber}</div>
-                      <div><strong>Nº Registro Sigma:</strong> {cessaoSigma}</div>
-                    </div>
-                    <p>
-                      Para uso exclusivo em treinamentos e competições oficiais do clube, pelo atirador federado desportivo:
-                    </p>
-                    <div className="bg-white p-2 border border-slate-200">
-                      <strong>Atleta:</strong> {cessaoAtletaName}
-                    </div>
-                    <p>
-                      Este termo é válido pelo período improrrogável de <strong>{cessaoDurationDays} dia(s)</strong> a contar da data de sua assinatura física.
-                    </p>
-                  </div>
-                  <div className="pt-4 border-t border-slate-250 flex justify-between items-end">
-                    <div>
-                      <p>Brasília-DF, {new Date().toLocaleDateString()}</p>
-                    </div>
-                    <div className="text-center w-28">
-                      <div className="h-0.5 bg-slate-400 w-full mb-1"></div>
-                      Assinatura Cedente
+
+                  {/* Document content */}
+                  <div className="p-6 overflow-auto max-h-[75vh]">
+                    <div id="cessao-pdf-content" className="font-mono text-[10px] text-slate-800 space-y-4 leading-relaxed">
+                      <div className="text-center space-y-1 border-b border-slate-300 pb-4">
+                        <p className="font-bold text-[11px]">ANEXO N</p>
+                        <p className="font-bold text-[11px]">CESSÃO N° {cessaoSalva.concessionNumber}</p>
+                        <p className="font-bold text-[11px]">CESSÃO DE ARMAS DE FOGO PARA UTILIZAÇÃO NA PRÁTICA DE TIRO DESPORTIVO</p>
+                        <p className="text-[9px]">(art. 34 do Decreto nº 11.615/2023)</p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <p className="font-bold underline">1. Objeto da cessão</p>
+                        <p>Arma da entidade de tiro desportivo cedida para pessoas com idade superior a vinte e cinco anos (inciso II, §2º, art. 34, Decreto nº 11.615/2023).</p>
+
+                        <table className="w-full text-[9px] border-collapse border border-slate-400">
+                          <tbody>
+                            <tr><td className="border border-slate-400 px-2 py-1 font-bold w-40">Clube Cedente</td><td className="border border-slate-400 px-2 py-1">{cessaoSalva.clubName}</td></tr>
+                            <tr><td className="border border-slate-400 px-2 py-1 font-bold">CNPJ</td><td className="border border-slate-400 px-2 py-1">{cessaoSalva.clubCnpj || '—'}</td></tr>
+                          </tbody>
+                        </table>
+
+                        <p className="font-bold underline">2. Identificação da Arma Cedida</p>
+                        <table className="w-full text-[9px] border-collapse border border-slate-400">
+                          <tbody>
+                            <tr><td className="border border-slate-400 px-2 py-1 font-bold w-40">Fabricante/Espécie</td><td className="border border-slate-400 px-2 py-1">{cessaoSalva.weaponManufacturer || '—'} / {cessaoSalva.weaponModel}</td></tr>
+                            <tr><td className="border border-slate-400 px-2 py-1 font-bold">Calibre</td><td className="border border-slate-400 px-2 py-1">{cessaoSalva.weaponCaliber}</td></tr>
+                            <tr><td className="border border-slate-400 px-2 py-1 font-bold">Nº SIGMA</td><td className="border border-slate-400 px-2 py-1 font-bold">{cessaoSalva.weaponSigma || cessaoSalva.weaponNumber || '—'}</td></tr>
+                          </tbody>
+                        </table>
+
+                        <p className="font-bold underline">3. Identificação do Atirador Desportivo</p>
+                        <table className="w-full text-[9px] border-collapse border border-slate-400">
+                          <tbody>
+                            <tr><td className="border border-slate-400 px-2 py-1 font-bold w-40">Nome Completo</td><td className="border border-slate-400 px-2 py-1">{cessaoSalva.athleteName}</td></tr>
+                            <tr><td className="border border-slate-400 px-2 py-1 font-bold">CPF</td><td className="border border-slate-400 px-2 py-1">{cessaoSalva.athleteCpf}</td></tr>
+                            <tr><td className="border border-slate-400 px-2 py-1 font-bold">Nº CR</td><td className="border border-slate-400 px-2 py-1">{cessaoSalva.athleteCr || '—'}</td></tr>
+                          </tbody>
+                        </table>
+
+                        <p className="font-bold underline">4. Período de Cessão</p>
+                        <table className="w-full text-[9px] border-collapse border border-slate-400">
+                          <tbody>
+                            <tr>
+                              <td className="border border-slate-400 px-2 py-1 font-bold w-40">Data de Início</td>
+                              <td className="border border-slate-400 px-2 py-1">{new Date(cessaoSalva.startDate + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+                            </tr>
+                            <tr>
+                              <td className="border border-slate-400 px-2 py-1 font-bold">Data de Término</td>
+                              <td className="border border-slate-400 px-2 py-1">{new Date(cessaoSalva.endDate + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+
+                        <p className="font-bold underline">5. Declaração</p>
+                        <p>
+                          O clube acima identificado declara, para os fins do art. 34 do Decreto nº 11.615/2023, que cede temporariamente o armamento descrito neste termo ao atirador identificado, para uso exclusivo em treinamentos e competições de tiro desportivo, no período indicado.
+                        </p>
+
+                        <div className="pt-6 flex justify-between items-end">
+                          <p>{cessaoSalva.clubCity || '___________'}, {new Date().toLocaleDateString('pt-BR')}</p>
+                          <div className="text-center">
+                            <div className="h-px bg-slate-600 w-48 mb-1"></div>
+                            <p>Assinatura e Carimbo do Responsável</p>
+                            <p className="text-[8px]">{cessaoSalva.clubName}</p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         );
+
 
       case 'relatorios_declaracoes':
         return (

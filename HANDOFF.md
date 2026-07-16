@@ -8,11 +8,11 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `d8e6183` |
-| Mensagem | `feat: exige data e hora de execucao ao cadastrar resultados` |
-| Data/hora | 2026-07-15T21:44:00-03:00 |
+| Hash | `8beaf00` |
+| Mensagem | `feat: implementa cadastro real de cessao de arma com busca por CPF, persistencia e PDF oficial` |
+| Data/hora | 2026-07-15T22:27:00-03:00 |
 | Push feito? | ✅ Sim |
-| Deploy EasyPanel confirmado? | ✅ Sim (disparado via Webhook) |
+| Deploy EasyPanel confirmado? | ⏳ Pendente (disparado via Webhook) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
@@ -69,6 +69,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **"Cadastro de Modalidades" has no category/discipline field.** An earlier iteration added one by inference from a decorative mock form; the user clarified it doesn't exist in the real system and to drop it. The DB column (`modalities.discipline`) was kept (nullable) rather than dropped, per the project's no-destructive-migration rule — it's just unused going forward.
 - **Re-entries (Reinscrições) are automatically detected and charged differently**: Instead of blocking re-registration, the system detects if the user is already registered for the same modality and stage in that championship, charging the `valor_reinscricao` rather than the `valor_inscricao_individual`.
 - **Result entries are made on a per-series basis with automatic best-series calculation**: The user enters points for each shot series across target zones (X, 10, 9, ..., 0). The backend stores the full series details in a JSON column and populates the physical columns (`score_x`...`score_p0` and `total_points`) with the values from the best series, maintaining parity with the legacy database.
+- **Cessão de Armas uses CPF/name autocomplete, not a dropdown**: With 2500+ athletes, a full dropdown would be too slow to load. Instead, a debounced search input (min 3 chars) calls `GET /api/members/search?q=` which returns max 8 results. The concession is stored in a new `weapon_concessions` table with a `SERIAL` concession_number. The weapon is also searched via the existing `/api/weapons/search` endpoint (by sigma or weapon_number). The PDF generated matches the "Anexo N" official format (art. 34, Decreto 11.615/2023).
 
 ## Infra / deploy
 
