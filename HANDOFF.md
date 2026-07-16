@@ -8,11 +8,11 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `13daad9` |
-| Mensagem | `feat: minimiza o formulario de campeonato exibindo apenas sob demanda na aba Novo Campeonato` |
-| Data/hora | 2026-07-16T16:15:00-03:00 |
+| Hash | `309e681` |
+| Mensagem | `feat: implementa deteccao de origem e gravacao de precos nas inscricoes de campeonatos` |
+| Data/hora | 2026-07-16T18:30:00-03:00 |
 | Push feito? | ✅ Sim |
-| Deploy EasyPanel confirmado? | ⏳ Pendente (disparado via Webhook) |
+| Deploy EasyPanel confirmado? | ✅ Sim |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
@@ -74,6 +74,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Championship List view shows "Inscritos" count instead of "Inscrição" fee**: The user pointed out that the single registration fee value shown in the table was incorrect (as championships have 3 different prices). Thus, the "Inscrição" column was replaced by "Inscritos", which displays the total count of registrations associated with that championship across all modalities and stages.
 - **Gerenciamento Clube > Resultados page layout is simplified into a 3-step select flow (Championship -> Stage -> Modality)**: The user requested that results are displayed only after selecting the Championship (via cards), the Stage, and the Modality, as stage results are independent per Modality and Stage. The view was rebuilt as a progressive funnel with robust tie-breaker calculations (sorting primarily by points/time/factor and then secondary checks on target zones X, 10, 9).
 - **Novo Campeonato (Championship creation/edition form) is minimized by default**: To clean up the interface, the create/edit forms on the 'novo_campeonato' tab are hidden by default, displaying only the list of registered championships. A prominent 'Novo Campeonato' button expands the creation form, and clicking 'Editar' on any championship loads that entry into the edit form. Cancel and Back buttons return to the clean list view.
+- **Registration Origin and Price Tracking**: Enabled backend validation and calculation for registration fees. In individual registration flow, the athlete can register for re-entries (which are no longer blocked) and is charged the `valor_reinscricao` rate, whereas the first entry is charged the `valor_inscricao_individual` rate. In bulk registration flow, the club-registered athletes are charged the `valor_inscricao_clube` (or `valor_reinscricao` for re-entries). In both cases, the calculated price is stored in `valor_pago` and metadata like `registered_by_user_id` and `registration_type` are recorded for audit. These options are rendered in the athlete's receipt and in the admin's General Inscriptions consultation table.
 
 
 
