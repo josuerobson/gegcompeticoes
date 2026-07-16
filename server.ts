@@ -2032,6 +2032,14 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
   if (!acao || !['salvar', 'nao_participou', 'desclassificar'].includes(acao)) {
     return res.status(400).json({ error: "acao deve ser 'salvar', 'nao_participou' ou 'desclassificar'." });
   }
+  if (acao === 'salvar') {
+    if (!dataExecucao) {
+      return res.status(400).json({ error: 'A data de execução é obrigatória para cadastrar o resultado.' });
+    }
+    if (!horaExecucao) {
+      return res.status(400).json({ error: 'A hora de execução é obrigatória para cadastrar o resultado.' });
+    }
+  }
 
   try {
     const regRes = await pool.query('SELECT * FROM registrations WHERE id = $1', [registrationId]);

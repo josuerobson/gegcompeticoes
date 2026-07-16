@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `f0729ce` |
-| Mensagem | `feat: adiciona alertas dinamicos em tempo real e validacao de tiros minimos ao salvar` |
-| Data/hora | 2026-07-15T08:35:00-03:00 |
+| Hash | `d8e6183` |
+| Mensagem | `feat: exige data e hora de execucao ao cadastrar resultados` |
+| Data/hora | 2026-07-15T21:44:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ✅ Sim (disparado via Webhook) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `f0729ce` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `d8e6183` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all

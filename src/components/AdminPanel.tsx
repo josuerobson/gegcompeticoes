@@ -943,6 +943,12 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
     try {
       const series = seriesData.map(s => Object.fromEntries(Object.entries(s).map(([k,v]) => [k, Number(v)||0])));
       if (acao === 'salvar') {
+        if (!dataExec) {
+          throw new Error('A data de execução é obrigatória para salvar o resultado.');
+        }
+        if (!horaExec) {
+          throw new Error('A hora de execução é obrigatória para salvar o resultado.');
+        }
         const expectedShots = selectedReg.shotsPerSeries || 0;
         if (expectedShots > 0) {
           for (let i = 0; i < series.length; i++) {
