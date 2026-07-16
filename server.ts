@@ -1877,26 +1877,27 @@ app.get('/api/weapons/search', requireAuth, async (req, res) => {
   if (!q || q.length < 2) return res.json({ weapons: [] });
   try {
     let rows;
-    if (['master_admin', 'admin'].includes(currentUser.role)) {
-      // master_admin can search all weapons
+    if (['master_admin', 'admin'].includes(currentUser.role) && !currentUser.clubId) {
+      // master_admin (without club context) can search all weapons in the system
       const r = await pool.query(
         `SELECT w.*, u.full_name as owner_name, c.name as club_name FROM weapons w
          LEFT JOIN users u ON u.id = w.owner_id
-         LEFT JOIN clubs c ON c.id = u.club_id
+         LEFT JOIN clubs c ON c.id = u.club_id OR c.id = w.owner_id
          WHERE w.sigma_number ILIKE $1 OR w.weapon_number ILIKE $1
          ORDER BY w.sigma_number LIMIT 20`,
         [`%${q}%`]
       );
       rows = r.rows;
     } else {
-      // club_admin: only weapons owned by athletes in their club
+      // club_admin / admin with club context: search club-owned weapons OR club-member-owned weapons
+      const targetClubId = currentUser.clubId || '';
       const r = await pool.query(
         `SELECT w.*, u.full_name as owner_name, c.name as club_name FROM weapons w
-         JOIN users u ON u.id = w.owner_id
-         LEFT JOIN clubs c ON c.id = u.club_id
-         WHERE u.club_id = $1 AND (w.sigma_number ILIKE $2 OR w.weapon_number ILIKE $2)
+         LEFT JOIN users u ON u.id = w.owner_id
+         LEFT JOIN clubs c ON c.id = u.club_id OR c.id = w.owner_id
+         WHERE (w.owner_id = $1 OR u.club_id = $1) AND (w.sigma_number ILIKE $2 OR w.weapon_number ILIKE $2)
          ORDER BY w.sigma_number LIMIT 20`,
-        [currentUser.clubId, `%${q}%`]
+        [targetClubId, `%${q}%`]
       );
       rows = r.rows;
     }

@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `c641b7d` |
-| Mensagem | `feat: adiciona opcao de editar armas cadastradas no clube` |
-| Data/hora | 2026-07-16T10:50:00-03:00 |
+| Hash | `0a45f94` |
+| Mensagem | `fix: inclui armas do clube na busca de armas do estande` |
+| Data/hora | 2026-07-16T11:39:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Pendente (disparado via Webhook) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `c641b7d` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `0a45f94` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
