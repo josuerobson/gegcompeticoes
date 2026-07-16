@@ -1407,9 +1407,12 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
       [championshipId, currentUser.id, modalityId, stageId]
     );
 
-    if (alreadyRegisteredRes.rows.length > 0) {
-      return res.status(400).json({ error: 'Você já possui inscrição ativa nesta modalidade/etapa para este campeonato.' });
-    }
+    const isReinscricao = alreadyRegisteredRes.rows.length > 0;
+    const registrationType = isReinscricao ? 'reinscrição' : 'normal';
+    const valorPago = isReinscricao
+      ? (champ.valorReinscricao ?? champ.registrationFee)
+      : (champ.valorInscricaoIndividual ?? champ.registrationFee);
+    const dataPagamento = new Date().toISOString().split('T')[0];
 
     const newReg: Registration = {
       id: `reg_${Date.now()}`,
@@ -1427,15 +1430,23 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
       approvedAt: new Date().toISOString(),
       txId: `tx_gg_${Math.random().toString(36).substring(2, 12)}`,
       disqualified: false,
-      penalty: 0
+      penalty: 0,
+      registeredByUserId: currentUser.id,
+      registrationType,
+      valorPago,
+      dataPagamento
     };
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       await client.query(
-        `INSERT INTO registrations (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number, payment_method, payment_status, completion_status, registered_at, approved_at, tx_id, disqualified, penalty)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+        `INSERT INTO registrations (
+          id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
+          payment_method, payment_status, completion_status, registered_at, approved_at, tx_id,
+          disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
         [
           newReg.id,
           newReg.championshipId,
@@ -1452,7 +1463,11 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
           newReg.approvedAt || null,
           newReg.txId || null,
           newReg.disqualified,
-          newReg.penalty
+          newReg.penalty,
+          newReg.registeredByUserId,
+          newReg.registrationType,
+          newReg.valorPago,
+          newReg.dataPagamento
         ]
       );
 
@@ -2023,16 +2038,21 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
         const userRes = await client.query('SELECT club_id FROM users WHERE id = $1', [athlete.userId]);
         const clubId = userRes.rows[0]?.club_id || currentUser.clubId;
 
+        const valorPago = isReinscricao
+          ? (champ.valorReinscricao ?? champ.registrationFee)
+          : (champ.valorInscricaoClube ?? champ.registrationFee);
+        const dataPagamento = new Date().toISOString().split('T')[0];
+
         await client.query(
           `INSERT INTO registrations
             (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
              payment_method, payment_status, completion_status, registered_at, approved_at,
-             registered_by_user_id, registration_type, disqualified, penalty)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','approved','pending',$9,$9,$10,$11,false,0)`,
+             registered_by_user_id, registration_type, valor_pago, data_pagamento, disqualified, penalty)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','approved','pending',$9,$9,$10,$11,$12,$13,false,0)`,
           [
             `reg_${Date.now()}_${athlete.userId.slice(-4)}`,
             championshipId, athlete.userId, clubId, modalityId, stageId, athlete.weaponId,
-            athlete.crNumber, new Date().toISOString(), currentUser.id, regType
+            athlete.crNumber, new Date().toISOString(), currentUser.id, regType, valorPago, dataPagamento
           ]
         );
         results.push({ userId: athlete.userId, status: isReinscricao ? 'reinscrito' : 'inscrito' });

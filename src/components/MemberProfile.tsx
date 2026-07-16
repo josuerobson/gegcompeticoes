@@ -1302,6 +1302,8 @@ export default function MemberProfile({
                             <div>Modalidade: <span className="font-bold text-slate-700">{modalityName(reg.modalityId)}</span></div>
                             <div>Documento CR: <span className="font-bold text-slate-700">{reg.crNumber}</span></div>
                             <div>Data Registro: {new Date(reg.registeredAt).toLocaleDateString()}</div>
+                            <div>Valor Pago: <span className="font-bold text-slate-700">{reg.valorPago != null ? `R$ ${Number(reg.valorPago).toFixed(2)}` : '-'}</span></div>
+                            <div>Tipo: <span className="font-bold text-slate-700 uppercase">{reg.registrationType === 'reinscrição' ? 'Reinscrição (Promocional)' : 'Normal'}</span></div>
                             {reg.txId && <div className="truncate max-w-[280px]">TxID: {reg.txId}</div>}
                           </div>
                         </div>
@@ -1318,7 +1320,11 @@ export default function MemberProfile({
                               paymentStatus: reg.paymentStatus,
                               txId: reg.txId,
                               athleteName: selectedUser.fullName,
-                              athleteUsername: selectedUser.username
+                              athleteUsername: selectedUser.username,
+                              valorPago: reg.valorPago,
+                              registrationType: reg.registrationType,
+                              registeredByUserId: reg.registeredByUserId,
+                              userId: reg.userId
                             });
                             setIsReceiptOpen(true);
                           }}
@@ -2667,6 +2673,15 @@ export default function MemberProfile({
                   <div><strong>Modalidade:</strong> {receiptData.modality}</div>
                   <div><strong>Registro:</strong> {new Date(receiptData.registeredAt).toLocaleString('pt-BR')}</div>
                   <div><strong>Pagamento:</strong> {receiptData.paymentMethod.toUpperCase()} ({receiptData.paymentStatus === 'approved' ? 'APROVADO' : 'PENDENTE'})</div>
+                  {receiptData.valorPago != null && (
+                    <div><strong>Valor Pago:</strong> R$ {Number(receiptData.valorPago).toFixed(2)}</div>
+                  )}
+                  {receiptData.registrationType && (
+                    <div className="uppercase"><strong>Tipo:</strong> {receiptData.registrationType}</div>
+                  )}
+                  {receiptData.registeredByUserId && (
+                    <div><strong>Origem:</strong> {receiptData.registeredByUserId === receiptData.userId ? 'ATLETA' : 'CLUBE'}</div>
+                  )}
                   {receiptData.txId && (
                     <div className="break-all"><strong>TxID:</strong> {receiptData.txId}</div>
                   )}

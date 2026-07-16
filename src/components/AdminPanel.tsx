@@ -3870,6 +3870,9 @@ export default function AdminPanel({
                     <th className="py-2">Atleta</th>
                     <th className="py-2">Campeonato</th>
                     <th className="py-2">Divisão / Mod</th>
+                    <th className="py-2">Valor Pago</th>
+                    <th className="py-2 text-center">Tipo</th>
+                    <th className="py-2 text-center">Origem</th>
                     <th className="py-2 text-center">Status</th>
                   </tr>
                 </thead>
@@ -3877,11 +3880,25 @@ export default function AdminPanel({
                   {registrations.map((reg) => {
                     const athlete = users.find(u => u.id === reg.userId);
                     const champ = championships.find(c => c.id === reg.championshipId);
+                    const isRegisteredByClub = reg.registeredByUserId && reg.registeredByUserId !== reg.userId;
                     return (
                       <tr key={reg.id}>
                         <td className="py-2.5 font-bold text-slate-800">{athlete?.fullName}</td>
                         <td className="py-2.5 text-slate-500">{champ?.title}</td>
                         <td className="py-2.5 font-mono">{modalityName(reg.modalityId)}</td>
+                        <td className="py-2.5 font-semibold text-slate-700">
+                          {reg.valorPago != null ? `R$ ${Number(reg.valorPago).toFixed(2)}` : '-'}
+                        </td>
+                        <td className="py-2.5 text-center">
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${reg.registrationType === 'reinscrição' ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-800'}`}>
+                            {reg.registrationType === 'reinscrição' ? 'REINSCRIÇÃO' : 'NORMAL'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 text-center">
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${isRegisteredByClub ? 'bg-teal-100 text-teal-800' : 'bg-indigo-100 text-indigo-800'}`}>
+                            {isRegisteredByClub ? 'CLUBE' : 'ATLETA'}
+                          </span>
+                        </td>
                         <td className="py-2.5 text-center">
                           <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${reg.paymentStatus === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
                             {reg.paymentStatus === 'approved' ? 'HOMOLOGADA' : 'PENDENTE'}
