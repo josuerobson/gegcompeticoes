@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `0a45f94` |
-| Mensagem | `fix: inclui armas do clube na busca de armas do estande` |
-| Data/hora | 2026-07-16T11:39:00-03:00 |
+| Hash | `26b2786` |
+| Mensagem | `feat: substitui valor de inscricao por contagem total de inscritos na lista de campeonatos` |
+| Data/hora | 2026-07-16T15:05:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Pendente (disparado via Webhook) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `0a45f94` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `26b2786` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -71,6 +71,8 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Result entries are made on a per-series basis with automatic best-series calculation**: The user enters points for each shot series across target zones (X, 10, 9, ..., 0). The backend stores the full series details in a JSON column and populates the physical columns (`score_x`...`score_p0` and `total_points`) with the values from the best series, maintaining parity with the legacy database.
 - **Cessão de Armas uses CPF/name autocomplete, not a dropdown**: With 2500+ athletes, a full dropdown would be too slow to load. Instead, a debounced search input (min 3 chars) calls `GET /api/members/search?q=` which returns max 8 results. The concession is stored in a new `weapon_concessions` table with a `SERIAL` concession_number. The weapon is also searched via the existing `/api/weapons/search` endpoint (by sigma or weapon_number). The PDF generated matches the "Anexo N" official format (art. 34, Decreto 11.615/2023).
 - **Cadastro de Armas supports inline editing**: Club administrators and master admins can edit existing weapon entries directly from the list view via a new inline form. A backend PUT endpoint updates fields while respecting the same ownership validations as deletion.
+- **Championship List view shows "Inscritos" count instead of "Inscrição" fee**: The user pointed out that the single registration fee value shown in the table was incorrect (as championships have 3 different prices). Thus, the "Inscrição" column was replaced by "Inscritos", which displays the total count of registrations associated with that championship across all modalities and stages.
+
 
 
 ## Infra / deploy

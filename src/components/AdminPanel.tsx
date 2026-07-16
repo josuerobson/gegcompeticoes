@@ -3190,7 +3190,7 @@ export default function AdminPanel({
                       <th className="py-3 px-2">Campeonato</th>
                       <th className="py-3 px-2">Período</th>
                       <th className="py-3 px-2 text-center">Etapas</th>
-                      <th className="py-3 px-2 text-right">Inscrição</th>
+                      <th className="py-3 px-2 text-center">Inscritos</th>
                       <th className="py-3 px-2 text-center">Ação</th>
                     </tr>
                   </thead>
@@ -3215,7 +3215,9 @@ export default function AdminPanel({
                           {new Date(champ.startDate).toLocaleDateString()} - {new Date(champ.endDate).toLocaleDateString()}
                         </td>
                         <td className="py-3 px-2 text-center font-bold font-mono">{champ.stagesCount}</td>
-                        <td className="py-3 px-2 text-right font-bold font-mono text-slate-850">R$ {champ.registrationFee}</td>
+                        <td className="py-3 px-2 text-center font-bold font-mono text-slate-850">
+                          {registrations.filter(r => r.championshipId === champ.id).length}
+                        </td>
                         <td className="py-3 px-2 text-center">
                           <div className="flex justify-center items-center gap-2">
                             <button
