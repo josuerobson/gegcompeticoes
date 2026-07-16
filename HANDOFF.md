@@ -8,9 +8,9 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `309e681` |
-| Mensagem | `feat: implementa deteccao de origem e gravacao de precos nas inscricoes de campeonatos` |
-| Data/hora | 2026-07-16T18:30:00-03:00 |
+| Hash | `4e4a61c` |
+| Mensagem | `feat: minimiza o formulario de etapa exibindo apenas sob demanda na aba Etapas` |
+| Data/hora | 2026-07-16T20:35:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ✅ Sim |
 | Tarefa estava completa? | ✅ Sim |
@@ -75,6 +75,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Gerenciamento Clube > Resultados page layout is simplified into a 3-step select flow (Championship -> Stage -> Modality)**: The user requested that results are displayed only after selecting the Championship (via cards), the Stage, and the Modality, as stage results are independent per Modality and Stage. The view was rebuilt as a progressive funnel with robust tie-breaker calculations (sorting primarily by points/time/factor and then secondary checks on target zones X, 10, 9).
 - **Novo Campeonato (Championship creation/edition form) is minimized by default**: To clean up the interface, the create/edit forms on the 'novo_campeonato' tab are hidden by default, displaying only the list of registered championships. A prominent 'Novo Campeonato' button expands the creation form, and clicking 'Editar' on any championship loads that entry into the edit form. Cancel and Back buttons return to the clean list view.
 - **Registration Origin and Price Tracking**: Enabled backend validation and calculation for registration fees. In individual registration flow, the athlete can register for re-entries (which are no longer blocked) and is charged the `valor_reinscricao` rate, whereas the first entry is charged the `valor_inscricao_individual` rate. In bulk registration flow, the club-registered athletes are charged the `valor_inscricao_clube` (or `valor_reinscricao` for re-entries). In both cases, the calculated price is stored in `valor_pago` and metadata like `registered_by_user_id` and `registration_type` are recorded for audit. These options are rendered in the athlete's receipt and in the admin's General Inscriptions consultation table.
+- **Cadastro de Etapas (Stage creation/edition form) is minimized by default**: To maintain consistency with the championships creation view, the stages creation form on the 'etapas' tab is now hidden by default, displaying only the list of stages. A 'Nova Etapa' button expands the creation form, clicking 'Editar' on any stage entry loads it into the editing form, and 'Voltar para a Lista' buttons or a back arrow icon return to the clean list view.
 
 
 
