@@ -1431,6 +1431,28 @@ export default function AdminPanel({
     { id: '4', name: 'Estande Alvo Certo (Pendente)', location: 'Goiânia - GO', shootersCount: 0, status: 'Pendente', president: 'Roberto Silva' },
   ]);
 
+  // Synchronize masterClubs with real clubs from database
+  React.useEffect(() => {
+    if (clubs) {
+      setMasterClubs(prevMasterClubs => {
+        return clubs.map(c => {
+          const existing = prevMasterClubs.find(mc => mc.id === c.id);
+          const status = existing ? existing.status : (c.isPremium ? 'Ativo' : 'Pendente');
+          const location = (c.city && c.state) ? `${c.city} - ${c.state}` : 'Não Informada';
+          const shootersCount = users.filter(u => u.clubId === c.id && u.role === 'member').length;
+          return {
+            id: c.id,
+            name: c.name,
+            location,
+            shootersCount,
+            status,
+            president: c.responsibleName || 'Não Informado'
+          };
+        });
+      });
+    }
+  }, [clubs, users]);
+
   const [billingList, setBillingList] = useState([
     { id: 'bill-1', target: 'G&G Sobradinho', type: 'Franquia (15%)', amount: 6765, dueDate: '2026-06-30', status: 'Pendente' },
     { id: 'bill-2', target: 'G&G Taguatinga', type: 'Franquia (15%)', amount: 4875, dueDate: '2026-06-30', status: 'Pago' },
