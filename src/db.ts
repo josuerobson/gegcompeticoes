@@ -647,6 +647,99 @@ export async function initDB() {
       }
     }
 
+    // --- SIMULATION DATA SEEDING (CLUBS AND ATHLETES FOR ONLINE TESTING) ---
+    const simClubs = [
+      { id: 'club_sim_1', name: 'Clube Sniper de Elite', subDomain: 'sniper', cnpj: '11.111.111/0001-11', phone: '(11) 99999-1111', crNumber: 'CR-CLUB-1111' },
+      { id: 'club_sim_2', name: 'Clube Balística de Precisão', subDomain: 'balistica', cnpj: '22.222.222/0001-22', phone: '(22) 99999-2222', crNumber: 'CR-CLUB-2222' }
+    ];
+    for (const c of simClubs) {
+      await client.query(
+        `INSERT INTO clubs (id, name, sub_domain, cnpj, phone, cr_number, is_premium, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, true, $7)
+         ON CONFLICT (id) DO NOTHING`,
+        [c.id, c.name, c.subDomain, c.cnpj, c.phone, c.crNumber, new Date().toISOString()]
+      );
+    }
+
+    const simAdmins = [
+      { id: 'usr_adm_sim_1', email: 'admin@sniper.com.br', username: 'admin_sniper', fullName: 'Guilherme Sniper', cpf: '66666666666', clubId: 'club_sim_1' },
+      { id: 'usr_adm_sim_2', email: 'admin@balistica.com.br', username: 'admin_balistica', fullName: 'Gabriel Balistica', cpf: '77777777777', clubId: 'club_sim_2' }
+    ];
+    for (const a of simAdmins) {
+      await client.query(
+        `INSERT INTO users (
+          id, email, username, full_name, role, club_id, cpf, cr_number, password_hash,
+          avatar_url, bio, is_club_member, member_since, has_paid_signature, is_profile_complete,
+          rg, phone
+         )
+         VALUES ($1, $2, $3, $4, 'club_admin', $5, $6, $7, $8, '', '', true, $9, true, true, '', '')
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          a.id, a.email, a.username, a.fullName, a.clubId, a.cpf, `CR-ADM-${a.cpf.slice(-4)}`, DEMO_PASSWORD_HASH,
+          new Date().toISOString().split('T')[0]
+        ]
+      );
+    }
+
+    const simAthletes = [
+      { id: 'ath_sim_1', email: 'atleta1@sniper.com', username: 'atleta1_sniper', fullName: 'Alexandre Sniper Um', cpf: '88888888881', clubId: 'club_sim_1' },
+      { id: 'ath_sim_2', email: 'atleta2@sniper.com', username: 'atleta2_sniper', fullName: 'Beatriz Sniper Dois', cpf: '88888888882', clubId: 'club_sim_1' },
+      { id: 'ath_sim_3', email: 'atleta3@sniper.com', username: 'atleta3_sniper', fullName: 'Carlos Sniper Tres', cpf: '88888888883', clubId: 'club_sim_1' },
+      { id: 'ath_sim_4', email: 'atleta1@balistica.com', username: 'atleta1_balistica', fullName: 'Daniel Balistica Um', cpf: '99999999991', clubId: 'club_sim_2' },
+      { id: 'ath_sim_5', email: 'atleta2@balistica.com', username: 'atleta2_balistica', fullName: 'Eduardo Balistica Dois', cpf: '99999999992', clubId: 'club_sim_2' },
+      { id: 'ath_sim_6', email: 'atleta3@balistica.com', username: 'atleta3_balistica', fullName: 'Fernanda Balistica Tres', cpf: '99999999993', clubId: 'club_sim_2' }
+    ];
+
+    const champRes = await client.query('SELECT id FROM championships LIMIT 1');
+    const stageRes = await client.query('SELECT id FROM stages LIMIT 1');
+    const modRes = await client.query('SELECT id FROM modalities LIMIT 1');
+
+    if (champRes.rows.length > 0 && stageRes.rows.length > 0 && modRes.rows.length > 0) {
+      const champId = champRes.rows[0].id;
+      const stageId = stageRes.rows[0].id;
+      const modalityId = modRes.rows[0].id;
+
+      for (const ath of simAthletes) {
+        const crNumber = `CR-ATH-${ath.cpf.slice(-4)}`;
+        await client.query(
+          `INSERT INTO users (
+            id, email, username, full_name, role, club_id, cpf, cr_number, password_hash,
+            avatar_url, bio, is_club_member, member_since, has_paid_signature, is_profile_complete,
+            rg, phone
+           )
+           VALUES ($1, $2, $3, $4, 'member', $5, $6, $7, $8, '', '', true, $9, true, true, '', '')
+           ON CONFLICT (id) DO NOTHING`,
+          [
+            ath.id, ath.email, ath.username, ath.fullName, ath.clubId, ath.cpf, crNumber, DEMO_PASSWORD_HASH,
+            new Date().toISOString().split('T')[0]
+          ]
+        );
+
+        const weaponId = `wpn_sim_${ath.id.slice(-4)}`;
+        await client.query(
+          `INSERT INTO weapons (id, owner_id, manufacturer, model, caliber, serial_number, weapon_type, weapon_number, sigma_number, class, permission_status)
+           VALUES ($1, $2, 'Taurus', 'TS9', '9mm', $3, 'Pistola', $4, $5, 'Pistola', 'Permitido')
+           ON CONFLICT (id) DO NOTHING`,
+          [weaponId, ath.id, `SER-SIM-${ath.cpf.slice(-4)}`, `NUM-SIM-${ath.cpf.slice(-4)}`, `SIG-SIM-${ath.cpf.slice(-4)}`]
+        );
+
+        const regId = `reg_sim_${ath.id.slice(-4)}`;
+        await client.query(
+          `INSERT INTO registrations (
+            id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
+            payment_method, payment_status, completion_status, registered_at, approved_at, tx_id,
+            disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pix', 'approved', 'pending', $9, $9, $10, false, 0, $3, 'normal', 120, $11)
+           ON CONFLICT (id) DO NOTHING`,
+          [
+            regId, champId, ath.id, ath.clubId, modalityId, stageId, weaponId, crNumber,
+            new Date().toISOString(), `tx_sim_${ath.id.slice(-4)}`, new Date().toISOString().split('T')[0]
+          ]
+        );
+      }
+    }
+
     console.log('Database seed check complete.');
 
     try {
