@@ -28,6 +28,7 @@ interface AdminPanelProps {
   weapons: Weapon[];
   weaponLookupOptions: WeaponLookupOption[];
   modalities: Modality[];
+  onRefreshData?: () => Promise<void>;
   onAddWeapon: (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string }) => Promise<void>;
   onRemoveWeapon: (weaponId: string) => Promise<void>;
   onUpdateWeapon: (weaponId: string, updates: { manufacturer?: string; model?: string; caliber?: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string }) => Promise<{ error?: string }>;
@@ -863,6 +864,7 @@ interface CadastrarResultadosPanelProps {
     score: number;
     timeSeconds?: number;
   }) => Promise<void>;
+  onRefreshData?: () => Promise<void>;
 }
 
 type EnrichedRegistration = {
@@ -884,7 +886,7 @@ function calcSeriePts(s: Record<string,number>, xValue: number = 11): number {
   return ZONES.reduce((acc, z) => acc + (Number(s[z])||0) * points[z], 0);
 }
 
-function CadastrarResultadosPanel({ championships, stages, modalities, currentUser, onRecordScore }: CadastrarResultadosPanelProps) {
+function CadastrarResultadosPanel({ championships, stages, modalities, currentUser, onRecordScore, onRefreshData }: CadastrarResultadosPanelProps) {
   const [champId, setChampId] = React.useState('');
   const [stageId, setStageId] = React.useState('');
   const [modalityId, setModalityId] = React.useState('');
@@ -987,6 +989,10 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
       const r2 = await fetch(refreshUrl, { headers: { 'x-user-id': currentUser?.id||'' } });
       const d2 = await r2.json();
       setRegistrations(d2.registrations || []);
+
+      if (onRefreshData) {
+        await onRefreshData();
+      }
     } catch(e: any) { setError(e.message); }
     finally { setSaving(false); }
   };
@@ -1181,6 +1187,7 @@ export default function AdminPanel({
   onRemoveStage,
   onRecordScore,
   onToggleAdminDemo,
+  onRefreshData,
   settings = {},
   onSaveSetting,
   onCreateMember,
@@ -2391,6 +2398,7 @@ export default function AdminPanel({
           modalities={modalities}
           currentUser={currentUser}
           onRecordScore={onRecordScore}
+          onRefreshData={onRefreshData}
         />;
 
       case 'inscricao_clube':

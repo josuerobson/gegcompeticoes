@@ -1848,6 +1848,7 @@ export default function App() {
               weapons={weapons}
               weaponLookupOptions={weaponLookupOptions}
               modalities={modalities}
+              onRefreshData={syncWithBackend}
               onCreateChampionship={handleCreateChampionshipAdmin}
               onUpdateChampionship={handleUpdateChampionshipAdmin}
               onRemoveChampionship={handleRemoveChampionship}
