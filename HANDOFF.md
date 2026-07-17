@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `e2445ce` |
-| Mensagem | `feat: alinha listagem de campeonatos da aba clube com a aba plataforma (inscritos clicaveis)` |
-| Data/hora | 2026-07-17T15:27:00-03:00 |
+| Hash | `04b79db` |
+| Mensagem | `fix: calcula pontuacao de acertos no X baseado no valor_x cadastrado no campeonato (padrao 11)` |
+| Data/hora | 2026-07-17T17:40:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ✅ Sim |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `e2445ce` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `04b79db` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -80,6 +80,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Sincronização de Clubes Reais no Master**: A listagem de clubes exibida na aba "Gerenciar Clubes" do Administrador Master agora sincroniza em tempo real com a propriedade `clubs` (dados reais do banco de dados). Conta a quantidade de atiradores ativos de cada clube diretamente da lista de usuários e resolve localização e diretores dinamicamente, mantendo o controle interativo de homologação e suspensão intactos.
 - **Seeding Automático de Simulação**: Para garantir que clubes e atletas de simulação estejam sempre disponíveis online, foi adicionada uma rotina no inicializador do banco (`src/db.ts`) que insere automaticamente os 2 clubes e os 3 atletas de cada um deles (com armas e inscrições homologadas) utilizando mapeamento dinâmico para o primeiro campeonato, etapa e modalidade ativos no banco online.
 - **Alinhamento da Lista de Campeonatos de Estande**: A listagem de campeonatos sob o gerenciamento de clubes agora compartilha a mesma estrutura visual e o modal de listagem de inscritos global, exibindo de forma clara o total de atiradores e possibilitando abrir o popup interativo de homologações com busca em tempo real.
+- **Cálculo Personalizado do Alvo X**: Adicionado suporte para peso customizado para a zona X do alvo. O frontend e o backend agora lêem dinamicamente a propriedade `valorX` / `valor_x` do campeonato ativo. Se a propriedade estiver preenchida, é usado o valor fornecido; caso contrário, é adotado automaticamente o padrão de **11 pontos** (em vez do valor estático antigo de 10).
 
 
 
