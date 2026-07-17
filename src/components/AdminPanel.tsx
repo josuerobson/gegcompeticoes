@@ -1513,6 +1513,10 @@ export default function AdminPanel({
   const [editChampSumulaFile, setEditChampSumulaFile] = useState<File | null>(null);
   const [editChampError, setEditChampError] = useState('');
 
+  // View registered athletes popup state
+  const [selectedChampForInscritosModal, setSelectedChampForInscritosModal] = useState<Championship | null>(null);
+  const [inscritosSearchQuery, setInscritosSearchQuery] = useState('');
+
   // Default image settings state (functional)
   const [defaultImageSourceMode, setDefaultImageSourceMode] = useState<'url' | 'upload' | 'gallery'>('gallery');
   const [newDefaultImage, setNewDefaultImage] = useState(settings.default_image || '');
@@ -3587,8 +3591,18 @@ export default function AdminPanel({
                           {new Date(champ.startDate).toLocaleDateString()} - {new Date(champ.endDate).toLocaleDateString()}
                         </td>
                         <td className="py-3 px-2 text-center font-bold font-mono">{champ.stagesCount}</td>
-                        <td className="py-3 px-2 text-center font-bold font-mono text-slate-850">
-                          {registrations.filter(r => r.championshipId === champ.id).length}
+                        <td className="py-3 px-2 text-center font-bold font-mono">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedChampForInscritosModal(champ);
+                              setInscritosSearchQuery('');
+                            }}
+                            className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer font-bold outline-none"
+                            title="Ver listagem de inscritos"
+                          >
+                            {registrations.filter(r => r.championshipId === champ.id).length}
+                          </button>
                         </td>
                         <td className="py-3 px-2 text-center">
                           <div className="flex justify-center items-center gap-2">
@@ -3603,30 +3617,189 @@ export default function AdminPanel({
                             <button
                               type="button"
                               onClick={async () => {
-                                if (confirm(`Deseja realmente excluir o campeonato "${champ.title}"?\nEsta ação é irreversível e excluirá as etapas vazias vinculadas.`)) {
-                                  try {
-                                    await onRemoveChampionship(champ.id);
-                                    alert('Campeonato excluído com sucesso!');
-                                  } catch (err: any) {
-                                    alert(err.message || 'Erro ao excluir campeonato.');
+                                  if (confirm(`Deseja realmente excluir o campeonato "${champ.title}"?\nEsta ação é irreversível e excluirá as etapas vazias vinculadas.`)) {
+                                    try {
+                                      await onRemoveChampionship(champ.id);
+                                      alert('Campeonato excluído com sucesso!');
+                                    } catch (err: any) {
+                                      alert(err.message || 'Erro ao excluir campeonato.');
+                                    }
                                   }
-                                }
-                              }}
-                              className="text-red-500 hover:text-red-700 transition p-1.5 hover:bg-red-50 rounded-lg cursor-pointer inline-flex items-center justify-center"
-                              title="Excluir Campeonato"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                                }}
+                                className="text-red-500 hover:text-red-700 transition p-1.5 hover:bg-red-50 rounded-lg cursor-pointer inline-flex items-center justify-center"
+                                title="Excluir Campeonato"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
+              )}
+
+              {/* POPUP: LISTA DE INSCRITOS */}
+              {selectedChampForInscritosModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+                  <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-2xl overflow-hidden shadow-2xl text-slate-800 flex flex-col max-h-[85vh]">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                      <div>
+                        <h4 className="font-display font-bold text-slate-900 text-sm">
+                          Inscritos — {selectedChampForInscritosModal.title}
+                        </h4>
+                        <p className="text-[10px] text-slate-400">Lista ordenada por Nome, Etapa e Modalidade</p>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setSelectedChampForInscritosModal(null);
+                          setInscritosSearchQuery('');
+                        }} 
+                        className="text-slate-400 hover:text-slate-650 transition cursor-pointer p-1 rounded-lg hover:bg-slate-100"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Search bar inside popup */}
+                    <div className="px-6 py-3 border-b border-slate-100 bg-white flex items-center gap-2">
+                      <Search className="w-4 h-4 text-slate-400 shrink-0" />
+                      <input
+                        type="text"
+                        placeholder="Buscar por atleta, etapa ou modalidade..."
+                        value={inscritosSearchQuery}
+                        onChange={(e) => setInscritosSearchQuery(e.target.value)}
+                        className="w-full text-xs outline-none bg-transparent placeholder:text-slate-400 text-slate-700"
+                      />
+                      {inscritosSearchQuery && (
+                        <button
+                          onClick={() => setInscritosSearchQuery('')}
+                          className="text-slate-400 hover:text-slate-600 text-xs font-semibold cursor-pointer"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Body - Scrollable table */}
+                    <div className="overflow-y-auto flex-1 p-6">
+                      {(() => {
+                        const allChampRegs = registrations.filter(r => r.championshipId === selectedChampForInscritosModal.id);
+                        
+                        const modalRegs = allChampRegs
+                          .map(r => {
+                            const user = users.find(u => u.id === r.userId);
+                            const stage = stages.find(s => s.id === r.stageId);
+                            const modality = modalities.find(m => m.id === r.modalityId);
+                            return {
+                              ...r,
+                              athleteName: user?.fullName || 'Atleta Desconhecido',
+                              stageTitle: stage?.title || 'Etapa Desconhecida',
+                              modalityName: modality?.name || 'Modalidade Desconhecida',
+                              athleteCpf: user?.cpf || '',
+                            };
+                          })
+                          .sort((a, b) => {
+                            const nameCompare = a.athleteName.localeCompare(b.athleteName, 'pt-BR');
+                            if (nameCompare !== 0) return nameCompare;
+                            const stageCompare = a.stageTitle.localeCompare(b.stageTitle, 'pt-BR');
+                            if (stageCompare !== 0) return stageCompare;
+                            return a.modalityName.localeCompare(b.modalityName, 'pt-BR');
+                          });
+
+                        const filteredRegs = modalRegs.filter(r => {
+                          const query = inscritosSearchQuery.toLowerCase();
+                          return (
+                            r.athleteName.toLowerCase().includes(query) ||
+                            r.stageTitle.toLowerCase().includes(query) ||
+                            r.modalityName.toLowerCase().includes(query) ||
+                            r.athleteCpf.includes(query)
+                          );
+                        });
+
+                        if (allChampRegs.length === 0) {
+                          return (
+                            <div className="py-12 text-center text-slate-450">
+                              <Trophy className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                              <p className="text-xs font-semibold">Nenhum atleta inscrito neste campeonato.</p>
+                            </div>
+                          );
+                        }
+
+                        if (filteredRegs.length === 0) {
+                          return (
+                            <div className="py-12 text-center text-slate-455">
+                              <Search className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                              <p className="text-xs font-semibold">Nenhuma inscrição corresponde à busca.</p>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <table className="w-full text-left text-xs">
+                            <thead>
+                              <tr className="border-b border-slate-200 font-mono text-[9px] text-slate-400 uppercase">
+                                <th className="py-2">Atleta</th>
+                                <th className="py-2">Etapa</th>
+                                <th className="py-2">Modalidade</th>
+                                <th className="py-2 text-center">Tipo</th>
+                                <th className="py-2 text-center">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-slate-700">
+                              {filteredRegs.map((reg) => (
+                                <tr key={reg.id} className="hover:bg-slate-50/50">
+                                  <td className="py-3 pr-2 font-bold text-slate-800">
+                                    <div>{reg.athleteName}</div>
+                                    {reg.athleteCpf && (
+                                      <div className="text-[9px] font-mono font-normal text-slate-400">CPF: {reg.athleteCpf}</div>
+                                    )}
+                                  </td>
+                                  <td className="py-3 px-2 text-slate-500 font-semibold">{reg.stageTitle}</td>
+                                  <td className="py-3 px-2 text-slate-650 font-mono">{reg.modalityName}</td>
+                                  <td className="py-3 px-2 text-center">
+                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${reg.registrationType === 'reinscrição' ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-800'}`}>
+                                      {reg.registrationType === 'reinscrição' ? 'REINSCRIÇÃO' : 'NORMAL'}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 text-center">
+                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${reg.paymentStatus === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                                      {reg.paymentStatus === 'approved' ? 'HOMOLOGADA' : 'PENDENTE'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center text-xs">
+                      <span className="text-slate-500 font-semibold">
+                        {(() => {
+                          const total = registrations.filter(r => r.championshipId === selectedChampForInscritosModal.id).length;
+                          return `Total: ${total} inscrição(ões)`;
+                        })()}
+                      </span>
+                      <button
+                        onClick={() => {
+                          setSelectedChampForInscritosModal(null);
+                          setInscritosSearchQuery('');
+                        }}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl transition cursor-pointer"
+                      >
+                        Fechar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            )}
-          </div>
         );
 
       case 'etapas':
