@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `5c029d1` |
-| Mensagem | `feat: exibe todos os clubes cadastrados no banco de dados no gerenciamento master` |
-| Data/hora | 2026-07-17T15:05:00-03:00 |
+| Hash | `059edf1` |
+| Mensagem | `feat: adiciona seeding automatico de clubes e atletas de simulacao na inicializacao do banco` |
+| Data/hora | 2026-07-17T15:20:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ✅ Sim |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `5c029d1` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `059edf1` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -78,6 +78,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Cadastro de Etapas (Stage creation/edition form) is minimized by default**: To maintain consistency with the championships creation view, the stages creation form on the 'etapas' tab is now hidden by default, displaying only the list of stages. A 'Nova Etapa' button expands the creation form, clicking 'Editar' on any stage entry loads it into the editing form, and 'Voltar para a Lista' buttons or a back arrow icon return to the clean list view.
 - **Visualização de Inscritos via Popup**: O número de inscritos exibido na listagem de campeonatos do menu "Novo Campeonato" foi transformado em link interativo azul. Clicar nele abre um popup (modal) contendo a listagem ordenada de todos os atletas inscritos naquele campeonato, ordenados primariamente por nome do atleta, seguidamente por título da etapa e modalidade de disputa. Uma barra de busca permite pesquisar por atleta (nome ou CPF), etapa ou modalidade em tempo real.
 - **Sincronização de Clubes Reais no Master**: A listagem de clubes exibida na aba "Gerenciar Clubes" do Administrador Master agora sincroniza em tempo real com a propriedade `clubs` (dados reais do banco de dados). Conta a quantidade de atiradores ativos de cada clube diretamente da lista de usuários e resolve localização e diretores dinamicamente, mantendo o controle interativo de homologação e suspensão intactos.
+- **Seeding Automático de Simulação**: Para garantir que clubes e atletas de simulação estejam sempre disponíveis online, foi adicionada uma rotina no inicializador do banco (`src/db.ts`) que insere automaticamente os 2 clubes e os 3 atletas de cada um deles (com armas e inscrições homologadas) utilizando mapeamento dinâmico para o primeiro campeonato, etapa e modalidade ativos no banco online.
 
 
 
