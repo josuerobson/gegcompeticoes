@@ -2171,9 +2171,13 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
         }
 
         // a) New per-series mode
+        const champRes = await client.query('SELECT valor_x FROM championships WHERE id = $1', [championshipId]);
+        const champRow = champRes.rows[0];
+        const xScoreValue = (champRow && champRow.valor_x !== null) ? Number(champRow.valor_x) : 11;
+
         seriesPontos = series.map((s: any, idx: number) => {
           const zones = ['x','p10','p9','p8','p7','p6','p5','p4','p3','p2','p1','p0'];
-          const total = (Number(s.x)||0)*10 + (Number(s.p10)||0)*10 + (Number(s.p9)||0)*9
+          const total = (Number(s.x)||0)*xScoreValue + (Number(s.p10)||0)*10 + (Number(s.p9)||0)*9
             + (Number(s.p8)||0)*8 + (Number(s.p7)||0)*7 + (Number(s.p6)||0)*6
             + (Number(s.p5)||0)*5 + (Number(s.p4)||0)*4 + (Number(s.p3)||0)*3
             + (Number(s.p2)||0)*2 + (Number(s.p1)||0)*1;

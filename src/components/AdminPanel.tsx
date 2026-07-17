@@ -879,8 +879,9 @@ const ZONES = ['x','p10','p9','p8','p7','p6','p5','p4','p3','p2','p1','p0'] as c
 const ZONE_LABELS: Record<string, string> = { x:'X', p10:'10', p9:'9', p8:'8', p7:'7', p6:'6', p5:'5', p4:'4', p3:'3', p2:'2', p1:'1', p0:'0' };
 const ZONE_POINTS: Record<string, number> = { x:10, p10:10, p9:9, p8:8, p7:7, p6:6, p5:5, p4:4, p3:3, p2:2, p1:1, p0:0 };
 
-function calcSeriePts(s: Record<string,number>): number {
-  return ZONES.reduce((acc, z) => acc + (Number(s[z])||0) * ZONE_POINTS[z], 0);
+function calcSeriePts(s: Record<string,number>, xValue: number = 11): number {
+  const points: Record<string, number> = { ...ZONE_POINTS, x: xValue };
+  return ZONES.reduce((acc, z) => acc + (Number(s[z])||0) * points[z], 0);
 }
 
 function CadastrarResultadosPanel({ championships, stages, modalities, currentUser, onRecordScore }: CadastrarResultadosPanelProps) {
@@ -935,7 +936,10 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
     setSeriesData(prev => prev.map((s, i) => i === serieIdx ? {...s, [zone]: val} : s));
   };
 
-  const serieTotals = seriesData.map(s => calcSeriePts(Object.fromEntries(Object.entries(s).map(([k,v]) => [k, Number(v)||0]))));
+  const currentChamp = championships.find(c => c.id === champId);
+  const xValue = (currentChamp && typeof currentChamp.valorX === 'number') ? currentChamp.valorX : 11;
+
+  const serieTotals = seriesData.map(s => calcSeriePts(Object.fromEntries(Object.entries(s).map(([k,v]) => [k, Number(v)||0])), xValue));
   const bestIdx = serieTotals.indexOf(Math.max(...serieTotals));
 
   const handleSubmit = async (acao: 'salvar'|'nao_participou'|'desclassificar') => {
@@ -1098,7 +1102,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
                       <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">⭐ Melhor Série</span>
                     )}
                     <span className="text-xs font-mono font-bold text-slate-700">
-                      Total: {calcSeriePts(Object.fromEntries(Object.entries(serie).map(([k,v]) => [k, Number(v)||0])))} pts
+                      Total: {calcSeriePts(Object.fromEntries(Object.entries(serie).map(([k,v]) => [k, Number(v)||0])), xValue)} pts
                     </span>
                   </div>
                   <div className="grid grid-cols-6 sm:grid-cols-12 gap-1">
