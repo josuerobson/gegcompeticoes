@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `4e4a61c` |
-| Mensagem | `feat: minimiza o formulario de etapa exibindo apenas sob demanda na aba Etapas` |
-| Data/hora | 2026-07-16T20:35:00-03:00 |
+| Hash | `0a1da29` |
+| Mensagem | `feat: adiciona popup de inscritos por campeonato ordenados e filtrados no Painel Diretor` |
+| Data/hora | 2026-07-17T14:35:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ✅ Sim |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `13daad9` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `0a1da29` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -76,6 +76,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Novo Campeonato (Championship creation/edition form) is minimized by default**: To clean up the interface, the create/edit forms on the 'novo_campeonato' tab are hidden by default, displaying only the list of registered championships. A prominent 'Novo Campeonato' button expands the creation form, and clicking 'Editar' on any championship loads that entry into the edit form. Cancel and Back buttons return to the clean list view.
 - **Registration Origin and Price Tracking**: Enabled backend validation and calculation for registration fees. In individual registration flow, the athlete can register for re-entries (which are no longer blocked) and is charged the `valor_reinscricao` rate, whereas the first entry is charged the `valor_inscricao_individual` rate. In bulk registration flow, the club-registered athletes are charged the `valor_inscricao_clube` (or `valor_reinscricao` for re-entries). In both cases, the calculated price is stored in `valor_pago` and metadata like `registered_by_user_id` and `registration_type` are recorded for audit. These options are rendered in the athlete's receipt and in the admin's General Inscriptions consultation table.
 - **Cadastro de Etapas (Stage creation/edition form) is minimized by default**: To maintain consistency with the championships creation view, the stages creation form on the 'etapas' tab is now hidden by default, displaying only the list of stages. A 'Nova Etapa' button expands the creation form, clicking 'Editar' on any stage entry loads it into the editing form, and 'Voltar para a Lista' buttons or a back arrow icon return to the clean list view.
+- **Visualização de Inscritos via Popup**: O número de inscritos exibido na listagem de campeonatos do menu "Novo Campeonato" foi transformado em link interativo azul. Clicar nele abre um popup (modal) contendo a listagem ordenada de todos os atletas inscritos naquele campeonato, ordenados primariamente por nome do atleta, seguidamente por título da etapa e modalidade de disputa. Uma barra de busca permite pesquisar por atleta (nome ou CPF), etapa ou modalidade em tempo real.
 
 
 
