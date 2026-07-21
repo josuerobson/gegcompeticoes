@@ -682,12 +682,12 @@ export async function initDB() {
     }
 
     const simAthletes = [
-      { id: 'ath_sim_1', email: 'atleta1@sniper.com', username: 'atleta1_sniper', fullName: 'Alexandre Sniper Um', cpf: '88888888881', clubId: 'club_sim_1' },
-      { id: 'ath_sim_2', email: 'atleta2@sniper.com', username: 'atleta2_sniper', fullName: 'Beatriz Sniper Dois', cpf: '88888888882', clubId: 'club_sim_1' },
-      { id: 'ath_sim_3', email: 'atleta3@sniper.com', username: 'atleta3_sniper', fullName: 'Carlos Sniper Tres', cpf: '88888888883', clubId: 'club_sim_1' },
-      { id: 'ath_sim_4', email: 'atleta1@balistica.com', username: 'atleta1_balistica', fullName: 'Daniel Balistica Um', cpf: '99999999991', clubId: 'club_sim_2' },
-      { id: 'ath_sim_5', email: 'atleta2@balistica.com', username: 'atleta2_balistica', fullName: 'Eduardo Balistica Dois', cpf: '99999999992', clubId: 'club_sim_2' },
-      { id: 'ath_sim_6', email: 'atleta3@balistica.com', username: 'atleta3_balistica', fullName: 'Fernanda Balistica Tres', cpf: '99999999993', clubId: 'club_sim_2' }
+      { id: 'ath_sim_1', email: 'atleta1@sniper.com', username: 'atleta1_sniper', fullName: 'Alexandre Sniper Um', cpf: '88888888881', clubId: 'club_sim_1', sex: 'masculino' },
+      { id: 'ath_sim_2', email: 'atleta2@sniper.com', username: 'atleta2_sniper', fullName: 'Beatriz Sniper Dois', cpf: '88888888882', clubId: 'club_sim_1', sex: 'feminino' },
+      { id: 'ath_sim_3', email: 'atleta3@sniper.com', username: 'atleta3_sniper', fullName: 'Carlos Sniper Tres', cpf: '88888888883', clubId: 'club_sim_1', sex: 'masculino' },
+      { id: 'ath_sim_4', email: 'atleta1@balistica.com', username: 'atleta1_balistica', fullName: 'Daniel Balistica Um', cpf: '99999999991', clubId: 'club_sim_2', sex: 'masculino' },
+      { id: 'ath_sim_5', email: 'atleta2@balistica.com', username: 'atleta2_balistica', fullName: 'Eduardo Balistica Dois', cpf: '99999999992', clubId: 'club_sim_2', sex: 'masculino' },
+      { id: 'ath_sim_6', email: 'atleta3@balistica.com', username: 'atleta3_balistica', fullName: 'Fernanda Balistica Tres', cpf: '99999999993', clubId: 'club_sim_2', sex: 'feminino' }
     ];
 
     const champRes = await client.query('SELECT id FROM championships LIMIT 1');
@@ -705,13 +705,13 @@ export async function initDB() {
           `INSERT INTO users (
             id, email, username, full_name, role, club_id, cpf, cr_number, password_hash,
             avatar_url, bio, is_club_member, member_since, has_paid_signature, is_profile_complete,
-            rg, phone
+            rg, phone, sex
            )
-           VALUES ($1, $2, $3, $4, 'member', $5, $6, $7, $8, '', '', true, $9, true, true, '', '')
+           VALUES ($1, $2, $3, $4, 'member', $5, $6, $7, $8, '', '', true, $9, true, true, '', '', $10)
            ON CONFLICT (id) DO NOTHING`,
           [
             ath.id, ath.email, ath.username, ath.fullName, ath.clubId, ath.cpf, crNumber, DEMO_PASSWORD_HASH,
-            new Date().toISOString().split('T')[0]
+            new Date().toISOString().split('T')[0], ath.sex
           ]
         );
 
@@ -729,9 +729,9 @@ export async function initDB() {
             id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
             payment_method, payment_status, completion_status, registered_at, approved_at, tx_id,
             disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento
-           )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pix', 'approved', 'pending', $9, $9, $10, false, 0, $3, 'normal', 120, $11)
-           ON CONFLICT (id) DO NOTHING`,
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pix', 'approved', 'pending', $9, $9, $10, false, 0, $3, 'normal', 120, $11)
+          ON CONFLICT (id) DO NOTHING`,
           [
             regId, champId, ath.id, ath.clubId, modalityId, stageId, weaponId, crNumber,
             new Date().toISOString(), `tx_sim_${ath.id.slice(-4)}`, new Date().toISOString().split('T')[0]
@@ -739,6 +739,16 @@ export async function initDB() {
         );
       }
     }
+
+    // Sincronizar o sexo de todos os atletas existentes na base de dados
+    await client.query(`
+      UPDATE users 
+      SET sex = CASE 
+        WHEN full_name ILIKE '%Beatriz%' OR full_name ILIKE '%Carla%' OR full_name ILIKE '%Ana%' OR full_name ILIKE '%Fernanda%' THEN 'feminino'
+        ELSE 'masculino'
+      END
+      WHERE (sex IS NULL OR sex = '' OR sex = 'undefined') AND role = 'member'
+    `);
 
     console.log('Database seed check complete.');
 
