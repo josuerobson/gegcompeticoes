@@ -1356,6 +1356,7 @@ export default function AdminPanel({
   const [selectedResultChampId, setSelectedResultChampId] = useState<string | null>(null);
   const [selectedResultStageId, setSelectedResultStageId] = useState<string | null>(null);
   const [selectedResultModalityId, setSelectedResultModalityId] = useState<string | null>(null);
+  const [selectedMedalFilter, setSelectedMedalFilter] = useState<'geral' | 'ouro' | 'prata' | 'bronze'>('geral');
 
   useEffect(() => {
     if (clubeMenu !== 'resultados') {
@@ -1364,6 +1365,10 @@ export default function AdminPanel({
       setSelectedResultModalityId(null);
     }
   }, [clubeMenu]);
+
+  useEffect(() => {
+    setSelectedMedalFilter('geral');
+  }, [selectedResultChampId, selectedResultStageId, selectedResultModalityId]);
 
   // Sidebar Menu selection for Plataforma
   const [plataformaMenu, setPlataformaMenu] = useState<string>('novo_campeonato');
@@ -2221,6 +2226,19 @@ export default function AdminPanel({
           }
         });
 
+        const goldMin = currentChamp?.pontuacaoMinimaAtletaOuro || 0;
+        const silverMin = currentChamp?.pontuacaoMinimaAtletaPrata || 0;
+        const bronzeMin = currentChamp?.pontuacaoMinimaAtletaBronze || 0;
+
+        let finalScores = [...sortedScores];
+        if (selectedMedalFilter === 'ouro' && goldMin > 0) {
+          finalScores = finalScores.filter(s => s.score >= goldMin);
+        } else if (selectedMedalFilter === 'prata' && silverMin > 0) {
+          finalScores = finalScores.filter(s => s.score >= silverMin);
+        } else if (selectedMedalFilter === 'bronze' && bronzeMin > 0) {
+          finalScores = finalScores.filter(s => s.score >= bronzeMin);
+        }
+
         return (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
             {/* Header / Breadcrumb navigation */}
@@ -2258,10 +2276,67 @@ export default function AdminPanel({
               </div>
             </div>
 
+            {/* Filtros de Medalhas / Índices de Pontuação */}
+            {(goldMin > 0 || silverMin > 0 || bronzeMin > 0) && (
+              <div className="flex flex-wrap gap-2 items-center bg-slate-50/60 p-3 rounded-xl border border-slate-150">
+                <span className="text-[10px] uppercase font-bold text-slate-450 tracking-wider mr-1">Filtrar por Medalha:</span>
+                <button
+                  onClick={() => setSelectedMedalFilter('geral')}
+                  className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition border cursor-pointer ${
+                    selectedMedalFilter === 'geral'
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-650 hover:bg-slate-50'
+                  }`}
+                >
+                  Classificação Geral
+                </button>
+                {goldMin > 0 && (
+                  <button
+                    onClick={() => setSelectedMedalFilter('ouro')}
+                    className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition border cursor-pointer flex items-center gap-1 ${
+                      selectedMedalFilter === 'ouro'
+                        ? 'bg-amber-500 border-amber-500 text-white shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-650 hover:bg-slate-50'
+                    }`}
+                  >
+                    🥇 Ouro (≥ {goldMin} pts)
+                  </button>
+                )}
+                {silverMin > 0 && (
+                  <button
+                    onClick={() => setSelectedMedalFilter('prata')}
+                    className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition border cursor-pointer flex items-center gap-1 ${
+                      selectedMedalFilter === 'prata'
+                        ? 'bg-slate-400 border-slate-400 text-white shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-650 hover:bg-slate-50'
+                    }`}
+                  >
+                    🥈 Prata (≥ {silverMin} pts)
+                  </button>
+                )}
+                {bronzeMin > 0 && (
+                  <button
+                    onClick={() => setSelectedMedalFilter('bronze')}
+                    className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition border cursor-pointer flex items-center gap-1 ${
+                      selectedMedalFilter === 'bronze'
+                        ? 'bg-amber-600 border-amber-600 text-white shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-650 hover:bg-slate-50'
+                    }`}
+                  >
+                    🥉 Bronze (≥ {bronzeMin} pts)
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Results Table */}
-            {sortedScores.length === 0 ? (
+            {finalScores.length === 0 ? (
               <div className="text-center py-12 text-slate-400 text-xs">
-                Nenhum resultado homologado para este campeonato, etapa e modalidade ainda.
+                {selectedMedalFilter !== 'geral'
+                  ? `Nenhum atleta atingiu a pontuação mínima para a categoria ${
+                      selectedMedalFilter === 'ouro' ? 'Ouro' : selectedMedalFilter === 'prata' ? 'Prata' : 'Bronze'
+                    } nesta etapa.`
+                  : 'Nenhum resultado homologado para este campeonato, etapa e modalidade ainda.'}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -2282,22 +2357,42 @@ export default function AdminPanel({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {sortedScores.map((score, index) => {
+                    {finalScores.map((score, index) => {
                       const reg = registrations.find(r => r.id === score.registrationId);
+                      const overallIndex = sortedScores.findIndex(s => s.id === score.id);
                       return (
                         <tr key={score.id} className="hover:bg-slate-50/50">
                           <td className="py-3 px-2 text-center font-bold font-mono">
-                            {index === 0 ? (
+                            {overallIndex === 0 ? (
                               <span className="inline-block bg-amber-100 text-amber-800 text-[10px] font-bold w-5 h-5 rounded-full leading-5 text-center">1º</span>
-                            ) : index === 1 ? (
+                            ) : overallIndex === 1 ? (
                               <span className="inline-block bg-slate-100 text-slate-800 text-[10px] font-bold w-5 h-5 rounded-full leading-5 text-center">2º</span>
-                            ) : index === 2 ? (
+                            ) : overallIndex === 2 ? (
                               <span className="inline-block bg-amber-50 text-amber-700 text-[10px] font-bold w-5 h-5 rounded-full leading-5 text-center">3º</span>
                             ) : (
-                              `${index + 1}º`
+                              `${overallIndex + 1}º`
                             )}
                           </td>
-                          <td className="py-3 px-2 font-bold text-slate-800">{score.shooterName}</td>
+                          <td className="py-3 px-2 font-bold text-slate-800">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{score.shooterName}</span>
+                              {goldMin > 0 && score.score >= goldMin && (
+                                <span className="inline-flex items-center bg-amber-50 text-amber-800 border border-amber-200 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full select-none" title="Índice Ouro">
+                                  🥇 Ouro
+                                </span>
+                              )}
+                              {silverMin > 0 && score.score < goldMin && score.score >= silverMin && (
+                                <span className="inline-flex items-center bg-slate-50 text-slate-800 border border-slate-200 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full select-none" title="Índice Prata">
+                                  🥈 Prata
+                                </span>
+                              )}
+                              {bronzeMin > 0 && score.score < silverMin && score.score >= bronzeMin && (
+                                <span className="inline-flex items-center bg-amber-50/50 text-amber-950 border border-amber-250 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full select-none" title="Índice Bronze">
+                                  🥉 Bronze
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td className="py-3 px-2 text-center text-slate-500 font-mono text-[10px]">
                             {clubs.find(c => c.id === (users.find(u => u.id === score.userId)?.clubId))?.name || '-'}
                           </td>
