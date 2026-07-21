@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `e148d02` |
-| Mensagem | `feat: adiciona filtro por medalhas (Ouro, Prata, Bronze) na classificacao de resultados` |
-| Data/hora | 2026-07-21T08:35:00-03:00 |
+| Hash | `336eee8` |
+| Mensagem | `feat: preenche automaticamente a coluna sex dos atletas no banco de dados` |
+| Data/hora | 2026-07-21T08:53:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ✅ Sim |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `e148d02` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `336eee8` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -83,6 +83,8 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Cálculo Personalizado do Alvo X**: Adicionado suporte para peso customizado para a zona X do alvo. O frontend e o backend agora lêem dinamicamente a propriedade `valorX` / `valor_x` do campeonato ativo. Se a propriedade estiver preenchida, é usado o valor fornecido; caso contrário, é adotado automaticamente o padrão de **11 pontos** (em vez do valor estático antigo de 10).
 - **Sincronização de Resultados**: Corrigido problema onde resultados recém-cadastrados não apareciam na aba "Resultados" sem recarregar a página. A prop `onRefreshData` agora é acionada após o salvamento bem-sucedido na interface do administrador de clube, fazendo com que o `App.tsx` atualize em tempo real todo o cache de pontuações de etapas e atletas em memória.
 - **Filtros de Medalhas (Ouro, Prata, Bronze)**: Adicionados botões de filtro e medalhas visuais na listagem de resultados de etapa/modalidade. O seletor de filtros aparece apenas para medalhas cujos índices mínimos de pontuação do campeonato correspondente sejam maiores que zero. Cada atleta que atinge os requisitos ganha uma medalha (🥇, 🥈, 🥉) ao lado do nome, e ao clicar no filtro a listagem exibe apenas os atletas elegíveis enquanto retém sua colocação na classificação geral original.
+- **Preenchimento Automático de Sexo dos Atletas**: Adicionada uma query de inicialização de banco de dados e seeding para definir a coluna `sex` de todos os atletas existentes em produção que estivessem nulos ou vazios. Identifica os nomes femininos mais comuns no ambiente de teste ("Beatriz", "Carla", "Ana", "Fernanda") como `'feminino'` e atribui `'masculino'` para os demais, possibilitando testes completos de filtragem por sexo nos campeonatos.
+
 
 
 
