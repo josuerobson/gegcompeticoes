@@ -1402,6 +1402,18 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
     }
     const champ = mapChampionship(champRes.rows[0]);
 
+    // Validar sexo do atleta com a etapa
+    const stageRes = await pool.query('SELECT sexo FROM stages WHERE id = $1', [stageId]);
+    if (stageRes.rows.length > 0) {
+      const stageSex = (stageRes.rows[0].sexo || 'misto').toLowerCase();
+      if (stageSex !== 'misto') {
+        const userSex = (currentUser.sex || '').toLowerCase();
+        if (userSex !== stageSex) {
+          return res.status(403).json({ error: `Esta etapa é restrita para atletas do sexo ${stageSex === 'feminino' ? 'Feminino' : 'Masculino'}.` });
+        }
+      }
+    }
+
     const alreadyRegisteredRes = await pool.query(
       'SELECT 1 FROM registrations WHERE championship_id = $1 AND user_id = $2 AND modality_id = $3 AND stage_id = $4',
       [championshipId, currentUser.id, modalityId, stageId]
@@ -2029,6 +2041,19 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
     await client.query('BEGIN');
     for (const athlete of athletes) {
       try {
+        // Validar sexo do atleta com a etapa
+        const stageRes = await client.query('SELECT sexo FROM stages WHERE id = $1', [stageId]);
+        const userSexRes = await client.query('SELECT sex FROM users WHERE id = $1', [athlete.userId]);
+        if (stageRes.rows.length > 0 && userSexRes.rows.length > 0) {
+          const stageSex = (stageRes.rows[0].sexo || 'misto').toLowerCase();
+          if (stageSex !== 'misto') {
+            const userSex = (userSexRes.rows[0].sex || '').toLowerCase();
+            if (userSex !== stageSex) {
+              throw new Error(`Atleta não possui o sexo compatível com esta etapa (${stageSex === 'feminino' ? 'Feminino' : 'Masculino'}).`);
+            }
+          }
+        }
+
         const existing = await client.query(
           'SELECT id FROM registrations WHERE championship_id=$1 AND user_id=$2 AND modality_id=$3 AND stage_id=$4',
           [championshipId, athlete.userId, modalityId, stageId]

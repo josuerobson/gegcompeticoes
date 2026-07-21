@@ -694,8 +694,17 @@ export default function ChampionshipsView({
                       className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
                     >
                       <option value="">Selecione a etapa</option>
-                      {stages.filter(s => s.championshipId === selectedChampReg.id).map(s => (
-                        <option key={s.id} value={s.id}>{s.title} — {new Date(s.date).toLocaleDateString('pt-BR')}</option>
+                      {stages.filter(s => {
+                        if (s.championshipId !== selectedChampReg.id) return false;
+                        if (!currentUser) return true;
+                        const stageSex = s.sexo || 'misto';
+                        if (stageSex === 'misto') return true;
+                        const userSex = (currentUser.sex || '').toLowerCase();
+                        return userSex === stageSex.toLowerCase();
+                      }).map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.title} — {new Date(s.date).toLocaleDateString('pt-BR')} {s.sexo && s.sexo !== 'misto' ? `(${s.sexo === 'feminino' ? 'Feminino 👩' : 'Masculino 👨'})` : ''}
+                        </option>
                       ))}
                     </select>
                   </div>

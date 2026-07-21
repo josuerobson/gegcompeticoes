@@ -551,6 +551,16 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser }:
   const [error, setError] = React.useState('');
 
   const champStages = stages.filter(s => s.championshipId === champId);
+  const currentStage = stages.find(s => s.id === stageId);
+  const filteredMembers = React.useMemo(() => {
+    if (!currentStage) return members;
+    const stageSex = currentStage.sexo || 'misto';
+    if (stageSex === 'misto') return members;
+    return members.filter(m => {
+      const athleteSex = (m.sex || '').toLowerCase();
+      return athleteSex === stageSex.toLowerCase();
+    });
+  }, [members, currentStage]);
 
   React.useEffect(() => {
     if (!champId || !stageId || !modalityId || !currentUser) return;
@@ -737,9 +747,22 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser }:
 
       {loadingMembers && <p className="text-xs text-slate-400 text-center py-4">Buscando sócios do estande...</p>}
 
-      {!loadingMembers && members.length > 0 && (
+      {!loadingMembers && members.length > 0 && filteredMembers.length === 0 && (
+        <div className="text-center py-8 px-4 text-slate-500 text-xs font-semibold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          Nenhum atleta do sexo <span className="text-slate-800 font-extrabold">{currentStage?.sexo === 'feminino' ? 'Feminino 👩' : 'Masculino 👨'}</span> cadastrado no clube está elegível para esta etapa.
+        </div>
+      )}
+
+      {!loadingMembers && members.length > 0 && filteredMembers.length > 0 && (
         <div className="space-y-4">
-          <p className="text-xs font-semibold text-slate-600">Selecione os atletas para inscrição e defina a arma:</p>
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+            <p className="text-xs font-semibold text-slate-600">Selecione os atletas para inscrição e defina a arma:</p>
+            {currentStage && currentStage.sexo && currentStage.sexo !== 'misto' && (
+              <span className="self-start text-[10px] bg-blue-50 text-blue-700 border border-blue-150 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                Restrição da Etapa: apenas {currentStage.sexo === 'feminino' ? 'Feminino 👩' : 'Masculino 👨'}
+              </span>
+            )}
+          </div>
           <div className="overflow-x-auto border border-slate-200 rounded-xl">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
@@ -751,7 +774,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser }:
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {members.map(member => {
+                {filteredMembers.map(member => {
                   const state = selectedAthletes[member.id] || { weaponId: '', checked: false };
                   const athleteWeapons = clubWeapons.filter(w => w.ownerId === member.id);
                   const searchInput = searchQueries[member.id] || '';
