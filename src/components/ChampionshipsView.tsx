@@ -1290,35 +1290,41 @@ export default function ChampionshipsView({
                       </div>
                     </div>
 
-                    {/* Section 3: Premiação Equipes Clubes */}
-                    <div className="space-y-2 pt-2 border-t border-slate-100">
-                      <h4 className="font-bold text-slate-900 text-xs">Premiação Equipes Clubes</h4>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="border-b border-slate-200 text-slate-900 font-bold uppercase">
-                              <th className="py-2 w-1/3">OURO</th>
-                              <th className="py-2 w-1/3">PRATA</th>
-                              <th className="py-2 w-1/3">BRONZE</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
-                            <tr className="font-bold text-slate-900">
-                              <td className="py-2">{fmt(vEquipesOuroPool)}</td>
-                              <td className="py-2">{fmt(vEquipesPrataPool)}</td>
-                              <td className="py-2">{fmt(vEquipesBronzePool)}</td>
-                            </tr>
-                            {[0, 1, 2, 3, 4].map((idx) => (
-                              <tr key={idx}>
-                                <td className="py-1.5">{idx + 1}º {fmt(vEquipesOuroPool * (pPos[idx] / 100))}</td>
-                                <td className="py-1.5">{idx + 1}º {fmt(vEquipesPrataPool * (pPos[idx] / 100))}</td>
-                                <td className="py-1.5">{idx + 1}º {fmt(vEquipesBronzePool * (pPos[idx] / 100))}</td>
+                    {/* Section 3: Premiação Equipes Clubes (apenas se houver pontuação mínima de equipe configurada) */}
+                    {Boolean(
+                      (champ.pontuacaoMinimaEquipeOuro && champ.pontuacaoMinimaEquipeOuro > 0) ||
+                      (champ.pontuacaoMinimaEquipePrata && champ.pontuacaoMinimaEquipePrata > 0) ||
+                      (champ.pontuacaoMinimaEquipeBronze && champ.pontuacaoMinimaEquipeBronze > 0)
+                    ) && (
+                      <div className="space-y-2 pt-2 border-t border-slate-100">
+                        <h4 className="font-bold text-slate-900 text-xs">Premiação Equipes Clubes</h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-200 text-slate-900 font-bold uppercase">
+                                <th className="py-2 w-1/3">OURO</th>
+                                <th className="py-2 w-1/3">PRATA</th>
+                                <th className="py-2 w-1/3">BRONZE</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                              <tr className="font-bold text-slate-900">
+                                <td className="py-2">{fmt(vEquipesOuroPool)}</td>
+                                <td className="py-2">{fmt(vEquipesPrataPool)}</td>
+                                <td className="py-2">{fmt(vEquipesBronzePool)}</td>
+                              </tr>
+                              {[0, 1, 2, 3, 4].map((idx) => (
+                                <tr key={idx}>
+                                  <td className="py-1.5">{idx + 1}º {fmt(vEquipesOuroPool * (pPos[idx] / 100))}</td>
+                                  <td className="py-1.5">{idx + 1}º {fmt(vEquipesPrataPool * (pPos[idx] / 100))}</td>
+                                  <td className="py-1.5">{idx + 1}º {fmt(vEquipesBronzePool * (pPos[idx] / 100))}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </>
                 );
               })()}
