@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `a3b263a` |
-| Mensagem | `feat: adiciona colunas Origem e Valor Inscricao na modal de inscritos do campeonato no Painel Diretor` |
-| Data/hora | 2026-07-22T18:36:24-03:00 |
+| Hash | `7d5b997` |
+| Mensagem | `fix: atualiza valores de inscricao legados e simulados no banco de dados e calcula taxas estritamente com base nos valores do campeonato` |
+| Data/hora | 2026-07-22T18:53:20-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `a3b263a` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `7d5b997` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -92,6 +92,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Sanitização e Filtragem de Modalidades Inexistentes/Excluídas**: Adicionada uma rotina SQL no inicializador do banco de dados (`src/db.ts`) que limpa automaticamente os arrays JSONB `modalities` da tabela `championships`, removendo IDs de modalidades que tenham sido excluídas do sistema (como `MOD_1784070018361`). Além disso, o componente `ChampionshipsView.tsx` foi atualizado com a função utilitária `getValidChampModalities` para filtrar e omitir na UI qualquer ID legado ou inválido que não esteja cadastrado na tabela oficial de modalidades.
 - **Coluna de Arrecadação Prevista na Tabela de Campeonatos**: Adicionada a coluna `"Arrecadação"` às tabelas de gerenciamento de campeonatos no Painel Diretor (`AdminPanel.tsx`). O sistema calcula o valor total acumulado/previsto da competição somando todas as inscrições efetuadas (sejam pagas ou pendentes), considerando as tarifas configuradas no cadastro do campeonato (valor individual, valor por clube e valor de reinscrição).
 - **Campos "Origem" e "Valor Inscrição" na Modal de Inscritos**: Atualizada a janela popup de listagem de inscritos de campeonatos no Painel Diretor (`AdminPanel.tsx`) para incluir 2 novas colunas: `"Origem"` (indicando com badges destacadas `CLUBE` ou `ATLETA`) e `"Valor Inscrição"` (exibindo o valor individual, de clube ou de re-inscrição em `R$`). O rodapé da modal também passou a exibir a soma total arrecadada das inscrições listadas.
+- **Correção dos Valores das Inscrições (Remoção do R$ 120 estático)**: Identificado que o valor estático de `R$ 120,00` vinha da rotina de seed de testes no banco de dados (`src/db.ts`). Adicionada migração SQL no backend (`src/db.ts`) que atualiza automaticamente no banco de dados qualquer inscrição legada/simulada com valor 120 para a tarifa real cadastrada no campeonato (individual, clube ou re-inscrição). No frontend (`AdminPanel.tsx`), a lógica de cálculo foi ajustada para consultar rigorosamente as tarifas configuradas do campeonato.
 
 
 
