@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `c0c9907` |
-| Mensagem | `fix: adiciona rotina SQL de sanitizacao de modalidades no banco de dados e filtra IDs de modalidades inexistentes ou excluidas na UI` |
-| Data/hora | 2026-07-22T12:12:16-03:00 |
+| Hash | `2a4c0b8` |
+| Mensagem | `feat: adiciona coluna Arrecadacao nas tabelas de campeonatos do Painel Diretor exibindo o valor total previsto de todas as inscricoes` |
+| Data/hora | 2026-07-22T18:26:06-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `c0c9907` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `2a4c0b8` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -90,6 +90,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Novo Fluxo de Inscrição ("Ver Campeonato")**: Alterado o botão principal do card de campeonatos de `"Inscrever-se neste Campeonato"` para `"Ver Campeonato"`. Ao clicar, o atleta abre a tela detalhada do campeonato exibindo título, botões verdes de download (`Baixar Regulamento` e `Baixar Súmula`), lista de modalidades vinculadas e a grade de cards das etapas cadastradas (`1ª ETAPA`, `2ª ETAPA`, etc.), onde o botão `[Participar]` de cada etapa abre o formulário de inscrição.
 - **Ajuste de Responsividade e Rolagem do Modal de Inscrição**: Adicionado `max-h-[90vh]`, `flex flex-col` e rolagem vertical (`overflow-y-auto`) tanto no overlay quanto no corpo do modal de inscrição de campeonatos (`ChampionshipsView.tsx`). O topo (com o botão de fechar `✕`) agora fica fixo e visível em qualquer resolução ou zoom de tela, e o clique no fundo escuro também fecha o modal.
 - **Sanitização e Filtragem de Modalidades Inexistentes/Excluídas**: Adicionada uma rotina SQL no inicializador do banco de dados (`src/db.ts`) que limpa automaticamente os arrays JSONB `modalities` da tabela `championships`, removendo IDs de modalidades que tenham sido excluídas do sistema (como `MOD_1784070018361`). Além disso, o componente `ChampionshipsView.tsx` foi atualizado com a função utilitária `getValidChampModalities` para filtrar e omitir na UI qualquer ID legado ou inválido que não esteja cadastrado na tabela oficial de modalidades.
+- **Coluna de Arrecadação Prevista na Tabela de Campeonatos**: Adicionada a coluna `"Arrecadação"` às tabelas de gerenciamento de campeonatos no Painel Diretor (`AdminPanel.tsx`). O sistema calcula o valor total acumulado/previsto da competição somando todas as inscrições efetuadas (sejam pagas ou pendentes), considerando as tarifas configuradas no cadastro do campeonato (valor individual, valor por clube e valor de reinscrição).
 
 
 
