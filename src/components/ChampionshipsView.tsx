@@ -1166,18 +1166,16 @@ export default function ChampionshipsView({
                 const pTributos = champ.percentualTributos ?? 0;
                 const pOrganizacao = champ.percentualOrganizacao ?? 0;
                 const pClubes = champ.percentualClubes ?? champ.percentualClube ?? 30;
-                const pPremiacaoAtleta = (currentStageId === 'all' && champ.percentualPremiacaoTodasEtapas && champ.percentualPremiacaoTodasEtapas > 0)
-                  ? champ.percentualPremiacaoTodasEtapas
-                  : (champ.percentualPremiacaoAtleta ?? 30);
+                const pPremiacaoAtleta = champ.percentualPremiacaoAtleta ?? 30;
                 const pPremiacaoClube = champ.percentualPremiacaoClube ?? 0;
 
-                const vAdicionalTodasEtapas = (currentStageId === 'all' && champ.premiacaoAdicionalTodasEtapas) ? champ.premiacaoAdicionalTodasEtapas : 0;
+                const vAdicionalTodasEtapas = champ.premiacaoAdicionalTodasEtapas ?? 0;
 
-                // Monetary values for division
+                // Monetary values for division of total revenue
                 const vTributos = totalArrecadado * (pTributos / 100);
                 const vOrganizacao = totalArrecadado * (pOrganizacao / 100);
                 const vClubes = totalArrecadado * (pClubes / 100);
-                const vPremiacaoAtleta = totalArrecadado * (pPremiacaoAtleta / 100) + vAdicionalTodasEtapas;
+                const vPremiacaoAtleta = totalArrecadado * (pPremiacaoAtleta / 100);
                 const vPremiacaoEquipes = totalArrecadado * (pPremiacaoClube / 100);
 
                 // Medal Pools for Individual Athletes
