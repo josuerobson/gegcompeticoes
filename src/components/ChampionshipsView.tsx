@@ -38,6 +38,7 @@ export default function ChampionshipsView({
 }: ChampionshipsProps) {
   // Navigation states
   const [activeTab, setActiveTab] = useState<'tournaments' | 'rankings' | 'certificates'>('tournaments');
+  const [viewingChampionship, setViewingChampionship] = useState<Championship | null>(null);
 
   // Registration and payment popup state
   const [selectedChampReg, setSelectedChampReg] = useState<Championship | null>(null);
@@ -334,115 +335,236 @@ export default function ChampionshipsView({
         <>
           {activeTab === 'tournaments' && (
             /* ==================================================== */
-            /* TOURNAMENTS LIST & ENTRANCE MODALITIES              */
+            /* TOURNAMENTS LIST & DETAIL VIEW                       */
             /* ==================================================== */
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {championships.map((champ) => {
-                const isFinished = champ.status === 'completed';
-                const isMyRegsList = registrations.filter(r => r.championshipId === champ.id && r.userId === currentUser?.id);
-                const isRegistered = isMyRegsList.length > 0;
-
-                return (
-                  <div key={champ.id} className="bg-white rounded-2xl smooth-shadow border border-slate-100 overflow-hidden flex flex-col">
-                    
-                    {/* Banner Image */}
-                    <div className="h-44 bg-slate-100 relative">
-                      <img
-                        src={champ.bannerUrl || defaultImage}
-                        alt={champ.title}
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                        onError={(e) => {
-                          e.currentTarget.onerror = null;
-                          if (defaultImage) e.currentTarget.src = defaultImage;
-                        }}
-                      />
-                      <div className="absolute top-3 left-3 flex gap-2">
-                        {isFinished ? (
-                          <span className="bg-slate-900/80 backdrop-blur-md text-white text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
-                            <CheckCircle className="w-3.5 h-3.5" /> Finalizado
-                          </span>
-                        ) : (
-                          <span className="bg-emerald-600 text-white text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5" /> Inscrições Abertas
-                          </span>
-                        )}
-                        
-                        {isRegistered && (
-                          <span className="bg-blue-600 text-white text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">
-                            Inscrito ({isMyRegsList.length} Cat)
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Content */}
-                    <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                      <div className="space-y-2">
-                        <h3 className="font-display font-bold text-lg text-slate-950 leading-snug">{champ.title}</h3>
-                        <p className="text-slate-500 text-xs leading-relaxed">{champ.description}</p>
-                      </div>
-
-                      {/* Info grid */}
-                      <div className="grid grid-cols-3 gap-2 border-t border-b border-slate-50 py-3 text-[11px] font-mono text-slate-600">
-                        <div>
-                          <span className="text-[9px] text-slate-400 block uppercase font-sans">Período</span>
-                          <span className="font-semibold">{new Date(champ.startDate).toLocaleDateString('pt-BR', {month: 'numeric', day: 'numeric'})} - {new Date(champ.endDate).toLocaleDateString('pt-BR', {month: 'numeric', day: 'numeric'})}</span>
-                        </div>
-                        <div>
-                          <span className="text-[9px] text-slate-400 block uppercase font-sans">Etapas</span>
-                          <span className="font-semibold font-sans">{champ.stagesCount} Stages</span>
-                        </div>
-                        <div>
-                          <span className="text-[9px] text-slate-400 block uppercase font-sans">Inscrição</span>
-                          <span className="text-blue-600 font-bold font-sans">R$ {champ.registrationFee}</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap gap-1">
-                          {champ.modalities.map((mod, i) => (
-                            <span key={i} className="text-[9px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold uppercase">
-                              {modalityName(mod)}
-                            </span>
-                          ))}
-                        </div>
-
-                        {/* Action CTA */}
-                        {isFinished ? (
-                          <button
-                            onClick={() => setActiveTab('rankings')}
-                            className="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs py-3 rounded-xl font-bold transition flex items-center justify-center gap-2"
-                          >
-                            <Trophy className="w-4 h-4 text-amber-500" />
-                            Ver Histórico dos Campeões
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              if (currentUser && !currentUser.isProfileComplete) {
-                                setShowProfileIncompleteNotice(true);
-                                return;
-                              }
-                              setSelectedChampReg(champ);
-                              setSelectedModalityId(champ.modalities[0]);
-                              const firstStage = stages.find(s => s.championshipId === champ.id);
-                              setSelectedStageId(firstStage?.id || '');
-                              setSelectedWeaponId('');
-                            }}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-3 rounded-xl font-bold shadow-md shadow-blue-100 transition flex items-center justify-center gap-2"
-                          >
-                            <Target className="w-4 h-4" />
-                            Inscrever-se neste Campeonato
-                          </button>
-                        )}
-                      </div>
-
-                    </div>
+            viewingChampionship ? (
+              <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-6 space-y-8 text-slate-800">
+                {/* Header & Navigation */}
+                <div className="space-y-3 border-b border-slate-100 pb-4">
+                  <button
+                    onClick={() => setViewingChampionship(null)}
+                    className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-1.5 rounded-lg transition font-bold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    ← Voltar para Campeonatos
+                  </button>
+                  <div className="pt-2">
+                    <span className="text-[11px] font-semibold text-slate-450 uppercase tracking-wider block">Dados da competição</span>
+                    <h2 className="font-display font-black text-2xl sm:text-3xl text-blue-950 uppercase tracking-tight mt-0.5">
+                      {viewingChampionship.title}
+                    </h2>
+                    {viewingChampionship.description && (
+                      <p className="text-xs text-slate-500 mt-1 max-w-3xl leading-relaxed">{viewingChampionship.description}</p>
+                    )}
                   </div>
-                );
-              })}
-            </div>
+                </div>
+
+                {/* Download Document Buttons */}
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => {
+                      window.open(`/api/championships/${viewingChampionship.id}/documents/regulamento`, '_blank');
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    Baixar Regulamento
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      window.open(`/api/championships/${viewingChampionship.id}/documents/sumula`, '_blank');
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    Baixar Súmula
+                  </button>
+                </div>
+
+                {/* Section: Modalidades */}
+                <div className="space-y-3">
+                  <h3 className="font-display font-bold text-slate-900 text-base sm:text-lg">Modalidades</h3>
+                  {viewingChampionship.modalities.length === 0 ? (
+                    <p className="text-xs text-slate-400">Nenhuma modalidade vinculada a este campeonato.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {viewingChampionship.modalities.map((modId) => {
+                        const mod = modalities.find(m => m.id === modId);
+                        const name = mod ? mod.name : modalityName(modId);
+                        return (
+                          <div
+                            key={modId}
+                            className="bg-white border border-slate-200 rounded-xl p-4 flex justify-between items-center hover:border-blue-300 transition shadow-xs"
+                          >
+                            <div>
+                              <h4 className="font-bold text-slate-800 text-xs sm:text-sm uppercase tracking-wide">{name}</h4>
+                              {mod && (
+                                <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                                  {mod.seriesCount} séries × {mod.shotsPerSeries} tiros • Avaliação: {mod.evaluationType === 'pontuacao' ? 'Pontos' : mod.evaluationType === 'tempo' ? 'Tempo' : 'Fator (Pontos/Tempo)'}
+                                </p>
+                              )}
+                            </div>
+                            <ChevronRight className="w-5 h-5 text-slate-400" />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Section: Participar das etapas */}
+                <div className="space-y-4 pt-2">
+                  <h3 className="font-display font-bold text-slate-900 text-base sm:text-lg">Participar das etapas:</h3>
+                  {(() => {
+                    const champStages = stages.filter(s => s.championshipId === viewingChampionship.id);
+                    if (champStages.length === 0) {
+                      return (
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 text-center text-slate-400 text-xs">
+                          Nenhuma etapa cadastrada para este campeonato ainda.
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {champStages.map((stage) => {
+                          const stageDateStr = new Date(stage.date).toLocaleDateString('pt-BR');
+                          return (
+                            <div
+                              key={stage.id}
+                              className="bg-white border border-slate-200 rounded-2xl p-5 text-center shadow-xs flex flex-col justify-between space-y-4 hover:border-indigo-300 transition"
+                            >
+                              <div className="space-y-1">
+                                <h4 className="font-display font-bold text-slate-900 text-sm uppercase">
+                                  {stage.stageNum}ª ETAPA
+                                </h4>
+                                <p className="text-xs text-slate-500 font-mono">{stageDateStr}</p>
+                                {stage.description && (
+                                  <p className="text-[11px] text-slate-400 line-clamp-2 mt-1">{stage.description}</p>
+                                )}
+                              </div>
+
+                              <button
+                                onClick={() => {
+                                  if (currentUser && !currentUser.isProfileComplete) {
+                                    setShowProfileIncompleteNotice(true);
+                                    return;
+                                  }
+                                  setSelectedChampReg(viewingChampionship);
+                                  setSelectedStageId(stage.id);
+                                  setSelectedModalityId(viewingChampionship.modalities[0] || '');
+                                  setSelectedWeaponId('');
+                                }}
+                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 rounded-xl shadow-xs transition cursor-pointer"
+                              >
+                                Participar
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {championships.map((champ) => {
+                  const isFinished = champ.status === 'completed';
+                  const isMyRegsList = registrations.filter(r => r.championshipId === champ.id && r.userId === currentUser?.id);
+                  const isRegistered = isMyRegsList.length > 0;
+
+                  return (
+                    <div key={champ.id} className="bg-white rounded-2xl smooth-shadow border border-slate-100 overflow-hidden flex flex-col">
+                      
+                      {/* Banner Image */}
+                      <div className="h-44 bg-slate-100 relative">
+                        <img
+                          src={champ.bannerUrl || defaultImage}
+                          alt={champ.title}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            if (defaultImage) e.currentTarget.src = defaultImage;
+                          }}
+                        />
+                        <div className="absolute top-3 left-3 flex gap-2">
+                          {isFinished ? (
+                            <span className="bg-slate-900/80 backdrop-blur-md text-white text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
+                              <CheckCircle className="w-3.5 h-3.5" /> Finalizado
+                            </span>
+                          ) : (
+                            <span className="bg-emerald-600 text-white text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
+                              <Calendar className="w-3.5 h-3.5" /> Inscrições Abertas
+                            </span>
+                          )}
+                          
+                          {isRegistered && (
+                            <span className="bg-blue-600 text-white text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">
+                              Inscrito ({isMyRegsList.length} Cat)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Content */}
+                      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                        <div className="space-y-2">
+                          <h3 className="font-display font-bold text-lg text-slate-950 leading-snug">{champ.title}</h3>
+                          <p className="text-slate-500 text-xs leading-relaxed">{champ.description}</p>
+                        </div>
+
+                        {/* Info grid */}
+                        <div className="grid grid-cols-3 gap-2 border-t border-b border-slate-50 py-3 text-[11px] font-mono text-slate-600">
+                          <div>
+                            <span className="text-[9px] text-slate-400 block uppercase font-sans">Período</span>
+                            <span className="font-semibold">{new Date(champ.startDate).toLocaleDateString('pt-BR', {month: 'numeric', day: 'numeric'})} - {new Date(champ.endDate).toLocaleDateString('pt-BR', {month: 'numeric', day: 'numeric'})}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-slate-400 block uppercase font-sans">Etapas</span>
+                            <span className="font-semibold font-sans">{champ.stagesCount} Stages</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-slate-400 block uppercase font-sans">Inscrição</span>
+                            <span className="text-blue-600 font-bold font-sans">R$ {champ.registrationFee}</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap gap-1">
+                            {champ.modalities.map((mod, i) => (
+                              <span key={i} className="text-[9px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold uppercase">
+                                {modalityName(mod)}
+                              </span>
+                            ))}
+                          </div>
+
+                          {/* Action CTA */}
+                          {isFinished ? (
+                            <button
+                              onClick={() => setActiveTab('rankings')}
+                              className="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs py-3 rounded-xl font-bold transition flex items-center justify-center gap-2"
+                            >
+                              <Trophy className="w-4 h-4 text-amber-500" />
+                              Ver Histórico dos Campeões
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setViewingChampionship(champ)}
+                              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-3 rounded-xl font-bold shadow-md shadow-blue-100 transition flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                              <Target className="w-4 h-4" />
+                              Ver Campeonato
+                            </button>
+                          )}
+                        </div>
+
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
           )}
 
           {activeTab === 'rankings' && (
