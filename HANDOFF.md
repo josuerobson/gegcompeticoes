@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `411cee3` |
-| Mensagem | `fix: exibe apenas atletas elegíveis de cada categoria nos filtros de medalha e reseta posicoes para 1, 2 etc` |
-| Data/hora | 2026-07-22T11:04:46-03:00 |
+| Hash | `2899f52` |
+| Mensagem | `feat: exibe navegador de resultados de competicao na aba Perfil > Resultados` |
+| Data/hora | 2026-07-22T11:18:36-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `411cee3` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `2899f52` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -85,6 +85,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Filtros de Medalhas (Ouro, Prata, Bronze)**: Adicionados botões de filtro e medalhas visuais na listagem de resultados de etapa/modalidade. O seletor de filtros exibe apenas os atletas classificados na respectiva categoria de medalha (excluindo atletas das faixas superiores/inferiores ao filtrar por Prata ou Bronze), e reinicia a contagem de colocação em 1º, 2º, 3º... dentro do ranking daquela medalha específica. A colocação na classificação geral original é mantida apenas no filtro "Classificação Geral".
 - **Preenchimento Automático de Sexo dos Atletas**: Adicionada uma query de inicialização de banco de dados e seeding para definir a coluna `sex` de todos os atletas existentes em produção que estivessem nulos ou vazios. Identifica os nomes femininos mais comuns no ambiente de teste ("Beatriz", "Carla", "Ana", "Fernanda") como `'feminino'` e atribui `'masculino'` para os demais, possibilitando testes completos de filtragem por sexo nos campeonatos.
 - **Restrição de Inscrições por Sexo**: Implementado filtro condicional no modal de inscrição individual (`ChampionshipsView.tsx`) e na tabela de inscrição em lote do clube (`AdminPanel.tsx`). O sistema analisa a restrição de gênero da Etapa (`sexo: 'masculino' | 'feminino' | 'misto'`) e impede a visualização/seleção de atletas incompatíveis. Além disso, adicionou-se validação de backend em ambos os endpoints (`/api/championships/:id/register` e `/api/championships/:id/register-bulk`) para garantir que nenhuma inscrição irregular seja efetuada por baixo dos panos.
+- **Navegador de Resultados de Competição no Perfil**: Extraído o componente reutilizável `CompetitionResultsViewer.tsx` que centraliza o fluxo de seleção em 4 etapas (Campeonato -> Etapa -> Modalidade -> Tabela de Resultados com Filtro por Medalhas e Critérios de Desempate). O componente foi integrado tanto no Painel Diretor quanto no Perfil do Atleta (`MemberProfile.tsx` > aba Resultados), permitindo aos atiradores consultar a listagem oficial de qualquer competição e aplicar os filtros por medalha diretamente pelo seu perfil.
 
 
 
