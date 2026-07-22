@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Championship, User, Registration, StageScore, RankingItem, Modality, Stage, Weapon } from '../types';
-import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, Award, Printer, Copy, CreditCard, ChevronRight, Download, Medal, PlusCircle } from 'lucide-react';
+import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, Award, Printer, Copy, CreditCard, ChevronRight, Download, Medal, PlusCircle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ChampionshipsProps {
@@ -39,6 +39,8 @@ export default function ChampionshipsView({
   // Navigation states
   const [activeTab, setActiveTab] = useState<'tournaments' | 'rankings' | 'certificates'>('tournaments');
   const [viewingChampionship, setViewingChampionship] = useState<Championship | null>(null);
+  const [selectedPremiacaoModal, setSelectedPremiacaoModal] = useState<{ champ: Championship; modality: Modality } | null>(null);
+  const [selectedPremiacaoStageId, setSelectedPremiacaoStageId] = useState<string>('');
 
   // Registration and payment popup state
   const [selectedChampReg, setSelectedChampReg] = useState<Championship | null>(null);
@@ -406,15 +408,23 @@ export default function ChampionshipsView({
                         {validMods.map((mod) => (
                           <div
                             key={mod.id}
-                            className="bg-white border border-slate-200 rounded-xl p-4 flex justify-between items-center hover:border-blue-300 transition shadow-xs"
+                            className="bg-white border border-slate-200 rounded-xl p-4 flex justify-between items-center hover:border-blue-400 hover:shadow-md transition shadow-xs cursor-pointer group"
+                            onClick={() => {
+                              setSelectedPremiacaoModal({ champ: viewingChampionship, modality: mod });
+                              const champStages = stages.filter(s => s.championshipId === viewingChampionship.id);
+                              if (champStages.length > 0) {
+                                setSelectedPremiacaoStageId(champStages[0].id);
+                              }
+                            }}
+                            title="Clique para ver os dados de premiação desta modalidade"
                           >
                             <div>
-                              <h4 className="font-bold text-slate-800 text-xs sm:text-sm uppercase tracking-wide">{mod.name}</h4>
+                              <h4 className="font-bold text-slate-800 text-xs sm:text-sm uppercase tracking-wide group-hover:text-blue-600 transition-colors">{mod.name}</h4>
                               <p className="text-[11px] text-slate-500 font-mono mt-0.5">
                                 {mod.seriesCount || 0} séries × {mod.shotsPerSeries || 0} tiros • Avaliação: {mod.evaluationType === 'pontuacao' ? 'Pontos' : mod.evaluationType === 'tempo' ? 'Tempo' : 'Fator (Pontos/Tempo)'}
                               </p>
                             </div>
-                            <ChevronRight className="w-5 h-5 text-slate-400" />
+                            <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
                           </div>
                         ))}
                       </div>
@@ -1096,6 +1106,236 @@ export default function ChampionshipsView({
           </div>
         )}
       </AnimatePresence>
+
+      {/* MODAL: DADOS DA PREMIAÇÃO */}
+      {selectedPremiacaoModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedPremiacaoModal(null);
+          }}
+        >
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-2xl overflow-hidden shadow-2xl text-slate-800 flex flex-col max-h-[90vh] text-left">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <div>
+                <h3 className="font-display font-bold text-slate-900 text-base sm:text-lg">
+                  Dados da Premiação
+                </h3>
+                <p className="text-xs text-blue-600 font-semibold uppercase tracking-wider mt-0.5">
+                  {selectedPremiacaoModal.modality.name}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedPremiacaoModal(null)}
+                className="text-slate-400 hover:text-slate-650 transition cursor-pointer p-1 rounded-lg hover:bg-slate-100"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+              {(() => {
+                const champ = selectedPremiacaoModal.champ;
+                const modality = selectedPremiacaoModal.modality;
+                const champStages = stages.filter(s => s.championshipId === champ.id);
+                const currentStageId = selectedPremiacaoStageId || (champStages[0]?.id || '');
+
+                // Filter registrations for this stage and modality
+                const stageModRegs = registrations.filter(
+                  r => r.championshipId === champ.id && r.stageId === currentStageId && r.modalityId === modality.id
+                );
+
+                const totalCount = stageModRegs.length;
+                const totalReinscricoes = stageModRegs.filter(r => r.registrationType === 'reinscrição').length;
+                const totalInscricoes = totalCount - totalReinscricoes;
+
+                // Compute total revenue for this stage + modality
+                const totalArrecadado = stageModRegs.reduce((acc, r) => {
+                  if (r.valorPago && r.valorPago > 0 && r.valorPago !== 120) return acc + r.valorPago;
+                  if (r.registrationType === 'reinscrição') {
+                    return acc + (champ.valorReinscricao ?? champ.registrationFee ?? 0);
+                  }
+                  const isClub = Boolean(r.registeredByUserId && r.registeredByUserId !== r.userId);
+                  if (isClub) {
+                    return acc + (champ.valorInscricaoClube ?? champ.registrationFee ?? 0);
+                  }
+                  return acc + (champ.valorInscricaoIndividual ?? champ.registrationFee ?? 0);
+                }, 0);
+
+                // Percentages (with defaults matching system design)
+                const pTributos = champ.percentualTributos ?? 0;
+                const pOrganizacao = champ.percentualOrganizacao ?? 0;
+                const pClubes = champ.percentualClubes ?? champ.percentualClube ?? 30;
+                const pPremiacaoAtleta = champ.percentualPremiacaoAtleta ?? 30;
+                const pPremiacaoClube = champ.percentualPremiacaoClube ?? 0;
+
+                // Monetary values for division
+                const vTributos = totalArrecadado * (pTributos / 100);
+                const vOrganizacao = totalArrecadado * (pOrganizacao / 100);
+                const vClubes = totalArrecadado * (pClubes / 100);
+                const vPremiacaoAtleta = totalArrecadado * (pPremiacaoAtleta / 100);
+                const vPremiacaoEquipes = totalArrecadado * (pPremiacaoClube / 100);
+
+                // Medal Pools for Individual Athletes
+                const pOuro = champ.percentualOuro ?? 50;
+                const pPrata = champ.percentualPrata ?? 30;
+                const pBronze = champ.percentualBronze ?? 20;
+
+                const vOuroPool = vPremiacaoAtleta * (pOuro / 100);
+                const vPrataPool = vPremiacaoAtleta * (pPrata / 100);
+                const vBronzePool = vPremiacaoAtleta * (pBronze / 100);
+
+                // Medal Pools for Teams (Clubes)
+                const vEquipesOuroPool = vPremiacaoEquipes * (pOuro / 100);
+                const vEquipesPrataPool = vPremiacaoEquipes * (pPrata / 100);
+                const vEquipesBronzePool = vPremiacaoEquipes * (pBronze / 100);
+
+                // Position Percentages
+                const pPos = [
+                  champ.percentualPos1Medalha ?? 40,
+                  champ.percentualPos2Medalha ?? 30,
+                  champ.percentualPos3Medalha ?? 15,
+                  champ.percentualPos4Medalha ?? 0,
+                  champ.percentualPos5Medalha ?? 0
+                ];
+
+                const fmt = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+                return (
+                  <>
+                    {/* Stage selector dropdown */}
+                    {champStages.length > 0 && (
+                      <div className="space-y-1.5 pb-2 border-b border-slate-100">
+                        <label className="text-[11px] font-bold text-slate-500 uppercase block">
+                          Selecione a Etapa:
+                        </label>
+                        <select
+                          value={currentStageId}
+                          onChange={(e) => setSelectedPremiacaoStageId(e.target.value)}
+                          className="w-full sm:w-64 bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-800 focus:border-blue-500 cursor-pointer"
+                        >
+                          {champStages.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.stageNum ? `${s.stageNum}ª ETAPA` : s.title} ({new Date(s.date).toLocaleDateString('pt-BR')})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Stats Summary */}
+                    <div className="space-y-1 font-semibold text-slate-700">
+                      <div>Total de Inscrições: <span className="font-bold text-slate-900">{totalInscricoes}</span></div>
+                      <div>Total de reinscrições: <span className="font-bold text-slate-900">{totalReinscricoes}</span></div>
+                      <div>Total arrecadado: <span className="font-bold text-emerald-600">{fmt(totalArrecadado)}</span></div>
+                    </div>
+
+                    {/* Section 1: Divisão dos valores arrecadados */}
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      <h4 className="font-bold text-slate-900 text-xs">Divisão dos valores arrecadados</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-200 text-slate-900 font-bold">
+                              <th className="py-2 pr-2">Tributos</th>
+                              <th className="py-2 px-2">Organização</th>
+                              <th className="py-2 px-2">Clubes</th>
+                              <th className="py-2 px-2">Premiação Atletas</th>
+                              <th className="py-2 pl-2">Premiação Equipes</th>
+                            </tr>
+                          </thead>
+                          <tbody className="text-slate-700 font-medium">
+                            <tr>
+                              <td className="py-2 pr-2">{fmt(vTributos)}</td>
+                              <td className="py-2 px-2">{fmt(vOrganizacao)}</td>
+                              <td className="py-2 px-2">{fmt(vClubes)}</td>
+                              <td className="py-2 px-2">{fmt(vPremiacaoAtleta)}</td>
+                              <td className="py-2 pl-2">{fmt(vPremiacaoEquipes)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Section 2: Premiação atletas Individual */}
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      <h4 className="font-bold text-slate-900 text-xs">Premiação atletas Individual</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-200 text-slate-900 font-bold uppercase">
+                              <th className="py-2 w-1/3">OURO</th>
+                              <th className="py-2 w-1/3">PRATA</th>
+                              <th className="py-2 w-1/3">BRONZE</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                            <tr className="font-bold text-slate-900">
+                              <td className="py-2">{fmt(vOuroPool)}</td>
+                              <td className="py-2">{fmt(vPrataPool)}</td>
+                              <td className="py-2">{fmt(vBronzePool)}</td>
+                            </tr>
+                            {[0, 1, 2, 3, 4].map((idx) => (
+                              <tr key={idx}>
+                                <td className="py-1.5">{idx + 1}º {fmt(vOuroPool * (pPos[idx] / 100))}</td>
+                                <td className="py-1.5">{idx + 1}º {fmt(vPrataPool * (pPos[idx] / 100))}</td>
+                                <td className="py-1.5">{idx + 1}º {fmt(vBronzePool * (pPos[idx] / 100))}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Section 3: Premiação Equipes Clubes */}
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      <h4 className="font-bold text-slate-900 text-xs">Premiação Equipes Clubes</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-200 text-slate-900 font-bold uppercase">
+                              <th className="py-2 w-1/3">OURO</th>
+                              <th className="py-2 w-1/3">PRATA</th>
+                              <th className="py-2 w-1/3">BRONZE</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                            <tr className="font-bold text-slate-900">
+                              <td className="py-2">{fmt(vEquipesOuroPool)}</td>
+                              <td className="py-2">{fmt(vEquipesPrataPool)}</td>
+                              <td className="py-2">{fmt(vEquipesBronzePool)}</td>
+                            </tr>
+                            {[0, 1, 2, 3, 4].map((idx) => (
+                              <tr key={idx}>
+                                <td className="py-1.5">{idx + 1}º {fmt(vEquipesOuroPool * (pPos[idx] / 100))}</td>
+                                <td className="py-1.5">{idx + 1}º {fmt(vEquipesPrataPool * (pPos[idx] / 100))}</td>
+                                <td className="py-1.5">{idx + 1}º {fmt(vEquipesBronzePool * (pPos[idx] / 100))}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex justify-end">
+              <button
+                onClick={() => setSelectedPremiacaoModal(null)}
+                className="bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
