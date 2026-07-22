@@ -1194,22 +1194,26 @@ export default function ChampionshipsView({
                 const vEquipesPrataPool = vPremiacaoEquipes * (pPrata / 100);
                 const vEquipesBronzePool = vPremiacaoEquipes * (pBronze / 100);
 
-                // Position Percentages
-                const pPos = (currentStageId === 'all' && champ.percentualPos1TodasEtapas && champ.percentualPos1TodasEtapas > 0)
-                  ? [
-                      champ.percentualPos1TodasEtapas ?? 40,
-                      champ.percentualPos2TodasEtapas ?? 30,
-                      champ.percentualPos3TodasEtapas ?? 15,
-                      champ.percentualPos4TodasEtapas ?? 0,
-                      champ.percentualPos5TodasEtapas ?? 0
-                    ]
-                  : [
-                      champ.percentualPos1Medalha ?? 40,
-                      champ.percentualPos2Medalha ?? 30,
-                      champ.percentualPos3Medalha ?? 15,
-                      champ.percentualPos4Medalha ?? 0,
-                      champ.percentualPos5Medalha ?? 0
-                    ];
+                // Position Percentages for Individual Stages (Medal breakdown)
+                const pPos = [
+                  champ.percentualPos1Medalha ?? 40,
+                  champ.percentualPos2Medalha ?? 30,
+                  champ.percentualPos3Medalha ?? 15,
+                  champ.percentualPos4Medalha ?? 0,
+                  champ.percentualPos5Medalha ?? 0
+                ];
+
+                // Position Percentages for Todas as Etapas (1º ao 5º lugar)
+                const pPosTodas = [
+                  champ.percentualPos1TodasEtapas ?? 40,
+                  champ.percentualPos2TodasEtapas ?? 25,
+                  champ.percentualPos3TodasEtapas ?? 15,
+                  champ.percentualPos4TodasEtapas ?? 12,
+                  champ.percentualPos5TodasEtapas ?? 8
+                ];
+
+                const pTodasEtapasSlice = champ.percentualPremiacaoTodasEtapas ?? 30;
+                const vPoolTodasEtapas = (vPremiacaoAtleta * (pTodasEtapasSlice / 100)) + vAdicionalTodasEtapas;
 
                 const fmt = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -1268,35 +1272,70 @@ export default function ChampionshipsView({
                       </div>
                     </div>
 
-                    {/* Section 2: Premiação atletas Individual */}
-                    <div className="space-y-2 pt-2 border-t border-slate-100">
-                      <h4 className="font-bold text-slate-900 text-xs">Premiação atletas Individual</h4>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="border-b border-slate-200 text-slate-900 font-bold uppercase">
-                              <th className="py-2 w-1/3">OURO</th>
-                              <th className="py-2 w-1/3">PRATA</th>
-                              <th className="py-2 w-1/3">BRONZE</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
-                            <tr className="font-bold text-slate-900">
-                              <td className="py-2">{fmt(vOuroPool)}</td>
-                              <td className="py-2">{fmt(vPrataPool)}</td>
-                              <td className="py-2">{fmt(vBronzePool)}</td>
-                            </tr>
-                            {[0, 1, 2, 3, 4].map((idx) => (
-                              <tr key={idx}>
-                                <td className="py-1.5">{idx + 1}º {fmt(vOuroPool * (pPos[idx] / 100))}</td>
-                                <td className="py-1.5">{idx + 1}º {fmt(vPrataPool * (pPos[idx] / 100))}</td>
-                                <td className="py-1.5">{idx + 1}º {fmt(vBronzePool * (pPos[idx] / 100))}</td>
+                    {/* Section 2: Premiação atletas (Todas as Etapas vs Etapa Individual) */}
+                    {currentStageId === 'all' ? (
+                      <div className="space-y-2 pt-2 border-t border-slate-100">
+                        <div className="flex justify-between items-center">
+                          <h4 className="font-bold text-slate-900 text-xs">Premiações Todas as Etapas</h4>
+                          <span className="text-xs font-bold text-emerald-600 font-mono">
+                            Total Premiação Geral: {fmt(vPoolTodasEtapas)}
+                          </span>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-200 text-slate-900 font-bold uppercase">
+                                <th className="py-2">Colocação</th>
+                                <th className="py-2 text-center">% Premiação</th>
+                                <th className="py-2 text-right">Valor Premiação</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                              {[0, 1, 2, 3, 4].map((idx) => {
+                                const perc = pPosTodas[idx];
+                                const val = vPoolTodasEtapas * (perc / 100);
+                                return (
+                                  <tr key={idx}>
+                                    <td className="py-2 font-bold text-slate-800">{idx + 1}º Lugar</td>
+                                    <td className="py-2 text-center font-mono">{perc}%</td>
+                                    <td className="py-2 text-right font-bold font-mono text-emerald-600">{fmt(val)}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="space-y-2 pt-2 border-t border-slate-100">
+                        <h4 className="font-bold text-slate-900 text-xs">Premiação atletas Individual</h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-200 text-slate-900 font-bold uppercase">
+                                <th className="py-2 w-1/3">OURO</th>
+                                <th className="py-2 w-1/3">PRATA</th>
+                                <th className="py-2 w-1/3">BRONZE</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                              <tr className="font-bold text-slate-900">
+                                <td className="py-2">{fmt(vOuroPool)}</td>
+                                <td className="py-2">{fmt(vPrataPool)}</td>
+                                <td className="py-2">{fmt(vBronzePool)}</td>
+                              </tr>
+                              {[0, 1, 2, 3, 4].map((idx) => (
+                                <tr key={idx}>
+                                  <td className="py-1.5">{idx + 1}º {fmt(vOuroPool * (pPos[idx] / 100))}</td>
+                                  <td className="py-1.5">{idx + 1}º {fmt(vPrataPool * (pPos[idx] / 100))}</td>
+                                  <td className="py-1.5">{idx + 1}º {fmt(vBronzePool * (pPos[idx] / 100))}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Section 3: Premiação Equipes Clubes (apenas se houver pontuação mínima de equipe configurada) */}
                     {Boolean(
