@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `2899f52` |
-| Mensagem | `feat: exibe navegador de resultados de competicao na aba Perfil > Resultados` |
-| Data/hora | 2026-07-22T11:18:36-03:00 |
+| Hash | `5f964fc` |
+| Mensagem | `feat: altera fluxo de inscricao exibindo botao Ver Campeonato e tela de detalhes com download de documentos, modalidades e seletor de etapas` |
+| Data/hora | 2026-07-22T11:33:52-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `2899f52` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `5f964fc` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -87,6 +87,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Restrição de Inscrições por Sexo**: Implementado filtro condicional no modal de inscrição individual (`ChampionshipsView.tsx`) e na tabela de inscrição em lote do clube (`AdminPanel.tsx`). O sistema analisa a restrição de gênero da Etapa (`sexo: 'masculino' | 'feminino' | 'misto'`) e impede a visualização/seleção de atletas incompatíveis. Além disso, adicionou-se validação de backend em ambos os endpoints (`/api/championships/:id/register` e `/api/championships/:id/register-bulk`) para garantir que nenhuma inscrição irregular seja efetuada por baixo dos panos.
 - **Navegador de Resultados de Competição no Perfil**: Extraído o componente reutilizável `CompetitionResultsViewer.tsx` que centraliza o fluxo de seleção em 4 etapas (Campeonato -> Etapa -> Modalidade -> Tabela de Resultados com Filtro por Medalhas e Critérios de Desempate). O componente foi integrado tanto no Painel Diretor quanto no Perfil do Atleta (`MemberProfile.tsx` > aba Resultados), permitindo aos atiradores consultar a listagem oficial de qualquer competição e aplicar os filtros por medalha diretamente pelo seu perfil.
 - **Regra de Propagação Universal de Resultados**: Registrado por instrução explícita do usuário que toda e qualquer correção, filtro ou ajuste no cálculo ou exibição de resultados DEVE ser aplicado universalmente em todas as telas que exibem resultados no sistema, mantendo a consistência completa através do componente central `CompetitionResultsViewer.tsx`.
+- **Novo Fluxo de Inscrição ("Ver Campeonato")**: Alterado o botão principal do card de campeonatos de `"Inscrever-se neste Campeonato"` para `"Ver Campeonato"`. Ao clicar, o atleta abre a tela detalhada do campeonato exibindo título, botões verdes de download (`Baixar Regulamento` e `Baixar Súmula`), lista de modalidades vinculadas e a grade de cards das etapas cadastradas (`1ª ETAPA`, `2ª ETAPA`, etc.), onde o botão `[Participar]` de cada etapa abre o formulário de inscrição.
 
 
 
