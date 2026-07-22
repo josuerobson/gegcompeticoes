@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `ee738a7` |
-| Mensagem | `fix: oculta colunas de medalhas Ouro/Prata/Bronze e exibe tabela de colocacao geral quando 'Todas as etapas' estiver selecionado no modal Dados da Premiacao` |
-| Data/hora | 2026-07-22T20:13:47-03:00 |
+| Hash | `1e8cf14` |
+| Mensagem | `fix: corrige calculo da tabela de divisao de arrecadacao para usar estritamente o percentualPremiaçãoAtleta do campeonato` |
+| Data/hora | 2026-07-22T20:31:54-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `ee738a7` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `1e8cf14` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -104,6 +104,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Exibição Condicional de "Premiação Equipes Clubes" (`ChampionshipsView.tsx`)**: A seção e tabela de "Premiação Equipes Clubes" na modal *Dados da Premiação* passou a ser exibida somente se o campeonato possuir os valores de "Pontuação Mínima Equipe" (Ouro, Prata ou Bronze) preenchidos e maiores que zero durante o cadastro/edição da competição. Caso a pontuação mínima de equipes não tenha sido estabelecida, o bloco de premiação por equipes é ocultado.
 - **Opção "Todas as etapas" no Seletor de Etapas do Modal de Premiação (`ChampionshipsView.tsx`)**: Adicionada a opção `"Todas as etapas"` à caixa de seleção de etapas no modal *Dados da Premiação*. Ao ser selecionada (opção padrão ao abrir o modal), o sistema consolida o número total de inscrições, reinscrições e a arrecadação de todas as etapas do campeonato para a modalidade escolhida, aplicando os percentuais gerais de premiação (`percentualPremiacaoTodasEtapas`, premiação adicional e posições 1º a 5º para o campeonato completo).
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
+- **Correção do Percentual na Tabela de Divisão de Arrecadação (`ChampionshipsView.tsx`)**: Corrigido o cálculo da 4ª coluna ("Premiação Atletas") na tabela de divisão de arrecadação para utilizar estritamente o valor configurado no campo `% PREMIAÇÃO ATLETA` (ex: `34%`), eliminando a sobreposição indevida que ocorria ao consultar o percentual de "Todas as etapas" (que indicava `30%`, idêntico ao percentual da Organização). A soma de todas as 5 colunas de divisão (Tributos + Organização + Clubes + Premiação Atletas + Premiação Clubes) agora atinge exatamente `100%` da arrecadação.
 
 
 
