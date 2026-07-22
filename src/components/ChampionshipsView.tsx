@@ -1244,7 +1244,7 @@ export default function ChampionshipsView({
                               <th className="py-2 px-2">Organização</th>
                               <th className="py-2 px-2">Clubes</th>
                               <th className="py-2 px-2">Premiação Atletas</th>
-                              <th className="py-2 pl-2">Premiação Equipes</th>
+                              <th className="py-2 pl-2">Premiação Clubes</th>
                             </tr>
                           </thead>
                           <tbody className="text-slate-700 font-medium">
