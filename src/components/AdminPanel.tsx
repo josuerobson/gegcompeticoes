@@ -4612,7 +4612,7 @@ export default function AdminPanel({
       {/* POPUP: LISTA DE INSCRITOS */}
       {selectedChampForInscritosModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-2xl overflow-hidden shadow-2xl text-slate-800 flex flex-col max-h-[85vh] text-left">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-4xl overflow-hidden shadow-2xl text-slate-800 flex flex-col max-h-[85vh] text-left">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
               <div>
@@ -4637,7 +4637,7 @@ export default function AdminPanel({
               <Search className="w-4 h-4 text-slate-400 shrink-0" />
               <input
                 type="text"
-                placeholder="Buscar por atleta, etapa ou modalidade..."
+                placeholder="Buscar por atleta, etapa, modalidade ou origem (clube/atleta)..."
                 value={inscritosSearchQuery}
                 onChange={(e) => setInscritosSearchQuery(e.target.value)}
                 className="w-full text-xs outline-none bg-transparent placeholder:text-slate-400 text-slate-700"
@@ -4680,11 +4680,14 @@ export default function AdminPanel({
 
                 const filteredRegs = modalRegs.filter(r => {
                   const query = inscritosSearchQuery.toLowerCase();
+                  const isClub = (r.registeredByUserId && r.registeredByUserId !== r.userId) || Boolean(r.clubId);
+                  const origemStr = isClub ? 'clube' : 'atleta';
                   return (
                     r.athleteName.toLowerCase().includes(query) ||
                     r.stageTitle.toLowerCase().includes(query) ||
                     r.modalityName.toLowerCase().includes(query) ||
-                    r.athleteCpf.includes(query)
+                    r.athleteCpf.includes(query) ||
+                    origemStr.includes(query)
                   );
                 });
 
@@ -4714,32 +4717,53 @@ export default function AdminPanel({
                         <th className="py-2">Etapa</th>
                         <th className="py-2">Modalidade</th>
                         <th className="py-2 text-center">Tipo</th>
+                        <th className="py-2 text-center">Origem</th>
+                        <th className="py-2 text-center">Valor Inscrição</th>
                         <th className="py-2 text-center">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
-                      {filteredRegs.map((reg) => (
-                        <tr key={reg.id} className="hover:bg-slate-50/50">
-                          <td className="py-3 pr-2 font-bold text-slate-800">
-                            <div>{reg.athleteName}</div>
-                            {reg.athleteCpf && (
-                              <div className="text-[9px] font-mono font-normal text-slate-400">CPF: {reg.athleteCpf}</div>
-                            )}
-                          </td>
-                          <td className="py-3 px-2 text-slate-500 font-semibold">{reg.stageTitle}</td>
-                          <td className="py-3 px-2 text-slate-655 font-mono">{reg.modalityName}</td>
-                          <td className="py-3 px-2 text-center">
-                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${reg.registrationType === 'reinscrição' ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-800'}`}>
-                              {reg.registrationType === 'reinscrição' ? 'REINSCRIÇÃO' : 'NORMAL'}
-                            </span>
-                          </td>
-                          <td className="py-3 text-center">
-                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${reg.paymentStatus === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                              {reg.paymentStatus === 'approved' ? 'HOMOLOGADA' : 'PENDENTE'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                      {filteredRegs.map((reg) => {
+                        const isClub = (reg.registeredByUserId && reg.registeredByUserId !== reg.userId) || Boolean(reg.clubId);
+                        const regValue = reg.valorPago && reg.valorPago > 0
+                          ? reg.valorPago
+                          : reg.registrationType === 'reinscrição'
+                            ? (selectedChampForInscritosModal.valorReinscricao ?? selectedChampForInscritosModal.registrationFee ?? 0)
+                            : isClub
+                              ? (selectedChampForInscritosModal.valorInscricaoClube ?? selectedChampForInscritosModal.registrationFee ?? 0)
+                              : (selectedChampForInscritosModal.valorInscricaoIndividual ?? selectedChampForInscritosModal.registrationFee ?? 0);
+
+                        return (
+                          <tr key={reg.id} className="hover:bg-slate-50/50">
+                            <td className="py-3 pr-2 font-bold text-slate-800">
+                              <div>{reg.athleteName}</div>
+                              {reg.athleteCpf && (
+                                <div className="text-[9px] font-mono font-normal text-slate-400">CPF: {reg.athleteCpf}</div>
+                              )}
+                            </td>
+                            <td className="py-3 px-2 text-slate-500 font-semibold">{reg.stageTitle}</td>
+                            <td className="py-3 px-2 text-slate-655 font-mono">{reg.modalityName}</td>
+                            <td className="py-3 px-2 text-center">
+                              <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${reg.registrationType === 'reinscrição' ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-800'}`}>
+                                {reg.registrationType === 'reinscrição' ? 'REINSCRIÇÃO' : 'NORMAL'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-2 text-center">
+                              <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${isClub ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
+                                {isClub ? 'CLUBE' : 'ATLETA'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-2 text-center font-bold font-mono text-emerald-600">
+                              R$ {regValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-3 text-center">
+                              <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${reg.paymentStatus === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                                {reg.paymentStatus === 'approved' ? 'HOMOLOGADA' : 'PENDENTE'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 );
@@ -4750,8 +4774,20 @@ export default function AdminPanel({
             <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center text-xs">
               <span className="text-slate-500 font-semibold">
                 {(() => {
-                  const total = registrations.filter(r => r.championshipId === selectedChampForInscritosModal.id).length;
-                  return `Total: ${total} inscrição(ões)`;
+                  const allRegs = registrations.filter(r => r.championshipId === selectedChampForInscritosModal.id);
+                  const totalCount = allRegs.length;
+                  const totalValor = allRegs.reduce((acc, r) => {
+                    const isClub = (r.registeredByUserId && r.registeredByUserId !== r.userId) || Boolean(r.clubId);
+                    const val = r.valorPago && r.valorPago > 0
+                      ? r.valorPago
+                      : r.registrationType === 'reinscrição'
+                        ? (selectedChampForInscritosModal.valorReinscricao ?? selectedChampForInscritosModal.registrationFee ?? 0)
+                        : isClub
+                          ? (selectedChampForInscritosModal.valorInscricaoClube ?? selectedChampForInscritosModal.registrationFee ?? 0)
+                          : (selectedChampForInscritosModal.valorInscricaoIndividual ?? selectedChampForInscritosModal.registrationFee ?? 0);
+                    return acc + val;
+                  }, 0);
+                  return `Total: ${totalCount} inscrição(ões) — Total Arrecadado: R$ ${totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                 })()}
               </span>
               <button
