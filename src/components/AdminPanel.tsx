@@ -2253,13 +2253,24 @@ export default function AdminPanel({
         const silverMin = currentChamp?.pontuacaoMinimaAtletaPrata || 0;
         const bronzeMin = currentChamp?.pontuacaoMinimaAtletaBronze || 0;
 
+        const getAthleteMedal = (scoreValue: number): 'ouro' | 'prata' | 'bronze' | null => {
+          if (goldMin > 0 && scoreValue >= goldMin) return 'ouro';
+          if (silverMin > 0 && (goldMin > 0 ? scoreValue < goldMin : true) && scoreValue >= silverMin) return 'prata';
+          if (
+            bronzeMin > 0 &&
+            (silverMin > 0 ? scoreValue < silverMin : goldMin > 0 ? scoreValue < goldMin : true) &&
+            scoreValue >= bronzeMin
+          ) return 'bronze';
+          return null;
+        };
+
         let finalScores = [...sortedScores];
         if (selectedMedalFilter === 'ouro' && goldMin > 0) {
-          finalScores = finalScores.filter(s => s.score >= goldMin);
+          finalScores = finalScores.filter(s => getAthleteMedal(s.score) === 'ouro');
         } else if (selectedMedalFilter === 'prata' && silverMin > 0) {
-          finalScores = finalScores.filter(s => s.score >= silverMin);
+          finalScores = finalScores.filter(s => getAthleteMedal(s.score) === 'prata');
         } else if (selectedMedalFilter === 'bronze' && bronzeMin > 0) {
-          finalScores = finalScores.filter(s => s.score >= bronzeMin);
+          finalScores = finalScores.filter(s => getAthleteMedal(s.score) === 'bronze');
         }
 
         return (
@@ -2383,33 +2394,35 @@ export default function AdminPanel({
                     {finalScores.map((score, index) => {
                       const reg = registrations.find(r => r.id === score.registrationId);
                       const overallIndex = sortedScores.findIndex(s => s.id === score.id);
+                      const displayPosIndex = selectedMedalFilter === 'geral' ? overallIndex : index;
+                      const athleteMedal = getAthleteMedal(score.score);
                       return (
                         <tr key={score.id} className="hover:bg-slate-50/50">
                           <td className="py-3 px-2 text-center font-bold font-mono">
-                            {overallIndex === 0 ? (
+                            {displayPosIndex === 0 ? (
                               <span className="inline-block bg-amber-100 text-amber-800 text-[10px] font-bold w-5 h-5 rounded-full leading-5 text-center">1º</span>
-                            ) : overallIndex === 1 ? (
+                            ) : displayPosIndex === 1 ? (
                               <span className="inline-block bg-slate-100 text-slate-800 text-[10px] font-bold w-5 h-5 rounded-full leading-5 text-center">2º</span>
-                            ) : overallIndex === 2 ? (
+                            ) : displayPosIndex === 2 ? (
                               <span className="inline-block bg-amber-50 text-amber-700 text-[10px] font-bold w-5 h-5 rounded-full leading-5 text-center">3º</span>
                             ) : (
-                              `${overallIndex + 1}º`
+                              `${displayPosIndex + 1}º`
                             )}
                           </td>
                           <td className="py-3 px-2 font-bold text-slate-800">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span>{score.shooterName}</span>
-                              {goldMin > 0 && score.score >= goldMin && (
+                              {athleteMedal === 'ouro' && (
                                 <span className="inline-flex items-center bg-amber-50 text-amber-800 border border-amber-200 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full select-none" title="Índice Ouro">
                                   🥇 Ouro
                                 </span>
                               )}
-                              {silverMin > 0 && score.score < goldMin && score.score >= silverMin && (
+                              {athleteMedal === 'prata' && (
                                 <span className="inline-flex items-center bg-slate-50 text-slate-800 border border-slate-200 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full select-none" title="Índice Prata">
                                   🥈 Prata
                                 </span>
                               )}
-                              {bronzeMin > 0 && score.score < silverMin && score.score >= bronzeMin && (
+                              {athleteMedal === 'bronze' && (
                                 <span className="inline-flex items-center bg-amber-50/50 text-amber-950 border border-amber-250 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full select-none" title="Índice Bronze">
                                   🥉 Bronze
                                 </span>
