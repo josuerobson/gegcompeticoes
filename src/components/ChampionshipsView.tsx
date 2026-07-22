@@ -743,28 +743,35 @@ export default function ChampionshipsView({
       {/* REGISTRATION & PAYMENT MODAL WINDOW */}
       <AnimatePresence>
         {selectedChampReg && (
-          <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) closeRegModal();
+            }}
+          >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white max-w-lg w-full rounded-2xl smooth-shadow overflow-hidden"
+              className="bg-white max-w-lg w-full rounded-2xl smooth-shadow overflow-hidden max-h-[90vh] flex flex-col my-auto"
             >
-              <div className="bg-blue-900 text-white p-4 flex justify-between items-center">
+              <div className="bg-blue-900 text-white p-4 flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-2">
                   <Trophy className="w-5 h-5 text-amber-400" />
                   <span className="font-display font-semibold text-sm">Ficha de Inscrição Oficial</span>
                 </div>
                 <button
+                  type="button"
                   onClick={closeRegModal}
-                  className="text-white/70 hover:text-white"
+                  className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer text-base leading-none font-bold"
+                  title="Fechar janela"
                 >
                   ✕
                 </button>
               </div>
 
               {paymentStep === 'form' && (
-                <form onSubmit={handleRegisterSubmit} className="p-5 space-y-4">
+                <form onSubmit={handleRegisterSubmit} className="p-5 space-y-4 flex-1 overflow-y-auto">
                   <div className="bg-blue-50 p-3 rounded-lg flex flex-col gap-1 text-xs">
                     <div className="flex items-center justify-between text-blue-900">
                       <span className="font-semibold">{selectedChampReg.title}</span>
@@ -973,7 +980,7 @@ export default function ChampionshipsView({
               )}
 
               {paymentStep === 'processing' && (
-                <div className="p-8 text-center space-y-4">
+                <div className="p-8 text-center space-y-4 flex-1 overflow-y-auto">
                   <div className="relative w-12 h-12 mx-auto">
                     <div className="w-12 h-12 rounded-full border-4 border-slate-200 animate-spin border-t-blue-600"></div>
                   </div>
@@ -985,7 +992,7 @@ export default function ChampionshipsView({
               )}
 
               {paymentStep === 'done' && (
-                <div className="p-6 text-center space-y-4">
+                <div className="p-6 text-center space-y-4 flex-1 overflow-y-auto">
                   <div className="bg-emerald-50 text-emerald-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto shadow-md">
                     <CheckCircle className="w-6 h-6" />
                   </div>
