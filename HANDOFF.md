@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `2a4c0b8` |
-| Mensagem | `feat: adiciona coluna Arrecadacao nas tabelas de campeonatos do Painel Diretor exibindo o valor total previsto de todas as inscricoes` |
-| Data/hora | 2026-07-22T18:26:06-03:00 |
+| Hash | `a3b263a` |
+| Mensagem | `feat: adiciona colunas Origem e Valor Inscricao na modal de inscritos do campeonato no Painel Diretor` |
+| Data/hora | 2026-07-22T18:36:24-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `2a4c0b8` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `a3b263a` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -91,6 +91,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Ajuste de Responsividade e Rolagem do Modal de Inscrição**: Adicionado `max-h-[90vh]`, `flex flex-col` e rolagem vertical (`overflow-y-auto`) tanto no overlay quanto no corpo do modal de inscrição de campeonatos (`ChampionshipsView.tsx`). O topo (com o botão de fechar `✕`) agora fica fixo e visível em qualquer resolução ou zoom de tela, e o clique no fundo escuro também fecha o modal.
 - **Sanitização e Filtragem de Modalidades Inexistentes/Excluídas**: Adicionada uma rotina SQL no inicializador do banco de dados (`src/db.ts`) que limpa automaticamente os arrays JSONB `modalities` da tabela `championships`, removendo IDs de modalidades que tenham sido excluídas do sistema (como `MOD_1784070018361`). Além disso, o componente `ChampionshipsView.tsx` foi atualizado com a função utilitária `getValidChampModalities` para filtrar e omitir na UI qualquer ID legado ou inválido que não esteja cadastrado na tabela oficial de modalidades.
 - **Coluna de Arrecadação Prevista na Tabela de Campeonatos**: Adicionada a coluna `"Arrecadação"` às tabelas de gerenciamento de campeonatos no Painel Diretor (`AdminPanel.tsx`). O sistema calcula o valor total acumulado/previsto da competição somando todas as inscrições efetuadas (sejam pagas ou pendentes), considerando as tarifas configuradas no cadastro do campeonato (valor individual, valor por clube e valor de reinscrição).
+- **Campos "Origem" e "Valor Inscrição" na Modal de Inscritos**: Atualizada a janela popup de listagem de inscritos de campeonatos no Painel Diretor (`AdminPanel.tsx`) para incluir 2 novas colunas: `"Origem"` (indicando com badges destacadas `CLUBE` ou `ATLETA`) e `"Valor Inscrição"` (exibindo o valor individual, de clube ou de re-inscrição em `R$`). O rodapé da modal também passou a exibir a soma total arrecadada das inscrições listadas.
 
 
 
