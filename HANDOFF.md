@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `ece1627` |
-| Mensagem | `fix: altera cabecalho de coluna da tabela de divisao de valores de Premiacao Equipes para Premiacao Clubes` |
-| Data/hora | 2026-07-22T19:44:10-03:00 |
+| Hash | `3025e7b` |
+| Mensagem | `fix: exibe tabela de Premiacao Equipes Clubes apenas se a pontuacao minima de equipe estiver configurada no campeonato` |
+| Data/hora | 2026-07-22T19:52:14-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `ece1627` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `3025e7b` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -101,6 +101,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
   - `% Clubes`: percentual reservado para o clube ao qual o atleta inscrito é filiado.
   - `% Premiação Atleta`: valor reservado para premiar os atletas individualmente.
   - `% Premiação Clube`: valor reservado para premiar o clube eleito campeão pela melhor participação combinada de seus atletas no campeonato.
+- **Exibição Condicional de "Premiação Equipes Clubes" (`ChampionshipsView.tsx`)**: A seção e tabela de "Premiação Equipes Clubes" na modal *Dados da Premiação* passou a ser exibida somente se o campeonato possuir os valores de "Pontuação Mínima Equipe" (Ouro, Prata ou Bronze) preenchidos e maiores que zero durante o cadastro/edição da competição. Caso a pontuação mínima de equipes não tenha sido estabelecida, o bloco de premiação por equipes é ocultado.
 
 
 
