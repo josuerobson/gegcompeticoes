@@ -260,6 +260,32 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS aberto_outros_clubes TEXT DEFAULT 'sim';
     `);
 
+    // Sanitize championships.modalities JSONB array: remove any deleted/orphaned modality IDs
+    await client.query(`
+      DO $$
+      DECLARE
+          champ RECORD;
+          m_elem text;
+          new_mods jsonb;
+          mod_exists boolean;
+      BEGIN
+          FOR champ IN SELECT id, modalities FROM championships WHERE jsonb_typeof(modalities) = 'array' LOOP
+              new_mods := '[]'::jsonb;
+              FOR m_elem IN SELECT jsonb_array_elements_text(champ.modalities) LOOP
+                  SELECT EXISTS (
+                      SELECT 1 FROM modalities WHERE id = m_elem OR name = m_elem
+                  ) INTO mod_exists;
+                  
+                  IF mod_exists THEN
+                      new_mods := new_mods || to_jsonb(m_elem);
+                  END IF;
+              END LOOP;
+              
+              UPDATE championships SET modalities = new_mods WHERE id = champ.id;
+          END LOOP;
+      END $$;
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS stages (
         id TEXT PRIMARY KEY,

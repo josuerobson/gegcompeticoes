@@ -80,7 +80,19 @@ export default function ChampionshipsView({
     }
   };
 
-  const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
+  const modalityName = (id: string) => {
+    const m = modalities.find(mod => mod.id === id || mod.name === id);
+    if (m) return m.name;
+    if (id && (id.startsWith('MOD_') || id.startsWith('mod_'))) return '';
+    return id;
+  };
+
+  const getValidChampModalities = (champModArray?: string[]) => {
+    if (!Array.isArray(champModArray)) return [];
+    return champModArray
+      .map(modId => modalities.find(m => m.id === modId || m.name === modId))
+      .filter((mod): mod is Modality => Boolean(mod));
+  };
   const eligibleWeapons = weapons.filter(w => w.ownerId === currentUser?.id || (currentUser?.clubId && w.ownerId === currentUser.clubId));
 
   const isAlreadyRegistered = registrations.some(
@@ -384,32 +396,30 @@ export default function ChampionshipsView({
                 {/* Section: Modalidades */}
                 <div className="space-y-3">
                   <h3 className="font-display font-bold text-slate-900 text-base sm:text-lg">Modalidades</h3>
-                  {viewingChampionship.modalities.length === 0 ? (
-                    <p className="text-xs text-slate-400">Nenhuma modalidade vinculada a este campeonato.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {viewingChampionship.modalities.map((modId) => {
-                        const mod = modalities.find(m => m.id === modId);
-                        const name = mod ? mod.name : modalityName(modId);
-                        return (
+                  {(() => {
+                    const validMods = getValidChampModalities(viewingChampionship.modalities);
+                    if (validMods.length === 0) {
+                      return <p className="text-xs text-slate-400">Nenhuma modalidade cadastrada vinculada a este campeonato.</p>;
+                    }
+                    return (
+                      <div className="space-y-2">
+                        {validMods.map((mod) => (
                           <div
-                            key={modId}
+                            key={mod.id}
                             className="bg-white border border-slate-200 rounded-xl p-4 flex justify-between items-center hover:border-blue-300 transition shadow-xs"
                           >
                             <div>
-                              <h4 className="font-bold text-slate-800 text-xs sm:text-sm uppercase tracking-wide">{name}</h4>
-                              {mod && (
-                                <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                                  {mod.seriesCount} séries × {mod.shotsPerSeries} tiros • Avaliação: {mod.evaluationType === 'pontuacao' ? 'Pontos' : mod.evaluationType === 'tempo' ? 'Tempo' : 'Fator (Pontos/Tempo)'}
-                                </p>
-                              )}
+                              <h4 className="font-bold text-slate-800 text-xs sm:text-sm uppercase tracking-wide">{mod.name}</h4>
+                              <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                                {mod.seriesCount || 0} séries × {mod.shotsPerSeries || 0} tiros • Avaliação: {mod.evaluationType === 'pontuacao' ? 'Pontos' : mod.evaluationType === 'tempo' ? 'Tempo' : 'Fator (Pontos/Tempo)'}
+                              </p>
                             </div>
                             <ChevronRight className="w-5 h-5 text-slate-400" />
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Section: Participar das etapas */}
@@ -532,9 +542,9 @@ export default function ChampionshipsView({
 
                         <div className="space-y-2">
                           <div className="flex flex-wrap gap-1">
-                            {champ.modalities.map((mod, i) => (
-                              <span key={i} className="text-[9px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold uppercase">
-                                {modalityName(mod)}
+                            {getValidChampModalities(champ.modalities).map((mod) => (
+                              <span key={mod.id} className="text-[9px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold uppercase">
+                                {mod.name}
                               </span>
                             ))}
                           </div>
@@ -797,8 +807,8 @@ export default function ChampionshipsView({
                       onChange={(e) => setSelectedModalityId(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
                     >
-                      {selectedChampReg.modalities.map((modId, i) => (
-                        <option key={i} value={modId}>{modalityName(modId)}</option>
+                      {getValidChampModalities(selectedChampReg.modalities).map((mod) => (
+                        <option key={mod.id} value={mod.id}>{mod.name}</option>
                       ))}
                     </select>
                     {(() => {
