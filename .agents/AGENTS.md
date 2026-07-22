@@ -86,6 +86,7 @@ Mantenha sempre esta seção atualizada no topo do `HANDOFF.md` (logo após o t�
 - Sem testes automatizados — verificação manual via browser/API calls
 - Auth: CPF + senha, header `x-user-id` (sem JWT)
 - **Nunca fazer migrações destrutivas** (`DROP COLUMN`, `NOT NULL` em coluna existente) — sempre aditivo
+- **Correções de resultados em todas as telas**: Toda correção, regra de cálculo ou filtro de resultados DEVE ser aplicada em todas as páginas e componentes que exibem resultados (ex: Painel Diretor, Perfil do Atleta, Rankings). Utilize o componente reutilizável `CompetitionResultsViewer.tsx` como padrão central.
 - Credenciais de deploy/infra ficam **apenas no `.env` local** (veja seção abaixo) — nunca no git
 
 ---
