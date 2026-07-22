@@ -1886,6 +1886,8 @@ export default function App() {
               championships={championships}
               modalities={modalities}
               clubs={clubs}
+              stages={stages}
+              users={users}
               onToggleFollow={handleToggleFollow}
               onPaySignature={handlePaySignature}
               onLogout={handleLogout}
