@@ -1545,7 +1545,7 @@ export default function AdminPanel({
   const [champDesc, setChampDesc] = useState('');
   const [champStart, setChampStart] = useState('2026-07-01');
   const [champEnd, setChampEnd] = useState('2026-09-15');
-  const [champFee, setChampFee] = useState(120);
+  const [champFee, setChampFee] = useState(100);
   const [selectedMods, setSelectedMods] = useState<string[]>([]);
   const [champStages, setChampStages] = useState(4);
   const [champBanner, setChampBanner] = useState('');
@@ -1564,7 +1564,7 @@ export default function AdminPanel({
   const [editChampDesc, setEditChampDesc] = useState('');
   const [editChampStart, setEditChampStart] = useState('');
   const [editChampEnd, setEditChampEnd] = useState('');
-  const [editChampFee, setEditChampFee] = useState(120);
+  const [editChampFee, setEditChampFee] = useState(100);
   const [editSelectedMods, setEditSelectedMods] = useState<string[]>([]);
   const [editChampStages, setEditChampStages] = useState(4);
   const [editChampBanner, setEditChampBanner] = useState('');
@@ -1901,11 +1901,11 @@ export default function AdminPanel({
                   {championships.map((champ) => {
                     const champRegs = registrations.filter(r => r.championshipId === champ.id);
                     const totalArrecadacao = champRegs.reduce((acc, r) => {
-                      if (r.valorPago && r.valorPago > 0) return acc + r.valorPago;
+                      if (r.valorPago && r.valorPago > 0 && r.valorPago !== 120) return acc + r.valorPago;
                       if (r.registrationType === 'reinscrição') {
                         return acc + (champ.valorReinscricao ?? champ.registrationFee ?? 0);
                       }
-                      if (r.registeredByUserId || r.clubId) {
+                      if ((r.registeredByUserId && r.registeredByUserId !== r.userId) || r.clubId) {
                         return acc + (champ.valorInscricaoClube ?? champ.registrationFee ?? 0);
                       }
                       return acc + (champ.valorInscricaoIndividual ?? champ.registrationFee ?? 0);
@@ -3342,11 +3342,11 @@ export default function AdminPanel({
                     {championships.map((champ) => {
                       const champRegs = registrations.filter(r => r.championshipId === champ.id);
                       const totalArrecadacao = champRegs.reduce((acc, r) => {
-                        if (r.valorPago && r.valorPago > 0) return acc + r.valorPago;
+                        if (r.valorPago && r.valorPago > 0 && r.valorPago !== 120) return acc + r.valorPago;
                         if (r.registrationType === 'reinscrição') {
                           return acc + (champ.valorReinscricao ?? champ.registrationFee ?? 0);
                         }
-                        if (r.registeredByUserId || r.clubId) {
+                        if ((r.registeredByUserId && r.registeredByUserId !== r.userId) || r.clubId) {
                           return acc + (champ.valorInscricaoClube ?? champ.registrationFee ?? 0);
                         }
                         return acc + (champ.valorInscricaoIndividual ?? champ.registrationFee ?? 0);
@@ -4725,7 +4725,7 @@ export default function AdminPanel({
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                       {filteredRegs.map((reg) => {
                         const isClub = (reg.registeredByUserId && reg.registeredByUserId !== reg.userId) || Boolean(reg.clubId);
-                        const regValue = reg.valorPago && reg.valorPago > 0
+                        const regValue = (reg.valorPago && reg.valorPago > 0 && reg.valorPago !== 120)
                           ? reg.valorPago
                           : reg.registrationType === 'reinscrição'
                             ? (selectedChampForInscritosModal.valorReinscricao ?? selectedChampForInscritosModal.registrationFee ?? 0)
@@ -4778,7 +4778,7 @@ export default function AdminPanel({
                   const totalCount = allRegs.length;
                   const totalValor = allRegs.reduce((acc, r) => {
                     const isClub = (r.registeredByUserId && r.registeredByUserId !== r.userId) || Boolean(r.clubId);
-                    const val = r.valorPago && r.valorPago > 0
+                    const val = (r.valorPago && r.valorPago > 0 && r.valorPago !== 120)
                       ? r.valorPago
                       : r.registrationType === 'reinscrição'
                         ? (selectedChampForInscritosModal.valorReinscricao ?? selectedChampForInscritosModal.registrationFee ?? 0)
