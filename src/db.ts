@@ -756,7 +756,7 @@ export async function initDB() {
             payment_method, payment_status, completion_status, registered_at, approved_at, tx_id,
             disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pix', 'approved', 'pending', $9, $9, $10, false, 0, $3, 'normal', 80, $11)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pix', 'approved', 'pending', $9, $9, $10, false, 0, 'usr_admin_1', 'normal', 80, $11)
           ON CONFLICT (id) DO NOTHING`,
           [
             regId, champId, ath.id, ath.clubId, modalityId, stageId, weaponId, crNumber,
@@ -781,7 +781,7 @@ export async function initDB() {
       UPDATE registrations
       SET valor_pago = CASE
         WHEN registration_type = 'reinscrição' THEN COALESCE(c.valor_reinscricao, c.registration_fee, 0)
-        WHEN (registrations.registered_by_user_id IS NOT NULL AND registrations.registered_by_user_id <> registrations.user_id) OR registrations.club_id IS NOT NULL THEN COALESCE(c.valor_inscricao_clube, c.registration_fee, 0)
+        WHEN (registrations.registered_by_user_id IS NOT NULL AND registrations.registered_by_user_id <> registrations.user_id) THEN COALESCE(c.valor_inscricao_clube, c.registration_fee, 0)
         ELSE COALESCE(c.valor_inscricao_individual, c.registration_fee, 0)
       END
       FROM championships c

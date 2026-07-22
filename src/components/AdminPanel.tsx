@@ -1905,7 +1905,7 @@ export default function AdminPanel({
                       if (r.registrationType === 'reinscrição') {
                         return acc + (champ.valorReinscricao ?? champ.registrationFee ?? 0);
                       }
-                      if ((r.registeredByUserId && r.registeredByUserId !== r.userId) || r.clubId) {
+                      if (r.registeredByUserId && r.registeredByUserId !== r.userId) {
                         return acc + (champ.valorInscricaoClube ?? champ.registrationFee ?? 0);
                       }
                       return acc + (champ.valorInscricaoIndividual ?? champ.registrationFee ?? 0);
@@ -3346,7 +3346,7 @@ export default function AdminPanel({
                         if (r.registrationType === 'reinscrição') {
                           return acc + (champ.valorReinscricao ?? champ.registrationFee ?? 0);
                         }
-                        if ((r.registeredByUserId && r.registeredByUserId !== r.userId) || r.clubId) {
+                        if (r.registeredByUserId && r.registeredByUserId !== r.userId) {
                           return acc + (champ.valorInscricaoClube ?? champ.registrationFee ?? 0);
                         }
                         return acc + (champ.valorInscricaoIndividual ?? champ.registrationFee ?? 0);
@@ -4680,7 +4680,7 @@ export default function AdminPanel({
 
                 const filteredRegs = modalRegs.filter(r => {
                   const query = inscritosSearchQuery.toLowerCase();
-                  const isClub = (r.registeredByUserId && r.registeredByUserId !== r.userId) || Boolean(r.clubId);
+                  const isClub = Boolean(r.registeredByUserId && r.registeredByUserId !== r.userId);
                   const origemStr = isClub ? 'clube' : 'atleta';
                   return (
                     r.athleteName.toLowerCase().includes(query) ||
@@ -4724,7 +4724,7 @@ export default function AdminPanel({
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                       {filteredRegs.map((reg) => {
-                        const isClub = (reg.registeredByUserId && reg.registeredByUserId !== reg.userId) || Boolean(reg.clubId);
+                        const isClub = Boolean(reg.registeredByUserId && reg.registeredByUserId !== reg.userId);
                         const regValue = (reg.valorPago && reg.valorPago > 0 && reg.valorPago !== 120)
                           ? reg.valorPago
                           : reg.registrationType === 'reinscrição'
@@ -4777,7 +4777,7 @@ export default function AdminPanel({
                   const allRegs = registrations.filter(r => r.championshipId === selectedChampForInscritosModal.id);
                   const totalCount = allRegs.length;
                   const totalValor = allRegs.reduce((acc, r) => {
-                    const isClub = (r.registeredByUserId && r.registeredByUserId !== r.userId) || Boolean(r.clubId);
+                    const isClub = Boolean(r.registeredByUserId && r.registeredByUserId !== r.userId);
                     const val = (r.valorPago && r.valorPago > 0 && r.valorPago !== 120)
                       ? r.valorPago
                       : r.registrationType === 'reinscrição'
