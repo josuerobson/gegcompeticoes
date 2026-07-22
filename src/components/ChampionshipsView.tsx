@@ -411,10 +411,7 @@ export default function ChampionshipsView({
                             className="bg-white border border-slate-200 rounded-xl p-4 flex justify-between items-center hover:border-blue-400 hover:shadow-md transition shadow-xs cursor-pointer group"
                             onClick={() => {
                               setSelectedPremiacaoModal({ champ: viewingChampionship, modality: mod });
-                              const champStages = stages.filter(s => s.championshipId === viewingChampionship.id);
-                              if (champStages.length > 0) {
-                                setSelectedPremiacaoStageId(champStages[0].id);
-                              }
+                              setSelectedPremiacaoStageId('all');
                             }}
                             title="Clique para ver os dados de premiação desta modalidade"
                           >
@@ -1141,18 +1138,18 @@ export default function ChampionshipsView({
                 const champ = selectedPremiacaoModal.champ;
                 const modality = selectedPremiacaoModal.modality;
                 const champStages = stages.filter(s => s.championshipId === champ.id);
-                const currentStageId = selectedPremiacaoStageId || (champStages[0]?.id || '');
+                const currentStageId = selectedPremiacaoStageId || 'all';
 
-                // Filter registrations for this stage and modality
+                // Filter registrations for stage(s) and modality
                 const stageModRegs = registrations.filter(
-                  r => r.championshipId === champ.id && r.stageId === currentStageId && r.modalityId === modality.id
+                  r => r.championshipId === champ.id && r.modalityId === modality.id && (currentStageId === 'all' || r.stageId === currentStageId)
                 );
 
                 const totalCount = stageModRegs.length;
                 const totalReinscricoes = stageModRegs.filter(r => r.registrationType === 'reinscrição').length;
                 const totalInscricoes = totalCount - totalReinscricoes;
 
-                // Compute total revenue for this stage + modality
+                // Compute total revenue for this stage / all stages + modality
                 const totalArrecadado = stageModRegs.reduce((acc, r) => {
                   if (r.valorPago && r.valorPago > 0 && r.valorPago !== 120) return acc + r.valorPago;
                   if (r.registrationType === 'reinscrição') {
@@ -1169,14 +1166,18 @@ export default function ChampionshipsView({
                 const pTributos = champ.percentualTributos ?? 0;
                 const pOrganizacao = champ.percentualOrganizacao ?? 0;
                 const pClubes = champ.percentualClubes ?? champ.percentualClube ?? 30;
-                const pPremiacaoAtleta = champ.percentualPremiacaoAtleta ?? 30;
+                const pPremiacaoAtleta = (currentStageId === 'all' && champ.percentualPremiacaoTodasEtapas && champ.percentualPremiacaoTodasEtapas > 0)
+                  ? champ.percentualPremiacaoTodasEtapas
+                  : (champ.percentualPremiacaoAtleta ?? 30);
                 const pPremiacaoClube = champ.percentualPremiacaoClube ?? 0;
+
+                const vAdicionalTodasEtapas = (currentStageId === 'all' && champ.premiacaoAdicionalTodasEtapas) ? champ.premiacaoAdicionalTodasEtapas : 0;
 
                 // Monetary values for division
                 const vTributos = totalArrecadado * (pTributos / 100);
                 const vOrganizacao = totalArrecadado * (pOrganizacao / 100);
                 const vClubes = totalArrecadado * (pClubes / 100);
-                const vPremiacaoAtleta = totalArrecadado * (pPremiacaoAtleta / 100);
+                const vPremiacaoAtleta = totalArrecadado * (pPremiacaoAtleta / 100) + vAdicionalTodasEtapas;
                 const vPremiacaoEquipes = totalArrecadado * (pPremiacaoClube / 100);
 
                 // Medal Pools for Individual Athletes
@@ -1194,37 +1195,44 @@ export default function ChampionshipsView({
                 const vEquipesBronzePool = vPremiacaoEquipes * (pBronze / 100);
 
                 // Position Percentages
-                const pPos = [
-                  champ.percentualPos1Medalha ?? 40,
-                  champ.percentualPos2Medalha ?? 30,
-                  champ.percentualPos3Medalha ?? 15,
-                  champ.percentualPos4Medalha ?? 0,
-                  champ.percentualPos5Medalha ?? 0
-                ];
+                const pPos = (currentStageId === 'all' && champ.percentualPos1TodasEtapas && champ.percentualPos1TodasEtapas > 0)
+                  ? [
+                      champ.percentualPos1TodasEtapas ?? 40,
+                      champ.percentualPos2TodasEtapas ?? 30,
+                      champ.percentualPos3TodasEtapas ?? 15,
+                      champ.percentualPos4TodasEtapas ?? 0,
+                      champ.percentualPos5TodasEtapas ?? 0
+                    ]
+                  : [
+                      champ.percentualPos1Medalha ?? 40,
+                      champ.percentualPos2Medalha ?? 30,
+                      champ.percentualPos3Medalha ?? 15,
+                      champ.percentualPos4Medalha ?? 0,
+                      champ.percentualPos5Medalha ?? 0
+                    ];
 
                 const fmt = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
                 return (
                   <>
                     {/* Stage selector dropdown */}
-                    {champStages.length > 0 && (
-                      <div className="space-y-1.5 pb-2 border-b border-slate-100">
-                        <label className="text-[11px] font-bold text-slate-500 uppercase block">
-                          Selecione a Etapa:
-                        </label>
-                        <select
-                          value={currentStageId}
-                          onChange={(e) => setSelectedPremiacaoStageId(e.target.value)}
-                          className="w-full sm:w-64 bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-800 focus:border-blue-500 cursor-pointer"
-                        >
-                          {champStages.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.stageNum ? `${s.stageNum}ª ETAPA` : s.title} ({new Date(s.date).toLocaleDateString('pt-BR')})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
+                    <div className="space-y-1.5 pb-2 border-b border-slate-100">
+                      <label className="text-[11px] font-bold text-slate-500 uppercase block">
+                        Selecione a Etapa:
+                      </label>
+                      <select
+                        value={currentStageId}
+                        onChange={(e) => setSelectedPremiacaoStageId(e.target.value)}
+                        className="w-full sm:w-64 bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-800 focus:border-blue-500 cursor-pointer"
+                      >
+                        <option value="all">Todas as etapas</option>
+                        {champStages.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.stageNum ? `${s.stageNum}ª ETAPA` : s.title} ({new Date(s.date).toLocaleDateString('pt-BR')})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
                     {/* Stats Summary */}
                     <div className="space-y-1 font-semibold text-slate-700">
