@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `13af7b6` |
-| Mensagem | `feat: restringe inscricoes de atletas ao sexo compativel com a etapa` |
-| Data/hora | 2026-07-21T09:19:00-03:00 |
+| Hash | `411cee3` |
+| Mensagem | `fix: exibe apenas atletas elegíveis de cada categoria nos filtros de medalha e reseta posicoes para 1, 2 etc` |
+| Data/hora | 2026-07-22T11:04:46-03:00 |
 | Push feito? | ✅ Sim |
-| Deploy EasyPanel confirmado? | ✅ Sim |
+| Deploy EasyPanel confirmado? | ⏳ Em andamento |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `13af7b6` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `411cee3` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -82,7 +82,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Alinhamento da Lista de Campeonatos de Estande**: A listagem de campeonatos sob o gerenciamento de clubes agora compartilha a mesma estrutura visual e o modal de listagem de inscritos global, exibindo de forma clara o total de atiradores e possibilitando abrir o popup interativo de homologações com busca em tempo real.
 - **Cálculo Personalizado do Alvo X**: Adicionado suporte para peso customizado para a zona X do alvo. O frontend e o backend agora lêem dinamicamente a propriedade `valorX` / `valor_x` do campeonato ativo. Se a propriedade estiver preenchida, é usado o valor fornecido; caso contrário, é adotado automaticamente o padrão de **11 pontos** (em vez do valor estático antigo de 10).
 - **Sincronização de Resultados**: Corrigido problema onde resultados recém-cadastrados não apareciam na aba "Resultados" sem recarregar a página. A prop `onRefreshData` agora é acionada após o salvamento bem-sucedido na interface do administrador de clube, fazendo com que o `App.tsx` atualize em tempo real todo o cache de pontuações de etapas e atletas em memória.
-- **Filtros de Medalhas (Ouro, Prata, Bronze)**: Adicionados botões de filtro e medalhas visuais na listagem de resultados de etapa/modalidade. O seletor de filtros aparece apenas para medalhas cujos índices mínimos de pontuação do campeonato correspondente sejam maiores que zero. Cada atleta que atinge os requisitos ganha uma medalha (🥇, 🥈, 🥉) ao lado do nome, e ao clicar no filtro a listagem exibe apenas os atletas elegíveis enquanto retém sua colocação na classificação geral original.
+- **Filtros de Medalhas (Ouro, Prata, Bronze)**: Adicionados botões de filtro e medalhas visuais na listagem de resultados de etapa/modalidade. O seletor de filtros exibe apenas os atletas classificados na respectiva categoria de medalha (excluindo atletas das faixas superiores/inferiores ao filtrar por Prata ou Bronze), e reinicia a contagem de colocação em 1º, 2º, 3º... dentro do ranking daquela medalha específica. A colocação na classificação geral original é mantida apenas no filtro "Classificação Geral".
 - **Preenchimento Automático de Sexo dos Atletas**: Adicionada uma query de inicialização de banco de dados e seeding para definir a coluna `sex` de todos os atletas existentes em produção que estivessem nulos ou vazios. Identifica os nomes femininos mais comuns no ambiente de teste ("Beatriz", "Carla", "Ana", "Fernanda") como `'feminino'` e atribui `'masculino'` para os demais, possibilitando testes completos de filtragem por sexo nos campeonatos.
 - **Restrição de Inscrições por Sexo**: Implementado filtro condicional no modal de inscrição individual (`ChampionshipsView.tsx`) e na tabela de inscrição em lote do clube (`AdminPanel.tsx`). O sistema analisa a restrição de gênero da Etapa (`sexo: 'masculino' | 'feminino' | 'misto'`) e impede a visualização/seleção de atletas incompatíveis. Além disso, adicionou-se validação de backend em ambos os endpoints (`/api/championships/:id/register` e `/api/championships/:id/register-bulk`) para garantir que nenhuma inscrição irregular seja efetuada por baixo dos panos.
 
