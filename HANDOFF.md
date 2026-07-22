@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `7d5b997` |
-| Mensagem | `fix: atualiza valores de inscricao legados e simulados no banco de dados e calcula taxas estritamente com base nos valores do campeonato` |
-| Data/hora | 2026-07-22T18:53:20-03:00 |
+| Hash | `a8e4629` |
+| Mensagem | `fix: aprimora diferenciacao de origem entre login de atleta e login de clube na inscricao e ajusta comparacao de usuario autor` |
+| Data/hora | 2026-07-22T19:01:27-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `7d5b997` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `a8e4629` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -93,6 +93,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Coluna de Arrecadação Prevista na Tabela de Campeonatos**: Adicionada a coluna `"Arrecadação"` às tabelas de gerenciamento de campeonatos no Painel Diretor (`AdminPanel.tsx`). O sistema calcula o valor total acumulado/previsto da competição somando todas as inscrições efetuadas (sejam pagas ou pendentes), considerando as tarifas configuradas no cadastro do campeonato (valor individual, valor por clube e valor de reinscrição).
 - **Campos "Origem" e "Valor Inscrição" na Modal de Inscritos**: Atualizada a janela popup de listagem de inscritos de campeonatos no Painel Diretor (`AdminPanel.tsx`) para incluir 2 novas colunas: `"Origem"` (indicando com badges destacadas `CLUBE` ou `ATLETA`) e `"Valor Inscrição"` (exibindo o valor individual, de clube ou de re-inscrição em `R$`). O rodapé da modal também passou a exibir a soma total arrecadada das inscrições listadas.
 - **Correção dos Valores das Inscrições (Remoção do R$ 120 estático)**: Identificado que o valor estático de `R$ 120,00` vinha da rotina de seed de testes no banco de dados (`src/db.ts`). Adicionada migração SQL no backend (`src/db.ts`) que atualiza automaticamente no banco de dados qualquer inscrição legada/simulada com valor 120 para a tarifa real cadastrada no campeonato (individual, clube ou re-inscrição). No frontend (`AdminPanel.tsx`), a lógica de cálculo foi ajustada para consultar rigorosamente as tarifas configuradas do campeonato.
+- **Validação e Diferenciação Estrita de Origem da Inscrição (Atleta vs Clube)**: Refatorada a checagem no backend (`server.ts`) e no frontend (`AdminPanel.tsx`) para garantir a separação total entre inscrições feitas pelo login do atleta e inscrições feitas em lote pelo clube. O critério de Origem passou a comparar estritamente `registeredByUserId !== userId` (identificando quando um gestor de clube inscreve o atleta), evitando que atletas vinculados a um clube fossem incorretamente marcados como origem `CLUBE` ao se inscreverem pelo próprio perfil.
 
 
 
