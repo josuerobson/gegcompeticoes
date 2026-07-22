@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `7663d58` |
-| Mensagem | `feat: exibe modal de dados da premiacao ao clicar em uma modalidade na tela de detalhes do campeonato` |
-| Data/hora | 2026-07-22T19:31:33-03:00 |
+| Hash | `ece1627` |
+| Mensagem | `fix: altera cabecalho de coluna da tabela de divisao de valores de Premiacao Equipes para Premiacao Clubes` |
+| Data/hora | 2026-07-22T19:44:10-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `7663d58` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `ece1627` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -94,7 +94,13 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Campos "Origem" e "Valor Inscrição" na Modal de Inscritos**: Atualizada a janela popup de listagem de inscritos de campeonatos no Painel Diretor (`AdminPanel.tsx`) para incluir 2 novas colunas: `"Origem"` (indicando com badges destacadas `CLUBE` ou `ATLETA`) e `"Valor Inscrição"` (exibindo o valor individual, de clube ou de re-inscrição em `R$`). O rodapé da modal também passou a exibir a soma total arrecadada das inscrições listadas.
 - **Correção dos Valores das Inscrições (Remoção do R$ 120 estático)**: Identificado que o valor estático de `R$ 120,00` vinha da rotina de seed de testes no banco de dados (`src/db.ts`). Adicionada migração SQL no backend (`src/db.ts`) que atualiza automaticamente no banco de dados qualquer inscrição legada/simulada com valor 120 para a tarifa real cadastrada no campeonato (individual, clube ou re-inscrição). No frontend (`AdminPanel.tsx`), a lógica de cálculo foi ajustada para consultar rigorosamente as tarifas configuradas do campeonato.
 - **Validação e Diferenciação Estrita de Origem da Inscrição (Atleta vs Clube)**: Refatorada a checagem no backend (`server.ts`) e no frontend (`AdminPanel.tsx`) para garantir a separação total entre inscrições feitas pelo login do atleta e inscrições feitas em lote pelo clube. O critério de Origem passou a comparar estritamente `registeredByUserId !== userId` (identificando quando um gestor de clube inscreve o atleta), evitando que atletas vinculados a um clube fossem incorretamente marcados como origem `CLUBE` ao se inscreverem pelo próprio perfil.
-- **Modal Popup "Dados da Premiação" ao Clicar em Modalidade (`ChampionshipsView.tsx`)**: Implementada a abertura do modal popup com o detalhamento completo de premiação e inscritos ao clicar no card de qualquer modalidade na tela de detalhes do campeonato. O modal inclui seletor por etapa (`1ª ETAPA`, `2ª ETAPA`, etc.), contadores de inscrições normais, reinscrições e total arrecadado na etapa/modalidade, tabela de divisão de valores (tributos, organização, clubes, premiação atletas, premiação equipes) e tabelas completas de premiação individual e por equipes em OURO, PRATA e BRONZE para as 5 primeiras posições.
+- **Modal Popup "Dados da Premiação" ao Clicar em Modalidade (`ChampionshipsView.tsx`)**: Implementada a abertura do modal popup com o detalhamento completo de premiação e inscritos ao clicar no card de qualquer modalidade na tela de detalhes do campeonato. O modal inclui seletor por etapa (`1ª ETAPA`, `2ª ETAPA`, etc.), contadores de inscrições normais, reinscrições e total arrecadado na etapa/modalidade, tabela de divisão de valores (Tributos, Organização, Clubes, Premiação Atletas, Premiação Clubes) e tabelas completas de premiação individual e por equipes em OURO, PRATA e BRONZE para as 5 primeiras posições.
+- **Definição e Nomenclatura das Divisões de Arrecadação (% Tributos, Organização, Clubes, Premiação Atleta, Premiação Clube)**: Ajustado o cabeçalho da 5ª coluna da tabela "Divisão dos valores arrecadados" de `"Premiação Equipes"` para `"Premiação Clubes"`. Registrada a definição de cada campo:
+  - `% Tributos`: reservado para pagamento de impostos.
+  - `% Organização`: percentual estabelecido para o clube administrador do campeonato.
+  - `% Clubes`: percentual reservado para o clube ao qual o atleta inscrito é filiado.
+  - `% Premiação Atleta`: valor reservado para premiar os atletas individualmente.
+  - `% Premiação Clube`: valor reservado para premiar o clube eleito campeão pela melhor participação combinada de seus atletas no campeonato.
 
 
 
