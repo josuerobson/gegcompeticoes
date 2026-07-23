@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `719d820` |
-| Mensagem | `feat: adiciona listagem e geracao de certificados por atleta com pesquisa por nome em Gerenciamento Clube > Certificados` |
-| Data/hora | 2026-07-23T19:38:23-03:00 |
+| Hash | `cc6d71b` |
+| Mensagem | `feat: conecta geracao de certificado na tela do clube ao modelo A4 customizado e fundo salvos em Site > Certificados e Carteirinhas` |
+| Data/hora | 2026-07-23T19:54:04-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `719d820` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `cc6d71b` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
