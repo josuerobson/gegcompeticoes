@@ -16,6 +16,8 @@ interface ClubCertificatesViewerProps {
 
 interface CertificatePrintModalData {
   athleteName: string;
+  cpfNumber: string;
+  rgNumber: string;
   crNumber: string;
   championshipTitle: string;
   modalityName: string;
@@ -27,6 +29,105 @@ interface CertificatePrintModalData {
   hash: string;
   clubId: string;
 }
+
+const DEFAULT_CERTIFICATE_ELEMENTS: TextElement[] = [
+  {
+    id: 'c1',
+    text: 'O {NOME_CLUBE}, através da Plataforma G&G Competições, no uso das suas atribuições, confere o presente CERTIFICADO para o Atleta de Tiro Desportivo,',
+    x: 10,
+    y: 22,
+    fontSize: 13,
+    fontWeight: 'normal',
+    fontStyle: 'normal',
+    color: '#334155',
+    textAlign: 'center',
+    width: 80
+  },
+  {
+    id: 'c2',
+    text: '{NOME_ATLETA}',
+    x: 10,
+    y: 38,
+    fontSize: 26,
+    fontWeight: '900',
+    fontStyle: 'normal',
+    color: '#0f172a',
+    textAlign: 'center',
+    width: 80
+  },
+  {
+    id: 'c3',
+    text: '{POSICAO_GERAL} geral com {PONTOS} pontos - Classificação {MEDALHA}',
+    x: 10,
+    y: 48,
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontStyle: 'normal',
+    color: '#b45309',
+    textAlign: 'center',
+    width: 80
+  },
+  {
+    id: 'c4',
+    text: '{ETAPA}\n{CAMPEONATO}\n{MODALIDADE}',
+    x: 10,
+    y: 58,
+    fontSize: 13,
+    fontWeight: 'bold',
+    fontStyle: 'normal',
+    color: '#1e293b',
+    textAlign: 'center',
+    width: 80
+  },
+  {
+    id: 'c5',
+    text: 'Data de realização: {DATA_INICIO} A {DATA_FIM}\nLocal da prova: {LOCAL_PROVA} - {CIDADE}/{UF}',
+    x: 10,
+    y: 70,
+    fontSize: 11,
+    fontWeight: 'normal',
+    fontStyle: 'normal',
+    color: '#475569',
+    textAlign: 'center',
+    width: 80
+  },
+  {
+    id: 'c6',
+    text: '{CIDADE}, {DATA_EMISSAO_EXTENSO}.',
+    x: 10,
+    y: 79,
+    fontSize: 11,
+    fontWeight: 'bold',
+    fontStyle: 'normal',
+    color: '#334155',
+    textAlign: 'center',
+    width: 80
+  },
+  {
+    id: 'c7',
+    text: '{QR_CODE}',
+    x: 44,
+    y: 84,
+    fontSize: 12,
+    fontWeight: 'normal',
+    fontStyle: 'normal',
+    color: '#000000',
+    textAlign: 'center',
+    width: 12
+  },
+  {
+    id: 'c8',
+    text: 'CÓDIGO DE VALIDAÇÃO: {CODIGO_VALIDACAO}',
+    x: 10,
+    y: 95,
+    fontSize: 10,
+    fontWeight: 'bold',
+    fontStyle: 'normal',
+    color: '#64748b',
+    textAlign: 'center',
+    width: 80
+  }
+];
 
 export function ClubCertificatesViewer({
   currentUser,
@@ -88,24 +189,19 @@ export function ClubCertificatesViewer({
 
   // Filter approved registrations for the selected club
   const eligibleRegistrations = registrations.filter(r => {
-    // Only approved registrations qualify for certificates
     if (r.paymentStatus !== 'approved') return false;
 
-    // Filter by club
     if (effectiveClubId && r.clubId && r.clubId !== effectiveClubId) {
-      // Check if user belongs to club
       const athlete = users.find(u => u.id === r.userId);
       if (athlete?.clubId !== effectiveClubId && r.registeredByUserId !== currentUser?.id) {
         return false;
       }
     }
 
-    // Filter by championship dropdown
     if (selectedChampFilter && r.championshipId !== selectedChampFilter) {
       return false;
     }
 
-    // Filter by search query (athlete name, cpf, cr)
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const athlete = users.find(u => u.id === r.userId);
@@ -129,7 +225,12 @@ export function ClubCertificatesViewer({
 
     const originalContent = document.body.innerHTML;
     document.body.innerHTML = `
-      <div style="width: 100%; display: flex; justify-content: center; align-items: center; padding: 0; margin: 0;">
+      <style>
+        @page { size: A4 portrait; margin: 0; }
+        body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; background: white; }
+        #printable-certificate-area { width: 210mm !important; height: 297mm !important; max-width: none !important; border: none !important; border-radius: 0 !important; box-shadow: none !important; }
+      </style>
+      <div style="width: 210mm; height: 297mm; position: relative;">
         ${printableArea}
       </div>
     `;
@@ -143,6 +244,8 @@ export function ClubCertificatesViewer({
     const clubObj = clubs.find(c => c.id === cert.clubId);
     return text
       .replace(/{NOME_ATLETA}/g, cert.athleteName)
+      .replace(/{CPF_ATLETA}/g, cert.cpfNumber)
+      .replace(/{RG_ATLETA}/g, cert.rgNumber)
       .replace(/{CR_ATLETA}/g, cert.crNumber)
       .replace(/{NOME_CLUBE}/g, clubObj?.name || 'Clube de Tiro')
       .replace(/{CAMPEONATO}/g, cert.championshipTitle)
@@ -160,6 +263,10 @@ export function ClubCertificatesViewer({
       .replace(/{DATA_EMISSAO_EXTENSO}/g, new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }))
       .replace(/{CODIGO_VALIDACAO}/g, cert.hash);
   };
+
+  const renderElements = clubTemplate?.layout_config?.elements && clubTemplate.layout_config.elements.length > 0
+    ? clubTemplate.layout_config.elements
+    : DEFAULT_CERTIFICATE_ELEMENTS;
 
   return (
     <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-6 space-y-6">
@@ -244,7 +351,6 @@ export function ClubCertificatesViewer({
             const champ = championships.find(c => c.id === reg.championshipId);
             const modName = getModalityName(reg.modalityId);
 
-            // Compute athlete scores for this championship
             const userScores = stageScores.filter(s => s.userId === reg.userId && s.championshipId === reg.championshipId && s.modalityId === reg.modalityId);
             const totalScore = userScores.reduce((sum, s) => sum + s.score, 0);
             const bestHitFactor = userScores.length > 0 ? Math.max(...userScores.map(s => s.hitFactor || 0)) : 0;
@@ -252,6 +358,8 @@ export function ClubCertificatesViewer({
 
             const certData: CertificatePrintModalData = {
               athleteName: athlete?.fullName || 'Atleta G&G',
+              cpfNumber: athlete?.cpf || '-',
+              rgNumber: athlete?.rg || '-',
               crNumber: reg.crNumber || athlete?.crNumber || '572103',
               championshipTitle: champ?.title || 'Campeonato G&G',
               modalityName: modName,
@@ -314,8 +422,8 @@ export function ClubCertificatesViewer({
             {/* Modal Header */}
             <div className="flex justify-between items-center pb-3 border-b border-slate-100">
               <div>
-                <h3 className="font-display font-bold text-slate-900 text-base">Gerar Certificado de Participação</h3>
-                <p className="text-xs text-slate-400">Certificado gerado com os dados oficiais do atleta e layout do clube.</p>
+                <h3 className="font-display font-bold text-slate-900 text-base">Gerar Certificado de Participação (A4)</h3>
+                <p className="text-xs text-slate-400">Modelo A4 gerado com os dados reais do atleta e o layout visual salvo do clube.</p>
               </div>
               <button
                 onClick={() => setActiveCert(null)}
@@ -326,100 +434,66 @@ export function ClubCertificatesViewer({
             </div>
 
             {loadingTemplate ? (
-              <div className="py-12 text-center text-slate-400 text-xs">Carregando modelo do clube...</div>
+              <div className="py-12 text-center text-slate-400 text-xs">Carregando modelo A4 do clube...</div>
             ) : (
               <div className="flex flex-col items-center justify-center space-y-4">
-                {/* Printable Certificate Box */}
+                {/* Printable A4 Certificate Canvas Box */}
                 <div
                   id="printable-certificate-area"
                   style={{
-                    width: '100%',
-                    maxWidth: '750px',
-                    minHeight: '520px',
+                    width: '520px',
+                    height: '735px',
                     position: 'relative',
                     backgroundColor: '#ffffff',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-                    borderRadius: '8px',
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2)',
+                    borderRadius: '4px',
                     overflow: 'hidden',
-                    border: '1px solid #e2e8f0',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    padding: '24px'
+                    userSelect: 'none'
                   }}
                 >
                   {/* Background Layer */}
                   {clubTemplate?.background_url ? (
                     <img
                       src={clubTemplate.background_url}
-                      alt="Fundo Certificado"
+                      alt="Fundo Certificado A4"
                       className="absolute inset-0 w-full h-full object-fill pointer-events-none opacity-90"
                     />
                   ) : (
-                    <div className="absolute inset-0 border-8 border-double border-amber-600/60 m-2 pointer-events-none"></div>
+                    <div className="absolute inset-0 bg-gradient-to-b from-blue-900 to-slate-900 opacity-90 flex items-center justify-center p-6 text-center text-white/50 text-xs font-mono pointer-events-none">
+                      [Fundo Padrão A4 G&G]
+                    </div>
                   )}
 
                   {/* Overlaid Layout Content */}
-                  {clubTemplate?.layout_config?.elements && clubTemplate.layout_config.elements.length > 0 ? (
-                    <div className="relative z-10 w-full h-[500px]">
-                      {clubTemplate.layout_config.elements.map((el) => {
-                        const isQr = el.text.trim() === '{QR_CODE}';
-                        return (
-                          <div
-                            key={el.id}
-                            style={{
-                              position: 'absolute',
-                              left: `${el.x}%`,
-                              top: `${el.y}%`,
-                              width: el.width ? `${el.width}%` : 'auto',
-                              fontSize: `${el.fontSize}px`,
-                              fontWeight: el.fontWeight,
-                              fontStyle: el.fontStyle,
-                              color: el.color,
-                              textAlign: el.textAlign,
-                              lineHeight: '1.3',
-                              whiteSpace: 'pre-line'
-                            }}
-                          >
-                            {isQr ? (
-                              <div className="flex flex-col items-center justify-center p-1 bg-white border border-slate-300 rounded">
-                                <QrCode className="w-12 h-12 text-slate-900" />
-                              </div>
-                            ) : (
-                              <span>{renderDynamicToken(el.text, activeCert)}</span>
-                            )}
+                  {renderElements.map((el) => {
+                    const isQr = el.text.trim() === '{QR_CODE}';
+                    return (
+                      <div
+                        key={el.id}
+                        style={{
+                          position: 'absolute',
+                          left: `${el.x}%`,
+                          top: `${el.y}%`,
+                          width: el.width ? `${el.width}%` : 'auto',
+                          fontSize: `${el.fontSize}px`,
+                          fontWeight: el.fontWeight,
+                          fontStyle: el.fontStyle,
+                          color: el.color,
+                          textAlign: el.textAlign,
+                          lineHeight: '1.3',
+                          whiteSpace: 'pre-line'
+                        }}
+                      >
+                        {isQr ? (
+                          <div className="flex flex-col items-center justify-center p-1 bg-white border border-slate-300 rounded shadow-xs">
+                            <QrCode className="w-12 h-12 text-slate-900" />
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    /* Default G&G Certificate Layout */
-                    <div className="relative z-10 w-full p-6 text-center space-y-4 font-sans text-slate-800">
-                      <div className="space-y-1">
-                        <span className="font-mono text-[10px] text-amber-700 font-bold tracking-widest block uppercase">G&G COMPETIÇÕES</span>
-                        <h2 className="font-display font-extrabold text-2xl text-slate-900 uppercase">Certificado de Participação</h2>
-                        <div className="h-0.5 bg-amber-600 w-20 mx-auto"></div>
+                        ) : (
+                          <span>{renderDynamicToken(el.text, activeCert)}</span>
+                        )}
                       </div>
-
-                      <div className="text-xs text-slate-700 leading-relaxed max-w-xl mx-auto space-y-3">
-                        <p>
-                          Certificamos que o(a) Atleta Desportivo(a) <strong className="text-slate-900 text-sm">{activeCert.athleteName}</strong>, inscrito(a) sob o CR nº <strong className="font-mono">{activeCert.crNumber}</strong>, participou das etapas homologadas do campeonato:
-                        </p>
-                        <p className="font-bold text-blue-900 text-sm bg-blue-50 py-2 px-4 rounded-lg border border-blue-100 uppercase">
-                          {activeCert.championshipTitle}
-                        </p>
-                        <p>
-                          Disputando na modalidade <strong className="text-slate-900">{activeCert.modalityName}</strong> e acumulando o total de <strong className="text-amber-700 font-mono text-sm">{activeCert.totalScore.toFixed(2)} pontos</strong>.
-                        </p>
-                      </div>
-
-                      <div className="pt-4 flex justify-between items-center text-[10px] text-slate-500 font-mono border-t border-slate-200">
-                        <span>CÓD: {activeCert.hash}</span>
-                        <span>Emissão: {new Date().toLocaleDateString('pt-BR')}</span>
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
 
                 {/* Modal Action Buttons */}
@@ -437,7 +511,7 @@ export function ClubCertificatesViewer({
                     className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl transition text-xs flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                   >
                     <Printer className="w-4 h-4" />
-                    Imprimir Certificado PDF
+                    Imprimir Certificado PDF (A4)
                   </button>
                 </div>
               </div>
