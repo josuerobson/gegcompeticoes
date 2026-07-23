@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `b4696bb` |
-| Mensagem | `fix: corrige busca de imagem de fundo salva no editor e token replacements na geracao de certificado A4` |
-| Data/hora | 2026-07-23T20:05:15-03:00 |
+| Hash | `12fa66c` |
+| Mensagem | `fix: adiciona css print color adjust exact e estilo nao-destrutivo para impressao do fundo do certificado em PDF` |
+| Data/hora | 2026-07-23T20:19:32-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `b4696bb` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `12fa66c` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
