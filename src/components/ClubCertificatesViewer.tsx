@@ -57,7 +57,7 @@ const DEFAULT_CERTIFICATE_ELEMENTS: TextElement[] = [
   },
   {
     id: 'c3',
-    text: '{POSICAO_GERAL} geral com {PONTOS} pontos - Classificação {MEDALHA}',
+    text: '{POSICAO_GERAL} com {PONTOS} pontos - Classificação {MEDALHA}',
     x: 10,
     y: 48,
     fontSize: 16,
@@ -151,27 +151,38 @@ export function ClubCertificatesViewer({
   const isMaster = currentUser?.role === 'master_admin';
   const effectiveClubId = isMaster ? selectedClubId : (currentUser?.clubId || selectedClubId);
 
-  // Fetch custom template when opening modal for a club
+  // Fetch custom template when opening modal for a club with automatic fallback
   useEffect(() => {
     if (activeCert) {
       setLoadingTemplate(true);
-      fetch(`/api/club-templates?clubId=${activeCert.clubId}`)
+      const targetClubId = activeCert.clubId || selectedClubId || 'c1';
+
+      fetch(`/api/club-templates?clubId=${targetClubId}`)
         .then(r => r.json())
-        .then(data => {
-          if (data.templates && Array.isArray(data.templates)) {
-            const certTmpl = data.templates.find((t: any) => t.template_type === 'certificate');
-            if (certTmpl) {
-              let parsedLayout = certTmpl.layout_config;
-              if (typeof parsedLayout === 'string') {
-                try { parsedLayout = JSON.parse(parsedLayout); } catch (e) {}
-              }
-              setClubTemplate({
-                background_url: certTmpl.background_url || '',
-                layout_config: parsedLayout
-              });
-            } else {
-              setClubTemplate(null);
+        .then(async data => {
+          let certTmpl = data.templates?.find((t: any) => t.template_type === 'certificate' && t.background_url);
+          
+          if (!certTmpl) {
+            // Fallback: search template for 'c1' or primary club
+            try {
+              const res2 = await fetch(`/api/club-templates?clubId=c1`).then(r => r.json());
+              certTmpl = res2.templates?.find((t: any) => t.template_type === 'certificate' && t.background_url);
+            } catch (e) {}
+          }
+
+          if (!certTmpl && data.templates?.length > 0) {
+            certTmpl = data.templates.find((t: any) => t.template_type === 'certificate');
+          }
+
+          if (certTmpl) {
+            let parsedLayout = certTmpl.layout_config;
+            if (typeof parsedLayout === 'string') {
+              try { parsedLayout = JSON.parse(parsedLayout); } catch (e) {}
             }
+            setClubTemplate({
+              background_url: certTmpl.background_url || '',
+              layout_config: parsedLayout
+            });
           } else {
             setClubTemplate(null);
           }
@@ -242,22 +253,28 @@ export function ClubCertificatesViewer({
   // Dynamic token replacement for active certificate
   const renderDynamicToken = (text: string, cert: CertificatePrintModalData) => {
     const clubObj = clubs.find(c => c.id === cert.clubId);
+    const champObj = championships.find(c => c.title === cert.championshipTitle);
+    const startDateFormatted = champObj?.startDate ? new Date(champObj.startDate).toLocaleDateString('pt-BR') : '01/01/2023';
+    const endDateFormatted = champObj?.endDate ? new Date(champObj.endDate).toLocaleDateString('pt-BR') : '31/12/2023';
+
     return text
       .replace(/{NOME_ATLETA}/g, cert.athleteName)
       .replace(/{CPF_ATLETA}/g, cert.cpfNumber)
       .replace(/{RG_ATLETA}/g, cert.rgNumber)
       .replace(/{CR_ATLETA}/g, cert.crNumber)
-      .replace(/{NOME_CLUBE}/g, clubObj?.name || 'Clube de Tiro')
+      .replace(/{NOME_CLUBE}/g, clubObj?.name || 'Clube de Tiro Aranãs')
       .replace(/{CAMPEONATO}/g, cert.championshipTitle)
       .replace(/{ETAPA}/g, `${cert.stageCount} Etapa(s) Homologada(s)`)
       .replace(/{MODALIDADE}/g, cert.modalityName)
       .replace(/{PONTOS}/g, cert.totalScore.toFixed(2))
-      .replace(/{POSICAO_GERAL}/g, cert.posicao)
+      .replace(/{POSICAO_GERAL}/g, cert.posicao === 'Geral' ? 'Classificação' : cert.posicao)
       .replace(/{MEDALHA}/g, cert.medalha)
-      .replace(/{POSICAO_CATEGORIA}/g, cert.posicao)
-      .replace(/{LOCAL_PROVA}/g, clubObj?.name || 'Clube de Tiro')
-      .replace(/{CIDADE}/g, clubObj?.city || 'Brasília')
-      .replace(/{UF}/g, clubObj?.state || 'DF')
+      .replace(/{POSICAO_CATEGORIA}/g, '')
+      .replace(/{DATA_INICIO}/g, startDateFormatted)
+      .replace(/{DATA_FIM}/g, endDateFormatted)
+      .replace(/{LOCAL_PROVA}/g, clubObj?.name || 'Clube de Tiro Aranãs')
+      .replace(/{CIDADE}/g, clubObj?.city || 'Capelinha')
+      .replace(/{UF}/g, clubObj?.state || 'MG')
       .replace(/{CNPJ_CLUBE}/g, clubObj?.cnpj || '-')
       .replace(/{CR_CLUBE}/g, clubObj?.crNumber || '-')
       .replace(/{DATA_EMISSAO_EXTENSO}/g, new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }))
@@ -451,17 +468,15 @@ export function ClubCertificatesViewer({
                     userSelect: 'none'
                   }}
                 >
-                  {/* Background Layer */}
+                  {/* Background Image Layer */}
                   {clubTemplate?.background_url ? (
                     <img
                       src={clubTemplate.background_url}
                       alt="Fundo Certificado A4"
-                      className="absolute inset-0 w-full h-full object-fill pointer-events-none opacity-90"
+                      className="absolute inset-0 w-full h-full object-fill pointer-events-none"
                     />
                   ) : (
-                    <div className="absolute inset-0 bg-gradient-to-b from-blue-900 to-slate-900 opacity-90 flex items-center justify-center p-6 text-center text-white/50 text-xs font-mono pointer-events-none">
-                      [Fundo Padrão A4 G&G]
-                    </div>
+                    <div className="absolute inset-0 border-8 border-double border-amber-600/50 m-3 bg-white pointer-events-none"></div>
                   )}
 
                   {/* Overlaid Layout Content */}
