@@ -107,6 +107,17 @@ export function CompetitionResultsViewer({
   // 2. Com campeonato selecionado, mas sem etapa selecionada: exibe a lista de etapas
   if (!selectedResultStageId) {
     const champStages = stages.filter(s => s.championshipId === selectedResultChampId);
+    const hasMasculino = champStages.some(s => (s.sexo || 'misto') === 'masculino');
+    const hasFeminino = champStages.some(s => (s.sexo || 'misto') === 'feminino');
+    const hasMisto = champStages.some(s => (s.sexo || 'misto') === 'misto');
+
+    const allOptions = [
+      hasMasculino && { id: 'all_masculino', title: 'Todas as etapas Masculinas', badge: 'Masculino', color: 'bg-blue-600', hoverBg: 'hover:bg-blue-50/50 hover:border-blue-400' },
+      hasFeminino && { id: 'all_feminino', title: 'Todas as etapas Femininas', badge: 'Feminino', color: 'bg-pink-600', hoverBg: 'hover:bg-pink-50/50 hover:border-pink-400' },
+      hasMisto && { id: 'all_misto', title: 'Todas as etapas Mistas', badge: 'Misto', color: 'bg-purple-600', hoverBg: 'hover:bg-purple-50/50 hover:border-purple-400' },
+      (!hasMasculino && !hasFeminino && !hasMisto) && { id: 'all', title: 'Todas as etapas', badge: 'Geral', color: 'bg-slate-700', hoverBg: 'hover:bg-slate-50 hover:border-slate-400' }
+    ].filter(Boolean) as Array<{ id: string; title: string; badge: string; color: string; hoverBg: string }>;
+
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100">
@@ -136,30 +147,58 @@ export function CompetitionResultsViewer({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {champStages.map((stage) => (
-              <div
-                key={stage.id}
-                onClick={() => setSelectedResultStageId(stage.id)}
-                className="border border-slate-200 hover:border-blue-400 hover:bg-blue-50/5 rounded-xl p-4 transition duration-150 cursor-pointer space-y-2 flex flex-col justify-between"
-              >
-                <div>
-                  <span className="bg-blue-100 text-blue-800 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    {stage.title || `${stage.stageNum}ª ETAPA`}
-                  </span>
-                  {stage.title && stage.title !== (stage.title || `${stage.stageNum}ª ETAPA`) && (
-                    <h4 className="font-bold text-slate-800 text-xs mt-2">{stage.title}</h4>
-                  )}
-                  {stage.description && (
-                    <p className="text-[10px] text-slate-400 mt-1 line-clamp-2">{stage.description}</p>
-                  )}
-                </div>
-                <div className="text-[9px] font-mono text-slate-500 pt-2 border-t border-slate-100 flex justify-between">
-                  <span>Realização:</span>
-                  <strong className="text-slate-700">{new Date(stage.date).toLocaleDateString()}</strong>
+          <div className="space-y-5">
+            {allOptions.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-slate-600 uppercase tracking-wider text-[10px]">Resultados Acumulados (Todas as Etapas):</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {allOptions.map((opt) => (
+                    <div
+                      key={opt.id}
+                      onClick={() => setSelectedResultStageId(opt.id)}
+                      className={`border border-slate-200 ${opt.hoverBg} rounded-xl p-4 transition duration-150 cursor-pointer space-y-2 flex flex-col justify-between shadow-2xs group bg-slate-50/40`}
+                    >
+                      <div>
+                        <span className={`${opt.color} text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider`}>
+                          {opt.badge}
+                        </span>
+                        <h4 className="font-bold text-slate-900 text-xs mt-2 group-hover:text-blue-600 transition">{opt.title}</h4>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-mono">Consolidado de todas as etapas</p>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
+            )}
+
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <p className="text-xs font-bold text-slate-600 uppercase tracking-wider text-[10px]">Ou selecione uma etapa individual:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {champStages.map((stage) => (
+                  <div
+                    key={stage.id}
+                    onClick={() => setSelectedResultStageId(stage.id)}
+                    className="border border-slate-200 hover:border-blue-400 hover:bg-blue-50/5 rounded-xl p-4 transition duration-150 cursor-pointer space-y-2 flex flex-col justify-between"
+                  >
+                    <div>
+                      <span className="bg-blue-100 text-blue-800 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        {stage.title || `${stage.stageNum}ª ETAPA`}
+                      </span>
+                      {stage.title && stage.title !== (stage.title || `${stage.stageNum}ª ETAPA`) && (
+                        <h4 className="font-bold text-slate-800 text-xs mt-2">{stage.title}</h4>
+                      )}
+                      {stage.description && (
+                        <p className="text-[10px] text-slate-400 mt-1 line-clamp-2">{stage.description}</p>
+                      )}
+                    </div>
+                    <div className="text-[9px] font-mono text-slate-500 pt-2 border-t border-slate-100 flex justify-between">
+                      <span>Realização:</span>
+                      <strong className="text-slate-700">{new Date(stage.date).toLocaleDateString()}</strong>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -167,6 +206,17 @@ export function CompetitionResultsViewer({
   }
 
   // 3. Com campeonato e etapa selecionados, mas sem modalidade: exibe a lista de modalidades
+  const isAllOption = selectedResultStageId?.startsWith('all');
+  const stageTitle = selectedResultStageId === 'all_masculino'
+    ? 'Todas as etapas Masculinas'
+    : selectedResultStageId === 'all_feminino'
+    ? 'Todas as etapas Femininas'
+    : selectedResultStageId === 'all_misto'
+    ? 'Todas as etapas Mistas'
+    : selectedResultStageId === 'all'
+    ? 'Todas as etapas'
+    : currentStage?.title || `Etapa ${currentStage?.stageNum}`;
+
   if (!selectedResultModalityId) {
     let champModIds: string[] = [];
     if (currentChamp?.modalities) {
@@ -193,7 +243,7 @@ export function CompetitionResultsViewer({
             <div>
               <h3 className="font-display font-bold text-slate-900 text-base">Selecione a Modalidade</h3>
               <p className="text-xs text-slate-400">
-                Campeonato: <strong className="text-slate-700">{currentChamp?.title}</strong> • {currentStage?.title || `Etapa ${currentStage?.stageNum}`}
+                Campeonato: <strong className="text-slate-700">{currentChamp?.title}</strong> • {stageTitle}
               </p>
             </div>
           </div>
@@ -246,7 +296,201 @@ export function CompetitionResultsViewer({
     );
   }
 
-  // 4. Com tudo selecionado: exibe a tabela de resultados com filtros de medalha e ordenação
+  // 4. Com tudo selecionado: exibe a tabela de resultados (Individual ou Acumulada "Todas as Etapas")
+  const champStages = stages.filter(s => s.championshipId === selectedResultChampId);
+  let targetStages: Stage[] = [];
+  if (selectedResultStageId === 'all_masculino') {
+    targetStages = champStages.filter(s => (s.sexo || 'misto') === 'masculino');
+  } else if (selectedResultStageId === 'all_feminino') {
+    targetStages = champStages.filter(s => (s.sexo || 'misto') === 'feminino');
+  } else if (selectedResultStageId === 'all_misto') {
+    targetStages = champStages.filter(s => (s.sexo || 'misto') === 'misto');
+  } else if (selectedResultStageId === 'all') {
+    targetStages = champStages;
+  } else if (currentStage) {
+    targetStages = [currentStage];
+  }
+
+  const targetStageNums = new Set(targetStages.map(s => s.stageNum));
+
+  // --- Lógica para opção Acumulada "Todas as Etapas" ---
+  if (isAllOption) {
+    type ConsolidatedScore = {
+      userId: string;
+      shooterName: string;
+      clubName: string;
+      totalScore: number;
+      totalTime: number;
+      hitFactor: number;
+      scoreX: number;
+      scoreP10: number;
+      scoreP9: number;
+      stageScores: Record<number, number>;
+    };
+
+    const scoresForMod = stageScores.filter(score =>
+      score.championshipId === selectedResultChampId &&
+      score.modality === currentMod?.name &&
+      targetStageNums.has(score.stageNum)
+    );
+
+    const userMap: Record<string, ConsolidatedScore> = {};
+
+    for (const score of scoresForMod) {
+      const uId = score.userId || score.shooterName;
+      if (!userMap[uId]) {
+        const u = users.find(usr => usr.id === score.userId);
+        const cName = clubs.find(c => c.id === u?.clubId)?.name || '-';
+        userMap[uId] = {
+          userId: score.userId,
+          shooterName: score.shooterName,
+          clubName: cName,
+          totalScore: 0,
+          totalTime: 0,
+          hitFactor: 0,
+          scoreX: 0,
+          scoreP10: 0,
+          scoreP9: 0,
+          stageScores: {},
+        };
+      }
+
+      userMap[uId].stageScores[score.stageNum] = score.score;
+      userMap[uId].totalScore += (score.score || 0);
+      userMap[uId].totalTime += (score.timeSeconds || 0);
+      if (score.hitFactor) {
+        userMap[uId].hitFactor = Math.max(userMap[uId].hitFactor, score.hitFactor);
+      }
+
+      const reg = registrations.find(r => r.id === score.registrationId);
+      if (reg) {
+        userMap[uId].scoreX += (reg.scoreX || 0);
+        userMap[uId].scoreP10 += (reg.scoreP10 || 0);
+        userMap[uId].scoreP9 += (reg.scoreP9 || 0);
+      }
+    }
+
+    const consolidatedList = Object.values(userMap).sort((a, b) => {
+      if (currentMod?.evaluationType === 'tempo') {
+        return a.totalTime - b.totalTime;
+      } else if (currentMod?.evaluationType === 'pontuacao_tempo') {
+        return b.hitFactor - a.hitFactor;
+      } else {
+        if (b.totalScore !== a.totalScore) {
+          return b.totalScore - a.totalScore;
+        }
+        if (b.scoreX !== a.scoreX) return b.scoreX - a.scoreX;
+        if (b.scoreP10 !== a.scoreP10) return b.scoreP10 - a.scoreP10;
+        if (b.scoreP9 !== a.scoreP9) return b.scoreP9 - a.scoreP9;
+        return 0;
+      }
+    });
+
+    return (
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
+        {/* Header / Breadcrumb navigation */}
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedResultModalityId(null)}
+              className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+              title="Voltar para modalidades"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div>
+              <h3 className="font-display font-bold text-slate-900 text-base">Resultado Geral Acumulado</h3>
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-450 mt-0.5">
+                <span className="hover:underline cursor-pointer" onClick={() => { setSelectedResultChampId(null); setSelectedResultStageId(null); setSelectedResultModalityId(null); }}>{currentChamp?.title}</span>
+                <span>/</span>
+                <span className="hover:underline cursor-pointer font-bold text-blue-600" onClick={() => { setSelectedResultStageId(null); setSelectedResultModalityId(null); }}>{stageTitle}</span>
+                <span>/</span>
+                <span className="font-semibold text-slate-700">{currentMod?.name}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setSelectedResultChampId(null);
+                setSelectedResultStageId(null);
+                setSelectedResultModalityId(null);
+              }}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer"
+            >
+              Limpar Filtros
+            </button>
+          </div>
+        </div>
+
+        {/* Results Table for All Stages */}
+        {consolidatedList.length === 0 ? (
+          <div className="text-center py-12 text-slate-400 text-xs">
+            Nenhum resultado homologado para {stageTitle.toLowerCase()} nesta modalidade ainda.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
+                  <th className="py-3 px-2 text-center w-12">Pos</th>
+                  <th className="py-3 px-2">Atleta</th>
+                  <th className="py-3 px-2 text-center">Clube</th>
+                  {targetStages.map(stg => (
+                    <th key={stg.id} className="py-3 px-2 text-center font-mono">{stg.title || `${stg.stageNum}ª ET`}</th>
+                  ))}
+                  <th className="py-3 px-2 text-right font-bold text-slate-800">Resultado Acumulado</th>
+                  <th className="py-3 px-2 text-center w-24">Desempates</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {consolidatedList.map((item, index) => {
+                  return (
+                    <tr key={item.userId || index} className="hover:bg-slate-50/50">
+                      <td className="py-3 px-2 text-center font-bold font-mono">
+                        {index === 0 ? (
+                          <span className="inline-block bg-amber-100 text-amber-800 text-[10px] font-bold w-5 h-5 rounded-full leading-5 text-center">1º</span>
+                        ) : index === 1 ? (
+                          <span className="inline-block bg-slate-100 text-slate-800 text-[10px] font-bold w-5 h-5 rounded-full leading-5 text-center">2º</span>
+                        ) : index === 2 ? (
+                          <span className="inline-block bg-amber-50 text-amber-700 text-[10px] font-bold w-5 h-5 rounded-full leading-5 text-center">3º</span>
+                        ) : (
+                          `${index + 1}º`
+                        )}
+                      </td>
+                      <td className="py-3 px-2 font-bold text-slate-800">
+                        {item.shooterName}
+                      </td>
+                      <td className="py-3 px-2 text-center text-slate-500 font-mono text-[10px]">
+                        {item.clubName}
+                      </td>
+                      {targetStages.map(stg => (
+                        <td key={stg.id} className="py-3 px-2 text-center font-mono font-semibold text-slate-600">
+                          {item.stageScores[stg.stageNum] !== undefined ? item.stageScores[stg.stageNum] : '-'}
+                        </td>
+                      ))}
+                      <td className="py-3 px-2 text-right font-bold font-mono text-blue-700">
+                        {currentMod?.evaluationType === 'tempo'
+                          ? `${item.totalTime}s`
+                          : currentMod?.evaluationType === 'pontuacao_tempo'
+                          ? `Fator ${item.hitFactor.toFixed(4)}`
+                          : `${item.totalScore} pts`}
+                      </td>
+                      <td className="py-3 px-2 text-center text-slate-400 font-mono text-[10px]">
+                        X:{item.scoreX} • 10:{item.scoreP10} • 9:{item.scoreP9}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // --- Lógica para Etapa Individual ---
   const filteredScores = stageScores.filter(score => 
     score.championshipId === selectedResultChampId &&
     score.stageNum === currentStage?.stageNum &&
