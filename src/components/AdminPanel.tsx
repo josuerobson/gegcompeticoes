@@ -1078,7 +1078,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
                 className="w-full text-left px-4 py-3 hover:bg-blue-50 transition flex justify-between items-center gap-2">
                 <div>
                   <span className="font-semibold text-xs text-slate-800">{reg.athleteName}</span>
-                  <span className="text-[10px] text-slate-450 ml-2">CR: {reg.athleteCr} | {reg.weaponModel} {reg.weaponSigma ? `(Sigma ${reg.weaponSigma})` : ''}</span>
+                  <span className="text-[10px] text-slate-450 ml-2">Clube: {reg.clubName || 'G&G Competições'} | CR: {reg.athleteCr} | {reg.weaponModel} {reg.weaponSigma ? `(Sigma ${reg.weaponSigma})` : ''}</span>
                 </div>
                 {statusBadge(reg)}
               </button>

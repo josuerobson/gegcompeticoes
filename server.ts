@@ -1990,11 +1990,6 @@ app.get('/api/admin/registrations', requireAdmin, async (req, res) => {
     if (championshipId) { query += ` AND r.championship_id = $${idx++}`; params.push(championshipId); }
     if (stageId)        { query += ` AND r.stage_id = $${idx++}`;        params.push(stageId); }
     if (modalityId)     { query += ` AND r.modality_id = $${idx++}`;     params.push(modalityId); }
-    // club_admin sees only their club's registrations
-    if (currentUser.role === 'club_admin') {
-      query += ` AND r.club_id = $${idx++}`;
-      params.push(currentUser.clubId);
-    }
     query += ' ORDER BY u.full_name';
     const result = await pool.query(query, params);
     const registrations = result.rows.map(r => ({
