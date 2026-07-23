@@ -157,15 +157,18 @@ export function ClubCertificatesViewer({
       setLoadingTemplate(true);
       const targetClubId = activeCert.clubId || selectedClubId || 'c1';
 
-      fetch(`/api/club-templates?clubId=${targetClubId}`)
+      fetch(`/api/club-templates?clubId=${targetClubId}`, {
+        headers: { 'x-user-id': currentUser?.id || '' }
+      })
         .then(r => r.json())
         .then(async data => {
           let certTmpl = data.templates?.find((t: any) => t.template_type === 'certificate' && t.background_url);
           
           if (!certTmpl) {
-            // Fallback: search template for 'c1' or primary club
             try {
-              const res2 = await fetch(`/api/club-templates?clubId=c1`).then(r => r.json());
+              const res2 = await fetch(`/api/club-templates?clubId=c1`, {
+                headers: { 'x-user-id': currentUser?.id || '' }
+              }).then(r => r.json());
               certTmpl = res2.templates?.find((t: any) => t.template_type === 'certificate' && t.background_url);
             } catch (e) {}
           }

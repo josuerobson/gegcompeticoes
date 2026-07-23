@@ -2587,12 +2587,29 @@ app.get('/api/weapon-concessions', requireAdmin, async (req, res) => {
 });
 
 // Club Templates Management (Certificates & Cards multi-tenancy)
-app.get('/api/club-templates', requireAuth, async (req, res) => {
-  const currentUser = (req as any).user as User;
-  const clubId = (req.query.clubId as string) || currentUser.clubId || 'c1';
+app.get('/api/club-templates', async (req, res) => {
+  const currentUser = (req as any).user as User | undefined;
+  const clubId = (req.query.clubId as string) || currentUser?.clubId || 'c1';
 
   try {
     const result = await pool.query('SELECT * FROM club_templates WHERE club_id = $1', [clubId]);
+    const certWithBg = result.rows.find(t => t.template_type === 'certificate' && t.background_url);
+    
+    if (!certWithBg) {
+      // Fallback: search for any certificate template with a non-empty background_url across all clubs
+      const fallbackResult = await pool.query(
+        "SELECT * FROM club_templates WHERE background_url IS NOT NULL AND background_url != '' ORDER BY updated_at DESC"
+      );
+      if (fallbackResult.rows.length > 0) {
+        const combined = [...result.rows];
+        fallbackResult.rows.forEach(fb => {
+          if (!combined.some(c => c.template_type === fb.template_type)) {
+            combined.push(fb);
+          }
+        });
+        return res.json({ templates: combined });
+      }
+    }
     res.json({ templates: result.rows });
   } catch (err) {
     console.error('Fetch club templates error:', err);
