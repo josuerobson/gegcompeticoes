@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
+import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import { 
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
@@ -2134,34 +2135,16 @@ export default function AdminPanel({
 
       case 'certificados':
         return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-display font-bold text-slate-900 text-base">Homologação de Certificados</h3>
-                <p className="text-xs text-slate-400">Verificar atletas que concluíram etapas e estão aptos para receber certificação.</p>
-              </div>
-              <Award className="w-5 h-5 text-blue-600" />
-            </div>
-
-            <div className="grid grid-cols-1 gap-3">
-              {registrations.filter(r => r.paymentStatus === 'approved').map((reg) => {
-                const athlete = users.find(u => u.id === reg.userId);
-                const champ = championships.find(c => c.id === reg.championshipId);
-                return (
-                  <div key={reg.id} className="border border-slate-100 rounded-xl p-4 flex items-center justify-between bg-slate-50/50">
-                    <div>
-                      <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded font-mono">IDSC / IPSC OFICIAL</span>
-                      <h4 className="font-bold text-slate-800 text-xs mt-1.5">{athlete?.fullName}</h4>
-                      <p className="text-[10px] text-slate-500">{champ?.title} - {modalityName(reg.modalityId)}</p>
-                    </div>
-                    <span className="text-emerald-600 text-[10px] font-bold flex items-center gap-1">
-                      <CheckCircle className="w-3.5 h-3.5" /> ELEGÍVEL
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <ClubCertificatesViewer
+            currentUser={currentUser}
+            clubs={clubs}
+            users={users}
+            registrations={registrations}
+            championships={championships}
+            stages={stages}
+            stageScores={stageScores}
+            modalities={modalities}
+          />
         );
 
       case 'cadastrar_membros':
