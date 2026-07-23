@@ -260,6 +260,20 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS aberto_outros_clubes TEXT DEFAULT 'sim';
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS club_templates (
+        id TEXT PRIMARY KEY,
+        club_id TEXT REFERENCES clubs(id) ON DELETE CASCADE,
+        template_type TEXT NOT NULL,
+        background_url TEXT,
+        body_template TEXT,
+        layout_config JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(club_id, template_type)
+      );
+    `);
+
     // Sanitize championships.modalities JSONB array: remove any deleted/orphaned modality IDs
     await client.query(`
       DO $$

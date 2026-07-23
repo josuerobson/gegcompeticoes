@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
+import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { 
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
@@ -4135,6 +4136,14 @@ export default function AdminPanel({
           </div>
         );
 
+      case 'certificados_carteirinhas':
+        return (
+          <ClubTemplatesManager
+            currentUser={currentUser}
+            clubs={clubs}
+          />
+        );
+
 
       default:
         return (
@@ -4582,6 +4591,7 @@ export default function AdminPanel({
                     <button onClick={() => setPlataformaMenu('patrocinadores')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'patrocinadores' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Patrocinadores</button>
                     <button onClick={() => setPlataformaMenu('videos_destaque')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'videos_destaque' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Vídeos Destaque</button>
                     <button onClick={() => setPlataformaMenu('imagem_padrao')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'imagem_padrao' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Imagem padrão</button>
+                    <button onClick={() => setPlataformaMenu('certificados_carteirinhas')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'certificados_carteirinhas' ? 'text-blue-600 bg-blue-50/50 font-bold' : 'text-slate-650 hover:bg-slate-50'}`}>Certificados e Carteirinhas</button>
                   </div>
                 )}
               </div>

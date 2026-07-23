@@ -2586,6 +2586,55 @@ app.get('/api/weapon-concessions', requireAdmin, async (req, res) => {
   }
 });
 
+// Club Templates Management (Certificates & Cards multi-tenancy)
+app.get('/api/club-templates', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const clubId = (req.query.clubId as string) || currentUser.clubId || 'c1';
+
+  try {
+    const result = await pool.query('SELECT * FROM club_templates WHERE club_id = $1', [clubId]);
+    res.json({ templates: result.rows });
+  } catch (err) {
+    console.error('Fetch club templates error:', err);
+    res.status(500).json({ error: 'Erro ao buscar templates do clube.' });
+  }
+});
+
+app.post('/api/club-templates', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  if (!ADMIN_ROLES.includes(currentUser.role) && currentUser.role !== 'club_admin') {
+    return res.status(403).json({ error: 'Acesso negado.' });
+  }
+
+  const clubId = req.body.clubId || currentUser.clubId || 'c1';
+  const { templateType, backgroundUrl, bodyTemplate, layoutConfig } = req.body;
+
+  if (!templateType) {
+    return res.status(400).json({ error: 'Tipo de template é obrigatório.' });
+  }
+
+  try {
+    const id = `tmpl_${clubId}_${templateType}`;
+    const result = await pool.query(
+      `INSERT INTO club_templates (id, club_id, template_type, background_url, body_template, layout_config, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       ON CONFLICT (club_id, template_type)
+       DO UPDATE SET
+         background_url = EXCLUDED.background_url,
+         body_template = EXCLUDED.body_template,
+         layout_config = EXCLUDED.layout_config,
+         updated_at = NOW()
+       RETURNING *`,
+      [id, clubId, templateType, backgroundUrl || '', bodyTemplate || '', JSON.stringify(layoutConfig || {})]
+    );
+
+    res.json({ success: true, template: result.rows[0] });
+  } catch (err) {
+    console.error('Save club template error:', err);
+    res.status(500).json({ error: 'Erro ao salvar template do clube.' });
+  }
+});
+
 // ==========================================
 // VITE DEV SERVER AND PRODUCTION ASSET HANDLERS
 // ==========================================
