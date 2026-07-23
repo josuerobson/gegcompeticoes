@@ -715,7 +715,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser }:
           <select value={stageId} onChange={e => setStageId(e.target.value)}
             className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!champId}>
             <option value="">Selecione...</option>
-            {champStages.map(s => <option key={s.id} value={s.id}>Etapa {s.stageNum} — {s.title}</option>)}
+            {champStages.map(s => <option key={s.id} value={s.id}>{s.title || `Etapa ${s.stageNum}`}</option>)}
           </select>
         </div>
         <div className="space-y-1">
@@ -1055,7 +1055,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
           <select value={stageId} onChange={e => { setStageId(e.target.value); setSelectedReg(null); }}
             className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!champId}>
             <option value="">Selecione...</option>
-            {champStages.map(s => <option key={s.id} value={s.id}>Etapa {s.stageNum} — {s.title}</option>)}
+            {champStages.map(s => <option key={s.id} value={s.id}>{s.title || `Etapa ${s.stageNum}`}</option>)}
           </select>
         </div>
         <div className="space-y-1">

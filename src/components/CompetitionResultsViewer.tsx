@@ -191,7 +191,7 @@ export function CompetitionResultsViewer({
             <div>
               <h3 className="font-display font-bold text-slate-900 text-base">Selecione a Modalidade</h3>
               <p className="text-xs text-slate-400">
-                Campeonato: <strong className="text-slate-700">{currentChamp?.title}</strong> • Etapa {currentStage?.stageNum}
+                Campeonato: <strong className="text-slate-700">{currentChamp?.title}</strong> • {currentStage?.title || `Etapa ${currentStage?.stageNum}`}
               </p>
             </div>
           </div>
@@ -318,7 +318,7 @@ export function CompetitionResultsViewer({
             <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-450 mt-0.5">
               <span className="hover:underline cursor-pointer" onClick={() => { setSelectedResultChampId(null); setSelectedResultStageId(null); setSelectedResultModalityId(null); }}>{currentChamp?.title}</span>
               <span>/</span>
-              <span className="hover:underline cursor-pointer" onClick={() => { setSelectedResultStageId(null); setSelectedResultModalityId(null); }}>Etapa {currentStage?.stageNum}</span>
+              <span className="hover:underline cursor-pointer" onClick={() => { setSelectedResultStageId(null); setSelectedResultModalityId(null); }}>{currentStage?.title || `Etapa ${currentStage?.stageNum}`}</span>
               <span>/</span>
               <span className="font-semibold text-slate-700">{currentMod?.name}</span>
             </div>

@@ -452,7 +452,7 @@ export default function ChampionshipsView({
                             >
                               <div className="space-y-1">
                                 <h4 className="font-display font-bold text-slate-900 text-sm uppercase">
-                                  {stage.stageNum}ª ETAPA
+                                  {stage.title || `${stage.stageNum}ª ETAPA`}
                                 </h4>
                                 <p className="text-xs text-slate-500 font-mono">{stageDateStr}</p>
                                 {stage.description && (
@@ -1230,7 +1230,7 @@ export default function ChampionshipsView({
                         <option value="all">Todas as etapas</option>
                         {champStages.map((s) => (
                           <option key={s.id} value={s.id}>
-                            {s.stageNum ? `${s.stageNum}ª ETAPA` : s.title} ({new Date(s.date).toLocaleDateString('pt-BR')})
+                            {s.title || `${s.stageNum}ª ETAPA`} ({new Date(s.date).toLocaleDateString('pt-BR')})
                           </option>
                         ))}
                       </select>
