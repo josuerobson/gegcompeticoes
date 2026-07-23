@@ -1972,7 +1972,7 @@ app.get('/api/club-members', requireAdmin, async (req, res) => {
 // ---- NEW: List registrations (enriched) for admin result entry ----
 app.get('/api/admin/registrations', requireAdmin, async (req, res) => {
   const currentUser = (req as any).user as User;
-  const { championshipId, stageId, modalityId } = req.query;
+  const { championshipId, stageId, modalityId, allClubs } = req.query;
   try {
     let query = `SELECT r.*,
       u.full_name as athlete_name, u.cr_number as athlete_cr,
@@ -1990,6 +1990,11 @@ app.get('/api/admin/registrations', requireAdmin, async (req, res) => {
     if (championshipId) { query += ` AND r.championship_id = $${idx++}`; params.push(championshipId); }
     if (stageId)        { query += ` AND r.stage_id = $${idx++}`;        params.push(stageId); }
     if (modalityId)     { query += ` AND r.modality_id = $${idx++}`;     params.push(modalityId); }
+    // Only restrict to club_id if NOT explicitly requested as allClubs (e.g. Gerenciamento de Clube)
+    if (allClubs !== 'true' && currentUser.role === 'club_admin') {
+      query += ` AND r.club_id = $${idx++}`;
+      params.push(currentUser.clubId);
+    }
     query += ' ORDER BY u.full_name';
     const result = await pool.query(query, params);
     const registrations = result.rows.map(r => ({

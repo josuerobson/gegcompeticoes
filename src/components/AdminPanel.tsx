@@ -889,6 +889,7 @@ interface CadastrarResultadosPanelProps {
     timeSeconds?: number;
   }) => Promise<void>;
   onRefreshData?: () => Promise<void>;
+  isPlataformaScope?: boolean;
 }
 
 type EnrichedRegistration = {
@@ -910,7 +911,7 @@ function calcSeriePts(s: Record<string,number>, xValue: number = 11): number {
   return ZONES.reduce((acc, z) => acc + (Number(s[z])||0) * points[z], 0);
 }
 
-function CadastrarResultadosPanel({ championships, stages, modalities, currentUser, onRecordScore, onRefreshData }: CadastrarResultadosPanelProps) {
+function CadastrarResultadosPanel({ championships, stages, modalities, currentUser, onRecordScore, onRefreshData, isPlataformaScope }: CadastrarResultadosPanelProps) {
   const [champId, setChampId] = React.useState('');
   const [stageId, setStageId] = React.useState('');
   const [modalityId, setModalityId] = React.useState('');
@@ -934,6 +935,9 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
     if (modalityId) {
       url += `&modalityId=${modalityId}`;
     }
+    if (isPlataformaScope) {
+      url += `&allClubs=true`;
+    }
     fetch(url, {
       headers: { 'x-user-id': currentUser?.id || '' }
     })
@@ -941,7 +945,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
       .then(d => setRegistrations(d.registrations || []))
       .catch(() => setRegistrations([]))
       .finally(() => setLoadingRegs(false));
-  }, [champId, stageId, modalityId]);
+  }, [champId, stageId, modalityId, isPlataformaScope]);
 
   const selectReg = (reg: EnrichedRegistration) => {
     setSelectedReg(reg);
@@ -2115,6 +2119,7 @@ export default function AdminPanel({
           currentUser={currentUser}
           onRecordScore={onRecordScore}
           onRefreshData={onRefreshData}
+          isPlataformaScope={false}
         />;
 
       case 'inscricao_clube':
@@ -3707,6 +3712,17 @@ export default function AdminPanel({
             </div>
           </div>
         );
+
+      case 'cadastrar_resultados':
+        return <CadastrarResultadosPanel
+          championships={championships}
+          stages={stages}
+          modalities={modalities}
+          currentUser={currentUser}
+          onRecordScore={onRecordScore}
+          onRefreshData={onRefreshData}
+          isPlataformaScope={true}
+        />;
 
       case 'consulta_inscricoes':
         return (
