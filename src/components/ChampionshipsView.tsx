@@ -411,7 +411,7 @@ export default function ChampionshipsView({
                             className="bg-white border border-slate-200 rounded-xl p-4 flex justify-between items-center hover:border-blue-400 hover:shadow-md transition shadow-xs cursor-pointer group"
                             onClick={() => {
                               setSelectedPremiacaoModal({ champ: viewingChampionship, modality: mod });
-                              setSelectedPremiacaoStageId('all');
+                              setSelectedPremiacaoStageId('');
                             }}
                             title="Clique para ver os dados de premiação desta modalidade"
                           >
@@ -1153,7 +1153,7 @@ export default function ChampionshipsView({
 
                 let currentStageId = selectedPremiacaoStageId;
                 const defaultAll = hasMasculino ? 'all_masculino' : hasFeminino ? 'all_feminino' : hasMisto ? 'all_misto' : 'all';
-                if (!currentStageId) {
+                if (!currentStageId || currentStageId === 'all') {
                   currentStageId = defaultAll;
                 }
 
