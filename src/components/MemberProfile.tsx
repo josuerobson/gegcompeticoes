@@ -1349,61 +1349,6 @@ export default function MemberProfile({
           {/* 4. Resultados (NEW tab) */}
           {profileTab === 'results' && (
             <div className="space-y-6">
-              {/* Stats row do atleta */}
-              <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-6 space-y-6">
-                <div className="flex justify-between items-center">
-                  <h4 className="font-display font-bold text-slate-800 text-sm uppercase">Meus Resultados em Competições</h4>
-                  <Trophy className="w-5 h-5 text-amber-500" />
-                </div>
-
-                {/* Stats row */}
-                <div className="grid grid-cols-3 gap-4 font-mono text-center">
-                  <div className="bg-slate-50 p-3 rounded-lg">
-                    <span className="text-[10px] text-slate-450 block font-sans">Etapas Disputadas</span>
-                    <span className="font-bold text-base text-slate-800">{userScores.length}</span>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-lg">
-                    <span className="text-[10px] text-slate-450 block font-sans">Pontos Acumulados</span>
-                    <span className="font-bold text-base text-blue-600">
-                      {userScores.reduce((sum, s) => sum + s.score, 0).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-lg">
-                    <span className="text-[10px] text-slate-450 block font-sans">Melhor Fator</span>
-                    <span className="font-bold text-base text-emerald-600">
-                      {userScores.length > 0 ? Math.max(...userScores.map(s => s.hitFactor || 0)).toFixed(3) : '0.000'}
-                    </span>
-                  </div>
-                </div>
-
-                {userScores.length > 0 && (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left font-sans text-xs border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-slate-450 uppercase font-mono tracking-wider">
-                          <th className="py-3 px-2">Campeonato</th>
-                          <th className="py-3 px-2">Modalidade</th>
-                          <th className="py-3 px-2 text-center">Etapa</th>
-                          <th className="py-3 px-2 text-right">Tempo</th>
-                          <th className="py-3 px-2 text-right">Pontos</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50">
-                        {userScores.map((score) => (
-                          <tr key={score.id} className="hover:bg-slate-50/50">
-                            <td className="py-3 px-2 font-semibold text-slate-800">{getChampionshipName(score.championshipId)}</td>
-                            <td className="py-3 px-2 text-slate-600">{score.modality}</td>
-                            <td className="py-3 px-2 text-center font-bold text-blue-600 font-mono">#{score.stageNum}</td>
-                            <td className="py-3 px-2 text-right font-mono text-slate-550">{score.timeSeconds ? `${score.timeSeconds}s` : '-'}</td>
-                            <td className="py-3 px-2 text-right font-bold font-mono text-slate-800">{score.score.toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
               {/* Tabela Interativa de Resultados Gerais das Competições */}
               <CompetitionResultsViewer
                 championships={championships}
