@@ -231,23 +231,43 @@ export function ClubCertificatesViewer({
   });
 
   const handlePrintCertificate = () => {
-    const printableArea = document.getElementById('printable-certificate-area')?.outerHTML;
-    if (!printableArea) return;
-
-    const originalContent = document.body.innerHTML;
-    document.body.innerHTML = `
-      <style>
-        @page { size: A4 portrait; margin: 0; }
-        body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; background: white; }
-        #printable-certificate-area { width: 210mm !important; height: 297mm !important; max-width: none !important; border: none !important; border-radius: 0 !important; box-shadow: none !important; }
-      </style>
-      <div style="width: 210mm; height: 297mm; position: relative;">
-        ${printableArea}
-      </div>
-    `;
+    let styleElem = document.getElementById('cert-print-style');
+    if (!styleElem) {
+      styleElem = document.createElement('style');
+      styleElem.id = 'cert-print-style';
+      styleElem.innerHTML = `
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 0;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          #printable-certificate-area, #printable-certificate-area * {
+            visibility: visible !important;
+          }
+          #printable-certificate-area {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 210mm !important;
+            height: 297mm !important;
+            max-width: none !important;
+            max-height: none !important;
+            box-shadow: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
+            z-index: 999999 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+      `;
+      document.head.appendChild(styleElem);
+    }
     window.print();
-    document.body.innerHTML = originalContent;
-    window.location.reload();
   };
 
   // Dynamic token replacement for active certificate
@@ -462,10 +482,16 @@ export function ClubCertificatesViewer({
                     height: '735px',
                     position: 'relative',
                     backgroundColor: '#ffffff',
+                    backgroundImage: clubTemplate?.background_url ? `url("${clubTemplate.background_url}")` : undefined,
+                    backgroundSize: '100% 100%',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat',
                     boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2)',
                     borderRadius: '4px',
                     overflow: 'hidden',
-                    userSelect: 'none'
+                    userSelect: 'none',
+                    WebkitPrintColorAdjust: 'exact',
+                    printColorAdjust: 'exact'
                   }}
                 >
                   {/* Background Image Layer */}
@@ -473,7 +499,16 @@ export function ClubCertificatesViewer({
                     <img
                       src={clubTemplate.background_url}
                       alt="Fundo Certificado A4"
-                      className="absolute inset-0 w-full h-full object-fill pointer-events-none"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'fill',
+                        pointerEvents: 'none',
+                        WebkitPrintColorAdjust: 'exact',
+                        printColorAdjust: 'exact'
+                      }}
                     />
                   ) : (
                     <div className="absolute inset-0 border-8 border-double border-amber-600/50 m-3 bg-white pointer-events-none"></div>

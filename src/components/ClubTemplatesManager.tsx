@@ -512,19 +512,74 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
 
   // Print Test PDF
   const handlePrintTest = () => {
-    const canvasNode = canvasRef.current;
-    if (!canvasNode) return;
-    const printContent = canvasNode.outerHTML;
-    const originalContent = document.body.innerHTML;
-
-    document.body.innerHTML = `
-      <div style="width: 100%; display: flex; justify-content: center; align-items: center; padding: 20px;">
-        ${printContent}
-      </div>
-    `;
+    let styleElem = document.getElementById('editor-print-style');
+    if (!styleElem) {
+      styleElem = document.createElement('style');
+      styleElem.id = 'editor-print-style';
+      styleElem.innerHTML = `
+        @media print {
+          @page {
+            size: ${isCardTab ? 'landscape' : 'A4 portrait'};
+            margin: 0;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          #editor-canvas-print-area, #editor-canvas-print-area * {
+            visibility: visible !important;
+          }
+          #editor-canvas-print-area {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: ${isCardTab ? '85.6mm' : '210mm'} !important;
+            height: ${isCardTab ? '54mm' : '297mm'} !important;
+            max-width: none !important;
+            max-height: none !important;
+            box-shadow: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
+            z-index: 999999 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+      `;
+      document.head.appendChild(styleElem);
+    } else {
+      styleElem.innerHTML = `
+        @media print {
+          @page {
+            size: ${isCardTab ? 'landscape' : 'A4 portrait'};
+            margin: 0;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          #editor-canvas-print-area, #editor-canvas-print-area * {
+            visibility: visible !important;
+          }
+          #editor-canvas-print-area {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: ${isCardTab ? '85.6mm' : '210mm'} !important;
+            height: ${isCardTab ? '54mm' : '297mm'} !important;
+            max-width: none !important;
+            max-height: none !important;
+            box-shadow: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
+            z-index: 999999 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+      `;
+    }
     window.print();
-    document.body.innerHTML = originalContent;
-    window.location.reload();
   };
 
   return (
@@ -691,16 +746,23 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
         {/* CANVAS WORKSPACE (SIMULATING A4 OR CARD) */}
         <div className="lg:col-span-8 flex flex-col items-center justify-center bg-slate-200/80 p-4 sm:p-8 rounded-2xl border border-slate-300 min-h-[550px] shadow-inner overflow-x-auto">
           <div
+            id="editor-canvas-print-area"
             ref={canvasRef}
             style={{
               width: isCardTab ? '420px' : '520px',
               height: isCardTab ? '260px' : '735px',
               position: 'relative',
               backgroundColor: '#ffffff',
+              backgroundImage: bgUrl ? `url("${bgUrl}")` : undefined,
+              backgroundSize: '100% 100%',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
               boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
               borderRadius: isCardTab ? '16px' : '4px',
               overflow: 'hidden',
-              userSelect: 'none'
+              userSelect: 'none',
+              WebkitPrintColorAdjust: 'exact',
+              printColorAdjust: 'exact'
             }}
             className="transition-all duration-200"
           >
