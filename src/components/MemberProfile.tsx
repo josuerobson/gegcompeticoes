@@ -4,7 +4,8 @@ import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
-  Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronDown, Info, PlusCircle, X, UserCog, Camera
+  Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronDown, Info, PlusCircle, X, UserCog, Camera,
+  Clock, Copy, QrCode
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -49,6 +50,157 @@ function ProfileField({ label, value, onChange, type = 'text', placeholder }: {
         onChange={e => onChange(e.target.value)}
         className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-blue-500 text-slate-800"
       />
+      {/* MODAL DE PAGAMENTO PIX EM LOTE */}
+      {isBatchPayModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-6 shadow-2xl relative my-8 text-slate-800">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="font-display font-bold text-slate-900 text-base">Pagamento Unificado via PIX</h3>
+                <p className="text-xs text-slate-400">Escaneie o QR Code ou copie a chave para pagar as inscrições selecionadas.</p>
+              </div>
+              <button
+                onClick={() => setIsBatchPayModalOpen(false)}
+                className="text-slate-400 hover:text-slate-650 transition cursor-pointer p-1 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {batchPayError && (
+              <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold border border-red-200">{batchPayError}</div>
+            )}
+
+            {(() => {
+              const selectedRegs = pendingRegistrations.filter(r => selectedPendingIds.includes(r.id));
+              const totalVal = selectedRegs.reduce((sum, r) => sum + (r.valorPago != null ? Number(r.valorPago) : 100), 0);
+              const pixChaveStr = `00020126580014BR.GOV.BCB.PIX0136419974402555204000053039865405${totalVal.toFixed(2)}5802BR5915GG COMPETICOES6008BRASILIA62070503***6304`;
+
+              return (
+                <div className="space-y-5 text-xs">
+                  {/* Box com resumo do valor */}
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-center space-y-1">
+                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Valor Total a Pagar ({selectedRegs.length} inscrição/ões)</span>
+                    <div className="text-2xl font-extrabold text-emerald-700 font-mono">R$ {totalVal.toFixed(2)}</div>
+                  </div>
+
+                  {/* QR Code Simulado */}
+                  <div className="flex flex-col items-center justify-center p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                    <div className="w-40 h-40 bg-white p-2 border border-slate-300 rounded-xl shadow-xs flex items-center justify-center">
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(pixChaveStr)}`}
+                        alt="QR Code PIX"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono">Chave Pix Celular: (41) 99744-0255</span>
+                  </div>
+
+                  {/* Chave Copia e Cola */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Chave PIX Copia e Cola</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={pixChaveStr}
+                        className="w-full bg-slate-100 border border-slate-200 p-2.5 rounded-xl font-mono text-[10px] text-slate-600 truncate outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(pixChaveStr);
+                          setPixCopied(true);
+                          setTimeout(() => setPixCopied(false), 3000);
+                        }}
+                        className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-3 py-2 rounded-xl transition text-[11px] flex-shrink-0 cursor-pointer flex items-center gap-1"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        {pixCopied ? 'Copiado!' : 'Copiar'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Lista resumida de itens inclusos */}
+                  <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase block">Inscrições Incluídas neste lote:</span>
+                    <div className="max-h-36 overflow-y-auto space-y-1 divide-y divide-slate-100 text-[11px] pr-1">
+                      {selectedRegs.map(reg => {
+                        const c = championships.find(ch => ch.id === reg.championshipId);
+                        const st = stages.find(s => s.id === reg.stageId);
+                        const m = modalityName(reg.modalityId);
+                        const u = users.find(usr => usr.id === reg.userId);
+                        const v = reg.valorPago != null ? Number(reg.valorPago) : 100;
+                        return (
+                          <div key={reg.id} className="pt-1 flex justify-between items-center text-slate-700">
+                            <div className="truncate max-w-[280px]">
+                              <span className="font-bold">{c?.title || 'Campeonato'}</span> &gt; {st?.title || `Etapa ${st?.stageNum || 1}`} &gt; {m}
+                              {isClubLogin && <span className="text-[10px] text-slate-400 block">Atleta: {u?.fullName}</span>}
+                            </div>
+                            <span className="font-mono font-bold text-amber-700 flex-shrink-0">R$ {v.toFixed(2)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Botões de Ação */}
+                  <div className="flex gap-3 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setIsBatchPayModalOpen(false)}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition text-xs cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={batchPaySaving}
+                      onClick={async () => {
+                        setBatchPaySaving(true);
+                        setBatchPayError('');
+                        try {
+                          const res = await fetch('/api/registrations/pay-batch', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'x-user-id': selectedUser.id
+                            },
+                            body: JSON.stringify({
+                              registrationIds: selectedPendingIds,
+                              paymentMethod: 'pix'
+                            })
+                          }).then(r => r.json());
+
+                          if (res.error) {
+                            setBatchPayError(res.error);
+                          } else {
+                            setIsBatchPayModalOpen(false);
+                            setBatchPaySuccess(`Pagamento de ${res.paidCount} inscrição(ões) aprovado com sucesso! (TxID: ${res.txId})`);
+                            if (onUpdateProfile) {
+                              onUpdateProfile({});
+                            }
+                            setTimeout(() => window.location.reload(), 1500);
+                          }
+                        } catch (err) {
+                          console.error(err);
+                          setBatchPayError('Erro de conexão ao processar pagamento.');
+                        } finally {
+                          setBatchPaySaving(false);
+                        }
+                      }}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold py-2.5 rounded-xl transition text-xs cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      {batchPaySaving ? 'Confirmando...' : 'Confirmar Pagamento PIX'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -348,6 +500,31 @@ export default function MemberProfile({
     cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
   });
   const [savingSection, setSavingSection] = useState<string | null>(null);
+
+  // Batch payment state for pending registrations in Minhas Inscrições tab
+  const [selectedPendingIds, setSelectedPendingIds] = useState<string[]>([]);
+  const [isBatchPayModalOpen, setIsBatchPayModalOpen] = useState(false);
+  const [batchPaySaving, setBatchPaySaving] = useState(false);
+  const [batchPaySuccess, setBatchPaySuccess] = useState('');
+  const [batchPayError, setBatchPayError] = useState('');
+  const [pixCopied, setPixCopied] = useState(false);
+
+  const isClubLogin = selectedUser.role === 'club_admin';
+
+  const relevantRegistrations = registrations.filter(r => {
+    if (isClubLogin) {
+      return r.registeredByUserId === selectedUser.id || (selectedUser.clubId && r.clubId === selectedUser.clubId);
+    }
+    return r.userId === selectedUser.id || r.registeredByUserId === selectedUser.id;
+  });
+
+  const pendingRegistrations = relevantRegistrations.filter(r => r.paymentStatus !== 'approved');
+  const approvedRegistrations = relevantRegistrations.filter(r => r.paymentStatus === 'approved');
+
+  useEffect(() => {
+    // Select all pending IDs by default
+    setSelectedPendingIds(pendingRegistrations.map(r => r.id));
+  }, [registrations.length, selectedUser.id, selectedUser.role]);
   const [savedSection, setSavedSection] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1279,70 +1456,232 @@ export default function MemberProfile({
           {/* Minhas Inscrições tab */}
           {profileTab === 'my_registrations' && (
             <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-6 space-y-6">
-              <div className="flex justify-between items-center">
-                <h4 className="font-display font-bold text-slate-800 text-sm uppercase">Minhas Inscrições Homologadas</h4>
-                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100">
+                <div>
+                  <h4 className="font-display font-bold text-slate-900 text-base">
+                    {isClubLogin ? 'Inscrições da Unidade Filiada (Gestão do Clube)' : 'Minhas Inscrições em Campeonatos'}
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    {isClubLogin
+                      ? 'Gerencie e efetue o pagamento do lote de inscrições dos atletas filiados ao seu clube.'
+                      : 'Acompanhe o status das suas inscrições pagas e efetue o pagamento das pendentes.'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase bg-blue-50 text-blue-700 font-mono border border-blue-100">
+                    {isClubLogin ? 'Login Clube' : 'Login Atleta'}
+                  </span>
+                </div>
               </div>
 
-              {registrations.filter(r => r.userId === selectedUser.id).length === 0 ? (
-                <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-xl">
-                  <CheckCircle2 className="w-10 h-10 text-slate-200 mx-auto mb-2" />
-                  <p className="text-xs">Nenhuma inscrição encontrada para este atleta.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {registrations.filter(r => r.userId === selectedUser.id).map((reg) => {
-                    const champ = championships.find(c => c.id === reg.championshipId);
-                    return (
-                      <div key={reg.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 hover:bg-slate-50 transition flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase ${reg.paymentStatus === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                              {reg.paymentStatus === 'approved' ? 'HOMOLOGADA' : 'PENDENTE'}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-mono">ID: {reg.id.slice(0, 8).toUpperCase()}</span>
-                          </div>
-                          <h5 className="font-bold text-slate-800 text-xs mt-1">{champ ? champ.title : 'Campeonato G&G'}</h5>
-                          <div className="text-[10px] text-slate-550 space-y-0.5 font-mono leading-tight">
-                            <div>Modalidade: <span className="font-bold text-slate-700">{modalityName(reg.modalityId)}</span></div>
-                            <div>Documento CR: <span className="font-bold text-slate-700">{reg.crNumber}</span></div>
-                            <div>Data Registro: {new Date(reg.registeredAt).toLocaleDateString()}</div>
-                            <div>Valor Pago: <span className="font-bold text-slate-700">{reg.valorPago != null ? `R$ ${Number(reg.valorPago).toFixed(2)}` : '-'}</span></div>
-                            <div>Tipo: <span className="font-bold text-slate-700 uppercase">{reg.registrationType === 'reinscrição' ? 'Reinscrição (Promocional)' : 'Normal'}</span></div>
-                            {reg.txId && <div className="truncate max-w-[280px]">TxID: {reg.txId}</div>}
-                          </div>
-                        </div>
-                        
-                        <button
-                          onClick={() => {
-                            setReceiptData({
-                              regId: reg.id,
-                              champTitle: champ ? champ.title : 'Campeonato G&G',
-                              modality: modalityName(reg.modalityId),
-                              crNumber: reg.crNumber,
-                              registeredAt: reg.registeredAt,
-                              paymentMethod: reg.paymentMethod,
-                              paymentStatus: reg.paymentStatus,
-                              txId: reg.txId,
-                              athleteName: selectedUser.fullName,
-                              athleteUsername: selectedUser.username,
-                              valorPago: reg.valorPago,
-                              registrationType: reg.registrationType,
-                              registeredByUserId: reg.registeredByUserId,
-                              userId: reg.userId
-                            });
-                            setIsReceiptOpen(true);
-                          }}
-                          className="self-end sm:self-center bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-800 text-xs px-3.5 py-2 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer border border-blue-100"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          Ver Comprovante
-                        </button>
-                      </div>
-                    );
-                  })}
+              {batchPaySuccess && (
+                <div className="bg-emerald-50 text-emerald-800 p-3.5 rounded-xl text-xs font-semibold flex items-center gap-2 border border-emerald-200">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  {batchPaySuccess}
                 </div>
               )}
+
+              {/* 1. SEÇÃO DE INSCRIÇÕES PENDENTES DE PAGAMENTO */}
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 bg-amber-50/60 p-3.5 rounded-xl border border-amber-200/60">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                    <div>
+                      <h5 className="font-bold text-xs text-amber-900 uppercase">Inscrições Pendentes de Pagamento ({pendingRegistrations.length})</h5>
+                      <p className="text-[10px] text-amber-700">Selecione as inscrições em aberto para realizar o pagamento unificado via PIX.</p>
+                    </div>
+                  </div>
+                  {pendingRegistrations.length > 0 && (
+                    <button
+                      onClick={() => {
+                        if (selectedPendingIds.length === pendingRegistrations.length) {
+                          setSelectedPendingIds([]);
+                        } else {
+                          setSelectedPendingIds(pendingRegistrations.map(r => r.id));
+                        }
+                      }}
+                      className="text-xs text-amber-800 hover:text-amber-950 font-bold underline cursor-pointer self-start sm:self-center"
+                    >
+                      {selectedPendingIds.length === pendingRegistrations.length ? 'Desmarcar todas' : 'Selecionar todas'}
+                    </button>
+                  )}
+                </div>
+
+                {pendingRegistrations.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-1.5" />
+                    <p className="text-xs font-semibold text-slate-600">Nenhuma inscrição pendente no momento!</p>
+                    <p className="text-[10px] text-slate-400">Todas as inscrições estão quitadas e homologadas.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="divide-y divide-slate-100 border border-amber-200/80 rounded-xl overflow-hidden bg-white shadow-2xs">
+                      {pendingRegistrations.map((reg) => {
+                        const champ = championships.find(c => c.id === reg.championshipId);
+                        const stg = stages.find(s => s.id === reg.stageId);
+                        const modName = modalityName(reg.modalityId);
+                        const regUser = users.find(u => u.id === reg.userId);
+                        const isSelected = selectedPendingIds.includes(reg.id);
+                        const feeVal = reg.valorPago != null ? Number(reg.valorPago) : (champ?.valorInscricaoIndividual || 100);
+
+                        return (
+                          <div
+                            key={reg.id}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedPendingIds(selectedPendingIds.filter(id => id !== reg.id));
+                              } else {
+                                setSelectedPendingIds([...selectedPendingIds, reg.id]);
+                              }
+                            }}
+                            className={`p-4 transition duration-150 flex items-start gap-3 cursor-pointer ${
+                              isSelected ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'hover:bg-slate-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              className="mt-1 w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                            />
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[9px] px-2 py-0.5 rounded font-bold uppercase bg-amber-100 text-amber-800 border border-amber-200">
+                                  PENDENTE
+                                </span>
+                                <span className="font-bold text-xs text-slate-900">
+                                  {champ?.title || 'Campeonato G&G'} &gt; {stg?.title || `Etapa ${stg?.stageNum || 1}`} &gt; {modName}
+                                </span>
+                              </div>
+                              
+                              <div className="text-[11px] text-slate-600 font-mono flex flex-wrap gap-x-4 gap-y-0.5">
+                                {isClubLogin && (
+                                  <span>Atleta: <strong className="text-slate-800">{regUser?.fullName || 'Filiado G&G'}</strong> (CR: {reg.crNumber})</span>
+                                )}
+                                {!isClubLogin && (
+                                  <span>CR: <strong className="text-slate-800">{reg.crNumber}</strong></span>
+                                )}
+                                <span>Data: {new Date(reg.registeredAt).toLocaleDateString()}</span>
+                                <span>Tipo: <strong className="text-slate-800 uppercase">{reg.registrationType === 'reinscrição' ? 'Reinscrição' : 'Normal'}</strong></span>
+                              </div>
+                            </div>
+
+                            <div className="text-right font-mono flex-shrink-0">
+                              <span className="text-xs font-extrabold text-amber-700 block">R$ {feeVal.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Barra de ação do Pagamento do Lote Pendente */}
+                    {pendingRegistrations.length > 0 && (
+                      <div className="bg-slate-900 text-white p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-3 shadow-md">
+                        <div>
+                          <span className="text-xs text-slate-300 font-medium">
+                            {selectedPendingIds.length} de {pendingRegistrations.length} inscrição(ões) selecionada(s)
+                          </span>
+                          <div className="text-lg font-bold font-mono text-emerald-400">
+                            Total: R$ {pendingRegistrations
+                              .filter(r => selectedPendingIds.includes(r.id))
+                              .reduce((sum, r) => sum + (r.valorPago != null ? Number(r.valorPago) : 100), 0)
+                              .toFixed(2)}
+                          </div>
+                        </div>
+
+                        <button
+                          disabled={selectedPendingIds.length === 0}
+                          onClick={() => { setPixCopied(false); setIsBatchPayModalOpen(true); }}
+                          className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-extrabold text-xs px-5 py-3 rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+                        >
+                          <QrCode className="w-4 h-4" />
+                          Pagar Selecionadas via PIX
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 2. SEÇÃO DE INSCRIÇÕES PAGAS / HOMOLOGADAS */}
+              <div className="space-y-4 pt-4 border-t border-slate-100">
+                <div className="flex items-center gap-2 bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-200/60">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                  <div>
+                    <h5 className="font-bold text-xs text-emerald-900 uppercase">Inscrições Pagas & Homologadas ({approvedRegistrations.length})</h5>
+                    <p className="text-[10px] text-emerald-700">Inscrições confirmadas e aptas para disputar as etapas.</p>
+                  </div>
+                </div>
+
+                {approvedRegistrations.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    <p className="text-xs">Nenhuma inscrição paga/homologada registrada ainda.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {approvedRegistrations.map((reg) => {
+                      const champ = championships.find(c => c.id === reg.championshipId);
+                      const stg = stages.find(s => s.id === reg.stageId);
+                      const modName = modalityName(reg.modalityId);
+                      const regUser = users.find(u => u.id === reg.userId);
+                      const feeVal = reg.valorPago != null ? Number(reg.valorPago) : (champ?.valorInscricaoIndividual || 100);
+
+                      return (
+                        <div key={reg.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 hover:bg-slate-50 transition flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[9px] px-2 py-0.5 rounded font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                HOMOLOGADA
+                              </span>
+                              <span className="font-bold text-xs text-slate-900">
+                                {champ?.title || 'Campeonato G&G'} &gt; {stg?.title || `Etapa ${stg?.stageNum || 1}`} &gt; {modName}
+                              </span>
+                            </div>
+
+                            <div className="text-[11px] text-slate-600 font-mono flex flex-wrap gap-x-4 gap-y-0.5">
+                              {isClubLogin && (
+                                <span>Atleta: <strong className="text-slate-800">{regUser?.fullName || 'Filiado G&G'}</strong> (CR: {reg.crNumber})</span>
+                              )}
+                              {!isClubLogin && (
+                                <span>CR: <strong className="text-slate-800">{reg.crNumber}</strong></span>
+                              )}
+                              <span>Data Pgto: {reg.dataPagamento || new Date(reg.registeredAt).toLocaleDateString()}</span>
+                              <span>Valor Pago: <strong className="text-slate-800">R$ {feeVal.toFixed(2)}</strong></span>
+                              {reg.txId && <span className="truncate max-w-[200px]">TxID: {reg.txId}</span>}
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              setReceiptData({
+                                regId: reg.id,
+                                champTitle: champ ? champ.title : 'Campeonato G&G',
+                                modality: modName,
+                                crNumber: reg.crNumber,
+                                registeredAt: reg.registeredAt,
+                                paymentMethod: reg.paymentMethod,
+                                paymentStatus: reg.paymentStatus,
+                                txId: reg.txId,
+                                athleteName: regUser?.fullName || selectedUser.fullName,
+                                athleteUsername: regUser?.username || selectedUser.username,
+                                valorPago: reg.valorPago,
+                                registrationType: reg.registrationType,
+                                registeredByUserId: reg.registeredByUserId,
+                                userId: reg.userId
+                              });
+                              setIsReceiptOpen(true);
+                            }}
+                            className="self-end sm:self-center bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-800 text-xs px-3.5 py-2 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer border border-blue-100"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            Ver Comprovante
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

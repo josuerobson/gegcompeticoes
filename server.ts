@@ -1382,6 +1382,30 @@ app.get('/api/registrations', requireAuth, async (req, res) => {
   }
 });
 
+app.post('/api/registrations/pay-batch', requireAuth, async (req, res) => {
+  const { registrationIds, paymentMethod } = req.body;
+  if (!Array.isArray(registrationIds) || registrationIds.length === 0) {
+    return res.status(400).json({ error: 'Nenhuma inscrição selecionada para pagamento.' });
+  }
+
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const txId = `tx_gg_${Math.random().toString(36).substring(2, 12)}`;
+
+    await pool.query(
+      `UPDATE registrations
+       SET payment_status = 'approved', approved_at = NOW(), tx_id = $1, data_pagamento = $2, payment_method = $3
+       WHERE id = ANY($4::text[])`,
+      [txId, today, paymentMethod || 'pix', registrationIds]
+    );
+
+    res.json({ success: true, txId, paidCount: registrationIds.length });
+  } catch (err) {
+    console.error('Batch payment error:', err);
+    res.status(500).json({ error: 'Erro ao processar pagamento das inscrições.' });
+  }
+});
+
 app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
   const championshipId = req.params.id;
   const { modalityId, stageId, weaponId, crNumber, paymentMethod } = req.body;
