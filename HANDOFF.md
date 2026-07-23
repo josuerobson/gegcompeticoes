@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `64555db` |
-| Mensagem | `feat: adiciona editor visual drag & drop com simulador A4/carteirinha, formatação de blocos e teste em PDF em Site > Certificados e Carteirinhas` |
-| Data/hora | 2026-07-23T19:25:41-03:00 |
+| Hash | `719d820` |
+| Mensagem | `feat: adiciona listagem e geracao de certificados por atleta com pesquisa por nome em Gerenciamento Clube > Certificados` |
+| Data/hora | 2026-07-23T19:38:23-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `64555db` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `719d820` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -104,7 +104,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Exibição Condicional de "Premiação Equipes Clubes" (`ChampionshipsView.tsx`)**: A seção e tabela de "Premiação Equipes Clubes" na modal *Dados da Premiação* passou a ser exibida somente se o campeonato possuir os valores de "Pontuação Mínima Equipe" (Ouro, Prata ou Bronze) preenchidos e maiores que zero durante o cadastro/edição da competição. Caso a pontuação mínima de equipes não tenha sido estabelecida, o bloco de premiação por equipes é ocultado.
 - **Opção "Todas as etapas" no Seletor de Etapas do Modal de Premiação (`ChampionshipsView.tsx`)**: Adicionada a opção `"Todas as etapas"` à caixa de seleção de etapas no modal *Dados da Premiação*. Ao ser selecionada (opção padrão ao abrir o modal), o sistema consolida o número total de inscrições, reinscrições e a arrecadação de todas as etapas do campeonato para a modalidade escolhida, aplicando os percentuais gerais de premiação (`percentualPremiacaoTodasEtapas`, premiação adicional e posições 1º a 5º para o campeonato completo).
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
-- **Editor Visual Drag & Drop com Simulador A4 / Carteirinha (`ClubTemplatesManager.tsx`)**: O módulo em *Painel Diretor > Gerenciamento Plataforma > Site > Certificados e Carteirinhas* foi aprimorado com um simulador visual interativo de folha A4 e cartão de credencial. Permite adicionar blocos de texto livres, arrastar qualquer texto/variável livremente com o mouse sobre a imagem de fundo enviada, ajustar tamanho de fonte, cor, negrito, itálico, alinhamento e largura, alternar para o "Modo Dados de Teste" em tempo real e gerar a impressão do modelo PDF para verificação instantânea.
+- **Listagem e Gerador de Certificados de Atletas no Clube (`ClubCertificatesViewer.tsx`)**: No menu *Painel Diretor > Gerenciamento Clube > Certificados*, foi criada a tela de homologação e emissão de certificados. Exibe os atletas filiados e suas participações homologadas nos campeonatos com campo de pesquisa dinâmica por nome do atleta, CR ou CPF, filtro por campeonato e o botão "Gerar Certificado", que aplica o layout dinâmico e fundo salvos pelo clube em `club_templates` para impressão em PDF.
 
 ## Infra / deploy
 
