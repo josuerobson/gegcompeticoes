@@ -145,9 +145,11 @@ export function CompetitionResultsViewer({
               >
                 <div>
                   <span className="bg-blue-100 text-blue-800 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    Etapa {stage.stageNum}
+                    {stage.title || `${stage.stageNum}ª ETAPA`}
                   </span>
-                  <h4 className="font-bold text-slate-800 text-xs mt-2">{stage.title}</h4>
+                  {stage.title && stage.title !== (stage.title || `${stage.stageNum}ª ETAPA`) && (
+                    <h4 className="font-bold text-slate-800 text-xs mt-2">{stage.title}</h4>
+                  )}
                   {stage.description && (
                     <p className="text-[10px] text-slate-400 mt-1 line-clamp-2">{stage.description}</p>
                   )}

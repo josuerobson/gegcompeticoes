@@ -624,10 +624,18 @@ export default function ChampionshipsView({
                       <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase font-bold font-mono tracking-wider">
                         <th className="py-3 px-2">Colocação</th>
                         <th className="py-3 px-4">Atleta G&G</th>
-                        <th className="py-3 px-4 text-center">Etapa 1</th>
-                        <th className="py-3 px-4 text-center">Etapa 2</th>
-                        <th className="py-3 px-4 text-center">Etapa 3</th>
-                        <th className="py-3 px-4 text-center">Etapa 4</th>
+                        {stages.length > 0 ? (
+                          stages.map((s, idx) => (
+                            <th key={s.id || idx} className="py-3 px-4 text-center">{s.title || `Etapa ${s.stageNum || idx + 1}`}</th>
+                          ))
+                        ) : (
+                          <>
+                            <th className="py-3 px-4 text-center">Etapa 1</th>
+                            <th className="py-3 px-4 text-center">Etapa 2</th>
+                            <th className="py-3 px-4 text-center">Etapa 3</th>
+                            <th className="py-3 px-4 text-center">Etapa 4</th>
+                          </>
+                        )}
                         <th className="py-3 px-4 text-right">Resultado Total</th>
                       </tr>
                     </thead>
@@ -1138,11 +1146,35 @@ export default function ChampionshipsView({
                 const champ = selectedPremiacaoModal.champ;
                 const modality = selectedPremiacaoModal.modality;
                 const champStages = stages.filter(s => s.championshipId === champ.id);
-                const currentStageId = selectedPremiacaoStageId || 'all';
+                
+                const hasMasculino = champStages.some(s => (s.sexo || 'misto') === 'masculino');
+                const hasFeminino = champStages.some(s => (s.sexo || 'misto') === 'feminino');
+                const hasMisto = champStages.some(s => (s.sexo || 'misto') === 'misto');
+
+                let currentStageId = selectedPremiacaoStageId;
+                const defaultAll = hasMasculino ? 'all_masculino' : hasFeminino ? 'all_feminino' : hasMisto ? 'all_misto' : 'all';
+                if (!currentStageId) {
+                  currentStageId = defaultAll;
+                }
+
+                let targetStages: Stage[] = [];
+                if (currentStageId === 'all_masculino') {
+                  targetStages = champStages.filter(s => (s.sexo || 'misto') === 'masculino');
+                } else if (currentStageId === 'all_feminino') {
+                  targetStages = champStages.filter(s => (s.sexo || 'misto') === 'feminino');
+                } else if (currentStageId === 'all_misto') {
+                  targetStages = champStages.filter(s => (s.sexo || 'misto') === 'misto');
+                } else if (currentStageId === 'all') {
+                  targetStages = champStages;
+                } else {
+                  targetStages = champStages.filter(s => s.id === currentStageId);
+                }
+
+                const targetStageIds = targetStages.map(s => s.id);
 
                 // Filter registrations for stage(s) and modality
                 const stageModRegs = registrations.filter(
-                  r => r.championshipId === champ.id && r.modalityId === modality.id && (currentStageId === 'all' || r.stageId === currentStageId)
+                  r => r.championshipId === champ.id && r.modalityId === modality.id && targetStageIds.includes(r.stageId)
                 );
 
                 const totalCount = stageModRegs.length;
@@ -1227,10 +1259,13 @@ export default function ChampionshipsView({
                         onChange={(e) => setSelectedPremiacaoStageId(e.target.value)}
                         className="w-full sm:w-64 bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-800 focus:border-blue-500 cursor-pointer"
                       >
-                        <option value="all">Todas as etapas</option>
+                        {hasMasculino && <option value="all_masculino">Todas as etapas Masculinas</option>}
+                        {hasFeminino && <option value="all_feminino">Todas as etapas Femininas</option>}
+                        {hasMisto && <option value="all_misto">Todas as etapas Mistas</option>}
+                        {!hasMasculino && !hasFeminino && !hasMisto && <option value="all">Todas as etapas</option>}
                         {champStages.map((s) => (
                           <option key={s.id} value={s.id}>
-                            {s.title || `${s.stageNum}ª ETAPA`} ({new Date(s.date).toLocaleDateString('pt-BR')})
+                            {s.title || `${s.stageNum}ª ETAPA`} ({new Date(s.date).toLocaleDateString('pt-BR')}) {s.sexo && s.sexo !== 'misto' ? `[${s.sexo === 'feminino' ? 'Feminino' : 'Masculino'}]` : ''}
                           </option>
                         ))}
                       </select>
@@ -1271,10 +1306,12 @@ export default function ChampionshipsView({
                     </div>
 
                     {/* Section 2: Premiação atletas (Todas as Etapas vs Etapa Individual) */}
-                    {currentStageId === 'all' ? (
+                    {currentStageId.startsWith('all') ? (
                       <div className="space-y-2 pt-2 border-t border-slate-100">
                         <div className="flex justify-between items-center">
-                          <h4 className="font-bold text-slate-900 text-xs">Premiações Todas as Etapas</h4>
+                          <h4 className="font-bold text-slate-900 text-xs">
+                            Premiações Todas as Etapas {currentStageId === 'all_masculino' ? 'Masculinas' : currentStageId === 'all_feminino' ? 'Femininas' : currentStageId === 'all_misto' ? 'Mistas' : ''}
+                          </h4>
                           <span className="text-xs font-bold text-emerald-600 font-mono">
                             Total Premiação Geral: {fmt(vPoolTodasEtapas)}
                           </span>
