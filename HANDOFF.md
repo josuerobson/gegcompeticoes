@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `8785fb8` |
-| Mensagem | `feat: permite cadastrar resultados para membros de todos os clubes vinculados sem restricao por clube em Cadastrar Resultados` |
-| Data/hora | 2026-07-23T13:42:58-03:00 |
+| Hash | `a4f813f` |
+| Mensagem | `fix: separa escopo de Cadastrar Resultados em Gerenciamento de Clube (filiados do clube) vs Gerenciamento Plataforma (todos os clubes)` |
+| Data/hora | 2026-07-23T16:26:22-03:00 |
 | Push feito? | ✅ Sim |
-| Deploy EasyPanel confirmado? | ⏳ Em andamento (acao cmrxqpqbp007p07s90oxn36ua) |
+| Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `8785fb8` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `a4f813f` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -104,7 +104,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Exibição Condicional de "Premiação Equipes Clubes" (`ChampionshipsView.tsx`)**: A seção e tabela de "Premiação Equipes Clubes" na modal *Dados da Premiação* passou a ser exibida somente se o campeonato possuir os valores de "Pontuação Mínima Equipe" (Ouro, Prata ou Bronze) preenchidos e maiores que zero durante o cadastro/edição da competição. Caso a pontuação mínima de equipes não tenha sido estabelecida, o bloco de premiação por equipes é ocultado.
 - **Opção "Todas as etapas" no Seletor de Etapas do Modal de Premiação (`ChampionshipsView.tsx`)**: Adicionada a opção `"Todas as etapas"` à caixa de seleção de etapas no modal *Dados da Premiação*. Ao ser selecionada (opção padrão ao abrir o modal), o sistema consolida o número total de inscrições, reinscrições e a arrecadação de todas as etapas do campeonato para a modalidade escolhida, aplicando os percentuais gerais de premiação (`percentualPremiacaoTodasEtapas`, premiação adicional e posições 1º a 5º para o campeonato completo).
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
-- **Lançamento de Resultados sem Restrição por Clube (`server.ts` & `AdminPanel.tsx`)**: O endpoint `GET /api/admin/registrations` foi ajustado para remover o filtro por `club_id` do usuário logado. Administradores gerenciando a etapa de um campeonato no *Cadastrar Resultados* do Painel Diretor agora visualizam e cadastram notas/resultados para todos os atletas inscritos na etapa, independentemente de qual clube o atleta pertence.
+- **Separação de Escopos em Cadastrar Resultados (`server.ts` & `AdminPanel.tsx`)**: No menu *Painel Diretor > Gerenciamento de Clube > Cadastrar Resultados*, a listagem de atletas é estritamente filtrada para exibir **apenas filiados do próprio clube logado** (`r.club_id = currentUser.clubId`). Já no menu *Painel Diretor > Gerenciamento Plataforma > Cadastrar Resultados* (acesso do Administrador Geral da Plataforma), o componente faz a requisição passando `allClubs=true`, permitindo listar e cadastrar notas para **atletas de todos os clubes vinculados**.
 
 ## Infra / deploy
 
