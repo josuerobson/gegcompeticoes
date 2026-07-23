@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `12fa66c` |
-| Mensagem | `fix: adiciona css print color adjust exact e estilo nao-destrutivo para impressao do fundo do certificado em PDF` |
-| Data/hora | 2026-07-23T20:19:32-03:00 |
+| Hash | `5159b7b` |
+| Mensagem | `fix: torna rota GET /api/club-templates desbloqueada com fallback automatico para qualquer modelo salvo no banco` |
+| Data/hora | 2026-07-23T20:25:03-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `12fa66c` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `5159b7b` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
