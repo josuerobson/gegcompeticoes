@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `cc6d71b` |
-| Mensagem | `feat: conecta geracao de certificado na tela do clube ao modelo A4 customizado e fundo salvos em Site > Certificados e Carteirinhas` |
-| Data/hora | 2026-07-23T19:54:04-03:00 |
+| Hash | `b4696bb` |
+| Mensagem | `fix: corrige busca de imagem de fundo salva no editor e token replacements na geracao de certificado A4` |
+| Data/hora | 2026-07-23T20:05:15-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `cc6d71b` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `b4696bb` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
