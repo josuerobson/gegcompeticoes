@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `55c6a90` |
-| Mensagem | `feat: diferencia calculos de premiacao todas as etapas pelo sexo das etapas (masculina, feminina, mista) e usa titulo das etapas no select` |
-| Data/hora | 2026-07-23T13:00:34-03:00 |
+| Hash | `d05bde5` |
+| Mensagem | `fix: inicializa selecao de etapa no modal de premiacao para resolver default por sexo de etapa no carregamento inicial` |
+| Data/hora | 2026-07-23T13:14:10-03:00 |
 | Push feito? | ✅ Sim |
-| Deploy EasyPanel confirmado? | ⏳ Em andamento (acao cmrxp7a6p007807s9a7on3mwr) |
+| Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `55c6a90` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `d05bde5` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
