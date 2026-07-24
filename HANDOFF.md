@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `589de2b` |
-| Mensagem | `fix: calcula a posicao exata do ranking, pontuacao acumulada real e medalha do atleta no certificado` |
-| Data/hora | 2026-07-24T17:27:22-03:00 |
+| Hash | `39b61d8` |
+| Mensagem | `fix: corrige chaveamento do mapa de atletas prevenindo duplicacao com pontuacao zerada no ranking do certificado` |
+| Data/hora | 2026-07-24T18:01:02-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `589de2b` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `39b61d8` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
