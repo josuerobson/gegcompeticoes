@@ -57,7 +57,7 @@ const DEFAULT_CERTIFICATE_ELEMENTS: TextElement[] = [
   },
   {
     id: 'c3',
-    text: '{POSICAO_GERAL} com {PONTOS} pontos - Classificação {MEDALHA}',
+    text: '{POSICAO_GERAL} geral com {PONTOS} pontos - Classificação {MEDALHA}',
     x: 10,
     y: 48,
     fontSize: 16,
@@ -201,6 +201,95 @@ export function ClubCertificatesViewer({
   const getModalityName = (mId: string) => modalities.find(m => m.id === mId)?.name || mId;
   const getChampTitle = (cId: string) => championships.find(c => c.id === cId)?.title || 'Campeonato G&G';
 
+  // Helper function to calculate ranking, scores, and medals for a championship & modality
+  const computeAthletePerformance = (
+    userId: string,
+    userName: string,
+    championshipId: string,
+    modalityId: string
+  ) => {
+    const modObj = modalities.find(m => m.id === modalityId);
+    const modName = modObj?.name || '';
+
+    // Get all scores for this championship & modality
+    const matchingScores = stageScores.filter(s =>
+      s.championshipId === championshipId &&
+      (s.modalityId === modalityId || s.modality === modName || (modName && s.modality?.toLowerCase() === modName.toLowerCase()))
+    );
+
+    // Group scores by athlete (userId or shooterName)
+    const athleteTotals: Record<string, { userId: string; name: string; totalScore: number; hitFactor: number; stageCount: number }> = {};
+
+    for (const s of matchingScores) {
+      const u = users.find(usr => usr.id === s.userId || (usr.fullName && s.shooterName && usr.fullName.toLowerCase() === s.shooterName.toLowerCase()));
+      const key = u?.id || s.userId || s.shooterName || 'unknown';
+      if (!athleteTotals[key]) {
+        athleteTotals[key] = {
+          userId: u?.id || s.userId || '',
+          name: u?.fullName || s.shooterName || '',
+          totalScore: 0,
+          hitFactor: 0,
+          stageCount: 0
+        };
+      }
+      athleteTotals[key].totalScore += (s.score || 0);
+      athleteTotals[key].hitFactor = Math.max(athleteTotals[key].hitFactor, s.hitFactor || 0);
+      athleteTotals[key].stageCount += 1;
+    }
+
+    // Also include registrations for athletes who registered
+    const matchingRegs = registrations.filter(r => r.championshipId === championshipId && r.modalityId === modalityId && r.paymentStatus === 'approved');
+    for (const r of matchingRegs) {
+      const u = users.find(usr => usr.id === r.userId);
+      const key = r.userId;
+      if (!athleteTotals[key]) {
+        athleteTotals[key] = {
+          userId: r.userId,
+          name: u?.fullName || '',
+          totalScore: 0,
+          hitFactor: 0,
+          stageCount: 1
+        };
+      }
+    }
+
+    // Sort ranking list
+    const rankedList = Object.values(athleteTotals).sort((a, b) => {
+      if (modObj?.evaluationType === 'tempo') {
+        return a.totalScore - b.totalScore;
+      } else if (modObj?.evaluationType === 'pontuacao_tempo') {
+        return b.hitFactor - a.hitFactor;
+      } else {
+        return b.totalScore - a.totalScore;
+      }
+    });
+
+    // Find target athlete position (1-indexed)
+    const rankIndex = rankedList.findIndex(item => item.userId === userId || (userName && item.name.toLowerCase() === userName.toLowerCase()));
+    const positionNum = rankIndex >= 0 ? rankIndex + 1 : 1;
+    const targetPerf = rankIndex >= 0 ? rankedList[rankIndex] : null;
+
+    const totalScore = targetPerf ? targetPerf.totalScore : 0;
+    const stageCount = targetPerf && targetPerf.stageCount > 0 ? targetPerf.stageCount : 1;
+    const bestHitFactor = targetPerf ? targetPerf.hitFactor : 0;
+
+    const posicaoStr = `${positionNum}º`;
+
+    let medalhaStr = 'HOMOLOGADO';
+    if (positionNum === 1) medalhaStr = 'OURO';
+    else if (positionNum === 2) medalhaStr = 'PRATA';
+    else if (positionNum === 3) medalhaStr = 'BRONZE';
+
+    return {
+      positionNum,
+      posicaoStr,
+      totalScore,
+      stageCount,
+      bestHitFactor,
+      medalhaStr
+    };
+  };
+
   // Filter approved registrations for the selected club
   const eligibleRegistrations = registrations.filter(r => {
     if (r.paymentStatus !== 'approved') return false;
@@ -290,7 +379,7 @@ export function ClubCertificatesViewer({
       .replace(/{ETAPA}/g, `${cert.stageCount} Etapa(s) Homologada(s)`)
       .replace(/{MODALIDADE}/g, cert.modalityName)
       .replace(/{PONTOS}/g, cert.totalScore.toFixed(2))
-      .replace(/{POSICAO_GERAL}/g, cert.posicao === 'Geral' ? 'Classificação' : cert.posicao)
+      .replace(/{POSICAO_GERAL}/g, cert.posicao)
       .replace(/{MEDALHA}/g, cert.medalha)
       .replace(/{POSICAO_CATEGORIA}/g, '')
       .replace(/{DATA_INICIO}/g, startDateFormatted)
@@ -391,10 +480,12 @@ export function ClubCertificatesViewer({
             const champ = championships.find(c => c.id === reg.championshipId);
             const modName = getModalityName(reg.modalityId);
 
-            const userScores = stageScores.filter(s => s.userId === reg.userId && s.championshipId === reg.championshipId && s.modalityId === reg.modalityId);
-            const totalScore = userScores.reduce((sum, s) => sum + s.score, 0);
-            const bestHitFactor = userScores.length > 0 ? Math.max(...userScores.map(s => s.hitFactor || 0)) : 0;
-            const stageCount = userScores.length > 0 ? userScores.length : 1;
+            const perf = computeAthletePerformance(
+              reg.userId,
+              athlete?.fullName || '',
+              reg.championshipId,
+              reg.modalityId
+            );
 
             const certData: CertificatePrintModalData = {
               athleteName: athlete?.fullName || 'Atleta G&G',
@@ -403,11 +494,11 @@ export function ClubCertificatesViewer({
               crNumber: reg.crNumber || athlete?.crNumber || '572103',
               championshipTitle: champ?.title || 'Campeonato G&G',
               modalityName: modName,
-              stageCount: stageCount,
-              totalScore: totalScore,
-              bestHitFactor: bestHitFactor,
-              posicao: 'Geral',
-              medalha: 'HOMOLOGADO',
+              stageCount: perf.stageCount,
+              totalScore: perf.totalScore,
+              bestHitFactor: perf.bestHitFactor,
+              posicao: perf.posicaoStr,
+              medalha: perf.medalhaStr,
               hash: `GG-CERT-${reg.id.slice(0, 10).toUpperCase()}`,
               clubId: reg.clubId || athlete?.clubId || selectedClubId
             };
@@ -434,8 +525,8 @@ export function ClubCertificatesViewer({
                     <p className="font-bold text-blue-900 truncate">{champ?.title || 'Campeonato'}</p>
                     <p className="text-[11px] text-slate-600">Modalidade: <strong className="text-slate-800">{modName}</strong></p>
                     <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-slate-600 pt-1 border-t border-slate-200/60">
-                      <div>Pontuação: <strong className="text-blue-700">{totalScore.toFixed(2)} pts</strong></div>
-                      <div>Etapas Disputadas: <strong className="text-slate-800">{stageCount}</strong></div>
+                      <div>Pontuação: <strong className="text-blue-700">{perf.totalScore.toFixed(2)} pts</strong></div>
+                      <div>Posição: <strong className="text-amber-700">{perf.posicaoStr} ({perf.medalhaStr})</strong></div>
                     </div>
                   </div>
                 </div>
