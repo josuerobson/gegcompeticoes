@@ -206,68 +206,83 @@ export function ClubCertificatesViewer({
     userId: string,
     userName: string,
     championshipId: string,
-    modalityId: string
+    modalityId: string,
+    registrationId?: string
   ) => {
     const modObj = modalities.find(m => m.id === modalityId);
+    const champObj = championships.find(c => c.id === championshipId);
     const modName = modObj?.name || '';
 
     // Get all scores for this championship & modality
     const matchingScores = stageScores.filter(s =>
       s.championshipId === championshipId &&
-      (s.modalityId === modalityId || s.modality === modName || (modName && s.modality?.toLowerCase() === modName.toLowerCase()))
+      (s.modalityId === modalityId || (modName && s.modality?.toLowerCase() === modName.toLowerCase()))
     );
 
-    // Group scores by athlete (userId or shooterName)
-    const athleteTotals: Record<string, { userId: string; name: string; totalScore: number; hitFactor: number; stageCount: number }> = {};
+    // Group scores by athlete/registration
+    const athleteMap: Record<string, {
+      userId: string;
+      registrationId: string;
+      shooterName: string;
+      totalScore: number;
+      hitFactor: number;
+      stageCount: number;
+      scoreX: number;
+      scoreP10: number;
+      scoreP9: number;
+    }> = {};
 
     for (const s of matchingScores) {
-      const u = users.find(usr => usr.id === s.userId || (usr.fullName && s.shooterName && usr.fullName.toLowerCase() === s.shooterName.toLowerCase()));
-      const key = u?.id || s.userId || s.shooterName || 'unknown';
-      if (!athleteTotals[key]) {
-        athleteTotals[key] = {
+      const reg = registrations.find(r => r.id === s.registrationId || (r.userId === s.userId && r.championshipId === championshipId && r.modalityId === modalityId));
+      const u = users.find(usr => usr.id === (reg?.userId || s.userId) || (usr.fullName && s.shooterName && usr.fullName.toLowerCase() === s.shooterName.toLowerCase()));
+      
+      const key = reg?.id || u?.id || s.userId || s.shooterName || 'unknown';
+
+      if (!athleteMap[key]) {
+        athleteMap[key] = {
           userId: u?.id || s.userId || '',
-          name: u?.fullName || s.shooterName || '',
+          registrationId: reg?.id || s.registrationId || '',
+          shooterName: u?.fullName || s.shooterName || '',
           totalScore: 0,
           hitFactor: 0,
-          stageCount: 0
+          stageCount: 0,
+          scoreX: reg?.scoreX || 0,
+          scoreP10: reg?.scoreP10 || 0,
+          scoreP9: reg?.scoreP9 || 0
         };
       }
-      athleteTotals[key].totalScore += (s.score || 0);
-      athleteTotals[key].hitFactor = Math.max(athleteTotals[key].hitFactor, s.hitFactor || 0);
-      athleteTotals[key].stageCount += 1;
+
+      athleteMap[key].totalScore += (s.score || 0);
+      athleteMap[key].hitFactor = Math.max(athleteMap[key].hitFactor, s.hitFactor || 0);
+      athleteMap[key].stageCount += 1;
     }
 
-    // Also include registrations for athletes who registered
-    const matchingRegs = registrations.filter(r => r.championshipId === championshipId && r.modalityId === modalityId && r.paymentStatus === 'approved');
-    for (const r of matchingRegs) {
-      const u = users.find(usr => usr.id === r.userId);
-      const key = r.userId;
-      if (!athleteTotals[key]) {
-        athleteTotals[key] = {
-          userId: r.userId,
-          name: u?.fullName || '',
-          totalScore: 0,
-          hitFactor: 0,
-          stageCount: 1
-        };
-      }
-    }
-
-    // Sort ranking list
-    const rankedList = Object.values(athleteTotals).sort((a, b) => {
+    // Sort ranking list using exact tie-breakers as CompetitionResultsViewer
+    const sortedList = Object.values(athleteMap).sort((a, b) => {
       if (modObj?.evaluationType === 'tempo') {
         return a.totalScore - b.totalScore;
       } else if (modObj?.evaluationType === 'pontuacao_tempo') {
         return b.hitFactor - a.hitFactor;
       } else {
-        return b.totalScore - a.totalScore;
+        if (b.totalScore !== a.totalScore) {
+          return b.totalScore - a.totalScore;
+        }
+        if (b.scoreX !== a.scoreX) return b.scoreX - a.scoreX;
+        if (b.scoreP10 !== a.scoreP10) return b.scoreP10 - a.scoreP10;
+        if (b.scoreP9 !== a.scoreP9) return b.scoreP9 - a.scoreP9;
+        return 0;
       }
     });
 
-    // Find target athlete position (1-indexed)
-    const rankIndex = rankedList.findIndex(item => item.userId === userId || (userName && item.name.toLowerCase() === userName.toLowerCase()));
+    // Find target athlete position
+    const rankIndex = sortedList.findIndex(item =>
+      (registrationId && item.registrationId === registrationId) ||
+      (userId && item.userId === userId) ||
+      (userName && item.shooterName.toLowerCase() === userName.toLowerCase())
+    );
+
     const positionNum = rankIndex >= 0 ? rankIndex + 1 : 1;
-    const targetPerf = rankIndex >= 0 ? rankedList[rankIndex] : null;
+    const targetPerf = rankIndex >= 0 ? sortedList[rankIndex] : null;
 
     const totalScore = targetPerf ? targetPerf.totalScore : 0;
     const stageCount = targetPerf && targetPerf.stageCount > 0 ? targetPerf.stageCount : 1;
@@ -275,10 +290,24 @@ export function ClubCertificatesViewer({
 
     const posicaoStr = `${positionNum}º`;
 
+    // Determine medal: check championship minimum cutoffs first
+    const goldMin = champObj?.pontuacaoMinimaAtletaOuro || 0;
+    const silverMin = champObj?.pontuacaoMinimaAtletaPrata || 0;
+    const bronzeMin = champObj?.pontuacaoMinimaAtletaBronze || 0;
+
     let medalhaStr = 'HOMOLOGADO';
-    if (positionNum === 1) medalhaStr = 'OURO';
-    else if (positionNum === 2) medalhaStr = 'PRATA';
-    else if (positionNum === 3) medalhaStr = 'BRONZE';
+    if (goldMin > 0 && totalScore >= goldMin) {
+      medalhaStr = 'OURO';
+    } else if (silverMin > 0 && totalScore >= silverMin) {
+      medalhaStr = 'PRATA';
+    } else if (bronzeMin > 0 && totalScore >= bronzeMin) {
+      medalhaStr = 'BRONZE';
+    } else {
+      // Fallback by rank if no cutoffs defined
+      if (positionNum === 1) medalhaStr = 'OURO';
+      else if (positionNum === 2) medalhaStr = 'PRATA';
+      else if (positionNum === 3) medalhaStr = 'BRONZE';
+    }
 
     return {
       positionNum,
@@ -484,7 +513,8 @@ export function ClubCertificatesViewer({
               reg.userId,
               athlete?.fullName || '',
               reg.championshipId,
-              reg.modalityId
+              reg.modalityId,
+              reg.id
             );
 
             const certData: CertificatePrintModalData = {
