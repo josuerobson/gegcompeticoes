@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Post, User, Comment, ShootingResult } from '../types';
-import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw } from 'lucide-react';
+import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { shootingImages } from '../data/mockData';
 import likeIcon from '@/assets/like_icon.png';
@@ -9,7 +9,7 @@ interface FeedProps {
   posts: Post[];
   currentUser: User | null;
   users: User[];
-  onAddPost: (content: string, imageUrl?: string, targetScore?: ShootingResult) => Promise<void>;
+  onAddPost: (content: string, imageUrl?: string, targetScore?: ShootingResult, imageUrls?: string[]) => Promise<void>;
   onLikePost: (postId: string) => Promise<void>;
   onCommentPost: (postId: string, content: string) => Promise<void>;
   onToggleFollow: (userId: string) => Promise<void>;
@@ -45,6 +45,33 @@ export default function FeedView({
   const [gunModel, setGunModel] = useState('Glock 17 Gen 5');
   const [caliber, setCaliber] = useState('9mm');
   const [discipline, setDiscipline] = useState('IPSC Handgun');
+
+  // Multi-image selection state for post creation (max 5)
+  const [postImages, setPostImages] = useState<string[]>([]);
+
+  // Fullscreen Lightbox Modal state for expanding post photos
+  const [lightboxState, setLightboxState] = useState<{
+    images: string[];
+    currentIndex: number;
+    authorName?: string;
+    authorAvatar?: string;
+  } | null>(null);
+
+  // Keyboard navigation for Lightbox
+  useEffect(() => {
+    if (!lightboxState) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setLightboxState(null);
+      } else if (e.key === 'ArrowLeft') {
+        setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex - 1 + prev.images.length) % prev.images.length } : null);
+      } else if (e.key === 'ArrowRight') {
+        setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex + 1) % prev.images.length } : null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lightboxState]);
 
   // Comment input state
   const [commentInputs, setCommentInputs] = useState<{ [postId: string]: string }>({});
@@ -119,9 +146,14 @@ export default function FeedView({
     e.preventDefault();
     setIsSubmittingPost(true);
     try {
-      const finalImg = customImagePreview !== '' 
+      const singleFallbackImg = customImagePreview !== '' 
         ? customImagePreview 
         : (customImageUrl.trim() !== '' ? customImageUrl.trim() : selectedImagePreset);
+      
+      const finalImagesList = postImages.length > 0
+        ? postImages.slice(0, 5)
+        : (singleFallbackImg ? [singleFallbackImg] : undefined);
+
       let scoreObj: ShootingResult | undefined;
       
       if (includeTargetScore) {
@@ -136,13 +168,14 @@ export default function FeedView({
         };
       }
 
-      await onAddPost(postContent, finalImg, scoreObj);
+      await onAddPost(postContent, finalImagesList?.[0], scoreObj, finalImagesList);
       
       // Reset
       setPostContent('');
       setCustomImageUrl('');
       setCustomImagePreview('');
       setCustomImageFile(null);
+      setPostImages([]);
       setIncludeTargetScore(false);
       setIsPostingOpen(false);
     } catch (err) {
@@ -288,35 +321,179 @@ export default function FeedView({
                     </div>
                   </div>
 
-                  {/* Optional Image - 100% Full Uncropped Display */}
-                  {post.imageUrl && (
-                    <div className="relative bg-slate-950/90 overflow-hidden flex items-center justify-center min-h-[200px] max-h-[650px] w-full">
-                      {/* Soft blurred background layer matching the photo */}
-                      <div
-                        className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40 scale-110 pointer-events-none"
-                        style={{ backgroundImage: `url("${post.imageUrl || defaultImage}")` }}
-                      />
-                      
-                      {/* Main Uncropped Image */}
-                      <img
-                        src={post.imageUrl || defaultImage}
-                        alt="Post Asset"
-                        className="relative z-10 max-w-full max-h-[650px] w-auto h-auto object-contain mx-auto shadow-md"
-                        referrerPolicy="no-referrer"
-                        onError={(e) => {
-                          e.currentTarget.onerror = null;
-                          if (defaultImage) e.currentTarget.src = defaultImage;
-                        }}
-                      />
-                      
-                      {/* Floating Indicator of Shooting Record */}
-                      {hasScore && (
-                        <div className="absolute top-3 right-3 z-20 bg-blue-600/90 backdrop-blur-md text-white rounded-full p-2 shadow-lg flex items-center justify-center">
-                          <Target className="w-5 h-5 animate-pulse" />
+                  {/* Multi-Image Gallery Grid & Lightbox Trigger */}
+                  {(() => {
+                    const imagesList = post.imageUrls && post.imageUrls.length > 0
+                      ? post.imageUrls
+                      : (post.imageUrl ? [post.imageUrl] : []);
+
+                    if (imagesList.length === 0) return null;
+
+                    const openLightbox = (idx: number) => {
+                      setLightboxState({
+                        images: imagesList,
+                        currentIndex: idx,
+                        authorName: post.username,
+                        authorAvatar: post.userAvatar
+                      });
+                    };
+
+                    // 1 Photo Layout
+                    if (imagesList.length === 1) {
+                      return (
+                        <div
+                          onClick={() => openLightbox(0)}
+                          className="relative bg-slate-950/90 overflow-hidden flex items-center justify-center min-h-[200px] max-h-[600px] w-full cursor-pointer group select-none"
+                        >
+                          <div
+                            className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40 scale-110 pointer-events-none"
+                            style={{ backgroundImage: `url("${imagesList[0]}")` }}
+                          />
+                          <img
+                            src={imagesList[0]}
+                            alt="Post Asset"
+                            className="relative z-10 max-w-full max-h-[600px] w-auto h-auto object-contain mx-auto shadow-md group-hover:scale-[1.01] transition duration-200"
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              if (defaultImage) e.currentTarget.src = defaultImage;
+                            }}
+                          />
+                          <div className="absolute top-3 right-3 z-20 bg-slate-900/70 hover:bg-slate-900 text-white rounded-full p-2 backdrop-blur-md shadow-lg flex items-center justify-center transition">
+                            <Maximize2 className="w-4 h-4" />
+                          </div>
+                          {hasScore && (
+                            <div className="absolute top-3 left-3 z-20 bg-blue-600/90 backdrop-blur-md text-white rounded-full p-2 shadow-lg flex items-center justify-center">
+                              <Target className="w-5 h-5 animate-pulse" />
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  )}
+                      );
+                    }
+
+                    // 2 Photos Layout
+                    if (imagesList.length === 2) {
+                      return (
+                        <div className="grid grid-cols-2 gap-1 bg-slate-950 overflow-hidden max-h-[420px] relative select-none">
+                          {imagesList.slice(0, 2).map((img, idx) => (
+                            <div
+                              key={idx}
+                              onClick={() => openLightbox(idx)}
+                              className="relative aspect-[4/3] sm:aspect-square overflow-hidden cursor-pointer group bg-slate-900"
+                            >
+                              <img src={img} alt={`Foto ${idx+1}`} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" referrerPolicy="no-referrer" />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
+                                <Maximize2 className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition duration-200 drop-shadow-md" />
+                              </div>
+                              <span className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-mono">
+                                #{idx+1}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }
+
+                    // 3 Photos Layout
+                    if (imagesList.length === 3) {
+                      return (
+                        <div className="grid grid-cols-3 gap-1 bg-slate-950 overflow-hidden max-h-[420px] relative select-none">
+                          <div
+                            onClick={() => openLightbox(0)}
+                            className="col-span-2 relative h-full min-h-[220px] overflow-hidden cursor-pointer group bg-slate-900"
+                          >
+                            <img src={imagesList[0]} alt="Foto 1" className="w-full h-full object-cover group-hover:scale-105 transition duration-300" referrerPolicy="no-referrer" />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
+                              <Maximize2 className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition duration-200 drop-shadow-md" />
+                            </div>
+                            <span className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-mono">
+                              #1
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-1 h-full min-h-[220px]">
+                            {imagesList.slice(1, 3).map((img, idx) => (
+                              <div
+                                key={idx}
+                                onClick={() => openLightbox(idx + 1)}
+                                className="relative h-1/2 overflow-hidden cursor-pointer group bg-slate-900"
+                              >
+                                <img src={img} alt={`Foto ${idx+2}`} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" referrerPolicy="no-referrer" />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
+                                  <Maximize2 className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition duration-200 drop-shadow-md" />
+                                </div>
+                                <span className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-mono">
+                                  #{idx+2}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // 4 Photos Layout
+                    if (imagesList.length === 4) {
+                      return (
+                        <div className="grid grid-cols-2 gap-1 bg-slate-950 overflow-hidden max-h-[440px] relative select-none">
+                          {imagesList.slice(0, 4).map((img, idx) => (
+                            <div
+                              key={idx}
+                              onClick={() => openLightbox(idx)}
+                              className="relative aspect-[4/3] overflow-hidden cursor-pointer group bg-slate-900"
+                            >
+                              <img src={img} alt={`Foto ${idx+1}`} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" referrerPolicy="no-referrer" />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
+                                <Maximize2 className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition duration-200 drop-shadow-md" />
+                              </div>
+                              <span className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-mono">
+                                #{idx+1}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }
+
+                    // 5+ Photos Layout (2 top row + 3 bottom row)
+                    return (
+                      <div className="flex flex-col gap-1 bg-slate-950 overflow-hidden max-h-[460px] relative select-none">
+                        <div className="grid grid-cols-2 gap-1 h-[220px]">
+                          {imagesList.slice(0, 2).map((img, idx) => (
+                            <div
+                              key={idx}
+                              onClick={() => openLightbox(idx)}
+                              className="relative h-full overflow-hidden cursor-pointer group bg-slate-900"
+                            >
+                              <img src={img} alt={`Foto ${idx+1}`} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" referrerPolicy="no-referrer" />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
+                                <Maximize2 className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition duration-200 drop-shadow-md" />
+                              </div>
+                              <span className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-mono">
+                                #{idx+1}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-3 gap-1 h-[200px]">
+                          {imagesList.slice(2, 5).map((img, idx) => (
+                            <div
+                              key={idx}
+                              onClick={() => openLightbox(idx + 2)}
+                              className="relative h-full overflow-hidden cursor-pointer group bg-slate-900"
+                            >
+                              <img src={img} alt={`Foto ${idx+3}`} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" referrerPolicy="no-referrer" />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
+                                <Maximize2 className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition duration-200 drop-shadow-md" />
+                              </div>
+                              <span className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-mono">
+                                #{idx+3}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Body Content */}
                   <div className="p-4 space-y-4">
@@ -565,83 +742,137 @@ export default function FeedView({
                   />
                 </div>
 
-                {/* Preset Image selectors */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase block">Escolha uma foto da galeria do clube</label>
-                  <div className="grid grid-cols-5 gap-2">
-                    {Object.entries(shootingImages).slice(0, 5).map(([key, url]) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => {
-                          setSelectedImagePreset(url);
-                          setCustomImageUrl('');
-                        }}
-                        className={`aspect-square rounded-lg overflow-hidden border-2 relative ${selectedImagePreset === url ? 'border-blue-600 scale-95 ring-2 ring-blue-300' : 'border-transparent'}`}
-                      >
-                        <img src={url} alt={key} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                        {selectedImagePreset === url && (
-                          <div className="absolute inset-0 bg-blue-600/20 flex items-center justify-center">
-                            <CheckCircle2 className="w-5 h-5 text-white" />
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="pt-2">
-                    <span className="text-[11px] text-slate-450 block text-center font-medium">Ou adicione URL da sua imagem:</span>
-                    <input
-                      type="url"
-                      placeholder="Ex: https://minha-foto-no-clube.jpg"
-                      value={customImageUrl}
-                      onChange={(e) => {
-                        setCustomImageUrl(e.target.value);
-                        setSelectedImagePreset('');
-                        setCustomImagePreview('');
-                        setCustomImageFile(null);
-                      }}
-                      className="w-full mt-1 bg-slate-50 border border-slate-200 outline-none px-3 py-1.5 rounded-xl text-xs text-slate-600 focus:border-blue-500"
-                    />
+                {/* Multi-Image Gallery Selector (max 5) */}
+                <div className="space-y-2.5 border border-slate-200 bg-slate-50/50 p-3.5 rounded-xl">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 uppercase flex items-center gap-1.5">
+                      <Images className="w-4 h-4 text-blue-600" />
+                      Galeria de Fotos ({postImages.length}/5)
+                    </label>
+                    {postImages.length >= 5 ? (
+                      <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                        Limite de 5 fotos atingido
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        Até 5 fotos por publicação
+                      </span>
+                    )}
                   </div>
 
-                  <div className="pt-2 border-t border-slate-100 mt-2 flex flex-col gap-2">
-                    <span className="text-[11px] text-slate-450 block font-medium">Ou envie uma foto do seu computador:</span>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            setCustomImageFile(file);
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setCustomImagePreview(reader.result as string);
-                              setSelectedImagePreset('');
-                              setCustomImageUrl('');
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                        className="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-                      />
-                      {customImagePreview && (
-                        <div className="relative w-10 h-10 rounded border border-slate-200 overflow-hidden flex-shrink-0 bg-slate-50">
-                          <img src={customImagePreview} alt="Preview" className="w-full h-full object-cover" />
+                  {/* Selected Images Grid Preview */}
+                  {postImages.length > 0 && (
+                    <div className="grid grid-cols-5 gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
+                      {postImages.map((imgUrl, idx) => (
+                        <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-slate-300 bg-slate-900 group">
+                          <img src={imgUrl} alt={`Foto ${idx+1}`} className="w-full h-full object-cover" />
                           <button
                             type="button"
-                            onClick={() => {
-                              setCustomImageFile(null);
-                              setCustomImagePreview('');
-                            }}
-                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 shadow hover:bg-red-650 flex items-center justify-center cursor-pointer"
+                            onClick={() => setPostImages(prev => prev.filter((_, i) => i !== idx))}
+                            className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow-md transition cursor-pointer"
+                            title="Remover foto"
                           >
-                            <X className="w-2.5 h-2.5" />
+                            <X className="w-3 h-3" />
                           </button>
+                          <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded font-mono font-bold">
+                            #{idx + 1}
+                          </span>
                         </div>
-                      )}
+                      ))}
                     </div>
-                  </div>
+                  )}
+
+                  {/* Add Images Controls (only if < 5) */}
+                  {postImages.length < 5 && (
+                    <div className="space-y-3 pt-1">
+                      {/* Presets */}
+                      <div>
+                        <span className="text-[11px] text-slate-500 font-semibold block mb-1">
+                          Adicionar da galeria do clube:
+                        </span>
+                        <div className="grid grid-cols-5 gap-1.5">
+                          {Object.entries(shootingImages).slice(0, 5).map(([key, url]) => {
+                            const isAdded = postImages.includes(url);
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                disabled={isAdded}
+                                onClick={() => {
+                                  if (!isAdded && postImages.length < 5) {
+                                    setPostImages(prev => [...prev, url]);
+                                  }
+                                }}
+                                className={`aspect-square rounded-lg overflow-hidden border-2 relative transition cursor-pointer ${
+                                  isAdded
+                                    ? 'opacity-40 border-slate-300 cursor-not-allowed scale-95'
+                                    : 'border-slate-200 hover:border-blue-500 hover:scale-105'
+                                }`}
+                                title={isAdded ? 'Foto já adicionada' : 'Adicionar à galeria'}
+                              >
+                                <img src={url} alt={key} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                {isAdded && (
+                                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                    <CheckCircle2 className="w-4 h-4 text-white" />
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* File upload or URL */}
+                      <div className="pt-2 border-t border-slate-200/60 flex flex-col sm:flex-row items-center gap-2">
+                        <label className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 shadow-2xs">
+                          <Plus className="w-4 h-4" />
+                          Enviar do PC
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file && postImages.length < 5) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  if (reader.result) {
+                                    setPostImages(prev => [...prev, reader.result as string]);
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+
+                        <div className="flex-1 flex gap-1.5 w-full">
+                          <input
+                            type="url"
+                            placeholder="Ou colar URL da imagem..."
+                            value={customImageUrl}
+                            onChange={(e) => setCustomImageUrl(e.target.value)}
+                            className="flex-1 bg-white border border-slate-200 outline-none px-3 py-1.5 rounded-xl text-xs text-slate-700 focus:border-blue-500"
+                          />
+                          {customImageUrl.trim() !== '' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (customImageUrl.trim() && postImages.length < 5) {
+                                  setPostImages(prev => [...prev, customImageUrl.trim()]);
+                                  setCustomImageUrl('');
+                                }
+                              }}
+                              className="bg-blue-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-blue-700 transition cursor-pointer shrink-0"
+                            >
+                              Adicionar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Shooting Result checkbox switch */}
@@ -841,6 +1072,103 @@ export default function FeedView({
               </div>
             );
           })()
+        )}
+      </AnimatePresence>
+
+      {/* Fullscreen Multi-Image Lightbox Modal */}
+      <AnimatePresence>
+        {lightboxState && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col justify-between p-4 sm:p-6 select-none"
+          >
+            {/* Top Bar Header */}
+            <div className="flex items-center justify-between text-white border-b border-white/10 pb-3">
+              <div className="flex items-center gap-3">
+                {lightboxState.authorAvatar && (
+                  <img src={lightboxState.authorAvatar} alt="Avatar" className="w-8 h-8 rounded-full object-cover border border-white/20" />
+                )}
+                <div>
+                  {lightboxState.authorName && (
+                    <span className="font-bold text-xs text-white block">@{lightboxState.authorName}</span>
+                  )}
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    Foto {lightboxState.currentIndex + 1} de {lightboxState.images.length}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setLightboxState(null)}
+                className="text-white/70 hover:text-white bg-white/10 hover:bg-white/20 w-9 h-9 rounded-full flex items-center justify-center font-bold transition cursor-pointer"
+                title="Fechar (Esc)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Main Center Image Display with Navigation Arrows */}
+            <div className="relative flex-1 flex items-center justify-center my-3 overflow-hidden">
+              {/* Left Arrow Button */}
+              {lightboxState.images.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex - 1 + prev.images.length) % prev.images.length } : null)}
+                  className="absolute left-2 sm:left-4 z-20 bg-black/60 hover:bg-black/90 text-white p-3 rounded-full border border-white/10 transition cursor-pointer hover:scale-110 shadow-lg"
+                  title="Foto anterior (Seta esquerda)"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
+              )}
+
+              {/* Enlarged Photo */}
+              <motion.img
+                key={lightboxState.currentIndex}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.2 }}
+                src={lightboxState.images[lightboxState.currentIndex]}
+                alt={`Foto ${lightboxState.currentIndex + 1}`}
+                className="max-w-full max-h-[75vh] w-auto h-auto object-contain mx-auto shadow-2xl rounded-xl"
+                referrerPolicy="no-referrer"
+              />
+
+              {/* Right Arrow Button */}
+              {lightboxState.images.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex + 1) % prev.images.length } : null)}
+                  className="absolute right-2 sm:right-4 z-20 bg-black/60 hover:bg-black/90 text-white p-3 rounded-full border border-white/10 transition cursor-pointer hover:scale-110 shadow-lg"
+                  title="Próxima foto (Seta direita)"
+                >
+                  <ChevronRight className="w-6 h-6" />
+                </button>
+              )}
+            </div>
+
+            {/* Bottom Thumbnails Strip */}
+            {lightboxState.images.length > 1 && (
+              <div className="flex items-center justify-center gap-2 pt-2 border-t border-white/10 overflow-x-auto">
+                {lightboxState.images.map((thumbUrl, tIdx) => (
+                  <button
+                    key={tIdx}
+                    type="button"
+                    onClick={() => setLightboxState(prev => prev ? { ...prev, currentIndex: tIdx } : null)}
+                    className={`w-12 h-12 rounded-lg overflow-hidden border-2 transition cursor-pointer shrink-0 ${
+                      tIdx === lightboxState.currentIndex
+                        ? 'border-blue-500 scale-110 opacity-100 ring-2 ring-blue-400/50'
+                        : 'border-white/20 opacity-50 hover:opacity-100'
+                    }`}
+                  >
+                    <img src={thumbUrl} alt={`Miniatura ${tIdx+1}`} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </motion.div>
         )}
       </AnimatePresence>
 

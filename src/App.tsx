@@ -659,7 +659,7 @@ export default function App() {
     }
   };
 
-  const handleAddPost = async (content: string, imageUrl?: string, targetScore?: ShootingResult) => {
+  const handleAddPost = async (content: string, imageUrl?: string, targetScore?: ShootingResult, imageUrls?: string[]) => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {
       authHeaders['x-user-id'] = currentUser.id;
@@ -669,7 +669,7 @@ export default function App() {
       const res = await fetch('/api/posts', {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ content, imageUrl, targetScore })
+        body: JSON.stringify({ content, imageUrl, targetScore, imageUrls })
       });
       if (res.ok) {
         await syncWithBackend();

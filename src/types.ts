@@ -1,4 +1,4 @@
-﻿export interface User {
+export interface User {
   id: string;
   email: string;
   username: string;
@@ -89,6 +89,7 @@ export interface Post {
   userAvatar: string;
   content: string;
   imageUrl?: string;
+  imageUrls?: string[];
   targetScore?: ShootingResult;
   likes: string[]; // list of user IDs
   comments: Comment[];

@@ -275,13 +275,27 @@ function mapStageScore(s: any): StageScore {
 }
 
 function mapPost(p: any): Post {
+  let parsedImageUrls: string[] | undefined = undefined;
+  if (p.image_url) {
+    if (typeof p.image_url === 'string' && p.image_url.trim().startsWith('[') && p.image_url.trim().endsWith(']')) {
+      try {
+        parsedImageUrls = JSON.parse(p.image_url.trim());
+      } catch (e) {
+        parsedImageUrls = [p.image_url];
+      }
+    } else {
+      parsedImageUrls = [p.image_url];
+    }
+  }
+
   return {
     id: p.id,
     userId: p.user_id,
     username: p.username,
     userAvatar: p.user_avatar,
     content: p.content,
-    imageUrl: p.image_url || undefined,
+    imageUrl: parsedImageUrls && parsedImageUrls.length > 0 ? parsedImageUrls[0] : (p.image_url || undefined),
+    imageUrls: parsedImageUrls,
     targetScore: p.target_score || undefined,
     likes: p.likes || [],
     comments: (p.comments || []).map((c: any) => ({
@@ -1060,12 +1074,24 @@ app.get('/api/posts', async (req, res) => {
 });
 
 app.post('/api/posts', requireAuth, async (req, res) => {
-  const { content, imageUrl, targetScore } = req.body;
+  const { content, imageUrl, imageUrls, targetScore } = req.body;
   const currentUser = (req as any).user as User;
 
-  if (!content && !imageUrl && !targetScore) {
-    return res.status(400).json({ error: 'Post deve conter texto, imagem ou resultado de tiro.' });
+  // Process image URLs array (limit to max 5 images)
+  let finalImageUrls: string[] | undefined = undefined;
+  if (Array.isArray(imageUrls) && imageUrls.length > 0) {
+    finalImageUrls = imageUrls.slice(0, 5);
+  } else if (imageUrl) {
+    finalImageUrls = [imageUrl];
   }
+
+  if (!content && (!finalImageUrls || finalImageUrls.length === 0) && !targetScore) {
+    return res.status(400).json({ error: 'Post deve conter texto, imagens ou resultado de tiro.' });
+  }
+
+  const storedImageUrl = finalImageUrls && finalImageUrls.length > 0
+    ? (finalImageUrls.length === 1 ? finalImageUrls[0] : JSON.stringify(finalImageUrls))
+    : null;
 
   const newPost: Post = {
     id: `post_${Date.now()}`,
@@ -1073,7 +1099,8 @@ app.post('/api/posts', requireAuth, async (req, res) => {
     username: currentUser.username,
     userAvatar: currentUser.avatarUrl,
     content: content || '',
-    imageUrl: imageUrl || undefined,
+    imageUrl: finalImageUrls && finalImageUrls.length > 0 ? finalImageUrls[0] : undefined,
+    imageUrls: finalImageUrls,
     targetScore: targetScore || undefined,
     likes: [],
     comments: [],
@@ -1090,7 +1117,7 @@ app.post('/api/posts', requireAuth, async (req, res) => {
         newPost.username,
         newPost.userAvatar,
         newPost.content,
-        newPost.imageUrl || null,
+        storedImageUrl,
         newPost.targetScore ? JSON.stringify(newPost.targetScore) : null,
         newPost.createdAt
       ]
