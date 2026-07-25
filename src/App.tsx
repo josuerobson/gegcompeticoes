@@ -186,7 +186,7 @@ export default function App() {
     setShowLoginModal(true);
   };
 
-  // Load backend session and DB contents
+  // Load backend session and DB contents in parallel
   const syncWithBackend = async (userIdForHeader?: string) => {
     setIsSyncing(true);
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
@@ -197,84 +197,105 @@ export default function App() {
     }
 
     try {
-      // 1. Fetch current session
-      const meRes = await fetch('/api/auth/me', { headers: authHeaders });
-      const meData = await meRes.json();
-      if (meData.user) {
-        setCurrentUser(meData.user);
-        localStorage.setItem('gg_user_id', meData.user.id);
-      } else {
-        setCurrentUser(null);
-        localStorage.removeItem('gg_user_id');
+      // 1. Fetch current session first
+      try {
+        const meRes = await fetch('/api/auth/me', { headers: authHeaders });
+        const meData = await meRes.json();
+        if (meData.user) {
+          setCurrentUser(meData.user);
+          localStorage.setItem('gg_user_id', meData.user.id);
+        } else {
+          setCurrentUser(null);
+          localStorage.removeItem('gg_user_id');
+        }
+      } catch (err) {
+        console.error('Error fetching /api/auth/me', err);
       }
 
-      // 2. Fetch system users
-      const usersRes = await fetch('/api/users', { headers: authHeaders });
-      const usersData = await usersRes.json();
-      setUsers(usersData.users || []);
+      // 2. Fetch all system data concurrently in a single parallel batch
+      const [
+        usersResult,
+        postsResult,
+        champResult,
+        regResult,
+        scoresResult,
+        clubsResult,
+        modalitiesResult,
+        stagesResult,
+        weaponsResult,
+        weaponLookupsResult,
+        settingsResult
+      ] = await Promise.allSettled([
+        fetch('/api/users', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/posts', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/championships', { headers: authHeaders }).then(r => r.json()),
+        targetUserId ? fetch('/api/registrations', { headers: authHeaders }).then(r => r.json()) : Promise.resolve({ registrations: [] }),
+        fetch('/api/scores', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/clubs', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/modalities', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/stages', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/weapons', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/weapon-lookups', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/settings', { headers: authHeaders }).then(r => r.json())
+      ]);
 
-      // 3. Fetch social posts
-      const postsRes = await fetch('/api/posts', { headers: authHeaders });
-      const postsData = await postsRes.json();
-      setPosts(postsData.posts || []);
+      if (usersResult.status === 'fulfilled' && usersResult.value?.users) {
+        setUsers(usersResult.value.users);
+      }
+      if (postsResult.status === 'fulfilled' && postsResult.value?.posts) {
+        setPosts(postsResult.value.posts);
+      }
+      
+      let fetchedChamps: Championship[] = [];
+      if (champResult.status === 'fulfilled' && champResult.value?.championships) {
+        fetchedChamps = champResult.value.championships;
+        setChampionships(fetchedChamps);
+      }
 
-      // 4. Fetch Tournaments
-      const champRes = await fetch('/api/championships', { headers: authHeaders });
-      const champData = await champRes.json();
-      setChampionships(champData.championships || []);
-
-      // 5. Fetch Registrations
-      if (targetUserId) {
-        const regRes = await fetch('/api/registrations', { headers: authHeaders });
-        const regData = await regRes.json();
-        setRegistrations(regData.registrations || []);
+      if (regResult.status === 'fulfilled' && regResult.value?.registrations) {
+        setRegistrations(regResult.value.registrations);
       } else {
         setRegistrations([]);
       }
 
-      // 6. Fetch Stage Scores
-      const scoresRes = await fetch('/api/scores', { headers: authHeaders });
-      const scoresData = await scoresRes.json();
-      setStageScores(scoresData.stageScores || []);
-
-      // 6b. Fetch clubs, modalities, stages and weapons (registration reference data)
-      const clubsRes = await fetch('/api/clubs', { headers: authHeaders });
-      const clubsData = await clubsRes.json();
-      setClubs(clubsData.clubs || []);
-
-      const modalitiesRes = await fetch('/api/modalities', { headers: authHeaders });
-      const modalitiesData = await modalitiesRes.json();
-      setModalities(modalitiesData.modalities || []);
-
-      const stagesRes = await fetch('/api/stages', { headers: authHeaders });
-      const stagesData = await stagesRes.json();
-      setStages(stagesData.stages || []);
-
-      const weaponsRes = await fetch('/api/weapons', { headers: authHeaders });
-      const weaponsData = await weaponsRes.json();
-      setWeapons(weaponsData.weapons || []);
-
-      const weaponLookupsRes = await fetch('/api/weapon-lookups', { headers: authHeaders });
-      const weaponLookupsData = await weaponLookupsRes.json();
-      setWeaponLookupOptions(weaponLookupsData.options || []);
-
-      // 7. Fetch Site Settings
-      const settingsRes = await fetch('/api/settings', { headers: authHeaders });
-      const settingsData = await settingsRes.json();
-      if (settingsData.settings) {
-        setSettings(settingsData.settings);
+      if (scoresResult.status === 'fulfilled' && scoresResult.value?.stageScores) {
+        setStageScores(scoresResult.value.stageScores);
       }
 
-      // Initialize selected modality for rankings if empty (resolve modality id -> name, since
-      // stage_scores/rankings still key off the modality display name, not its id)
-      if (champData.championships && champData.championships.length > 0 && !selectedRankingModality) {
-        const firstModalityId = champData.championships[0].modalities[0];
-        const firstModalityName = (modalitiesData.modalities || []).find((m: Modality) => m.id === firstModalityId)?.name || firstModalityId;
+      if (clubsResult.status === 'fulfilled' && clubsResult.value?.clubs) {
+        setClubs(clubsResult.value.clubs);
+      }
+
+      let fetchedModalities: Modality[] = [];
+      if (modalitiesResult.status === 'fulfilled' && modalitiesResult.value?.modalities) {
+        fetchedModalities = modalitiesResult.value.modalities;
+        setModalities(fetchedModalities);
+      }
+
+      if (stagesResult.status === 'fulfilled' && stagesResult.value?.stages) {
+        setStages(stagesResult.value.stages);
+      }
+
+      if (weaponsResult.status === 'fulfilled' && weaponsResult.value?.weapons) {
+        setWeapons(weaponsResult.value.weapons);
+      }
+
+      if (weaponLookupsResult.status === 'fulfilled' && weaponLookupsResult.value?.options) {
+        setWeaponLookupOptions(weaponLookupsResult.value.options);
+      }
+
+      if (settingsResult.status === 'fulfilled' && settingsResult.value?.settings) {
+        setSettings(settingsResult.value.settings);
+      }
+
+      if (fetchedChamps.length > 0 && !selectedRankingModality) {
+        const firstModalityId = fetchedChamps[0].modalities[0];
+        const firstModalityName = fetchedModalities.find((m: Modality) => m.id === firstModalityId)?.name || firstModalityId;
         setSelectedRankingModality(firstModalityName);
       }
 
     } catch (err) {
-      console.error('REST api syncing failed, running in clean sandbox local memory state.', err);
+      console.error('REST api syncing failed', err);
     } finally {
       setIsSyncing(false);
     }
@@ -381,6 +402,15 @@ export default function App() {
 
   // Inicialização do App: Sincroniza do banco de dados e analisa a rota inicial
   useEffect(() => {
+    let isSubscribed = true;
+
+    // Safety fallback: Force booting = false after 3 seconds max so initial screen never hangs
+    const bootTimer = setTimeout(() => {
+      if (isSubscribed) {
+        setBooting(false);
+      }
+    }, 3000);
+
     const initApp = async () => {
       await syncWithBackend();
       const userId = localStorage.getItem('gg_user_id');
@@ -395,9 +425,18 @@ export default function App() {
           }
         }
       }
-      setBooting(false);
+      if (isSubscribed) {
+        clearTimeout(bootTimer);
+        setBooting(false);
+      }
     };
+
     initApp();
+
+    return () => {
+      isSubscribed = false;
+      clearTimeout(bootTimer);
+    };
   }, []);
 
   // Analisa rota caso o currentUser mude (e.g. após o login ou restauração de sessão)
@@ -1157,10 +1196,52 @@ export default function App() {
 
   if (booting) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col justify-center items-center text-white p-6 font-sans">
-        <Target className="w-16 h-16 text-blue-500 animate-spin mb-6" />
-        <img src={logoGgCompeticoes} alt="G&G Competições" className="h-16 w-auto object-contain mb-2" />
-        <p className="text-xs text-slate-400 font-mono">Conectando atiradores federados de alta precisão...</p>
+      <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center text-white p-6 font-sans relative overflow-hidden select-none">
+        {/* Ambient Glowing Background */}
+        <div className="absolute w-96 h-96 bg-blue-600/10 rounded-full blur-3xl animate-pulse pointer-events-none" />
+        <div className="absolute w-64 h-64 bg-amber-500/10 rounded-full blur-2xl animate-pulse pointer-events-none delay-700" />
+
+        {/* Central Animated Target Core with Radar & Pulsing Rings */}
+        <div className="relative mb-8 flex items-center justify-center">
+          {/* Spinning dashed outer radar ring */}
+          <div className="w-28 h-28 border-2 border-dashed border-blue-500/40 rounded-full animate-spin [animation-duration:8s] absolute" />
+          {/* Pulsing ripple aura */}
+          <div className="w-36 h-36 border border-blue-400/20 rounded-full animate-ping absolute [animation-duration:3s]" />
+          
+          {/* Pulsing Target Core */}
+          <motion.div
+            animate={{ scale: [0.92, 1.12, 0.92], rotate: [0, 90, 180, 270, 360] }}
+            transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+            className="p-5 bg-gradient-to-br from-slate-900 to-blue-950 border border-blue-500/40 rounded-2xl shadow-[0_0_30px_rgba(59,130,246,0.35)] backdrop-blur-xs relative z-10"
+          >
+            <Target className="w-12 h-12 text-blue-400" />
+          </motion.div>
+        </div>
+
+        {/* G&G Competições Logo */}
+        <motion.img
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          src={logoGgCompeticoes}
+          alt="G&G Competições"
+          className="h-14 w-auto object-contain mb-5 filter drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]"
+        />
+
+        {/* Glowing Dynamic Shimmer Progress Bar */}
+        <div className="w-64 h-1.5 bg-slate-900 rounded-full overflow-hidden mb-6 relative border border-slate-800 shadow-inner">
+          <motion.div
+            className="h-full bg-gradient-to-r from-blue-600 via-sky-400 to-amber-400 rounded-full w-full"
+            initial={{ x: "-100%" }}
+            animate={{ x: "100%" }}
+            transition={{ repeat: Infinity, duration: 1.4, ease: "linear" }}
+          />
+        </div>
+
+        {/* Dynamic Status Text with Animated Spinner */}
+        <div className="flex items-center gap-2 text-xs text-blue-300 font-mono tracking-wide">
+          <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+          <span>Conectando atiradores federados de alta precisão...</span>
+        </div>
       </div>
     );
   }

@@ -274,6 +274,20 @@ export async function initDB() {
       );
     `);
 
+    // Database performance optimization indexes
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_likes_post_id ON likes(post_id);
+      CREATE INDEX IF NOT EXISTS idx_comments_post_id ON comments(post_id);
+      CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);
+      CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
+      CREATE INDEX IF NOT EXISTS idx_registrations_user ON registrations(user_id);
+      CREATE INDEX IF NOT EXISTS idx_registrations_championship ON registrations(championship_id);
+      CREATE INDEX IF NOT EXISTS idx_stage_scores_championship ON stage_scores(championship_id);
+      CREATE INDEX IF NOT EXISTS idx_stage_scores_registration ON stage_scores(registration_id);
+      CREATE INDEX IF NOT EXISTS idx_posts_user ON posts(user_id);
+      CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);
+    `);
+
     // Sanitize championships.modalities JSONB array: remove any deleted/orphaned modality IDs
     await client.query(`
       DO $$
