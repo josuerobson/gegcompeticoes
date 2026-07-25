@@ -1434,9 +1434,11 @@ export default function App() {
                       <h4 className={`font-display font-bold text-lg leading-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>
                         {champ.title}
                       </h4>
-                      <p className={`text-xs line-clamp-3 leading-relaxed ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                        {champ.description}
-                      </p>
+                      {champ.description && champ.description.trim() !== '' && champ.description.trim().toLowerCase() !== champ.title.trim().toLowerCase() && (
+                        <p className={`text-xs line-clamp-3 leading-relaxed ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                          {champ.description}
+                        </p>
+                      )}
                     </div>
                   </div>
 

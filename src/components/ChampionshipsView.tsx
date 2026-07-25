@@ -494,11 +494,11 @@ export default function ChampionshipsView({
                     <div
                       key={champ.id}
                       onClick={() => setViewingChampionship(champ)}
-                      className="bg-white rounded-2xl smooth-shadow border border-slate-100 hover:border-blue-400 hover:shadow-lg transition duration-200 cursor-pointer overflow-hidden flex flex-col group"
+                      className="bg-white dark:bg-slate-900 rounded-2xl smooth-shadow border border-slate-100 dark:border-slate-800 hover:border-blue-400 hover:shadow-lg transition duration-200 cursor-pointer overflow-hidden flex flex-col group"
                     >
                       
                       {/* Banner Image */}
-                      <div className="h-44 bg-slate-100 relative overflow-hidden">
+                      <div className="h-44 bg-slate-100 dark:bg-slate-800 relative overflow-hidden">
                         <img
                           src={champ.bannerUrl || defaultImage}
                           alt={champ.title}
@@ -531,30 +531,32 @@ export default function ChampionshipsView({
                       {/* Content */}
                       <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                         <div className="space-y-2">
-                          <h3 className="font-display font-bold text-lg text-slate-950 leading-snug group-hover:text-blue-600 transition">{champ.title}</h3>
-                          <p className="text-slate-500 text-xs leading-relaxed">{champ.description}</p>
+                          <h3 className="font-display font-bold text-lg text-slate-900 dark:text-white leading-snug group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">{champ.title}</h3>
+                          {champ.description && champ.description.trim() !== '' && champ.description.trim().toLowerCase() !== champ.title.trim().toLowerCase() && (
+                            <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">{champ.description}</p>
+                          )}
                         </div>
 
                         {/* Info grid */}
-                        <div className="grid grid-cols-3 gap-2 border-t border-b border-slate-50 py-3 text-[11px] font-mono text-slate-600">
+                        <div className="grid grid-cols-3 gap-2 border-t border-b border-slate-100 dark:border-slate-800/80 py-3 text-[11px] font-mono text-slate-600 dark:text-slate-300">
                           <div>
-                            <span className="text-[9px] text-slate-400 block uppercase font-sans">Período</span>
+                            <span className="text-[9px] text-slate-400 dark:text-slate-400 block uppercase font-sans">Período</span>
                             <span className="font-semibold">{new Date(champ.startDate).toLocaleDateString('pt-BR', {month: 'numeric', day: 'numeric'})} - {new Date(champ.endDate).toLocaleDateString('pt-BR', {month: 'numeric', day: 'numeric'})}</span>
                           </div>
                           <div>
-                            <span className="text-[9px] text-slate-400 block uppercase font-sans">Etapas</span>
+                            <span className="text-[9px] text-slate-400 dark:text-slate-400 block uppercase font-sans">Etapas</span>
                             <span className="font-semibold font-sans">{champ.stagesCount} Stages</span>
                           </div>
                           <div>
-                            <span className="text-[9px] text-slate-400 block uppercase font-sans">Inscrição</span>
-                            <span className="text-blue-600 font-bold font-sans">R$ {champ.registrationFee}</span>
+                            <span className="text-[9px] text-slate-400 dark:text-slate-400 block uppercase font-sans">Inscrição</span>
+                            <span className="text-blue-600 dark:text-blue-400 font-bold font-sans">R$ {champ.registrationFee}</span>
                           </div>
                         </div>
 
                         <div className="space-y-2">
                           <div className="flex flex-wrap gap-1">
                             {getValidChampModalities(champ.modalities).map((mod) => (
-                              <span key={mod.id} className="text-[9px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold uppercase">
+                              <span key={mod.id} className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded font-bold uppercase">
                                 {mod.name}
                               </span>
                             ))}
