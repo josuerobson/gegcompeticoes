@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `79747ad` |
-| Mensagem | `feat: adiciona gesto de deslizar pro lado (touch swipe left/right) na galeria de imagens das postagens em dispositivos móveis e modal de zoom` |
-| Data/hora | 2026-07-25T15:46:35-03:00 |
+| Hash | `93b0ec0` |
+| Mensagem | `fix: altera cor do titulo dos campeonatos no modo escuro para branco e remove repeticao duplicada da descricao` |
+| Data/hora | 2026-07-25T16:24:24-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `79747ad` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `93b0ec0` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -106,7 +106,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
 - **Otimização do Carregamento Inicial (`App.tsx`, `db.ts`)**: Identificado que a função `syncWithBackend` executava 12 requisições HTTP sequenciais uma após a outra, somando latências e acumulando esperas de até 60s~120s. A sincronização foi otimizada para realizar os 11 endpoints em lote paralelo com `Promise.allSettled()`, reduzindo a inicialização para ~1 segundo. Adicionada trava de segurança com `setTimeout` (máximo 3 segundos para encerrar a tela estática) e criados índices no PostgreSQL (`CREATE INDEX IF NOT EXISTS`) nas tabelas `likes`, `comments`, `follows`, `registrations`, `stage_scores` e `posts`.
 - **Paginação e Rolagem Infinita no Feed (`FeedView.tsx`)**: Implementado carregamento progressivo do feed renderizando estritamente **3 postagens iniciais**. Ao rolar a página para baixo, o `IntersectionObserver` detecta a aproximação do final da tela e carrega automaticamente mais 3 postagens por vez. Adicionado também o botão "Carregar mais publicações" como fallback manual e o atributo `loading="lazy"` em todas as tags `<img>`.
-- **Navegação Deslizando pro Lado nas Galerias de Imagem em Dispositivos Móveis (`FeedView.tsx`)**: Implementado o suporte a gestos de toque/arrastar (`touch swipe left/right` via `framer-motion` `drag="x"`) nas galerias de postagens. No carrossel dos posts do feed, o usuário em smartphones/tablets pode arrastar a foto para a esquerda ou direita com o dedo para navegar suavemente entre as imagens (com indicador de pontos `• • •`). No modal de zoom/expansão em tela cheia, o gesto de deslizar pro lado também alterna entre a foto anterior e a seguinte de forma fluida.
+- **Correção da Cor do Título e Remoção da Repetição de Descrição nos Campeonatos (`ChampionshipsView.tsx`, `App.tsx`)**: Ajustada a classe do título dos cards de campeonatos para utilizar fonte branca em modo escuro / temas escuros (`text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400`), resolvendo o problema de legibilidade do título em preto sobre fundo escuro. Adicionada também a checagem condicional para omitir o parágrafo de descrição sempre que o texto for idêntico ao título do campeonato (`champ.description.trim().toLowerCase() !== champ.title.trim().toLowerCase()`), eliminando a repetição duplicada do nome do campeonato logo abaixo do título.
 
 ## Infra / deploy
 
