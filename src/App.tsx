@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Post, Championship, ChampionshipInput, Registration, StageScore, RankingItem, ShootingResult, Club, Modality, Stage, StageInput, Weapon, WeaponLookupOption } from './types';
+import { User, Post, Championship, ChampionshipInput, Registration, StageScore, RankingItem, ShootingResult, Club, Modality, Stage, StageInput, Weapon, WeaponLookupOption, SharedPostInfo } from './types';
 import FeedView from './components/FeedView';
 import ChampionshipsView from './components/ChampionshipsView';
 import AdminPanel from './components/AdminPanel';
@@ -659,7 +659,7 @@ export default function App() {
     }
   };
 
-  const handleAddPost = async (content: string, imageUrl?: string, targetScore?: ShootingResult, imageUrls?: string[]) => {
+  const handleAddPost = async (content: string, imageUrl?: string, targetScore?: ShootingResult, imageUrls?: string[], sharedPost?: SharedPostInfo) => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {
       authHeaders['x-user-id'] = currentUser.id;
@@ -669,7 +669,7 @@ export default function App() {
       const res = await fetch('/api/posts', {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ content, imageUrl, targetScore, imageUrls })
+        body: JSON.stringify({ content, imageUrl, targetScore, imageUrls, sharedPost })
       });
       if (res.ok) {
         await syncWithBackend();

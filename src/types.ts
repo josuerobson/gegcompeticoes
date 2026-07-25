@@ -82,6 +82,18 @@ export interface ShootingResult {
   discipline: string; // e.g., IPSC, Trap Americano, Fogo Central, Carabina de Pressão
 }
 
+export interface SharedPostInfo {
+  originalPostId: string;
+  originalUserId: string;
+  originalUsername: string;
+  originalUserAvatar?: string;
+  originalContent: string;
+  originalImageUrl?: string;
+  originalImageUrls?: string[];
+  originalTargetScore?: ShootingResult;
+  originalCreatedAt: string;
+}
+
 export interface Post {
   id: string;
   userId: string;
@@ -94,6 +106,8 @@ export interface Post {
   likes: string[]; // list of user IDs
   comments: Comment[];
   createdAt: string;
+  sharedPost?: SharedPostInfo;
+  sharesCount?: number;
 }
 
 export interface Modality {

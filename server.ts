@@ -288,6 +288,15 @@ function mapPost(p: any): Post {
     }
   }
 
+  let parsedSharedPost: SharedPostInfo | undefined = undefined;
+  if (p.shared_post) {
+    try {
+      parsedSharedPost = typeof p.shared_post === 'string' ? JSON.parse(p.shared_post) : p.shared_post;
+    } catch (e) {
+      console.error('Error parsing shared_post:', e);
+    }
+  }
+
   return {
     id: p.id,
     userId: p.user_id,
@@ -307,6 +316,8 @@ function mapPost(p: any): Post {
       createdAt: c.createdAt || c.created_at
     })),
     createdAt: p.created_at,
+    sharedPost: parsedSharedPost,
+    sharesCount: p.shares_count ? Number(p.shares_count) : 0,
   };
 }
 
@@ -1075,8 +1086,16 @@ app.get('/api/posts', async (req, res) => {
 });
 
 app.post('/api/posts', requireAuth, async (req, res) => {
-  const { content, imageUrl, imageUrls, targetScore } = req.body;
+  const { content, imageUrl, imageUrls, targetScore, sharedPost } = req.body;
   const currentUser = (req as any).user as User;
+
+  // Add additive columns if not present
+  try {
+    await pool.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS shared_post TEXT;`);
+    await pool.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS shares_count INT DEFAULT 0;`);
+  } catch (e) {
+    // Columns already exist or minor warning
+  }
 
   // Process image URLs array (limit to max 5 images)
   let finalImageUrls: string[] | undefined = undefined;
@@ -1086,13 +1105,15 @@ app.post('/api/posts', requireAuth, async (req, res) => {
     finalImageUrls = [imageUrl];
   }
 
-  if (!content && (!finalImageUrls || finalImageUrls.length === 0) && !targetScore) {
-    return res.status(400).json({ error: 'Post deve conter texto, imagens ou resultado de tiro.' });
+  if (!content && (!finalImageUrls || finalImageUrls.length === 0) && !targetScore && !sharedPost) {
+    return res.status(400).json({ error: 'Post deve conter texto, imagens, resultado de tiro ou compartilhamento.' });
   }
 
   const storedImageUrl = finalImageUrls && finalImageUrls.length > 0
     ? (finalImageUrls.length === 1 ? finalImageUrls[0] : JSON.stringify(finalImageUrls))
     : null;
+
+  const storedSharedPost = sharedPost ? JSON.stringify(sharedPost) : null;
 
   const newPost: Post = {
     id: `post_${Date.now()}`,
@@ -1105,13 +1126,15 @@ app.post('/api/posts', requireAuth, async (req, res) => {
     targetScore: targetScore || undefined,
     likes: [],
     comments: [],
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    sharedPost: sharedPost || undefined,
+    sharesCount: 0
   };
 
   try {
     await pool.query(
-      `INSERT INTO posts (id, user_id, username, user_avatar, content, image_url, target_score, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      `INSERT INTO posts (id, user_id, username, user_avatar, content, image_url, target_score, shared_post, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         newPost.id,
         newPost.userId,
@@ -1120,9 +1143,18 @@ app.post('/api/posts', requireAuth, async (req, res) => {
         newPost.content,
         storedImageUrl,
         newPost.targetScore ? JSON.stringify(newPost.targetScore) : null,
+        storedSharedPost,
         newPost.createdAt
       ]
     );
+
+    if (sharedPost && sharedPost.originalPostId) {
+      await pool.query(
+        `UPDATE posts SET shares_count = COALESCE(shares_count, 0) + 1 WHERE id = $1`,
+        [sharedPost.originalPostId]
+      );
+    }
+
     res.status(201).json({ post: newPost });
   } catch (err) {
     console.error('Create post database error:', err);

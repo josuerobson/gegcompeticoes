@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Post, User, Comment, ShootingResult } from '../types';
-import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2 } from 'lucide-react';
+import { Post, User, Comment, ShootingResult, SharedPostInfo } from '../types';
+import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { shootingImages } from '../data/mockData';
 import likeIcon from '@/assets/like_icon.png';
@@ -9,7 +9,7 @@ interface FeedProps {
   posts: Post[];
   currentUser: User | null;
   users: User[];
-  onAddPost: (content: string, imageUrl?: string, targetScore?: ShootingResult, imageUrls?: string[]) => Promise<void>;
+  onAddPost: (content: string, imageUrl?: string, targetScore?: ShootingResult, imageUrls?: string[], sharedPost?: SharedPostInfo) => Promise<void>;
   onLikePost: (postId: string) => Promise<void>;
   onCommentPost: (postId: string, content: string) => Promise<void>;
   onToggleFollow: (userId: string) => Promise<void>;
@@ -56,6 +56,38 @@ export default function FeedView({
     authorName?: string;
     authorAvatar?: string;
   } | null>(null);
+
+  // Share post state
+  const [shareModalPost, setShareModalPost] = useState<Post | null>(null);
+  const [shareComment, setShareComment] = useState('');
+  const [isSubmittingShare, setIsSubmittingShare] = useState(false);
+
+  const handleConfirmShare = async () => {
+    if (!shareModalPost || !currentUser) return;
+    setIsSubmittingShare(true);
+    try {
+      const originalPostInfo: SharedPostInfo = {
+        originalPostId: shareModalPost.sharedPost ? shareModalPost.sharedPost.originalPostId : shareModalPost.id,
+        originalUserId: shareModalPost.sharedPost ? shareModalPost.sharedPost.originalUserId : shareModalPost.userId,
+        originalUsername: shareModalPost.sharedPost ? shareModalPost.sharedPost.originalUsername : shareModalPost.username,
+        originalUserAvatar: shareModalPost.sharedPost ? shareModalPost.sharedPost.originalUserAvatar : shareModalPost.userAvatar,
+        originalContent: shareModalPost.sharedPost ? shareModalPost.sharedPost.originalContent : shareModalPost.content,
+        originalImageUrl: shareModalPost.sharedPost ? shareModalPost.sharedPost.originalImageUrl : shareModalPost.imageUrl,
+        originalImageUrls: shareModalPost.sharedPost ? shareModalPost.sharedPost.originalImageUrls : shareModalPost.imageUrls,
+        originalTargetScore: shareModalPost.sharedPost ? shareModalPost.sharedPost.originalTargetScore : shareModalPost.targetScore,
+        originalCreatedAt: shareModalPost.sharedPost ? shareModalPost.sharedPost.originalCreatedAt : shareModalPost.createdAt
+      };
+
+      await onAddPost(shareComment.trim(), undefined, undefined, undefined, originalPostInfo);
+
+      setShareModalPost(null);
+      setShareComment('');
+    } catch (err) {
+      console.error('Error sharing post:', err);
+    } finally {
+      setIsSubmittingShare(false);
+    }
+  };
 
   // Keyboard navigation for Lightbox
   useEffect(() => {
@@ -315,6 +347,26 @@ export default function FeedView({
                   animate={{ opacity: 1, y: 0 }}
                   className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"
                 >
+                  {/* Shared Post Banner Header if post is a shared repost */}
+                  {post.sharedPost && (
+                    <div className="bg-blue-50/70 border-b border-blue-100 px-4 py-2 flex items-center justify-between text-xs text-slate-700">
+                      <div className="flex items-center gap-2">
+                        <Repeat className="w-4 h-4 text-blue-600 shrink-0" />
+                        <span>
+                          <strong className="font-bold text-slate-900 cursor-pointer hover:underline" onClick={() => onViewProfile(post.username)}>@{post.username}</strong>
+                          {' '}compartilhou a publicação de{' '}
+                          <button
+                            type="button"
+                            onClick={() => onViewProfile(post.sharedPost!.originalUsername)}
+                            className="font-bold text-blue-700 hover:underline"
+                          >
+                            @{post.sharedPost.originalUsername}
+                          </button>
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Header */}
                   <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3 cursor-pointer hover:opacity-85 transition" onClick={() => onViewProfile(post.username)}>
@@ -567,6 +619,87 @@ export default function FeedView({
                       </div>
                     )}
 
+                    {/* Embedded Shared Original Post Card */}
+                    {post.sharedPost && (
+                      <div className="border border-slate-200 rounded-xl bg-slate-50/80 overflow-hidden space-y-2.5 my-2">
+                        <div className="p-3 bg-white border-b border-slate-200/70 flex items-center justify-between">
+                          <div
+                            className="flex items-center gap-2.5 cursor-pointer hover:opacity-85"
+                            onClick={() => onViewProfile(post.sharedPost!.originalUsername)}
+                          >
+                            <img
+                              src={post.sharedPost.originalUserAvatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80"}
+                              alt={post.sharedPost.originalUsername}
+                              className="w-7 h-7 rounded-full object-cover border border-slate-200"
+                              referrerPolicy="no-referrer"
+                            />
+                            <div>
+                              <span className="font-semibold text-slate-900 text-xs block">@{post.sharedPost.originalUsername}</span>
+                              <span className="text-[10px] text-slate-400">
+                                {new Date(post.sharedPost.originalCreatedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Original Content */}
+                        {post.sharedPost.originalContent && post.sharedPost.originalContent.trim() !== '' && (
+                          <p className="px-3.5 text-slate-800 text-xs leading-relaxed whitespace-pre-wrap">
+                            {post.sharedPost.originalContent}
+                          </p>
+                        )}
+
+                        {/* Original Images Gallery */}
+                        {(() => {
+                          const origImgs = post.sharedPost.originalImageUrls && post.sharedPost.originalImageUrls.length > 0
+                            ? post.sharedPost.originalImageUrls
+                            : (post.sharedPost.originalImageUrl ? [post.sharedPost.originalImageUrl] : []);
+
+                          if (origImgs.length === 0) return null;
+
+                          return (
+                            <div className="px-3.5 pb-2">
+                              <div className={`grid gap-1 rounded-xl overflow-hidden ${origImgs.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                                {origImgs.slice(0, 4).map((img, idx) => (
+                                  <div
+                                    key={idx}
+                                    onClick={() => setLightboxState({
+                                      images: origImgs,
+                                      currentIndex: idx,
+                                      authorName: post.sharedPost!.originalUsername,
+                                      authorAvatar: post.sharedPost!.originalUserAvatar
+                                    })}
+                                    className="relative aspect-[16/9] overflow-hidden cursor-pointer group bg-slate-900 rounded-lg"
+                                  >
+                                    <img src={img} alt={`Foto original ${idx+1}`} className="w-full h-full object-cover group-hover:scale-105 transition duration-200" referrerPolicy="no-referrer" />
+                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
+                                      <Maximize2 className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition duration-150" />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Original Target Score */}
+                        {post.sharedPost.originalTargetScore && (
+                          <div className="px-3.5 pb-3">
+                            <div className="bg-slate-900 text-white p-3 rounded-xl font-mono text-xs space-y-1.5">
+                              <div className="flex justify-between items-center text-[10px] text-blue-400 font-bold">
+                                <span>{post.sharedPost.originalTargetScore.discipline}</span>
+                                <span>{post.sharedPost.originalTargetScore.distance}m</span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs border-t border-slate-800 pt-1.5">
+                                <span className="text-emerald-400 font-bold">Acertos: {post.sharedPost.originalTargetScore.hits}/{post.sharedPost.originalTargetScore.shots}</span>
+                                <span className="text-amber-400 font-bold">Pontos: {post.sharedPost.originalTargetScore.score}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Action Buttons */}
                     <div className="flex items-center justify-between border-t border-slate-50 pt-3 text-slate-600">
                       <div className="flex items-center gap-5">
@@ -591,10 +724,21 @@ export default function FeedView({
                         
                         <button
                           onClick={() => setActiveCommentDrawer(activeCommentDrawer === post.id ? null : post.id)}
-                          className="flex items-center gap-1.5 hover:text-blue-600 transition duration-150 text-sm"
+                          className="flex items-center gap-1.5 hover:text-blue-600 transition duration-150 text-sm cursor-pointer"
                         >
                           <MessageCircle className="w-5 h-5" />
                           <span className="font-medium">{post.comments.length}</span>
+                        </button>
+
+                        <button
+                          onClick={() => setShareModalPost(post)}
+                          className="flex items-center gap-1.5 text-slate-500 hover:text-blue-600 transition duration-150 text-sm cursor-pointer"
+                          title="Compartilhar no meu perfil"
+                        >
+                          <Share2 className="w-4 h-4" />
+                          <span className="font-semibold text-xs">
+                            {post.sharesCount && post.sharesCount > 0 ? post.sharesCount : 'Compartilhar'}
+                          </span>
                         </button>
                       </div>
 
@@ -1242,6 +1386,112 @@ export default function FeedView({
               </div>
             )}
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Share Post Modal */}
+      <AnimatePresence>
+        {shareModalPost && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white max-w-lg w-full rounded-2xl smooth-shadow overflow-hidden flex flex-col"
+            >
+              {/* Modal Header */}
+              <div className="bg-blue-900 text-white p-4 flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <Share2 className="w-5 h-5 text-amber-400" />
+                  <span className="font-display font-semibold text-base">Compartilhar Publicação</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShareModalPost(null)}
+                  className="text-white/70 hover:text-white bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-5 space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase block">Adicione um comentário (opcional)</label>
+                  <textarea
+                    rows={3}
+                    placeholder="O que você achou dessa publicação? Escreva algo para seus seguidores..."
+                    value={shareComment}
+                    onChange={(e) => setShareComment(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-sm text-slate-700"
+                  />
+                </div>
+
+                {/* Preview of Original Post */}
+                <div className="border border-slate-200 bg-slate-50 p-3.5 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2">
+                    <img
+                      src={shareModalPost.userAvatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80"}
+                      alt={shareModalPost.username}
+                      className="w-7 h-7 rounded-full object-cover border border-slate-200"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div>
+                      <span className="font-bold text-xs text-slate-800 block">@{shareModalPost.username}</span>
+                      <span className="text-[10px] text-slate-400">
+                        {new Date(shareModalPost.createdAt).toLocaleDateString('pt-BR')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {shareModalPost.content && (
+                    <p className="text-xs text-slate-700 line-clamp-2">{shareModalPost.content}</p>
+                  )}
+
+                  {((shareModalPost.imageUrls && shareModalPost.imageUrls.length > 0) || shareModalPost.imageUrl) && (
+                    <div className="h-28 rounded-lg overflow-hidden bg-slate-900 relative">
+                      <img
+                        src={(shareModalPost.imageUrls && shareModalPost.imageUrls[0]) || shareModalPost.imageUrl}
+                        alt="Preview"
+                        className="w-full h-full object-cover opacity-90"
+                      />
+                      {(shareModalPost.imageUrls?.length || 0) > 1 && (
+                        <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded font-mono">
+                          +{shareModalPost.imageUrls!.length - 1} fotos
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Modal Buttons */}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShareModalPost(null)}
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl text-xs font-semibold transition cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmShare}
+                    disabled={isSubmittingShare}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
+                  >
+                    {isSubmittingShare ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Compartilhando...
+                      </>
+                    ) : (
+                      'Compartilhar no meu perfil'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
