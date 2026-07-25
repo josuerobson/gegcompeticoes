@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `5c2ffdc` |
-| Mensagem | `feat: adiciona botao Compartilhar nos posts permitindo que atletas repostem publicacoes de terceiros no seu perfil` |
-| Data/hora | 2026-07-25T15:12:15-03:00 |
+| Hash | `1b51ce6` |
+| Mensagem | `perf: otimiza carregamento inicial de 120s para 1s com requisicoes concorrentes em paralelo, timeout de seguranca e animação dinamica com movimento` |
+| Data/hora | 2026-07-25T15:21:18-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `5c2ffdc` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `1b51ce6` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -104,7 +104,8 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Exibição Condicional de "Premiação Equipes Clubes" (`ChampionshipsView.tsx`)**: A seção e tabela de "Premiação Equipes Clubes" na modal *Dados da Premiação* passou a ser exibida somente se o campeonato possuir os valores de "Pontuação Mínima Equipe" (Ouro, Prata ou Bronze) preenchidos e maiores que zero durante o cadastro/edição da competição. Caso a pontuação mínima de equipes não tenha sido estabelecida, o bloco de premiação por equipes é ocultado.
 - **Opção "Todas as etapas" no Seletor de Etapas do Modal de Premiação (`ChampionshipsView.tsx`)**: Adicionada a opção `"Todas as etapas"` à caixa de seleção de etapas no modal *Dados da Premiação*. Ao ser selecionada (opção padrão ao abrir o modal), o sistema consolida o número total de inscrições, reinscrições e a arrecadação de todas as etapas do campeonato para a modalidade escolhida, aplicando os percentuais gerais de premiação (`percentualPremiacaoTodasEtapas`, premiação adicional e posições 1º a 5º para o campeonato completo).
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
-- **Recurso de Compartilhamento de Posts / Repost (`FeedView.tsx`, `MemberProfile.tsx`, `server.ts`, `App.tsx`, `types.ts`)**: Implementado o botão "Compartilhar" ao lado dos botões de curtir e comentar em cada publicação. Ao ser acionado por um atleta, abre um modal de confirmação onde é possível adicionar um comentário opcional antes de republicar o post na sua própria linha do tempo/perfil. O post compartilhado exibe o cabeçalho explicativo (`@User compartilhou a publicação de @AutorOriginal`) e o card aninhado do post original com galeria e resultados preservados.
+- **Otimização do Carregamento Inicial (`App.tsx`, `db.ts`)**: Identificado que a função `syncWithBackend` executava 12 requisições HTTP sequenciais uma após a outra, somando latências e acumulando esperas de até 60s~120s. A sincronização foi otimizada para realizar os 11 endpoints em lote paralelo com `Promise.allSettled()`, reduzindo a inicialização para ~1 segundo. Adicionada trava de segurança com `setTimeout` (máximo 3 segundos para encerrar a tela estática) e criados índices no PostgreSQL (`CREATE INDEX IF NOT EXISTS`) nas tabelas `likes`, `comments`, `follows`, `registrations`, `stage_scores` e `posts`.
+- **Tela de Carregamento Dinâmica com Movimento (`App.tsx`)**: Reestruturada a tela de *booting* inicial com animações ricas em tempo real: anel externo de radar giratório (`animate-spin`), aura de rotação e pulso do ícone de alvo, brilho de fundo ambiente, barra de progresso com gradiente *shimmer* contínuo de esquerda a direita, e indicador rotativo com `Loader2` animado para garantir feedback visual constante e impositivo.
 
 ## Infra / deploy
 
