@@ -3,6 +3,7 @@ import { Post, User, Comment, ShootingResult } from '../types';
 import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { shootingImages } from '../data/mockData';
+import likeIcon from '@/assets/like_icon.png';
 
 interface FeedProps {
   posts: Post[];
@@ -284,10 +285,21 @@ export default function FeedView({
                       <div className="flex items-center gap-5">
                         <button
                           onClick={() => onLikePost(post.id)}
-                          className={`flex items-center gap-1.5 hover:text-red-500 transition duration-150 group text-sm ${isLiked ? 'text-red-500' : ''}`}
+                          className="flex items-center gap-1.5 group transition duration-150 cursor-pointer select-none"
+                          title={isLiked ? 'Descurtir publicação' : 'Curtir publicação'}
                         >
-                          <Heart className={`w-5 h-5 transition-transform group-hover:scale-120 ${isLiked ? 'fill-current' : ''}`} />
-                          <span className="font-medium">{post.likes.length}</span>
+                          <img
+                            src={likeIcon}
+                            alt="Curtir"
+                            className={`w-6 h-6 object-contain transition-all duration-200 ${
+                              isLiked
+                                ? 'scale-110 drop-shadow-md brightness-105'
+                                : 'opacity-40 grayscale group-hover:grayscale-0 group-hover:opacity-100 group-hover:scale-115'
+                            }`}
+                          />
+                          <span className={`font-bold text-xs ${isLiked ? 'text-blue-600 font-extrabold' : 'text-slate-600'}`}>
+                            {post.likes.length}
+                          </span>
                         </button>
                         
                         <button
