@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, Post, Championship, ChampionshipInput, Registration, StageScore, RankingItem, ShootingResult, Club, Modality, Stage, StageInput, Weapon, WeaponLookupOption } from './types';
 import FeedView from './components/FeedView';
 import ChampionshipsView from './components/ChampionshipsView';
 import AdminPanel from './components/AdminPanel';
 import MemberProfile from './components/MemberProfile';
-import { Target, Trophy, ShieldCheck, User as UserIcon, Home, Zap, Loader2, Sparkles, CheckCircle2, Sun, Moon } from 'lucide-react';
+import { Target, Trophy, ShieldCheck, User as UserIcon, Home, Zap, Loader2, Sparkles, CheckCircle2, Sun, Moon, ChevronDown, LogOut } from 'lucide-react';
 import { motion } from 'motion/react';
 import shootingDarkBg from '@/assets/shooting_dark_bg.png';
 import shootingBanner from '@/assets/shooting_banner.png';
@@ -166,6 +166,20 @@ export default function App() {
   // Estados adicionais da Landing Page
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginModalMessage, setLoginModalMessage] = useState('');
+
+  // Top header user profile dropdown menu state
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target as Node)) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const triggerLoginModal = (message: string = '') => {
     setLoginModalMessage(message);
@@ -1780,21 +1794,64 @@ export default function App() {
             {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
           
-          <div
-            onClick={() => navigateToProfile(currentUser)}
-            className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition select-none"
-          >
-            <div className="w-8 h-8 rounded-full bg-blue-100 border-2 border-blue-600 flex items-center justify-center font-bold text-blue-800 text-xs shadow-inner overflow-hidden">
-              {currentUser.avatarUrl ? (
-                <img src={currentUser.avatarUrl} alt={currentUser.fullName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-              ) : (
-                'RD'
-              )}
-            </div>
-            <div className="hidden md:block leading-none text-left">
-              <span className="font-bold text-slate-800 text-xs">{currentUser.fullName.split(' ')[0]}</span>
-              <span className="text-[10px] text-slate-400 block mt-0.5">@{currentUser.username}</span>
-            </div>
+          {/* Profile Dropdown Menu */}
+          <div className="relative" ref={profileDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setProfileDropdownOpen(prev => !prev)}
+              className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1.5 rounded-2xl transition select-none outline-none group"
+              title="Menu do Perfil"
+            >
+              <div className="w-8 h-8 rounded-full bg-blue-100 border-2 border-blue-600 flex items-center justify-center font-bold text-blue-800 text-xs shadow-xs overflow-hidden shrink-0">
+                {currentUser.avatarUrl ? (
+                  <img src={currentUser.avatarUrl} alt={currentUser.fullName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  currentUser.fullName.slice(0, 2).toUpperCase()
+                )}
+              </div>
+              <div className="hidden md:block leading-none text-left">
+                <span className="font-bold text-slate-800 text-xs flex items-center gap-1">
+                  {currentUser.fullName.split(' ')[0]}
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${profileDropdownOpen ? 'rotate-180 text-blue-600' : ''}`} />
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">@{currentUser.username}</span>
+              </div>
+            </button>
+
+            {profileDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-xl border border-slate-150 py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/50">
+                  <p className="text-xs font-bold text-slate-900 truncate">{currentUser.fullName}</p>
+                  <p className="text-[10px] text-slate-500 font-mono truncate">@{currentUser.username}</p>
+                </div>
+
+                <div className="p-1 space-y-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileDropdownOpen(false);
+                      navigateToProfile(currentUser);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 rounded-xl flex items-center gap-2.5 font-bold transition cursor-pointer"
+                  >
+                    <UserIcon className="w-4 h-4 text-blue-600" />
+                    Ver perfil
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileDropdownOpen(false);
+                      handleLogout();
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 rounded-xl flex items-center gap-2.5 font-bold transition cursor-pointer border-t border-slate-100 mt-1 pt-2"
+                  >
+                    <LogOut className="w-4 h-4 text-red-600" />
+                    Sair
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </header>
