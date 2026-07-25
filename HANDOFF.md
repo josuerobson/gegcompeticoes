@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `e275f0e` |
-| Mensagem | `feat: torna o texto da postagem opcional permitindo publicar posts compostos apenas por imagens` |
-| Data/hora | 2026-07-25T14:48:56-03:00 |
+| Hash | `f2f9178` |
+| Mensagem | `feat: atualiza secao Publicar Nova Foto do perfil com suporte a ate 5 fotos, legenda opcional e galeria pessoal` |
+| Data/hora | 2026-07-25T15:00:54-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `e275f0e` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `f2f9178` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -104,7 +104,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Exibição Condicional de "Premiação Equipes Clubes" (`ChampionshipsView.tsx`)**: A seção e tabela de "Premiação Equipes Clubes" na modal *Dados da Premiação* passou a ser exibida somente se o campeonato possuir os valores de "Pontuação Mínima Equipe" (Ouro, Prata ou Bronze) preenchidos e maiores que zero durante o cadastro/edição da competição. Caso a pontuação mínima de equipes não tenha sido estabelecida, o bloco de premiação por equipes é ocultado.
 - **Opção "Todas as etapas" no Seletor de Etapas do Modal de Premiação (`ChampionshipsView.tsx`)**: Adicionada a opção `"Todas as etapas"` à caixa de seleção de etapas no modal *Dados da Premiação*. Ao ser selecionada (opção padrão ao abrir o modal), o sistema consolida o número total de inscrições, reinscrições e a arrecadação de todas as etapas do campeonato para a modalidade escolhida, aplicando os percentuais gerais de premiação (`percentualPremiacaoTodasEtapas`, premiação adicional e posições 1º a 5º para o campeonato completo).
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
-- **Texto de Postagem Opcional (`FeedView.tsx`)**: Removida a obrigatoriedade de preencher texto no formulário de criação de publicação. Atletas agora podem criar postagens compostas exclusivamente por imagens (ou resultados de tiro) sem necessidade de digitar nenhum texto. O card da publicação omite o parágrafo de texto quando vazio.
+- **Atualização da Seção "Publicar Nova Foto" no Perfil do Atleta (`MemberProfile.tsx`)**: Atualizado o formulário de postagem da página `/perfil` para alinhar com o Feed principal: legenda/texto tornado opcional, envio múltiplo de até 5 fotos via upload simultâneo do PC e seletor da Galeria Pessoal de fotos salvas do próprio atleta.
 
 ## Infra / deploy
 
