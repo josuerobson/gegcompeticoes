@@ -5,7 +5,7 @@ import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
   Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronDown, Info, PlusCircle, X, UserCog, Camera,
-  Clock, Copy, QrCode
+  Clock, Copy, QrCode, Images
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -23,7 +23,7 @@ interface MemberProfileProps {
   onToggleFollow: (userId: string) => Promise<void>;
   onPaySignature: () => Promise<void>;
   onLogout: () => void;
-  onAddPost: (content: string, imageUrl?: string) => Promise<void>;
+  onAddPost: (content: string, imageUrl?: string, targetScore?: any, imageUrls?: string[]) => Promise<void>;
   onNavigateToChampionships: () => void;
   onUpdateProfile: (fields: Record<string, unknown>) => Promise<boolean>;
   onUpdateClub: (clubId: string, fields: Record<string, unknown>) => Promise<boolean>;
@@ -634,32 +634,45 @@ export default function MemberProfile({
     notes: ''
   });
 
-  // Profile post states
+  // Profile post states (support up to 5 images)
   const [profilePostContent, setProfilePostContent] = useState('');
-  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
-  const [profileImagePreview, setProfileImagePreview] = useState<string>('');
+  const [profilePostImages, setProfilePostImages] = useState<string[]>([]);
   const [isPostingProfilePost, setIsPostingProfilePost] = useState(false);
 
-  const handleProfileImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setProfileImageFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfileImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+  // Personal photo gallery of the logged-in user
+  const myUserPhotos = React.useMemo(() => {
+    if (!currentUser) return [];
+    const urls: string[] = [];
+
+    posts.forEach(p => {
+      if (p.userId === currentUser.id || p.username === currentUser.username) {
+        const pImgs = p.imageUrls && p.imageUrls.length > 0
+          ? p.imageUrls
+          : (p.imageUrl ? [p.imageUrl] : []);
+
+        pImgs.forEach(url => {
+          if (url && typeof url === 'string' && !urls.includes(url)) {
+            urls.push(url);
+          }
+        });
+      }
+    });
+
+    return urls;
+  }, [posts, currentUser]);
 
   const handleCreateProfilePost = async () => {
-    if (!profilePostContent.trim()) return;
+    if (!profilePostContent.trim() && profilePostImages.length === 0) return;
     setIsPostingProfilePost(true);
     try {
-      await onAddPost(profilePostContent, profileImagePreview || undefined);
+      await onAddPost(
+        profilePostContent,
+        profilePostImages[0] || undefined,
+        undefined,
+        profilePostImages.length > 0 ? profilePostImages : undefined
+      );
       setProfilePostContent('');
-      setProfileImageFile(null);
-      setProfileImagePreview('');
+      setProfilePostImages([]);
     } catch (err) {
       console.error(err);
     } finally {
@@ -1211,52 +1224,171 @@ export default function MemberProfile({
             <div className="space-y-4">
               {isMe && (
                 <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col gap-3">
-                  <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Publicar Nova Foto</h4>
-                  <div className="flex gap-2">
-                    <textarea
-                      rows={2}
-                      placeholder="Escreva uma legenda para sua foto de tiro..."
-                      value={profilePostContent}
-                      onChange={e => setProfilePostContent(e.target.value)}
-                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-blue-500 text-xs text-slate-800 resize-none"
-                    />
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                      <Images className="w-4 h-4 text-blue-600" />
+                      Publicar Nova Foto ({profilePostImages.length}/5)
+                    </h4>
+                    {profilePostImages.length >= 5 ? (
+                      <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                        Limite de 5 fotos atingido
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        Até 5 fotos por publicação
+                      </span>
+                    )}
                   </div>
-                  
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                    <div className="flex flex-col gap-1 w-full sm:w-auto">
-                      <label className="text-[10px] text-slate-400 font-bold uppercase">Foto do Computador</label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleProfileImageChange}
-                        className="text-[11px] text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-                      />
+
+                  {/* Text Legenda (Optional) */}
+                  <textarea
+                    rows={2}
+                    placeholder="Escreva uma legenda para sua foto (opcional se enviar foto)..."
+                    value={profilePostContent}
+                    onChange={e => setProfilePostContent(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-blue-500 text-xs text-slate-800 resize-none"
+                  />
+
+                  {/* Selected Images Grid Preview */}
+                  {profilePostImages.length > 0 && (
+                    <div className="grid grid-cols-5 gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                      {profilePostImages.map((imgUrl, idx) => (
+                        <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-slate-300 bg-slate-900">
+                          <img src={imgUrl} alt={`Foto ${idx+1}`} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setProfilePostImages(prev => prev.filter((_, i) => i !== idx))}
+                            className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow-md transition cursor-pointer"
+                            title="Remover foto"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                          <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded font-mono font-bold">
+                            #{idx + 1}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                    
-                    {profileImagePreview && (
-                      <div className="relative w-12 h-12 rounded border border-slate-200 overflow-hidden flex-shrink-0 bg-slate-50">
-                        <img src={profileImagePreview} alt="Preview" className="w-full h-full object-cover" />
+                  )}
+
+                  {/* Controls: Upload from PC & Personal Gallery (only if < 5) */}
+                  {profilePostImages.length < 5 && (
+                    <div className="space-y-2 pt-1 border-t border-slate-100">
+                      {/* Personal Gallery Selector */}
+                      {myUserPhotos.length > 0 && (
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                            Sua Galeria Pessoal (fotos salvas):
+                          </span>
+                          <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-[100px] overflow-y-auto p-1 bg-slate-50 rounded-lg border border-slate-200">
+                            {myUserPhotos.map((url, idx) => {
+                              const isAdded = profilePostImages.includes(url);
+                              return (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  disabled={isAdded}
+                                  onClick={() => {
+                                    if (!isAdded && profilePostImages.length < 5) {
+                                      setProfilePostImages(prev => [...prev, url]);
+                                    }
+                                  }}
+                                  className={`aspect-square rounded-md overflow-hidden border relative transition cursor-pointer ${
+                                    isAdded
+                                      ? 'opacity-40 border-slate-300 cursor-not-allowed scale-95'
+                                      : 'border-slate-200 hover:border-blue-500 hover:scale-105'
+                                  }`}
+                                  title={isAdded ? 'Foto já adicionada' : 'Adicionar à publicação'}
+                                >
+                                  <img src={url} alt={`Minha foto ${idx + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                  {isAdded && (
+                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                      <CheckCircle2 className="w-3 h-3 text-white" />
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* File upload from PC */}
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-1">
+                        <label className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0">
+                          <Plus className="w-4 h-4 text-blue-600" />
+                          Enviar Foto(s) do PC (até 5)
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            onChange={async (e) => {
+                              const files = Array.from(e.target.files || []);
+                              if (files.length === 0) return;
+
+                              const remainingSlots = 5 - profilePostImages.length;
+                              if (remainingSlots <= 0) {
+                                e.target.value = '';
+                                return;
+                              }
+
+                              const filesToRead = files.slice(0, remainingSlots);
+
+                              const readPromises = filesToRead.map(file => {
+                                return new Promise<string>((resolve) => {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    if (reader.result) {
+                                      resolve(reader.result as string);
+                                    } else {
+                                      resolve('');
+                                    }
+                                  };
+                                  reader.readAsDataURL(file);
+                                });
+                              });
+
+                              const results = await Promise.all(readPromises);
+                              const validResults = results.filter(r => r !== '');
+
+                              setProfilePostImages(prev => {
+                                const combined = [...prev];
+                                validResults.forEach(r => {
+                                  if (!combined.includes(r) && combined.length < 5) {
+                                    combined.push(r);
+                                  }
+                                });
+                                return combined;
+                              });
+
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+
                         <button
-                          type="button"
-                          onClick={() => {
-                            setProfileImageFile(null);
-                            setProfileImagePreview('');
-                          }}
-                          className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 shadow hover:bg-red-650 flex items-center justify-center cursor-pointer"
+                          onClick={handleCreateProfilePost}
+                          disabled={isPostingProfilePost || (!profilePostContent.trim() && profilePostImages.length === 0)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2 rounded-xl transition self-end sm:self-center cursor-pointer shadow-md shadow-blue-50 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <X className="w-3 h-3" />
+                          {isPostingProfilePost ? 'Publicando...' : 'Publicar'}
                         </button>
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    <button
-                      onClick={handleCreateProfilePost}
-                      disabled={isPostingProfilePost || !profilePostContent.trim()}
-                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition self-end sm:self-center cursor-pointer shadow-md shadow-blue-50 flex items-center gap-1"
-                    >
-                      {isPostingProfilePost ? 'Publicando...' : 'Publicar'}
-                    </button>
-                  </div>
+                  {profilePostImages.length >= 5 && (
+                    <div className="flex justify-end pt-1">
+                      <button
+                        onClick={handleCreateProfilePost}
+                        disabled={isPostingProfilePost}
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2 rounded-xl transition cursor-pointer shadow-md shadow-blue-50 flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {isPostingProfilePost ? 'Publicando...' : 'Publicar'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
