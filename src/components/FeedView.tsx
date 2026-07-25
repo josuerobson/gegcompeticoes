@@ -18,6 +18,134 @@ interface FeedProps {
   onViewProfile: (username: string) => void;
 }
 
+function PostImageCarousel({
+  images,
+  onOpenLightbox,
+  hasScore,
+  defaultImage
+}: {
+  images: string[];
+  onOpenLightbox: (index: number) => void;
+  hasScore?: boolean;
+  defaultImage?: string;
+}) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  if (images.length === 0) return null;
+
+  const nextImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setCurrentIndex(prev => (prev + 1) % images.length);
+  };
+
+  const prevImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setCurrentIndex(prev => (prev - 1 + images.length) % images.length);
+  };
+
+  return (
+    <div className="relative bg-slate-950 overflow-hidden select-none group">
+      {/* Background Blur for aspect fill */}
+      <div
+        className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40 scale-110 pointer-events-none"
+        style={{ backgroundImage: `url("${images[currentIndex]}")` }}
+      />
+
+      {/* Swipeable Motion Image */}
+      <div className="relative z-10 flex items-center justify-center min-h-[240px] max-h-[550px] w-full overflow-hidden">
+        <motion.img
+          key={currentIndex}
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -20 }}
+          transition={{ duration: 0.2 }}
+          drag={images.length > 1 ? "x" : false}
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={0.2}
+          onDragEnd={(e, { offset }) => {
+            if (images.length <= 1) return;
+            if (offset.x < -40) {
+              nextImage();
+            } else if (offset.x > 40) {
+              prevImage();
+            }
+          }}
+          src={images[currentIndex]}
+          alt={`Foto ${currentIndex + 1}`}
+          loading="lazy"
+          onClick={() => onOpenLightbox(currentIndex)}
+          className="max-w-full max-h-[550px] w-auto h-auto object-contain mx-auto shadow-md cursor-grab active:cursor-grabbing touch-pan-y"
+          referrerPolicy="no-referrer"
+          onError={(e) => {
+            e.currentTarget.onerror = null;
+            if (defaultImage) e.currentTarget.src = defaultImage;
+          }}
+        />
+      </div>
+
+      {/* Touch & Click Navigation Arrows */}
+      {images.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={prevImage}
+            className="absolute left-2 top-1/2 -translate-y-1/2 z-20 bg-slate-950/70 hover:bg-slate-900 text-white p-2 rounded-full backdrop-blur-md shadow-lg transition opacity-80 sm:opacity-0 group-hover:opacity-100 cursor-pointer"
+            title="Foto anterior"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
+            onClick={nextImage}
+            className="absolute right-2 top-1/2 -translate-y-1/2 z-20 bg-slate-950/70 hover:bg-slate-900 text-white p-2 rounded-full backdrop-blur-md shadow-lg transition opacity-80 sm:opacity-0 group-hover:opacity-100 cursor-pointer"
+            title="Próxima foto"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </>
+      )}
+
+      {/* Expand Lightbox Button */}
+      <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onOpenLightbox(currentIndex)}
+          className="bg-slate-900/80 hover:bg-slate-900 text-white rounded-full p-2 backdrop-blur-md shadow-lg flex items-center justify-center transition cursor-pointer"
+          title="Ampliar imagem"
+        >
+          <Maximize2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      {hasScore && (
+        <div className="absolute top-3 left-3 z-20 bg-blue-600/90 backdrop-blur-md text-white rounded-full p-2 shadow-lg flex items-center justify-center">
+          <Target className="w-5 h-5 animate-pulse" />
+        </div>
+      )}
+
+      {/* Swipe Dots Indicator */}
+      {images.length > 1 && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-black/60 backdrop-blur-xs px-3 py-1.5 rounded-full">
+          {images.map((_, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentIndex(idx);
+              }}
+              className={`h-2 rounded-full transition-all cursor-pointer ${
+                idx === currentIndex ? 'w-5 bg-blue-400' : 'w-2 bg-white/50 hover:bg-white/80'
+              }`}
+              title={`Foto ${idx + 1}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FeedView({
   posts,
   currentUser,
@@ -426,7 +554,7 @@ export default function FeedView({
                     </div>
                   </div>
 
-                  {/* Multi-Image Gallery Grid & Lightbox Trigger */}
+                  {/* Multi-Image Touch Swipe Carousel & Lightbox Trigger */}
                   {(() => {
                     const imagesList = post.imageUrls && post.imageUrls.length > 0
                       ? post.imageUrls
@@ -434,169 +562,18 @@ export default function FeedView({
 
                     if (imagesList.length === 0) return null;
 
-                    const openLightbox = (idx: number) => {
-                      setLightboxState({
-                        images: imagesList,
-                        currentIndex: idx,
-                        authorName: post.username,
-                        authorAvatar: post.userAvatar
-                      });
-                    };
-
-                    // 1 Photo Layout
-                    if (imagesList.length === 1) {
-                      return (
-                        <div
-                          onClick={() => openLightbox(0)}
-                          className="relative bg-slate-950/90 overflow-hidden flex items-center justify-center min-h-[200px] max-h-[600px] w-full cursor-pointer group select-none"
-                        >
-                          <div
-                            className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40 scale-110 pointer-events-none"
-                            style={{ backgroundImage: `url("${imagesList[0]}")` }}
-                          />
-                          <img
-                            src={imagesList[0]}
-                            alt="Post Asset"
-                            className="relative z-10 max-w-full max-h-[600px] w-auto h-auto object-contain mx-auto shadow-md group-hover:scale-[1.01] transition duration-200"
-                            referrerPolicy="no-referrer"
-                            onError={(e) => {
-                              e.currentTarget.onerror = null;
-                              if (defaultImage) e.currentTarget.src = defaultImage;
-                            }}
-                          />
-                          <div className="absolute top-3 right-3 z-20 bg-slate-900/70 hover:bg-slate-900 text-white rounded-full p-2 backdrop-blur-md shadow-lg flex items-center justify-center transition">
-                            <Maximize2 className="w-4 h-4" />
-                          </div>
-                          {hasScore && (
-                            <div className="absolute top-3 left-3 z-20 bg-blue-600/90 backdrop-blur-md text-white rounded-full p-2 shadow-lg flex items-center justify-center">
-                              <Target className="w-5 h-5 animate-pulse" />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    // 2 Photos Layout
-                    if (imagesList.length === 2) {
-                      return (
-                        <div className="grid grid-cols-2 gap-1 bg-slate-950 overflow-hidden max-h-[420px] relative select-none">
-                          {imagesList.slice(0, 2).map((img, idx) => (
-                            <div
-                              key={idx}
-                              onClick={() => openLightbox(idx)}
-                              className="relative aspect-[4/3] sm:aspect-square overflow-hidden cursor-pointer group bg-slate-900"
-                            >
-                              <img src={img} alt={`Foto ${idx+1}`} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" referrerPolicy="no-referrer" />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
-                                <Maximize2 className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition duration-200 drop-shadow-md" />
-                              </div>
-                              <span className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-mono">
-                                #{idx+1}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    }
-
-                    // 3 Photos Layout
-                    if (imagesList.length === 3) {
-                      return (
-                        <div className="grid grid-cols-3 gap-1 bg-slate-950 overflow-hidden max-h-[420px] relative select-none">
-                          <div
-                            onClick={() => openLightbox(0)}
-                            className="col-span-2 relative h-full min-h-[220px] overflow-hidden cursor-pointer group bg-slate-900"
-                          >
-                            <img src={imagesList[0]} alt="Foto 1" className="w-full h-full object-cover group-hover:scale-105 transition duration-300" referrerPolicy="no-referrer" />
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
-                              <Maximize2 className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition duration-200 drop-shadow-md" />
-                            </div>
-                            <span className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-mono">
-                              #1
-                            </span>
-                          </div>
-                          <div className="flex flex-col gap-1 h-full min-h-[220px]">
-                            {imagesList.slice(1, 3).map((img, idx) => (
-                              <div
-                                key={idx}
-                                onClick={() => openLightbox(idx + 1)}
-                                className="relative h-1/2 overflow-hidden cursor-pointer group bg-slate-900"
-                              >
-                                <img src={img} alt={`Foto ${idx+2}`} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" referrerPolicy="no-referrer" />
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
-                                  <Maximize2 className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition duration-200 drop-shadow-md" />
-                                </div>
-                                <span className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-mono">
-                                  #{idx+2}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    // 4 Photos Layout
-                    if (imagesList.length === 4) {
-                      return (
-                        <div className="grid grid-cols-2 gap-1 bg-slate-950 overflow-hidden max-h-[440px] relative select-none">
-                          {imagesList.slice(0, 4).map((img, idx) => (
-                            <div
-                              key={idx}
-                              onClick={() => openLightbox(idx)}
-                              className="relative aspect-[4/3] overflow-hidden cursor-pointer group bg-slate-900"
-                            >
-                              <img src={img} alt={`Foto ${idx+1}`} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" referrerPolicy="no-referrer" />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
-                                <Maximize2 className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition duration-200 drop-shadow-md" />
-                              </div>
-                              <span className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-mono">
-                                #{idx+1}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    }
-
-                    // 5+ Photos Layout (2 top row + 3 bottom row)
                     return (
-                      <div className="flex flex-col gap-1 bg-slate-950 overflow-hidden max-h-[460px] relative select-none">
-                        <div className="grid grid-cols-2 gap-1 h-[220px]">
-                          {imagesList.slice(0, 2).map((img, idx) => (
-                            <div
-                              key={idx}
-                              onClick={() => openLightbox(idx)}
-                              className="relative h-full overflow-hidden cursor-pointer group bg-slate-900"
-                            >
-                              <img src={img} alt={`Foto ${idx+1}`} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" referrerPolicy="no-referrer" />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
-                                <Maximize2 className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition duration-200 drop-shadow-md" />
-                              </div>
-                              <span className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-mono">
-                                #{idx+1}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="grid grid-cols-3 gap-1 h-[200px]">
-                          {imagesList.slice(2, 5).map((img, idx) => (
-                            <div
-                              key={idx}
-                              onClick={() => openLightbox(idx + 2)}
-                              className="relative h-full overflow-hidden cursor-pointer group bg-slate-900"
-                            >
-                              <img src={img} alt={`Foto ${idx+3}`} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" referrerPolicy="no-referrer" />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
-                                <Maximize2 className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition duration-200 drop-shadow-md" />
-                              </div>
-                              <span className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-mono">
-                                #{idx+3}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      <PostImageCarousel
+                        images={imagesList}
+                        onOpenLightbox={(idx) => setLightboxState({
+                          images: imagesList,
+                          currentIndex: idx,
+                          authorName: post.username,
+                          authorAvatar: post.userAvatar
+                        })}
+                        hasScore={hasScore}
+                        defaultImage={defaultImage}
+                      />
                     );
                   })()}
 
@@ -1366,15 +1343,28 @@ export default function FeedView({
                 </button>
               )}
 
-              {/* Enlarged Photo */}
+              {/* Enlarged Photo with Mobile Touch Swipe Navigation */}
               <motion.img
                 key={lightboxState.currentIndex}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.2 }}
+                drag={lightboxState.images.length > 1 ? "x" : false}
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.2}
+                onDragEnd={(e, { offset }) => {
+                  if (lightboxState.images.length <= 1) return;
+                  if (offset.x < -40) {
+                    // Swiped Left -> Next Photo
+                    setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex + 1) % prev.images.length } : null);
+                  } else if (offset.x > 40) {
+                    // Swiped Right -> Previous Photo
+                    setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex - 1 + prev.images.length) % prev.images.length } : null);
+                  }
+                }}
                 src={lightboxState.images[lightboxState.currentIndex]}
                 alt={`Foto ${lightboxState.currentIndex + 1}`}
-                className="max-w-full max-h-[75vh] w-auto h-auto object-contain mx-auto shadow-2xl rounded-xl"
+                className="max-w-full max-h-[75vh] w-auto h-auto object-contain mx-auto shadow-2xl rounded-xl cursor-grab active:cursor-grabbing touch-pan-y select-none"
                 referrerPolicy="no-referrer"
               />
 
