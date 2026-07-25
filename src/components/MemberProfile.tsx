@@ -8,6 +8,7 @@ import {
   Clock, Copy, QrCode, Images
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { compressUploadImage } from '../utils/imageCompressor';
 
 interface MemberProfileProps {
   currentUser: User | null;
@@ -1335,19 +1336,7 @@ export default function MemberProfile({
 
                               const filesToRead = files.slice(0, remainingSlots);
 
-                              const readPromises = filesToRead.map(file => {
-                                return new Promise<string>((resolve) => {
-                                  const reader = new FileReader();
-                                  reader.onloadend = () => {
-                                    if (reader.result) {
-                                      resolve(reader.result as string);
-                                    } else {
-                                      resolve('');
-                                    }
-                                  };
-                                  reader.readAsDataURL(file);
-                                });
-                              });
+                              const readPromises = filesToRead.map(file => compressUploadImage(file, 1200, 0.75));
 
                               const results = await Promise.all(readPromises);
                               const validResults = results.filter(r => r !== '');
@@ -1407,8 +1396,9 @@ export default function MemberProfile({
                       className="aspect-square bg-slate-100 rounded-xl overflow-hidden cursor-pointer smooth-shadow border border-slate-200 relative group"
                     >
                       <img
-                        src={post.imageUrl || defaultImage}
+                        src={post.imageUrl || (post.sharedPost ? (post.sharedPost.originalImageUrl || post.sharedPost.originalImageUrls?.[0]) : defaultImage)}
                         alt="Thumbnail"
+                        loading="lazy"
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
                         onError={(e) => {

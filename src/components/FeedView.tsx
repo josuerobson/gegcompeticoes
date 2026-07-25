@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Post, User, Comment, ShootingResult, SharedPostInfo } from '../types';
 import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { shootingImages } from '../data/mockData';
 import likeIcon from '@/assets/like_icon.png';
+import { compressUploadImage } from '../utils/imageCompressor';
 
 interface FeedProps {
   posts: Post[];
@@ -152,10 +153,33 @@ export default function FeedView({
     return [...shuffleArray(recentPosts), ...shuffleArray(olderPosts)];
   };
 
+  // Pagination & Infinite Scroll: Load 3 posts initially, load 3 more on scroll
+  const [visibleCount, setVisibleCount] = useState<number>(3);
+  const observerTarget = useRef<HTMLDivElement | null>(null);
+
   // Re-build randomized feed on initial mount or when post count changes
   useEffect(() => {
     setDisplayPosts(buildRandomizedFeed(posts));
+    setVisibleCount(3);
   }, [posts.length]);
+
+  // Infinite Scroll Observer: auto-load 3 more posts as user scrolls near bottom
+  useEffect(() => {
+    const target = observerTarget.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount(prev => Math.min(prev + 3, displayPosts.length));
+        }
+      },
+      { threshold: 0.1, rootMargin: '250px' }
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [displayPosts.length, visibleCount]);
 
   // Merge updated likes/comments into displayPosts without breaking the randomized order
   useEffect(() => {
@@ -167,6 +191,7 @@ export default function FeedView({
 
   const handleManualRefreshFeed = () => {
     setDisplayPosts(buildRandomizedFeed(posts));
+    setVisibleCount(3);
   };
 
   // Personal photo gallery of the logged-in user (strictly photos uploaded/posted by currentUser)
@@ -790,13 +815,25 @@ export default function FeedView({
               );
             })
           )}
+
+          {/* Infinite Scroll Sentinel & Load More Indicator */}
+          {visibleCount < displayPosts.length && (
+            <div ref={observerTarget} className="py-8 flex flex-col items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setVisibleCount(prev => Math.min(prev + 3, displayPosts.length))}
+                className="bg-white border border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300 px-6 py-2.5 rounded-full text-xs font-semibold shadow-xs flex items-center gap-2 transition cursor-pointer"
+              >
+                <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                Carregar mais publicações ({displayPosts.length - visibleCount} restantes)
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Suggested Follows sidebar */}
       <div className="hidden lg:block space-y-6">
-        
-        {/* User Card info brief */}
         {currentUser && (
           <div className="bg-white p-5 rounded-2xl smooth-shadow border border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1032,19 +1069,7 @@ export default function FeedView({
 
                               const filesToRead = files.slice(0, remainingSlots);
 
-                              const readPromises = filesToRead.map(file => {
-                                return new Promise<string>((resolve) => {
-                                  const reader = new FileReader();
-                                  reader.onloadend = () => {
-                                    if (reader.result) {
-                                      resolve(reader.result as string);
-                                    } else {
-                                      resolve('');
-                                    }
-                                  };
-                                  reader.readAsDataURL(file);
-                                });
-                              });
+                              const readPromises = filesToRead.map(file => compressUploadImage(file, 1200, 0.75));
 
                               const results = await Promise.all(readPromises);
                               const validResults = results.filter(r => r !== '');
