@@ -867,18 +867,47 @@ export default function FeedView({
                           <input
                             type="file"
                             accept="image/*"
+                            multiple
                             className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file && postImages.length < 5) {
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                  if (reader.result) {
-                                    setPostImages(prev => [...prev, reader.result as string]);
-                                  }
-                                };
-                                reader.readAsDataURL(file);
+                            onChange={async (e) => {
+                              const files = Array.from(e.target.files || []);
+                              if (files.length === 0) return;
+
+                              const remainingSlots = 5 - postImages.length;
+                              if (remainingSlots <= 0) {
+                                e.target.value = '';
+                                return;
                               }
+
+                              const filesToRead = files.slice(0, remainingSlots);
+
+                              const readPromises = filesToRead.map(file => {
+                                return new Promise<string>((resolve) => {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    if (reader.result) {
+                                      resolve(reader.result as string);
+                                    } else {
+                                      resolve('');
+                                    }
+                                  };
+                                  reader.readAsDataURL(file);
+                                });
+                              });
+
+                              const results = await Promise.all(readPromises);
+                              const validResults = results.filter(r => r !== '');
+
+                              setPostImages(prev => {
+                                const combined = [...prev];
+                                validResults.forEach(r => {
+                                  if (!combined.includes(r) && combined.length < 5) {
+                                    combined.push(r);
+                                  }
+                                });
+                                return combined;
+                              });
+
                               e.target.value = '';
                             }}
                           />
