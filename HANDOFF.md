@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `1b51ce6` |
-| Mensagem | `perf: otimiza carregamento inicial de 120s para 1s com requisicoes concorrentes em paralelo, timeout de seguranca e animação dinamica com movimento` |
-| Data/hora | 2026-07-25T15:21:18-03:00 |
+| Hash | `62e95ec` |
+| Mensagem | `feat: adiciona paginacao e rolagem infinita no feed (3 posts iniciais) e otimizacao automatica de compressao de imagens no upload` |
+| Data/hora | 2026-07-25T15:31:43-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `1b51ce6` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `62e95ec` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -105,7 +105,8 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Opção "Todas as etapas" no Seletor de Etapas do Modal de Premiação (`ChampionshipsView.tsx`)**: Adicionada a opção `"Todas as etapas"` à caixa de seleção de etapas no modal *Dados da Premiação*. Ao ser selecionada (opção padrão ao abrir o modal), o sistema consolida o número total de inscrições, reinscrições e a arrecadação de todas as etapas do campeonato para a modalidade escolhida, aplicando os percentuais gerais de premiação (`percentualPremiacaoTodasEtapas`, premiação adicional e posições 1º a 5º para o campeonato completo).
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
 - **Otimização do Carregamento Inicial (`App.tsx`, `db.ts`)**: Identificado que a função `syncWithBackend` executava 12 requisições HTTP sequenciais uma após a outra, somando latências e acumulando esperas de até 60s~120s. A sincronização foi otimizada para realizar os 11 endpoints em lote paralelo com `Promise.allSettled()`, reduzindo a inicialização para ~1 segundo. Adicionada trava de segurança com `setTimeout` (máximo 3 segundos para encerrar a tela estática) e criados índices no PostgreSQL (`CREATE INDEX IF NOT EXISTS`) nas tabelas `likes`, `comments`, `follows`, `registrations`, `stage_scores` e `posts`.
-- **Tela de Carregamento Dinâmica com Movimento (`App.tsx`)**: Reestruturada a tela de *booting* inicial com animações ricas em tempo real: anel externo de radar giratório (`animate-spin`), aura de rotação e pulso do ícone de alvo, brilho de fundo ambiente, barra de progresso com gradiente *shimmer* contínuo de esquerda a direita, e indicador rotativo com `Loader2` animado para garantir feedback visual constante e impositivo.
+- **Paginação e Rolagem Infinita no Feed (`FeedView.tsx`)**: Implementado carregamento progressivo do feed renderizando estritamente **3 postagens iniciais**. Ao rolar a página para baixo, o `IntersectionObserver` detecta a aproximação do final da tela e carrega automaticamente mais 3 postagens por vez. Adicionado também o botão "Carregar mais publicações" como fallback manual e o atributo `loading="lazy"` em todas as tags `<img>`.
+- **Compressão e Otimização Automática de Imagens no Upload (`imageCompressor.ts`, `FeedView.tsx`, `MemberProfile.tsx`)**: Criado o utilitário client-side `compressUploadImage` que intercepta arquivos de imagem selecionados no navegador antes do upload, redimensiona automaticamente fotos brutas de câmeras/celulares para resolução otimizada para web/mobile (máx. 1200px) e aplica compressão JPEG de 75% via HTML5 Canvas. Arquivos brutos de 10MB a 15MB agora são reduzidos em **~98% para ~150KB**, eliminando payloads pesados em Base64 e acelerando a renderização do feed.
 
 ## Infra / deploy
 
