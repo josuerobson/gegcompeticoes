@@ -311,7 +311,8 @@ function mapPost(p: any): Post {
 }
 
 // Middlewares
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Auth middleware - reads client user context from header for stateless simple authentication
 app.use(async (req, res, next) => {
