@@ -491,14 +491,18 @@ export default function ChampionshipsView({
                   const isRegistered = isMyRegsList.length > 0;
 
                   return (
-                    <div key={champ.id} className="bg-white rounded-2xl smooth-shadow border border-slate-100 overflow-hidden flex flex-col">
+                    <div
+                      key={champ.id}
+                      onClick={() => setViewingChampionship(champ)}
+                      className="bg-white rounded-2xl smooth-shadow border border-slate-100 hover:border-blue-400 hover:shadow-lg transition duration-200 cursor-pointer overflow-hidden flex flex-col group"
+                    >
                       
                       {/* Banner Image */}
-                      <div className="h-44 bg-slate-100 relative">
+                      <div className="h-44 bg-slate-100 relative overflow-hidden">
                         <img
                           src={champ.bannerUrl || defaultImage}
                           alt={champ.title}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                           referrerPolicy="no-referrer"
                           onError={(e) => {
                             e.currentTarget.onerror = null;
@@ -527,7 +531,7 @@ export default function ChampionshipsView({
                       {/* Content */}
                       <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                         <div className="space-y-2">
-                          <h3 className="font-display font-bold text-lg text-slate-950 leading-snug">{champ.title}</h3>
+                          <h3 className="font-display font-bold text-lg text-slate-950 leading-snug group-hover:text-blue-600 transition">{champ.title}</h3>
                           <p className="text-slate-500 text-xs leading-relaxed">{champ.description}</p>
                         </div>
 
@@ -559,15 +563,21 @@ export default function ChampionshipsView({
                           {/* Action CTA */}
                           {isFinished ? (
                             <button
-                              onClick={() => setActiveTab('rankings')}
-                              className="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs py-3 rounded-xl font-bold transition flex items-center justify-center gap-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setViewingChampionship(champ);
+                              }}
+                              className="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs py-3 rounded-xl font-bold transition flex items-center justify-center gap-2 cursor-pointer"
                             >
-                              <Trophy className="w-4 h-4 text-amber-500" />
-                              Ver Histórico dos Campeões
+                              <Target className="w-4 h-4 text-amber-500" />
+                              Ver Campeonato
                             </button>
                           ) : (
                             <button
-                              onClick={() => setViewingChampionship(champ)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setViewingChampionship(champ);
+                              }}
                               className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-3 rounded-xl font-bold shadow-md shadow-blue-100 transition flex items-center justify-center gap-2 cursor-pointer"
                             >
                               <Target className="w-4 h-4" />

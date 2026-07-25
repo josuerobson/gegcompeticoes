@@ -1310,7 +1310,11 @@ export default function MemberProfile({
                   const isRegistered = userRegs.length > 0;
 
                   return (
-                    <div key={champ.id} className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50 flex flex-col justify-between">
+                    <div
+                      key={champ.id}
+                      onClick={onNavigateToChampionships}
+                      className="border border-slate-200 hover:border-blue-400 hover:shadow-md transition duration-200 cursor-pointer rounded-xl overflow-hidden bg-slate-50/50 flex flex-col justify-between group"
+                    >
                       <div className="h-32 bg-slate-200 relative">
                         <img
                           src={champ.bannerUrl || defaultImage}
