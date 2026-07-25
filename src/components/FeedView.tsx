@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Post, User, Comment, ShootingResult } from '../types';
-import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X } from 'lucide-react';
+import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { shootingImages } from '../data/mockData';
 import likeIcon from '@/assets/like_icon.png';
@@ -50,6 +50,65 @@ export default function FeedView({
   const [commentInputs, setCommentInputs] = useState<{ [postId: string]: string }>({});
   const [activeCommentDrawer, setActiveCommentDrawer] = useState<string | null>(null);
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
+
+  // --- Randomized Feed State & Algorithm ---
+  // Prioritizes new posts (last 3 days or top 5 newest), shuffling them randomly among themselves on each load,
+  // and shuffles older posts randomly below them.
+  const [displayPosts, setDisplayPosts] = useState<Post[]>([]);
+
+  const shuffleArray = <T,>(array: T[]): T[] => {
+    const arr = [...array];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  };
+
+  const buildRandomizedFeed = (allPosts: Post[]): Post[] => {
+    if (!allPosts || allPosts.length === 0) return [];
+
+    const now = new Date().getTime();
+    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+
+    // 1. Separate into recent posts (created in last 3 days) vs older posts
+    const recentPosts = allPosts.filter(p => {
+      const postTime = new Date(p.createdAt).getTime();
+      return !isNaN(postTime) && (now - postTime) <= THREE_DAYS_MS;
+    });
+
+    const olderPosts = allPosts.filter(p => !recentPosts.includes(p));
+
+    // 2. If fewer than 3 posts in the 3-day window, consider top 5 newest posts as "recent"
+    if (recentPosts.length < 3 && allPosts.length > 0) {
+      const sortedByDate = [...allPosts].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      const newest = sortedByDate.slice(0, Math.min(5, allPosts.length));
+      const rest = sortedByDate.slice(Math.min(5, allPosts.length));
+      return [...shuffleArray(newest), ...shuffleArray(rest)];
+    }
+
+    // 3. Shuffle recent posts among themselves, and older posts among themselves
+    return [...shuffleArray(recentPosts), ...shuffleArray(olderPosts)];
+  };
+
+  // Re-build randomized feed on initial mount or when post count changes
+  useEffect(() => {
+    setDisplayPosts(buildRandomizedFeed(posts));
+  }, [posts.length]);
+
+  // Merge updated likes/comments into displayPosts without breaking the randomized order
+  useEffect(() => {
+    setDisplayPosts(prev => {
+      if (prev.length === 0) return buildRandomizedFeed(posts);
+      return prev.map(p => posts.find(newP => newP.id === p.id) || p);
+    });
+  }, [posts]);
+
+  const handleManualRefreshFeed = () => {
+    setDisplayPosts(buildRandomizedFeed(posts));
+  };
 
   // Suggestions list
   const suggestedUsers = users
@@ -162,15 +221,28 @@ export default function FeedView({
         </div>
 
         {/* Feed Posts */}
-        <div className="space-y-6">
-          {posts.length === 0 ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Feed Social & Treinos</span>
+            <button
+              type="button"
+              onClick={handleManualRefreshFeed}
+              className="text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="Embaralhar e carregar novas publicações"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+              Atualizar Feed
+            </button>
+          </div>
+
+          {displayPosts.length === 0 ? (
             <div className="bg-white p-12 text-center rounded-xl border border-slate-200 shadow-sm">
               <Target className="w-12 h-12 text-slate-300 mx-auto mb-3" />
               <p className="text-slate-600 font-medium">Nenhuma postagem no feed ainda.</p>
               <p className="text-xs text-slate-400 mt-1">Seja o primeiro a publicar sua preparação esportiva!</p>
             </div>
           ) : (
-            posts.map((post) => {
+            displayPosts.map((post) => {
               const isLiked = currentUser ? post.likes.includes(currentUser.id) : false;
               const hasScore = !!post.targetScore;
 
