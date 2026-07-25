@@ -216,22 +216,30 @@ export default function FeedView({
                     </div>
                   </div>
 
-                  {/* Optional Image */}
+                  {/* Optional Image - 100% Full Uncropped Display */}
                   {post.imageUrl && (
-                    <div className="relative aspect-video sm:aspect-[4/3] bg-slate-100">
+                    <div className="relative bg-slate-950/90 overflow-hidden flex items-center justify-center min-h-[200px] max-h-[650px] w-full">
+                      {/* Soft blurred background layer matching the photo */}
+                      <div
+                        className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40 scale-110 pointer-events-none"
+                        style={{ backgroundImage: `url("${post.imageUrl || defaultImage}")` }}
+                      />
+                      
+                      {/* Main Uncropped Image */}
                       <img
                         src={post.imageUrl || defaultImage}
                         alt="Post Asset"
-                        className="w-full h-full object-cover"
+                        className="relative z-10 max-w-full max-h-[650px] w-auto h-auto object-contain mx-auto shadow-md"
                         referrerPolicy="no-referrer"
                         onError={(e) => {
                           e.currentTarget.onerror = null;
                           if (defaultImage) e.currentTarget.src = defaultImage;
                         }}
                       />
+                      
                       {/* Floating Indicator of Shooting Record */}
                       {hasScore && (
-                        <div className="absolute top-3 right-3 bg-blue-600 text-white rounded-full p-2 shadow-lg flex items-center justify-center">
+                        <div className="absolute top-3 right-3 z-20 bg-blue-600/90 backdrop-blur-md text-white rounded-full p-2 shadow-lg flex items-center justify-center">
                           <Target className="w-5 h-5 animate-pulse" />
                         </div>
                       )}

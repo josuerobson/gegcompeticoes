@@ -2470,11 +2470,16 @@ export default function MemberProfile({
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white max-w-2xl w-full rounded-2xl smooth-shadow overflow-hidden max-h-[85vh] flex flex-col sm:flex-row"
             >
-              <div className="sm:w-1/2 bg-slate-900 flex items-center justify-center">
+              <div className="sm:w-1/2 bg-slate-950 flex items-center justify-center p-2 relative overflow-hidden min-h-[250px]">
+                {/* Soft blurred background layer matching the photo */}
+                <div
+                  className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40 scale-110 pointer-events-none"
+                  style={{ backgroundImage: `url("${selectedExpandPost.imageUrl || defaultImage}")` }}
+                />
                 <img
                   src={selectedExpandPost.imageUrl || defaultImage}
                   alt="Expanded target"
-                  className="w-full h-full object-cover"
+                  className="relative z-10 max-w-full max-h-[500px] w-auto h-auto object-contain mx-auto shadow-md"
                   referrerPolicy="no-referrer"
                   onError={(e) => {
                     e.currentTarget.onerror = null;
