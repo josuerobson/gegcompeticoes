@@ -190,6 +190,12 @@ export default function FeedView({
         };
       }
 
+      if (!postContent.trim() && (!finalImagesList || finalImagesList.length === 0) && !scoreObj) {
+        alert('Por favor, escreva uma mensagem ou selecione pelo menos uma imagem para publicar.');
+        setIsSubmittingPost(false);
+        return;
+      }
+
       await onAddPost(postContent, finalImagesList?.[0], scoreObj, finalImagesList);
       
       // Reset
@@ -519,9 +525,11 @@ export default function FeedView({
 
                   {/* Body Content */}
                   <div className="p-4 space-y-4">
-                    <p className="text-slate-800 text-[14px] leading-relaxed whitespace-pre-wrap">
-                      {post.content}
-                    </p>
+                    {post.content && post.content.trim() !== '' && (
+                      <p className="text-slate-800 text-[14px] leading-relaxed whitespace-pre-wrap">
+                        {post.content}
+                      </p>
+                    )}
 
                     {/* Integrated Shooting Result Card */}
                     {hasScore && post.targetScore && (
@@ -753,14 +761,13 @@ export default function FeedView({
               <form onSubmit={handleSubmitPost} className="p-5 space-y-4 overflow-y-auto flex-1">
                 {/* Content */}
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase block">O que você está pensando?</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase block">O que você está pensando? (opcional)</label>
                   <textarea
                     rows={3}
-                    placeholder="Compartilhe seus treinos, munição, ajustes de mira ou a sensação de seu último disparo..."
+                    placeholder="Escreva uma legenda... ou deixe em branco se for publicar apenas fotos!"
                     value={postContent}
                     onChange={(e) => setPostContent(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-sm text-slate-700"
-                    required
                   />
                 </div>
 
