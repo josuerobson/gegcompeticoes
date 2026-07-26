@@ -2067,6 +2067,16 @@ export default function App() {
               onPaySignature={handlePaySignature}
               onLogout={handleLogout}
               onAddPost={handleAddPost}
+              onLikePost={handleLikePost}
+              onCommentPost={handleCommentPost}
+              onViewProfile={(username) => {
+                const foundUser = users.find(u => u.username === username);
+                if (foundUser) {
+                  setSelectedProfileUser(foundUser);
+                  setActiveTab('profile');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              }}
               onNavigateToChampionships={() => setActiveTab('championships')}
               onUpdateProfile={handleUpdateProfile}
               onUpdateClub={handleUpdateClub}

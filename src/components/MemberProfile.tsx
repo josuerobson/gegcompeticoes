@@ -4,11 +4,14 @@ import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
-  Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronDown, Info, PlusCircle, X, UserCog, Camera,
-  Clock, Copy, QrCode, Images
+  Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronLeft, ChevronDown, Info, PlusCircle, X, UserCog, Camera,
+  Clock, Copy, QrCode, Images, Heart, MessageCircle, Send, Bookmark, Maximize2, Share2, Repeat, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { compressUploadImage } from '../utils/imageCompressor';
+import { PostImageCarousel } from './FeedView';
+import likeIcon from '@/assets/like_icon.png';
+import { SharedPostInfo } from '../types';
 
 interface MemberProfileProps {
   currentUser: User | null;
@@ -24,7 +27,10 @@ interface MemberProfileProps {
   onToggleFollow: (userId: string) => Promise<void>;
   onPaySignature: () => Promise<void>;
   onLogout: () => void;
-  onAddPost: (content: string, imageUrl?: string, targetScore?: any, imageUrls?: string[]) => Promise<void>;
+  onAddPost: (content: string, imageUrl?: string, targetScore?: any, imageUrls?: string[], sharedPost?: SharedPostInfo) => Promise<void>;
+  onLikePost?: (postId: string) => Promise<void>;
+  onCommentPost?: (postId: string, content: string) => Promise<void>;
+  onViewProfile?: (username: string) => void;
   onNavigateToChampionships: () => void;
   onUpdateProfile: (fields: Record<string, unknown>) => Promise<boolean>;
   onUpdateClub: (clubId: string, fields: Record<string, unknown>) => Promise<boolean>;
@@ -437,6 +443,9 @@ export default function MemberProfile({
   onPaySignature,
   onLogout,
   onAddPost,
+  onLikePost,
+  onCommentPost,
+  onViewProfile,
   onNavigateToChampionships,
   onUpdateProfile,
   onUpdateClub,
@@ -444,6 +453,73 @@ export default function MemberProfile({
   defaultImage
 }: MemberProfileProps) {
   const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
+
+  // Post action states & Lightbox for profile post stream
+  const [commentInputs, setCommentInputs] = useState<{ [postId: string]: string }>({});
+  const [activeCommentDrawer, setActiveCommentDrawer] = useState<string | null>(null);
+  const [shareModalPost, setShareModalPost] = useState<Post | null>(null);
+  const [shareComment, setShareComment] = useState('');
+  const [isSubmittingShare, setIsSubmittingShare] = useState(false);
+  const [lightboxState, setLightboxState] = useState<{
+    images: string[];
+    currentIndex: number;
+    authorName?: string;
+    authorAvatar?: string;
+  } | null>(null);
+
+  const handleSendComment = (postId: string) => {
+    const content = commentInputs[postId];
+    if (content && content.trim() && onCommentPost) {
+      onCommentPost(postId, content.trim());
+      setCommentInputs(prev => ({ ...prev, [postId]: '' }));
+    }
+  };
+
+  const handleConfirmShare = async () => {
+    if (!shareModalPost) return;
+    setIsSubmittingShare(true);
+    try {
+      const origImgs = shareModalPost.imageUrls && shareModalPost.imageUrls.length > 0
+        ? shareModalPost.imageUrls
+        : (shareModalPost.imageUrl ? [shareModalPost.imageUrl] : undefined);
+
+      const sharedInfo: SharedPostInfo = {
+        originalPostId: shareModalPost.id,
+        originalUserId: shareModalPost.userId,
+        originalUsername: shareModalPost.username,
+        originalUserAvatar: shareModalPost.userAvatar,
+        originalContent: shareModalPost.content,
+        originalImageUrl: shareModalPost.imageUrl,
+        originalImageUrls: origImgs,
+        originalTargetScore: shareModalPost.targetScore,
+        originalCreatedAt: shareModalPost.createdAt
+      };
+
+      await onAddPost(shareComment.trim(), undefined, undefined, undefined, sharedInfo);
+      setShareModalPost(null);
+      setShareComment('');
+    } catch (err) {
+      console.error('Error sharing post:', err);
+    } finally {
+      setIsSubmittingShare(false);
+    }
+  };
+
+  // Keyboard navigation for Lightbox
+  useEffect(() => {
+    if (!lightboxState) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setLightboxState(null);
+      } else if (e.key === 'ArrowLeft') {
+        setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex - 1 + prev.images.length) % prev.images.length } : null);
+      } else if (e.key === 'ArrowRight') {
+        setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex + 1) % prev.images.length } : null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lightboxState]);
 
   // Tabs expanded
   type ProfileTabType = 'my_profile' | 'posts' | 'championships' | 'multi_championships' | 'my_registrations' | 'results' | 'certificates' | 'club_card' | 'gg_card' | 'trainings' | 'declarations' | 'ammo';
@@ -1272,98 +1348,56 @@ export default function MemberProfile({
                     </div>
                   )}
 
-                  {/* Controls: Upload from PC & Personal Gallery (only if < 5) */}
+                  {/* Controls: Upload from PC */}
                   {profilePostImages.length < 5 && (
-                    <div className="space-y-2 pt-1 border-t border-slate-100">
-                      {/* Personal Gallery Selector */}
-                      {myUserPhotos.length > 0 && (
-                        <div>
-                          <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
-                            Sua Galeria Pessoal (fotos salvas):
-                          </span>
-                          <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-[100px] overflow-y-auto p-1 bg-slate-50 rounded-lg border border-slate-200">
-                            {myUserPhotos.map((url, idx) => {
-                              const isAdded = profilePostImages.includes(url);
-                              return (
-                                <button
-                                  key={idx}
-                                  type="button"
-                                  disabled={isAdded}
-                                  onClick={() => {
-                                    if (!isAdded && profilePostImages.length < 5) {
-                                      setProfilePostImages(prev => [...prev, url]);
-                                    }
-                                  }}
-                                  className={`aspect-square rounded-md overflow-hidden border relative transition cursor-pointer ${
-                                    isAdded
-                                      ? 'opacity-40 border-slate-300 cursor-not-allowed scale-95'
-                                      : 'border-slate-200 hover:border-blue-500 hover:scale-105'
-                                  }`}
-                                  title={isAdded ? 'Foto já adicionada' : 'Adicionar à publicação'}
-                                >
-                                  <img src={url} alt={`Minha foto ${idx + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                  {isAdded && (
-                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                      <CheckCircle2 className="w-3 h-3 text-white" />
-                                    </div>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-1 border-t border-slate-100">
+                      <label className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer shrink-0">
+                        <Plus className="w-4 h-4 text-blue-600" />
+                        Enviar Foto(s) do Computador/Celular (até 5)
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={async (e) => {
+                            const files = Array.from(e.target.files || []);
+                            if (files.length === 0) return;
 
-                      {/* File upload from PC */}
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-1">
-                        <label className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0">
-                          <Plus className="w-4 h-4 text-blue-600" />
-                          Enviar Foto(s) do PC (até 5)
-                          <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            className="hidden"
-                            onChange={async (e) => {
-                              const files = Array.from(e.target.files || []);
-                              if (files.length === 0) return;
-
-                              const remainingSlots = 5 - profilePostImages.length;
-                              if (remainingSlots <= 0) {
-                                e.target.value = '';
-                                return;
-                              }
-
-                              const filesToRead = files.slice(0, remainingSlots);
-
-                              const readPromises = filesToRead.map(file => compressUploadImage(file, 1200, 0.75));
-
-                              const results = await Promise.all(readPromises);
-                              const validResults = results.filter(r => r !== '');
-
-                              setProfilePostImages(prev => {
-                                const combined = [...prev];
-                                validResults.forEach(r => {
-                                  if (!combined.includes(r) && combined.length < 5) {
-                                    combined.push(r);
-                                  }
-                                });
-                                return combined;
-                              });
-
+                            const remainingSlots = 5 - profilePostImages.length;
+                            if (remainingSlots <= 0) {
                               e.target.value = '';
-                            }}
-                          />
-                        </label>
+                              return;
+                            }
 
-                        <button
-                          onClick={handleCreateProfilePost}
-                          disabled={isPostingProfilePost || (!profilePostContent.trim() && profilePostImages.length === 0)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2 rounded-xl transition self-end sm:self-center cursor-pointer shadow-md shadow-blue-50 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {isPostingProfilePost ? 'Publicando...' : 'Publicar'}
-                        </button>
-                      </div>
+                            const filesToRead = files.slice(0, remainingSlots);
+
+                            const readPromises = filesToRead.map(file => compressUploadImage(file, 1200, 0.75));
+
+                            const results = await Promise.all(readPromises);
+                            const validResults = results.filter(r => r !== '');
+
+                            setProfilePostImages(prev => {
+                              const combined = [...prev];
+                              validResults.forEach(r => {
+                                if (!combined.includes(r) && combined.length < 5) {
+                                  combined.push(r);
+                                }
+                              });
+                              return combined;
+                            });
+
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+
+                      <button
+                        onClick={handleCreateProfilePost}
+                        disabled={isPostingProfilePost || (!profilePostContent.trim() && profilePostImages.length === 0)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-6 py-2 rounded-xl transition self-end sm:self-center cursor-pointer shadow-md shadow-blue-50 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isPostingProfilePost ? 'Publicando...' : 'Publicar'}
+                      </button>
                     </div>
                   )}
 
@@ -1372,7 +1406,7 @@ export default function MemberProfile({
                       <button
                         onClick={handleCreateProfilePost}
                         disabled={isPostingProfilePost}
-                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2 rounded-xl transition cursor-pointer shadow-md shadow-blue-50 flex items-center gap-1.5 disabled:opacity-50"
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-6 py-2 rounded-xl transition cursor-pointer shadow-md shadow-blue-50 flex items-center gap-1.5 disabled:opacity-50"
                       >
                         {isPostingProfilePost ? 'Publicando...' : 'Publicar'}
                       </button>
@@ -1381,37 +1415,329 @@ export default function MemberProfile({
                 </div>
               )}
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {/* User Posts Stream (Rendered as regular Feed Posts) */}
+              <div className="space-y-6 max-w-2xl mx-auto">
                 {userPosts.length === 0 ? (
-                  <div className="col-span-full py-16 text-center text-slate-400 bg-white rounded-2xl smooth-shadow border border-slate-100">
-                    <Grid className="w-10 h-10 text-slate-200 mx-auto mb-2" />
-                    <p className="font-medium text-sm">Nenhuma foto publicada ainda.</p>
+                  <div className="py-16 text-center text-slate-400 bg-white rounded-2xl smooth-shadow border border-slate-100">
+                    <Grid className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                    <p className="font-medium text-sm text-slate-600">Nenhuma publicação efetuada ainda.</p>
                   </div>
                 ) : (
-                  userPosts.map((post) => (
-                    <motion.div
-                      key={post.id}
-                      whileHover={{ scale: 1.02 }}
-                      onClick={() => setSelectedExpandPost(post)}
-                      className="aspect-square bg-slate-100 rounded-xl overflow-hidden cursor-pointer smooth-shadow border border-slate-200 relative group"
-                    >
-                      <img
-                        src={post.imageUrl || (post.sharedPost ? (post.sharedPost.originalImageUrl || post.sharedPost.originalImageUrls?.[0]) : defaultImage)}
-                        alt="Thumbnail"
-                        loading="lazy"
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                        onError={(e) => {
-                          e.currentTarget.onerror = null;
-                          if (defaultImage) e.currentTarget.src = defaultImage;
-                        }}
-                      />
-                      <div className="absolute inset-0 bg-blue-900/40 opacity-0 group-hover:opacity-100 transition duration-150 flex items-center justify-center gap-4 text-white text-xs font-bold font-mono">
-                        <span>❤ {post.likes.length}</span>
-                        <span>💬 {post.comments.length}</span>
-                      </div>
-                    </motion.div>
-                  ))
+                  userPosts.map((post) => {
+                    const isLiked = currentUser ? post.likes.includes(currentUser.id) : false;
+                    const hasScore = !!post.targetScore;
+
+                    return (
+                      <motion.article
+                        id={`profile-post-card-${post.id}`}
+                        key={post.id}
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden text-left"
+                      >
+                        {/* Shared Post Banner Header */}
+                        {post.sharedPost && (
+                          <div className="bg-blue-50/70 border-b border-blue-100 px-4 py-2 flex items-center justify-between text-xs text-slate-700">
+                            <div className="flex items-center gap-2">
+                              <Repeat className="w-4 h-4 text-blue-600 shrink-0" />
+                              <span>
+                                <strong className="font-bold text-slate-900 cursor-pointer hover:underline" onClick={() => onViewProfile && onViewProfile(post.username)}>@{post.username}</strong>
+                                {' '}compartilhou a publicação de{' '}
+                                <button
+                                  type="button"
+                                  onClick={() => onViewProfile && onViewProfile(post.sharedPost!.originalUsername)}
+                                  className="font-bold text-blue-700 hover:underline"
+                                >
+                                  @{post.sharedPost.originalUsername}
+                                </button>
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Header */}
+                        <div className="p-4 flex items-center justify-between">
+                          <div className="flex items-center gap-3 cursor-pointer hover:opacity-85 transition" onClick={() => onViewProfile && onViewProfile(post.username)}>
+                            <img
+                              src={post.userAvatar}
+                              alt={post.username}
+                              className="w-10 h-10 rounded-full object-cover border border-slate-200"
+                              referrerPolicy="no-referrer"
+                              loading="lazy"
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                              }}
+                            />
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-slate-900 text-sm">@{post.username}</span>
+                                {users.find(u => u.id === post.userId)?.role === 'admin' && (
+                                  <span className="bg-blue-50 text-blue-600 text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider">
+                                    DIRETORIA
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs text-slate-400">
+                                {new Date(post.createdAt).toLocaleDateString('pt-BR', {
+                                  day: '2-digit', 
+                                  month: 'short', 
+                                  hour: '2-digit', 
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Follow button if not current user */}
+                          {currentUser && currentUser.id !== post.userId && (
+                            <button
+                              onClick={() => onToggleFollow(post.userId)}
+                              className={`text-xs px-3 py-1.5 rounded-full font-semibold transition ${
+                                currentUser.following.includes(post.userId)
+                                  ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                  : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                              }`}
+                            >
+                              {currentUser.following.includes(post.userId) ? 'Seguindo' : 'Seguir'}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Media Carousel */}
+                        {(() => {
+                          const imagesList = post.imageUrls && post.imageUrls.length > 0
+                            ? post.imageUrls
+                            : (post.imageUrl ? [post.imageUrl] : []);
+
+                          if (imagesList.length === 0) return null;
+
+                          return (
+                            <PostImageCarousel
+                              images={imagesList}
+                              onOpenLightbox={(idx) => setLightboxState({
+                                images: imagesList,
+                                currentIndex: idx,
+                                authorName: post.username,
+                                authorAvatar: post.userAvatar
+                              })}
+                              hasScore={hasScore}
+                              defaultImage={defaultImage}
+                            />
+                          );
+                        })()}
+
+                        {/* Body Content */}
+                        <div className="p-4 space-y-3">
+                          {post.content && post.content.trim() !== '' && (
+                            <p className="text-slate-800 text-[14px] leading-relaxed whitespace-pre-wrap">
+                              {post.content}
+                            </p>
+                          )}
+
+                          {/* Target Score Card */}
+                          {hasScore && post.targetScore && (
+                            <div className="bg-gradient-to-br from-slate-900 to-blue-950 text-white p-4 rounded-xl space-y-3 font-mono relative overflow-hidden ring-1 ring-blue-500/20">
+                              <div className="absolute -right-3 -bottom-3 opacity-15">
+                                <Target className="w-24 h-24 text-white" />
+                              </div>
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <span className="text-[10px] text-blue-400 uppercase tracking-widest font-bold">G&G RESULTADO HOMOLOGADO</span>
+                                  <h4 className="text-sm font-semibold tracking-tight text-slate-100 font-display mt-0.5">{post.targetScore.discipline}</h4>
+                                </div>
+                                <div className="bg-blue-600/30 text-blue-300 font-sans border border-blue-500/20 px-2 py-0.5 rounded text-[11px] font-bold">
+                                  Distância: {post.targetScore.distance}m
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-3 border-t border-slate-800 pt-3">
+                                <div className="text-center bg-slate-950/40 p-2 rounded justify-center items-center">
+                                  <span className="text-[9px] text-slate-400 block uppercase">ACERTOS</span>
+                                  <span className="text-lg font-bold text-emerald-400">{post.targetScore.hits}/{post.targetScore.shots}</span>
+                                </div>
+                                <div className="text-center bg-slate-950/40 p-2 rounded justify-center items-center">
+                                  <span className="text-[9px] text-slate-400 block uppercase">EQUIPAMENTO</span>
+                                  <span className="text-xs font-semibold block text-slate-200 truncate">{post.targetScore.gunModel}</span>
+                                  <span className="text-[10px] text-slate-400">{post.targetScore.caliber}</span>
+                                </div>
+                                <div className="text-center bg-slate-950/40 p-2 rounded justify-center items-center">
+                                  <span className="text-[9px] text-slate-400 block uppercase">PONTOS</span>
+                                  <span className="text-lg font-bold text-amber-400">{post.targetScore.score}</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Embedded Shared Original Post Card */}
+                          {post.sharedPost && (
+                            <div className="border border-slate-200 rounded-xl bg-slate-50/80 overflow-hidden space-y-2.5 my-2">
+                              <div className="p-3 bg-white border-b border-slate-200/70 flex items-center justify-between">
+                                <div
+                                  className="flex items-center gap-2.5 cursor-pointer hover:opacity-85"
+                                  onClick={() => onViewProfile && onViewProfile(post.sharedPost!.originalUsername)}
+                                >
+                                  <img
+                                    src={post.sharedPost.originalUserAvatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80"}
+                                    alt={post.sharedPost.originalUsername}
+                                    className="w-7 h-7 rounded-full object-cover border border-slate-200"
+                                    referrerPolicy="no-referrer"
+                                    loading="lazy"
+                                  />
+                                  <div>
+                                    <span className="font-semibold text-slate-900 text-xs block">@{post.sharedPost.originalUsername}</span>
+                                    <span className="text-[10px] text-slate-400">
+                                      {new Date(post.sharedPost.originalCreatedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {post.sharedPost.originalContent && post.sharedPost.originalContent.trim() !== '' && (
+                                <p className="px-3.5 text-slate-800 text-xs leading-relaxed whitespace-pre-wrap">
+                                  {post.sharedPost.originalContent}
+                                </p>
+                              )}
+
+                              {(() => {
+                                const origImgs = post.sharedPost.originalImageUrls && post.sharedPost.originalImageUrls.length > 0
+                                  ? post.sharedPost.originalImageUrls
+                                  : (post.sharedPost.originalImageUrl ? [post.sharedPost.originalImageUrl] : []);
+
+                                if (origImgs.length === 0) return null;
+
+                                return (
+                                  <div className="px-3.5 pb-2">
+                                    <div className={`grid gap-1 rounded-xl overflow-hidden ${origImgs.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                                      {origImgs.slice(0, 4).map((img, idx) => (
+                                        <div
+                                          key={idx}
+                                          onClick={() => setLightboxState({
+                                            images: origImgs,
+                                            currentIndex: idx,
+                                            authorName: post.sharedPost!.originalUsername,
+                                            authorAvatar: post.sharedPost!.originalUserAvatar
+                                          })}
+                                          className="relative aspect-[16/9] overflow-hidden cursor-pointer group bg-slate-900 rounded-lg"
+                                        >
+                                          <img src={img} alt={`Foto original ${idx+1}`} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition duration-200" referrerPolicy="no-referrer" />
+                                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition flex items-center justify-center">
+                                            <Maximize2 className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition duration-150" />
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
+                              {post.sharedPost.originalTargetScore && (
+                                <div className="px-3.5 pb-3">
+                                  <div className="bg-slate-900 text-white p-3 rounded-xl font-mono text-xs space-y-1.5">
+                                    <div className="flex justify-between items-center text-[10px] text-blue-400 font-bold">
+                                      <span>{post.sharedPost.originalTargetScore.discipline}</span>
+                                      <span>{post.sharedPost.originalTargetScore.distance}m</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-xs border-t border-slate-800 pt-1.5">
+                                      <span className="text-emerald-400 font-bold">Acertos: {post.sharedPost.originalTargetScore.hits}/{post.sharedPost.originalTargetScore.shots}</span>
+                                      <span className="text-amber-400 font-bold">Pontos: {post.sharedPost.originalTargetScore.score}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Action Buttons */}
+                          <div className="flex items-center justify-between border-t border-slate-50 pt-3 text-slate-600">
+                            <div className="flex items-center gap-5">
+                              <button
+                                onClick={() => onLikePost && onLikePost(post.id)}
+                                className="flex items-center gap-1.5 group transition duration-150 cursor-pointer select-none"
+                                title={isLiked ? 'Descurtir publicação' : 'Curtir publicação'}
+                              >
+                                <img
+                                  src={likeIcon}
+                                  alt="Curtir"
+                                  loading="lazy"
+                                  className={`w-6 h-6 object-contain transition-all duration-200 ${
+                                    isLiked
+                                      ? 'scale-110 drop-shadow-md brightness-105'
+                                      : 'opacity-40 grayscale group-hover:grayscale-0 group-hover:opacity-100 group-hover:scale-115'
+                                  }`}
+                                />
+                                <span className={`font-bold text-xs ${isLiked ? 'text-blue-600 font-extrabold' : 'text-slate-600'}`}>
+                                  {post.likes.length}
+                                </span>
+                              </button>
+                              
+                              <button
+                                onClick={() => setActiveCommentDrawer(activeCommentDrawer === post.id ? null : post.id)}
+                                className="flex items-center gap-1.5 hover:text-blue-600 transition duration-150 text-sm cursor-pointer"
+                              >
+                                <MessageCircle className="w-5 h-5" />
+                                <span className="font-medium">{post.comments.length}</span>
+                              </button>
+
+                              <button
+                                onClick={() => setShareModalPost(post)}
+                                className="flex items-center gap-1.5 text-slate-500 hover:text-blue-600 transition duration-150 text-sm cursor-pointer"
+                                title="Compartilhar no meu perfil"
+                              >
+                                <Share2 className="w-4 h-4" />
+                                <span className="font-semibold text-xs">
+                                  {post.sharesCount && post.sharesCount > 0 ? post.sharesCount : 'Compartilhar'}
+                                </span>
+                              </button>
+                            </div>
+
+                            <button className="text-slate-400 hover:text-blue-600 transition">
+                              <Bookmark className="w-5 h-5" />
+                            </button>
+                          </div>
+
+                          {/* Comments Thread */}
+                          {post.comments.length > 0 && (
+                            <div className="bg-slate-50 rounded-xl p-3 space-y-2 mt-2 text-sm">
+                              {post.comments.slice(-3).map((comment) => (
+                                <div key={comment.id} className="flex gap-2">
+                                  <span className="font-bold text-slate-800 cursor-pointer hover:underline" onClick={() => onViewProfile && onViewProfile(comment.username)}>@{comment.username}:</span>
+                                  <span className="text-slate-600">{comment.content}</span>
+                                </div>
+                              ))}
+                              {post.comments.length > 3 && (
+                                <button
+                                  onClick={() => setActiveCommentDrawer(post.id)}
+                                  className="text-xs text-blue-600 font-medium hover:underline mt-1 block"
+                                >
+                                  Ver todos os {post.comments.length} comentários
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Input comment inline */}
+                          <div className="flex gap-2 items-center bg-slate-50 rounded-xl px-3 py-1.5 mt-2">
+                            <input
+                              type="text"
+                              placeholder="Escreva um comentário..."
+                              value={commentInputs[post.id] || ''}
+                              onChange={(e) => setCommentInputs(prev => ({ ...prev, [post.id]: e.target.value }))}
+                              onKeyDown={(e) => e.key === 'Enter' && handleSendComment(post.id)}
+                              className="flex-1 bg-transparent border-none focus:outline-none text-xs text-slate-700"
+                            />
+                            <button
+                              onClick={() => handleSendComment(post.id)}
+                              className="text-blue-600 hover:text-blue-800 p-1 rounded-lg hover:bg-blue-50 transition"
+                            >
+                              <Send className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                        </div>
+                      </motion.article>
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -3146,6 +3472,193 @@ export default function MemberProfile({
                   <Printer className="w-3.5 h-3.5" />
                   Imprimir
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Lightbox Modal for enlarged photos with touch swipe support */}
+      <AnimatePresence>
+        {lightboxState && (
+          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-2 sm:p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative max-w-5xl w-full h-full max-h-[90vh] flex flex-col justify-between p-2"
+            >
+              {/* Top Bar Header */}
+              <div className="flex items-center justify-between text-white border-b border-white/10 pb-3">
+                <div className="flex items-center gap-3">
+                  {lightboxState.authorAvatar && (
+                    <img src={lightboxState.authorAvatar} alt="Avatar" className="w-8 h-8 rounded-full object-cover border border-white/20" />
+                  )}
+                  <div>
+                    {lightboxState.authorName && (
+                      <span className="font-bold text-xs text-white block">@{lightboxState.authorName}</span>
+                    )}
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Foto {lightboxState.currentIndex + 1} de {lightboxState.images.length}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setLightboxState(null)}
+                  className="text-white/70 hover:text-white bg-white/10 hover:bg-white/20 w-9 h-9 rounded-full flex items-center justify-center font-bold transition cursor-pointer"
+                  title="Fechar (Esc)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Main Center Image Display with Navigation Arrows & Touch Swipe */}
+              <div className="relative flex-1 flex items-center justify-center my-3 overflow-hidden">
+                {lightboxState.images.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex - 1 + prev.images.length) % prev.images.length } : null)}
+                    className="absolute left-2 sm:left-4 z-20 bg-black/60 hover:bg-black/90 text-white p-3 rounded-full border border-white/10 transition cursor-pointer hover:scale-110 shadow-lg"
+                    title="Foto anterior"
+                  >
+                    <ChevronLeft className="w-6 h-6" />
+                  </button>
+                )}
+
+                <motion.img
+                  key={lightboxState.currentIndex}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.2 }}
+                  drag={lightboxState.images.length > 1 ? "x" : false}
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.2}
+                  onDragEnd={(e, { offset }) => {
+                    if (lightboxState.images.length <= 1) return;
+                    if (offset.x < -40) {
+                      setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex + 1) % prev.images.length } : null);
+                    } else if (offset.x > 40) {
+                      setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex - 1 + prev.images.length) % prev.images.length } : null);
+                    }
+                  }}
+                  src={lightboxState.images[lightboxState.currentIndex]}
+                  alt={`Foto ${lightboxState.currentIndex + 1}`}
+                  className="max-w-full max-h-[75vh] w-auto h-auto object-contain mx-auto shadow-2xl rounded-xl cursor-grab active:cursor-grabbing touch-pan-y select-none"
+                  referrerPolicy="no-referrer"
+                />
+
+                {lightboxState.images.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex + 1) % prev.images.length } : null)}
+                    className="absolute right-2 sm:right-4 z-20 bg-black/60 hover:bg-black/90 text-white p-3 rounded-full border border-white/10 transition cursor-pointer hover:scale-110 shadow-lg"
+                    title="Próxima foto"
+                  >
+                    <ChevronRight className="w-6 h-6" />
+                  </button>
+                )}
+              </div>
+
+              {/* Bottom Thumbnails Strip */}
+              {lightboxState.images.length > 1 && (
+                <div className="flex items-center justify-center gap-2 pt-2 border-t border-white/10 overflow-x-auto">
+                  {lightboxState.images.map((thumbUrl, tIdx) => (
+                    <button
+                      key={tIdx}
+                      type="button"
+                      onClick={() => setLightboxState(prev => prev ? { ...prev, currentIndex: tIdx } : null)}
+                      className={`w-12 h-12 rounded-lg overflow-hidden border-2 transition cursor-pointer shrink-0 ${
+                        tIdx === lightboxState.currentIndex
+                          ? 'border-blue-500 scale-110 opacity-100 ring-2 ring-blue-400/50'
+                          : 'border-white/20 opacity-50 hover:opacity-100'
+                      }`}
+                    >
+                      <img src={thumbUrl} alt={`Miniatura ${tIdx+1}`} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Share Post Modal */}
+      <AnimatePresence>
+        {shareModalPost && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white max-w-lg w-full rounded-2xl smooth-shadow overflow-hidden p-6 space-y-4 relative text-slate-800"
+            >
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2 text-slate-900">
+                  <Share2 className="w-5 h-5 text-blue-600" />
+                  <h3 className="font-display font-bold text-base">Compartilhar Publicação</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShareModalPost(null)}
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <textarea
+                  rows={3}
+                  placeholder="Escreva algo sobre este compartilhamento (opcional)..."
+                  value={shareComment}
+                  onChange={(e) => setShareComment(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 text-xs text-slate-800 resize-none"
+                />
+
+                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/70 space-y-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <img
+                      src={shareModalPost.userAvatar}
+                      alt={shareModalPost.username}
+                      className="w-6 h-6 rounded-full object-cover border border-slate-200"
+                    />
+                    <span className="font-bold text-slate-900">@{shareModalPost.username}</span>
+                  </div>
+
+                  {shareModalPost.content && (
+                    <p className="text-slate-700 text-xs line-clamp-3 leading-relaxed">
+                      {shareModalPost.content}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShareModalPost(null)}
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl text-xs font-semibold transition cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmShare}
+                    disabled={isSubmittingShare}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
+                  >
+                    {isSubmittingShare ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Compartilhando...
+                      </>
+                    ) : (
+                      'Compartilhar no meu perfil'
+                    )}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

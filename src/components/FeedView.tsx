@@ -18,7 +18,7 @@ interface FeedProps {
   onViewProfile: (username: string) => void;
 }
 
-function PostImageCarousel({
+export function PostImageCarousel({
   images,
   onOpenLightbox,
   hasScore,
