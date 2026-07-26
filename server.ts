@@ -325,6 +325,35 @@ function mapPost(p: any): Post {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// Serve uploaded images and static assets from public uploads directory
+const uploadsDir = path.join(__dirname, 'public', 'uploads', 'posts');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
+
+// Helper to save base64 image strings to disk as lightweight static images
+function saveBase64ImageToDisk(base64Data: string, prefix: string): string {
+  if (!base64Data || typeof base64Data !== 'string' || !base64Data.startsWith('data:image/')) {
+    return base64Data;
+  }
+  try {
+    const matches = base64Data.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) return base64Data;
+
+    const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+    const buffer = Buffer.from(matches[2], 'base64');
+    const fileName = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 10000)}.${ext}`;
+    const filePath = path.join(uploadsDir, fileName);
+
+    fs.writeFileSync(filePath, buffer);
+    return `/uploads/posts/${fileName}`;
+  } catch (err) {
+    console.error('Error saving base64 image to disk:', err);
+    return base64Data;
+  }
+}
+
 // Auth middleware - reads client user context from header for stateless simple authentication
 app.use(async (req, res, next) => {
   const userId = req.headers['x-user-id'] as string;
@@ -1060,6 +1089,10 @@ app.post('/api/users/:id/follow', requireAuth, async (req, res) => {
 // 3. Instagram Social Feed (Posts, Likes, Comments)
 app.get('/api/posts', async (req, res) => {
   try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || (req.query.all === 'true' ? 1000 : 20);
+    const offset = (page - 1) * limit;
+
     const postsRes = await pool.query(
       `SELECT p.*,
         COALESCE((SELECT json_agg(user_id) FROM likes WHERE post_id = p.id), '[]'::json) as likes,
@@ -1075,10 +1108,12 @@ app.get('/api/posts', async (req, res) => {
           FROM comments c WHERE c.post_id = p.id
         ), '[]'::json) as comments
       FROM posts p
-      ORDER BY p.created_at DESC`
+      ORDER BY p.created_at DESC
+      LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
     const posts = postsRes.rows.map(mapPost);
-    res.json({ posts });
+    res.json({ posts, page, limit });
   } catch (err) {
     console.error('Fetch posts database error:', err);
     res.status(500).json({ error: 'Erro ao buscar publicações.' });
@@ -1089,20 +1124,12 @@ app.post('/api/posts', requireAuth, async (req, res) => {
   const { content, imageUrl, imageUrls, targetScore, sharedPost } = req.body;
   const currentUser = (req as any).user as User;
 
-  // Add additive columns if not present
-  try {
-    await pool.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS shared_post TEXT;`);
-    await pool.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS shares_count INT DEFAULT 0;`);
-  } catch (e) {
-    // Columns already exist or minor warning
-  }
-
-  // Process image URLs array (limit to max 5 images)
+  // Process image URLs array (limit to max 5 images) & save Base64 to disk as lightweight static images
   let finalImageUrls: string[] | undefined = undefined;
   if (Array.isArray(imageUrls) && imageUrls.length > 0) {
-    finalImageUrls = imageUrls.slice(0, 5);
+    finalImageUrls = imageUrls.slice(0, 5).map((img, idx) => saveBase64ImageToDisk(img, `img_${currentUser.id}_${idx}`));
   } else if (imageUrl) {
-    finalImageUrls = [imageUrl];
+    finalImageUrls = [saveBase64ImageToDisk(imageUrl, `img_${currentUser.id}_0`)];
   }
 
   if (!content && (!finalImageUrls || finalImageUrls.length === 0) && !targetScore && !sharedPost) {

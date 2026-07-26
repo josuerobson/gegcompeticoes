@@ -711,7 +711,10 @@ export default function App() {
         body: JSON.stringify({ content, imageUrl, targetScore, imageUrls, sharedPost })
       });
       if (res.ok) {
-        await syncWithBackend();
+        const data = await res.json();
+        if (data.post) {
+          setPosts(prev => [data.post, ...prev]);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -719,30 +722,53 @@ export default function App() {
   };
 
   const handleLikePost = async (postId: string) => {
-    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
-    if (currentUser) {
-      authHeaders['x-user-id'] = currentUser.id;
-    }
+    if (!currentUser) return;
+    const authHeaders: HeadersInit = {
+      'Content-Type': 'application/json',
+      'x-user-id': currentUser.id
+    };
+
+    // Optimistic UI update (0ms delay)
+    setPosts(prev => prev.map(p => {
+      if (p.id !== postId) return p;
+      const isLiked = p.likes.includes(currentUser.id);
+      const newLikes = isLiked
+        ? p.likes.filter(id => id !== currentUser.id)
+        : [...p.likes, currentUser.id];
+      return { ...p, likes: newLikes };
+    }));
 
     try {
-      const res = await fetch(`/api/posts/${postId}/like`, {
+      await fetch(`/api/posts/${postId}/like`, {
         method: 'POST',
         headers: authHeaders
       });
-      if (res.ok) {
-        // Optimistic UI update or quick re-sync
-        await syncWithBackend();
-      }
     } catch (err) {
       console.error(err);
     }
   };
 
   const handleCommentPost = async (postId: string, content: string) => {
-    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
-    if (currentUser) {
-      authHeaders['x-user-id'] = currentUser.id;
-    }
+    if (!currentUser || !content.trim()) return;
+    const authHeaders: HeadersInit = {
+      'Content-Type': 'application/json',
+      'x-user-id': currentUser.id
+    };
+
+    const tempComment: Comment = {
+      id: `comm_${Date.now()}`,
+      userId: currentUser.id,
+      username: currentUser.username,
+      userAvatar: currentUser.avatarUrl,
+      content: content.trim(),
+      createdAt: new Date().toISOString()
+    };
+
+    // Optimistic UI update (0ms delay)
+    setPosts(prev => prev.map(p => {
+      if (p.id !== postId) return p;
+      return { ...p, comments: [...p.comments, tempComment] };
+    }));
 
     try {
       const res = await fetch(`/api/posts/${postId}/comment`, {
@@ -751,7 +777,16 @@ export default function App() {
         body: JSON.stringify({ content })
       });
       if (res.ok) {
-        await syncWithBackend();
+        const data = await res.json();
+        if (data.comment) {
+          setPosts(prev => prev.map(p => {
+            if (p.id !== postId) return p;
+            return {
+              ...p,
+              comments: p.comments.map(c => c.id === tempComment.id ? data.comment : c)
+            };
+          }));
+        }
       }
     } catch (err) {
       console.error(err);

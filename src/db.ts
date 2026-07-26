@@ -274,8 +274,10 @@ export async function initDB() {
       );
     `);
 
-    // Database performance optimization indexes
+    // Database performance optimization indexes & additive schema migrations
     await client.query(`
+      ALTER TABLE posts ADD COLUMN IF NOT EXISTS shared_post TEXT;
+      ALTER TABLE posts ADD COLUMN IF NOT EXISTS shares_count INT DEFAULT 0;
       CREATE INDEX IF NOT EXISTS idx_likes_post_id ON likes(post_id);
       CREATE INDEX IF NOT EXISTS idx_comments_post_id ON comments(post_id);
       CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);

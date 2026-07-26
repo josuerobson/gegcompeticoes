@@ -309,11 +309,13 @@ export default function FeedView({
     return () => observer.disconnect();
   }, [displayPosts.length, visibleCount]);
 
-  // Merge updated likes/comments into displayPosts without breaking the randomized order
+  // Merge updated likes/comments and newly added posts into displayPosts without breaking order
   useEffect(() => {
     setDisplayPosts(prev => {
       if (prev.length === 0) return buildRandomizedFeed(posts);
-      return prev.map(p => posts.find(newP => newP.id === p.id) || p);
+      const newItems = posts.filter(p => !prev.some(existing => existing.id === p.id));
+      const updated = prev.map(p => posts.find(newP => newP.id === p.id) || p);
+      return [...newItems, ...updated];
     });
   }, [posts]);
 
