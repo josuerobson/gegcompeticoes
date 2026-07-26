@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `93b0ec0` |
-| Mensagem | `fix: altera cor do titulo dos campeonatos no modo escuro para branco e remove repeticao duplicada da descricao` |
-| Data/hora | 2026-07-25T16:24:24-03:00 |
+| Hash | `52d2096` |
+| Mensagem | `perf: otimiza performance com salvamento de imagens Base64 em disco estatico, paginacao na API /api/posts, remocao de DDL nas rotas e atualizacao otimista instantanea (0ms delay) em curtidas, comentarios e postagens` |
+| Data/hora | 2026-07-26T09:44:29-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `93b0ec0` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `52d2096` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -106,7 +106,11 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
 - **Otimização do Carregamento Inicial (`App.tsx`, `db.ts`)**: Identificado que a função `syncWithBackend` executava 12 requisições HTTP sequenciais uma após a outra, somando latências e acumulando esperas de até 60s~120s. A sincronização foi otimizada para realizar os 11 endpoints em lote paralelo com `Promise.allSettled()`, reduzindo a inicialização para ~1 segundo. Adicionada trava de segurança com `setTimeout` (máximo 3 segundos para encerrar a tela estática) e criados índices no PostgreSQL (`CREATE INDEX IF NOT EXISTS`) nas tabelas `likes`, `comments`, `follows`, `registrations`, `stage_scores` e `posts`.
 - **Paginação e Rolagem Infinita no Feed (`FeedView.tsx`)**: Implementado carregamento progressivo do feed renderizando estritamente **3 postagens iniciais**. Ao rolar a página para baixo, o `IntersectionObserver` detecta a aproximação do final da tela e carrega automaticamente mais 3 postagens por vez. Adicionado também o botão "Carregar mais publicações" como fallback manual e o atributo `loading="lazy"` em todas as tags `<img>`.
-- **Correção da Cor do Título e Remoção da Repetição de Descrição nos Campeonatos (`ChampionshipsView.tsx`, `App.tsx`)**: Ajustada a classe do título dos cards de campeonatos para utilizar fonte branca em modo escuro / temas escuros (`text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400`), resolvendo o problema de legibilidade do título em preto sobre fundo escuro. Adicionada também a checagem condicional para omitir o parágrafo de descrição sempre que o texto for idêntico ao título do campeonato (`champ.description.trim().toLowerCase() !== champ.title.trim().toLowerCase()`), eliminando a repetição duplicada do nome do campeonato logo abaixo do título.
+- **Otimizações Profundas de Performance (`server.ts`, `db.ts`, `App.tsx`, `FeedView.tsx`)**:
+  1. **Conversão de Imagens Base64 para Arquivos Estáticos (`server.ts`)**: Adicionado o utilitário `saveBase64ImageToDisk` que intercepta dados Base64 no envio de postagens, salvando os arquivos fisicamente na pasta estática `/uploads/posts/` e armazenando apenas a URL leve no banco. O payload dos posts foi reduzido de ~10MB para KBs.
+  2. **Paginação na API Backend (`server.ts`)**: Atualizado o endpoint `GET /api/posts` para suportar parâmetros de consulta `page` e `limit`, aplicando cláusulas `LIMIT` e `OFFSET` no PostgreSQL e evitando a transferência de todo o histórico de posts em cada requisição.
+  3. **Remoção de Comandos DDL das Rotas HTTP (`db.ts`, `server.ts`)**: Transferidas todas as migrações `ALTER TABLE` para a rotina de boot do banco (`initDb()`), eliminando o *Access Exclusive Lock* que travava a tabela `posts` durante as publicações.
+  4. **Atualizações Otimistas Instantâneas (0ms Delay) (`App.tsx`)**: Refatorados os manipuladores de curtidas (`handleLikePost`), comentários (`handleCommentPost`) e publicação (`handleAddPost`) para atualizar o estado no React instantaneamente sem re-executar as 11 chamadas do `syncWithBackend()`.
 
 ## Infra / deploy
 
