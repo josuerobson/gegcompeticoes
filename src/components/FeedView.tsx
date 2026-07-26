@@ -1007,61 +1007,9 @@ export default function FeedView({
 
                   {/* Add Images Controls (only if < 5) */}
                   {postImages.length < 5 && (
-                    <div className="space-y-3 pt-1">
-                      {/* User's Personal Photo Gallery (only photos uploaded/posted by currentUser) */}
-                      <div>
-                        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600 mb-1">
-                          <span>Sua Galeria Pessoal (fotos enviadas por você):</span>
-                          {myUserPhotos.length > 0 && (
-                            <span className="text-[10px] text-slate-400 font-normal">
-                              {myUserPhotos.length} {myUserPhotos.length === 1 ? 'foto salva' : 'fotos salvas'}
-                            </span>
-                          )}
-                        </div>
-
-                        {myUserPhotos.length === 0 ? (
-                          <div className="bg-white p-3 rounded-xl border border-dashed border-slate-250 text-center">
-                            <p className="text-xs text-slate-600 font-semibold mb-0.5">Sua galeria pessoal está vazia</p>
-                            <p className="text-[10px] text-slate-400">
-                              Envie fotos do seu computador ou informe a URL abaixo para publicar e salvar na sua conta!
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-5 gap-1.5 max-h-[140px] overflow-y-auto p-1 bg-white rounded-xl border border-slate-200 shadow-2xs">
-                            {myUserPhotos.map((url, idx) => {
-                              const isAdded = postImages.includes(url);
-                              return (
-                                <button
-                                  key={idx}
-                                  type="button"
-                                  disabled={isAdded}
-                                  onClick={() => {
-                                    if (!isAdded && postImages.length < 5) {
-                                      setPostImages(prev => [...prev, url]);
-                                    }
-                                  }}
-                                  className={`aspect-square rounded-lg overflow-hidden border-2 relative transition cursor-pointer ${
-                                    isAdded
-                                      ? 'opacity-40 border-slate-300 cursor-not-allowed scale-95'
-                                      : 'border-slate-200 hover:border-blue-500 hover:scale-105'
-                                  }`}
-                                  title={isAdded ? 'Foto já adicionada' : 'Adicionar à publicação'}
-                                >
-                                  <img src={url} alt={`Minha foto ${idx + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                  {isAdded && (
-                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                      <CheckCircle2 className="w-4 h-4 text-white" />
-                                    </div>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-
+                    <div className="space-y-3 pt-1 border-t border-slate-100">
                       {/* File upload or URL */}
-                      <div className="pt-2 border-t border-slate-200/60 flex flex-col sm:flex-row items-center gap-2">
+                      <div className="flex flex-col sm:flex-row items-center gap-2">
                         <label className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 shadow-2xs">
                           <Plus className="w-4 h-4" />
                           Enviar do PC

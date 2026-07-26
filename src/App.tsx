@@ -2041,6 +2041,7 @@ export default function App() {
               stageScores={stageScores}
               stages={stages}
               users={users}
+              posts={posts}
               weapons={weapons}
               weaponLookupOptions={weaponLookupOptions}
               modalities={modalities}

@@ -28,6 +28,7 @@ interface AdminPanelProps {
   stageScores: StageScore[];
   stages: Stage[];
   users: User[];
+  posts?: Post[];
   weapons: Weapon[];
   weaponLookupOptions: WeaponLookupOption[];
   modalities: Modality[];
@@ -1197,6 +1198,7 @@ export default function AdminPanel({
   stageScores,
   stages,
   users,
+  posts = [],
   weapons,
   weaponLookupOptions,
   modalities,
@@ -1227,6 +1229,22 @@ export default function AdminPanel({
   onCreateClub
 }: AdminPanelProps) {
   const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
+
+  // User's own photos uploaded/posted in the system
+  const myUserPhotos = React.useMemo(() => {
+    if (!currentUser || !posts) return [];
+    const urls: string[] = [];
+    posts.filter(p => p.userId === currentUser.id).forEach(p => {
+      if (p.imageUrls && p.imageUrls.length > 0) {
+        p.imageUrls.forEach(u => {
+          if (u && !urls.includes(u)) urls.push(u);
+        });
+      } else if (p.imageUrl && !urls.includes(p.imageUrl)) {
+        urls.push(p.imageUrl);
+      }
+    });
+    return urls;
+  }, [currentUser, posts]);
   const DEFAULT_CLUB_WEAPON = { weaponNumber: '', sigmaNumber: '', weaponClass: '', model: '', caliber: '', manufacturer: '', registrySystem: '', permissionStatus: '' };
   const [newClubWeapon, setNewClubWeapon] = useState(DEFAULT_CLUB_WEAPON);
   const [savingClubWeapon, setSavingClubWeapon] = useState(false);
@@ -2962,7 +2980,7 @@ export default function AdminPanel({
                             onClick={() => setEditChampImageSourceMode('gallery')}
                             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${editChampImageSourceMode === 'gallery' ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650 hover:bg-slate-100'}`}
                           >
-                            Galeria G&G
+                            Fotos Próprias ({myUserPhotos.length})
                           </button>
                           <button
                             type="button"
@@ -2981,21 +2999,27 @@ export default function AdminPanel({
                         </div>
 
                         {editChampImageSourceMode === 'gallery' && (
-                          <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-3">
-                            {GALLERY_IMAGES.map((img) => (
-                              <button
-                                key={img.id}
-                                type="button"
-                                onClick={() => setEditChampBanner(img.url)}
-                                className={`relative rounded-lg overflow-hidden border-2 h-14 bg-slate-100 transition cursor-pointer ${editChampBanner === img.url ? 'border-blue-600 scale-95 shadow-xs' : 'border-transparent hover:border-slate-300'}`}
-                              >
-                                <img src={img.url} alt={img.label} className="w-full h-full object-cover" />
-                                <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-white text-[7px] truncate px-1 py-0.5 text-center font-semibold">
-                                  {img.label}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
+                          myUserPhotos.length === 0 ? (
+                            <div className="p-3 mb-3 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-500">
+                              Você ainda não possui fotos próprias enviadas. Escolha a opção <strong>"Upload de Imagem"</strong> ao lado para carregar do seu dispositivo.
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-3 max-h-[160px] overflow-y-auto p-1 border border-slate-200 rounded-xl bg-slate-50">
+                              {myUserPhotos.map((url, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => setEditChampBanner(url)}
+                                  className={`relative rounded-lg overflow-hidden border-2 h-14 bg-slate-100 transition cursor-pointer ${editChampBanner === url ? 'border-blue-600 scale-95 shadow-xs ring-2 ring-blue-500/30' : 'border-transparent hover:border-slate-300'}`}
+                                >
+                                  <img src={url} alt={`Minha foto ${idx + 1}`} className="w-full h-full object-cover" />
+                                  <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-white text-[7px] truncate px-1 py-0.5 text-center font-semibold font-mono">
+                                    Foto #{idx + 1}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )
                         )}
 
                         {editChampImageSourceMode === 'upload' && (
@@ -3185,7 +3209,7 @@ export default function AdminPanel({
                             onClick={() => setChampImageSourceMode('gallery')}
                             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${champImageSourceMode === 'gallery' ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650 hover:bg-slate-100'}`}
                           >
-                            Galeria G&G
+                            Fotos Próprias ({myUserPhotos.length})
                           </button>
                           <button
                             type="button"
@@ -3204,21 +3228,27 @@ export default function AdminPanel({
                         </div>
 
                         {champImageSourceMode === 'gallery' && (
-                          <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-3">
-                            {GALLERY_IMAGES.map((img) => (
-                              <button
-                                key={img.id}
-                                type="button"
-                                onClick={() => setChampBanner(img.url)}
-                                className={`relative rounded-lg overflow-hidden border-2 h-14 bg-slate-100 transition cursor-pointer ${champBanner === img.url ? 'border-blue-600 scale-95 shadow-xs' : 'border-transparent hover:border-slate-300'}`}
-                              >
-                                <img src={img.url} alt={img.label} className="w-full h-full object-cover" />
-                                <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-white text-[7px] truncate px-1 py-0.5 text-center font-semibold">
-                                  {img.label}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
+                          myUserPhotos.length === 0 ? (
+                            <div className="p-3 mb-3 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-500">
+                              Você ainda não possui fotos próprias enviadas. Escolha a opção <strong>"Upload de Imagem"</strong> ao lado para carregar do seu dispositivo.
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-3 max-h-[160px] overflow-y-auto p-1 border border-slate-200 rounded-xl bg-slate-50">
+                              {myUserPhotos.map((url, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => setChampBanner(url)}
+                                  className={`relative rounded-lg overflow-hidden border-2 h-14 bg-slate-100 transition cursor-pointer ${champBanner === url ? 'border-blue-600 scale-95 shadow-xs ring-2 ring-blue-500/30' : 'border-transparent hover:border-slate-300'}`}
+                                >
+                                  <img src={url} alt={`Minha foto ${idx + 1}`} className="w-full h-full object-cover" />
+                                  <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-white text-[7px] truncate px-1 py-0.5 text-center font-semibold font-mono">
+                                    Foto #{idx + 1}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )
                         )}
 
                         {champImageSourceMode === 'upload' && (
@@ -4026,7 +4056,7 @@ export default function AdminPanel({
                     onClick={() => setDefaultImageSourceMode('gallery')}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${defaultImageSourceMode === 'gallery' ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650 hover:bg-slate-100'}`}
                   >
-                    Galeria G&G
+                    Fotos Próprias ({myUserPhotos.length})
                   </button>
                   <button
                     type="button"
@@ -4045,21 +4075,27 @@ export default function AdminPanel({
                 </div>
 
                 {defaultImageSourceMode === 'gallery' && (
-                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-3">
-                    {GALLERY_IMAGES.map((img) => (
-                      <button
-                        key={img.id}
-                        type="button"
-                        onClick={() => setNewDefaultImage(img.url)}
-                        className={`relative rounded-lg overflow-hidden border-2 h-14 bg-slate-100 transition cursor-pointer ${newDefaultImage === img.url ? 'border-blue-600 scale-95 shadow-xs' : 'border-transparent hover:border-slate-300'}`}
-                      >
-                        <img src={img.url} alt={img.label} className="w-full h-full object-cover" />
-                        <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-white text-[7px] truncate px-1 py-0.5 text-center font-semibold">
-                          {img.label}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                  myUserPhotos.length === 0 ? (
+                    <div className="p-3 mb-3 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-500">
+                      Você ainda não possui fotos próprias enviadas. Escolha a opção <strong>"Upload de Imagem"</strong> ao lado para carregar do seu dispositivo.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-3 max-h-[160px] overflow-y-auto p-1 border border-slate-200 rounded-xl bg-slate-50">
+                      {myUserPhotos.map((url, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setNewDefaultImage(url)}
+                          className={`relative rounded-lg overflow-hidden border-2 h-14 bg-slate-100 transition cursor-pointer ${newDefaultImage === url ? 'border-blue-600 scale-95 shadow-xs ring-2 ring-blue-500/30' : 'border-transparent hover:border-slate-300'}`}
+                        >
+                          <img src={url} alt={`Minha foto ${idx + 1}`} className="w-full h-full object-cover" />
+                          <span className="absolute bottom-0 inset-x-0 bg-slate-900/60 text-white text-[7px] truncate px-1 py-0.5 text-center font-semibold font-mono">
+                            Foto #{idx + 1}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )
                 )}
 
                 {defaultImageSourceMode === 'upload' && (
