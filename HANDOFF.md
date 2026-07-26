@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `23b049c` |
-| Mensagem | `feat: exibe postagens no perfil como cards normais do feed e remove o card de galeria pessoal` |
-| Data/hora | 2026-07-26T10:22:18-03:00 |
+| Hash | `85cba96` |
+| Mensagem | `feat: adiciona opcao de exclusao de postagens proprias e endpoint DELETE /api/posts/:id` |
+| Data/hora | 2026-07-26T10:27:32-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `23b049c` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `85cba96` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -106,9 +106,9 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
 - **Otimização do Carregamento Inicial (`App.tsx`, `db.ts`)**: Identificado que a função `syncWithBackend` executava 12 requisições HTTP sequenciais uma após a outra, somando latências e acumulando esperas de até 60s~120s. A sincronização foi otimizada para realizar os 11 endpoints em lote paralelo com `Promise.allSettled()`, reduzindo a inicialização para ~1 segundo. Adicionada trava de segurança com `setTimeout` (máximo 3 segundos para encerrar a tela estática) e criados índices no PostgreSQL (`CREATE INDEX IF NOT EXISTS`) nas tabelas `likes`, `comments`, `follows`, `registrations`, `stage_scores` e `posts`.
 - **Paginação e Rolagem Infinita no Feed (`FeedView.tsx`)**: Implementado carregamento progressivo do feed renderizando estritamente **3 postagens iniciais**. Ao rolar a página para baixo, o `IntersectionObserver` detecta a aproximação do final da tela e carrega automaticamente mais 3 postagens por vez. Adicionado também o botão "Carregar mais publicações" como fallback manual e o atributo `loading="lazy"` em todas as tags `<img>`.
-- **Exibição de Posts Normais e Remoção do Card de Galeria Pessoal no Perfil (`MemberProfile.tsx`, `App.tsx`, `FeedView.tsx`)**:
-  1. Removido o card seletor `"Sua Galeria Pessoal (fotos salvas)"` da seção de criação de postagens no perfil.
-  2. Substituído a grade antiga de miniaturas quadradas (`grid-cols-2`) pela renderização completa de **cards de feed normais** na aba "Publicações" do perfil. Os posts exibem carrossel de fotos interativo (`PostImageCarousel` com navegação por gestos/touch swipe), botão de curtir com contagem instantânea, caixa de comentários com thread e atalho inline, cartão de resultado de tiro homologado, compartilhamento e modal Lightbox para expansão em tela cheia.
+- **Opção de Exclusão de Postagens Próprias (`server.ts`, `App.tsx`, `FeedView.tsx`, `MemberProfile.tsx`)**:
+  1. **Endpoint Backend `DELETE /api/posts/:id`**: Criada rota segura no servidor que valida se o solicitante é o autor do post ou administrador antes de remover a postagem e seus comentários/curtidas associados do PostgreSQL.
+  2. **Botão de Exclusão nos Cards (Lixeira `Trash2`)**: Adicionado ícone de lixeira no cabeçalho das postagens próprias tanto na Timeline (`FeedView.tsx`) quanto no Perfil do Atleta (`MemberProfile.tsx`). Ao confirmar a remoção, a postagem é ocultada instantaneamente com atualização otimista (0ms delay).
 
 ## Infra / deploy
 
