@@ -793,6 +793,26 @@ export default function App() {
     }
   };
 
+  const handleDeletePost = async (postId: string) => {
+    if (!currentUser) return;
+    const authHeaders: HeadersInit = {
+      'Content-Type': 'application/json',
+      'x-user-id': currentUser.id
+    };
+
+    // Optimistic UI removal (0ms delay)
+    setPosts(prev => prev.filter(p => p.id !== postId));
+
+    try {
+      await fetch(`/api/posts/${postId}`, {
+        method: 'DELETE',
+        headers: authHeaders
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleToggleFollow = async (userId: string) => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {
@@ -1987,6 +2007,7 @@ export default function App() {
               onAddPost={handleAddPost}
               onLikePost={handleLikePost}
               onCommentPost={handleCommentPost}
+              onDeletePost={handleDeletePost}
               onToggleFollow={handleToggleFollow}
               defaultImage={settings.default_image}
               onViewProfile={handleViewProfile}
@@ -2069,6 +2090,7 @@ export default function App() {
               onAddPost={handleAddPost}
               onLikePost={handleLikePost}
               onCommentPost={handleCommentPost}
+              onDeletePost={handleDeletePost}
               onViewProfile={(username) => {
                 const foundUser = users.find(u => u.username === username);
                 if (foundUser) {

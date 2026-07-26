@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Post, User, Comment, ShootingResult, SharedPostInfo } from '../types';
-import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat } from 'lucide-react';
+import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { shootingImages } from '../data/mockData';
 import likeIcon from '@/assets/like_icon.png';
@@ -13,6 +13,7 @@ interface FeedProps {
   onAddPost: (content: string, imageUrl?: string, targetScore?: ShootingResult, imageUrls?: string[], sharedPost?: SharedPostInfo) => Promise<void>;
   onLikePost: (postId: string) => Promise<void>;
   onCommentPost: (postId: string, content: string) => Promise<void>;
+  onDeletePost?: (postId: string) => Promise<void>;
   onToggleFollow: (userId: string) => Promise<void>;
   defaultImage?: string;
   onViewProfile: (username: string) => void;
@@ -153,6 +154,7 @@ export default function FeedView({
   onAddPost,
   onLikePost,
   onCommentPost,
+  onDeletePost,
   onToggleFollow,
   defaultImage,
   onViewProfile
@@ -553,6 +555,38 @@ export default function FeedView({
                           })}
                         </span>
                       </div>
+                    </div>
+
+                    {/* Right side actions in Header: Delete button (if owner or admin) & Follow button */}
+                    <div className="flex items-center gap-2">
+                      {currentUser && (currentUser.id === post.userId || ['admin', 'master_admin', 'club_admin'].includes(currentUser.role)) && onDeletePost && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm('Tem certeza que deseja excluir esta publicação?')) {
+                              onDeletePost(post.id);
+                            }
+                          }}
+                          className="p-1.5 rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                          title="Excluir publicação"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+
+                      {currentUser && currentUser.id !== post.userId && (
+                        <button
+                          onClick={() => onToggleFollow(post.userId)}
+                          className={`text-xs px-3 py-1.5 rounded-full font-semibold transition ${
+                            currentUser.following.includes(post.userId)
+                              ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                          }`}
+                        >
+                          {currentUser.following.includes(post.userId) ? 'Seguindo' : 'Seguir'}
+                        </button>
+                      )}
                     </div>
                   </div>
 

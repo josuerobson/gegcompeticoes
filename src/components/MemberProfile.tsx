@@ -30,6 +30,7 @@ interface MemberProfileProps {
   onAddPost: (content: string, imageUrl?: string, targetScore?: any, imageUrls?: string[], sharedPost?: SharedPostInfo) => Promise<void>;
   onLikePost?: (postId: string) => Promise<void>;
   onCommentPost?: (postId: string, content: string) => Promise<void>;
+  onDeletePost?: (postId: string) => Promise<void>;
   onViewProfile?: (username: string) => void;
   onNavigateToChampionships: () => void;
   onUpdateProfile: (fields: Record<string, unknown>) => Promise<boolean>;
@@ -445,6 +446,7 @@ export default function MemberProfile({
   onAddPost,
   onLikePost,
   onCommentPost,
+  onDeletePost,
   onViewProfile,
   onNavigateToChampionships,
   onUpdateProfile,
@@ -1489,19 +1491,37 @@ export default function MemberProfile({
                             </div>
                           </div>
 
-                          {/* Follow button if not current user */}
-                          {currentUser && currentUser.id !== post.userId && (
-                            <button
-                              onClick={() => onToggleFollow(post.userId)}
-                              className={`text-xs px-3 py-1.5 rounded-full font-semibold transition ${
-                                currentUser.following.includes(post.userId)
-                                  ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                  : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
-                              }`}
-                            >
-                              {currentUser.following.includes(post.userId) ? 'Seguindo' : 'Seguir'}
-                            </button>
-                          )}
+                          {/* Right side actions in Header: Delete button (if owner or admin) & Follow button */}
+                          <div className="flex items-center gap-2">
+                            {currentUser && (currentUser.id === post.userId || ['admin', 'master_admin', 'club_admin'].includes(currentUser.role)) && onDeletePost && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (window.confirm('Tem certeza que deseja excluir esta publicação?')) {
+                                    onDeletePost(post.id);
+                                  }
+                                }}
+                                className="p-1.5 rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                                title="Excluir publicação"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+
+                            {currentUser && currentUser.id !== post.userId && (
+                              <button
+                                onClick={() => onToggleFollow(post.userId)}
+                                className={`text-xs px-3 py-1.5 rounded-full font-semibold transition ${
+                                  currentUser.following.includes(post.userId)
+                                    ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                                }`}
+                              >
+                                {currentUser.following.includes(post.userId) ? 'Seguindo' : 'Seguir'}
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         {/* Media Carousel */}

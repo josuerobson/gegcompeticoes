@@ -1261,6 +1261,34 @@ app.post('/api/posts/:id/comment', requireAuth, async (req, res) => {
   }
 });
 
+app.delete('/api/posts/:id', requireAuth, async (req, res) => {
+  const postId = req.params.id;
+  const currentUser = (req as any).user as User;
+
+  try {
+    const postCheck = await pool.query('SELECT user_id FROM posts WHERE id = $1', [postId]);
+    if (postCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Publicação não encontrada.' });
+    }
+
+    const postOwnerId = postCheck.rows[0].user_id;
+    const isAdmin = ['admin', 'master_admin', 'club_admin'].includes(currentUser.role);
+
+    if (postOwnerId !== currentUser.id && !isAdmin) {
+      return res.status(403).json({ error: 'Sem permissão para excluir esta publicação.' });
+    }
+
+    await pool.query('DELETE FROM likes WHERE post_id = $1', [postId]);
+    await pool.query('DELETE FROM comments WHERE post_id = $1', [postId]);
+    await pool.query('DELETE FROM posts WHERE id = $1', [postId]);
+
+    res.json({ success: true, message: 'Publicação excluída com sucesso.' });
+  } catch (err) {
+    console.error('Delete post database error:', err);
+    res.status(500).json({ error: 'Erro ao excluir publicação.' });
+  }
+});
+
 // 4. Championships, Modalities & Staging
 app.get('/api/championships', async (req, res) => {
   try {
