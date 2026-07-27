@@ -773,10 +773,10 @@ export default function FeedView({
                           className="flex items-center gap-1.5 text-slate-500 hover:text-blue-600 transition duration-150 text-sm cursor-pointer"
                           title="Compartilhar no meu perfil"
                         >
-                          <Share2 className="w-4 h-4" />
-                          <span className="font-semibold text-xs">
-                            {post.sharesCount && post.sharesCount > 0 ? post.sharesCount : 'Compartilhar'}
-                          </span>
+                          <Share2 className="w-4.5 h-4.5" />
+                          {post.sharesCount && post.sharesCount > 0 ? (
+                            <span className="font-semibold text-xs">{post.sharesCount}</span>
+                          ) : null}
                         </button>
                       </div>
 
