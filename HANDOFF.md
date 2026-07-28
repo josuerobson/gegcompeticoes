@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `384969c` |
-| Mensagem | `fix: desestrutura prop weapons na funcao MemberProfile para corrigir ReferenceError` |
-| Data/hora | 2026-07-28T11:36:19-03:00 |
+| Hash | `9e65ef9` |
+| Mensagem | `fix: restaura estados printMode e printData no MemberProfile corrigindo erro de carregamento` |
+| Data/hora | 2026-07-28T12:06:25-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `384969c` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `9e65ef9` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
