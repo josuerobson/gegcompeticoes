@@ -830,6 +830,28 @@ export default function MemberProfile({
     return champ ? champ.title : 'Campeonato G&G Competições';
   };
 
+  // Calculate Habitualidade count (trainings + stage/competition participations in last 12 months)
+  const habitualidadeCount = useMemo(() => {
+    const now = new Date();
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setFullYear(now.getFullYear() - 1);
+
+    // 1. Real training sessions in the last 12 months
+    const recentTrainings = (trainings || []).filter(t => {
+      const d = new Date(t.dateTime || t.createdAt || '');
+      return !isNaN(d.getTime()) ? d >= twelveMonthsAgo : true;
+    });
+
+    // 2. Stage Score participations (Campeonato > Etapa > Modalidade) in the last 12 months
+    const recentScores = (userScores || []).filter(s => {
+      const d = new Date(s.createdAt || '');
+      return !isNaN(d.getTime()) ? d >= twelveMonthsAgo : true;
+    });
+
+    const compCount = recentScores.length > 0 ? recentScores.length : approvedRegs.length;
+    return recentTrainings.length + compCount;
+  }, [trainings, userScores, approvedRegs, selectedUser.id]);
+
   // Define sidebar menu items (only active for user's own profile)
   const menuItems = [
     { id: 'my_profile', label: 'Meu Cadastro', icon: UserCog, public: false },
@@ -851,19 +873,12 @@ export default function MemberProfile({
   return (
     <div className="py-6 space-y-6">
       
-      {/* Top Banner mock decoration */}
-      <div className="h-32 bg-gradient-to-r from-blue-900 via-blue-950 to-slate-900 rounded-2xl relative overflow-hidden flex items-end p-4">
-        <div className="absolute right-4 top-4 bg-white/10 backdrop-blur-md px-3 py-1 rounded-full text-[10px] text-white font-mono uppercase font-bold tracking-wider">
-          G&G FILIADO nº {selectedUser.isClubMember ? '918' : 'MOD'}
-        </div>
-      </div>
-
       {/* Main layout container */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
         
         {/* Left Column: Profile Card & Navigation */}
         <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col items-center text-center relative mt-[-64px] z-10">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col items-center text-center relative z-10">
             {/* Avatar */}
             <div className="relative w-28 h-28 rounded-full bg-slate-50 p-[4px] border border-slate-200 shadow-sm">
               <img
@@ -957,7 +972,75 @@ export default function MemberProfile({
             </div>
           </div>
 
-          {/* SIDEBAR NAVIGATION CARD (Visible on Desktop) */}
+          {/* Affiliation status Card (Placed ABOVE the menu on Desktop as requested) */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+            <div>
+              <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Situação Associativa G&G</h4>
+            </div>
+
+            <div className="space-y-2.5 font-mono text-xs">
+              {/* CR e Validade na mesma linha */}
+              <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                <div className="flex items-center gap-1 truncate max-w-[55%]">
+                  <span className="text-slate-450 font-sans text-[11px]">CR:</span>
+                  <span className="font-bold text-slate-800 truncate">{selectedUser.crNumber || 'Emitindo...'}</span>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <span className="text-slate-450 font-sans text-[11px]">Validade:</span>
+                  <span className="font-bold text-slate-800">
+                    {selectedUser.crValidity ? (selectedUser.crValidity.includes('-') ? selectedUser.crValidity.split('-').reverse().join('/') : selectedUser.crValidity) : '12/12/2030'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Anuidade */}
+              <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                <span className="text-slate-450 font-sans text-[11px]">Anuidade</span>
+                {selectedUser.hasPaidSignature ? (
+                  <span className="font-bold text-emerald-600 flex items-center gap-1">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" /> REGULAR
+                  </span>
+                ) : (
+                  <span className="font-bold text-rose-500">PENDENTE</span>
+                )}
+              </div>
+
+              {/* Validade do Certificado */}
+              {selectedUser.hasPaidSignature && selectedUser.signatureExpiry && (
+                <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                  <span className="text-slate-450 font-sans text-[11px]">Validade do Certificado</span>
+                  <span className="font-bold text-slate-600">{new Date(selectedUser.signatureExpiry).toLocaleDateString('pt-BR')}</span>
+                </div>
+              )}
+
+              {/* Habitualidade */}
+              <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                <span className="text-slate-450 font-sans text-[11px]">Habitualidade</span>
+                <span className="font-extrabold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-100 font-sans text-xs">
+                  {habitualidadeCount}
+                </span>
+              </div>
+
+              {/* Guia de Trânsito */}
+              <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                <span className="text-slate-450 font-sans text-[11px]">Guia de Trânsito</span>
+                <span className="font-bold text-slate-800">
+                  {(selectedUser as any).guiaTransitoExpiry ? new Date((selectedUser as any).guiaTransitoExpiry).toLocaleDateString('pt-BR') : '--/--/----'}
+                </span>
+              </div>
+            </div>
+
+            {isMe && !selectedUser.hasPaidSignature && (
+              <button
+                onClick={() => setIsSignModalOpen(true)}
+                className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs py-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-amber-100 cursor-pointer"
+              >
+                Regularizar Anuidade de Atleta
+              </button>
+            )}
+          </div>
+
+          {/* SIDEBAR NAVIGATION CARD (Visible on Desktop - Now below Situação Associativa) */}
           <div className="hidden md:block bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-1">
             <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider px-3 mb-2">Painel de Serviços</h4>
             <div className="space-y-1">
@@ -983,47 +1066,6 @@ export default function MemberProfile({
                 );
               })}
             </div>
-          </div>
-
-          {/* Affiliation status Card */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
-            <div>
-              <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Situação Associativa G&G</h4>
-            </div>
-
-            <div className="space-y-3 font-mono text-xs">
-              <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                <span className="text-slate-450 font-sans text-[11px]">CR</span>
-                <span className="font-bold text-slate-800">{selectedUser.crNumber || 'Emitindo...'}</span>
-              </div>
-
-              <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                <span className="text-slate-450 font-sans text-[11px]">Anuidade</span>
-                {selectedUser.hasPaidSignature ? (
-                  <span className="font-bold text-emerald-600 flex items-center gap-1">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" /> REGULAR
-                  </span>
-                ) : (
-                  <span className="font-bold text-rose-500">PENDENTE</span>
-                )}
-              </div>
-
-              {selectedUser.hasPaidSignature && selectedUser.signatureExpiry && (
-                <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                  <span className="text-slate-450 font-sans text-[11px]">Validade do Certificado</span>
-                  <span className="font-bold text-slate-600">{new Date(selectedUser.signatureExpiry).toLocaleDateString()}</span>
-                </div>
-              )}
-            </div>
-
-            {isMe && !selectedUser.hasPaidSignature && (
-              <button
-                onClick={() => setIsSignModalOpen(true)}
-                className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs py-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-amber-100 cursor-pointer"
-              >
-                Regularizar Anuidade de Atleta
-              </button>
-            )}
           </div>
         </div>
 
