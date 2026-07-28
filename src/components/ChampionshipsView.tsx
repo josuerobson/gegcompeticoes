@@ -484,7 +484,7 @@ export default function ChampionshipsView({
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5">
                 {championships.map((champ) => {
                   const isFinished = champ.status === 'completed';
                   const isMyRegsList = registrations.filter(r => r.championshipId === champ.id && r.userId === currentUser?.id);
@@ -494,100 +494,87 @@ export default function ChampionshipsView({
                     <div
                       key={champ.id}
                       onClick={() => setViewingChampionship(champ)}
-                      className="bg-white dark:bg-slate-900 rounded-2xl smooth-shadow border border-slate-100 dark:border-slate-800 hover:border-blue-400 hover:shadow-lg transition duration-200 cursor-pointer overflow-hidden flex flex-col group"
+                      className="bg-white dark:bg-slate-900 rounded-2xl smooth-shadow border border-slate-200 dark:border-slate-800 hover:border-blue-500 hover:shadow-md transition duration-200 cursor-pointer overflow-hidden flex flex-col justify-between p-3.5 sm:p-4 space-y-3 group"
                     >
-                      
-                      {/* Banner Image */}
-                      <div className="h-44 bg-slate-100 dark:bg-slate-800 relative overflow-hidden">
-                        <img
-                          src={champ.bannerUrl || defaultImage}
-                          alt={champ.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                          referrerPolicy="no-referrer"
-                          onError={(e) => {
-                            e.currentTarget.onerror = null;
-                            if (defaultImage) e.currentTarget.src = defaultImage;
-                          }}
-                        />
-                        <div className="absolute top-3 left-3 flex gap-2">
+                      {/* Top Info: Status badges & Title */}
+                      <div className="space-y-2">
+                        {/* Status Badges */}
+                        <div className="flex flex-wrap items-center gap-1">
                           {isFinished ? (
-                            <span className="bg-slate-900/80 backdrop-blur-md text-white text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
-                              <CheckCircle className="w-3.5 h-3.5" /> Finalizado
+                            <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[9px] px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wider flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3 text-slate-500" /> Finalizado
                             </span>
                           ) : (
-                            <span className="bg-emerald-600 text-white text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
-                              <Calendar className="w-3.5 h-3.5" /> Inscrições Abertas
+                            <span className="bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 text-[9px] px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wider flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-emerald-500" /> Abertas
                             </span>
                           )}
                           
                           {isRegistered && (
-                            <span className="bg-blue-600 text-white text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">
-                              Inscrito ({isMyRegsList.length} Cat)
+                            <span className="bg-blue-600 text-white text-[9px] px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wider">
+                              Inscrito ({isMyRegsList.length})
                             </span>
                           )}
                         </div>
+
+                        {/* Title */}
+                        <h3 className="font-display font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white leading-snug group-hover:text-blue-600 dark:group-hover:text-blue-400 transition line-clamp-2">
+                          {champ.title}
+                        </h3>
+
+                        {champ.description && champ.description.trim() !== '' && champ.description.trim().toLowerCase() !== champ.title.trim().toLowerCase() && (
+                          <p className="text-slate-500 dark:text-slate-400 text-[10.5px] leading-relaxed line-clamp-2">{champ.description}</p>
+                        )}
                       </div>
 
-                      {/* Content */}
-                      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                        <div className="space-y-2">
-                          <h3 className="font-display font-bold text-lg text-slate-900 dark:text-white leading-snug group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">{champ.title}</h3>
-                          {champ.description && champ.description.trim() !== '' && champ.description.trim().toLowerCase() !== champ.title.trim().toLowerCase() && (
-                            <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">{champ.description}</p>
-                          )}
-                        </div>
-
-                        {/* Info grid */}
-                        <div className="grid grid-cols-3 gap-2 border-t border-b border-slate-100 dark:border-slate-800/80 py-3 text-[11px] font-mono text-slate-600 dark:text-slate-300">
+                      {/* Bottom Info Grid & Action */}
+                      <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                        <div className="grid grid-cols-2 gap-1 text-[10px] font-mono text-slate-600 dark:text-slate-300">
                           <div>
-                            <span className="text-[9px] text-slate-400 dark:text-slate-400 block uppercase font-sans">Período</span>
-                            <span className="font-semibold">{new Date(champ.startDate).toLocaleDateString('pt-BR', {month: 'numeric', day: 'numeric'})} - {new Date(champ.endDate).toLocaleDateString('pt-BR', {month: 'numeric', day: 'numeric'})}</span>
-                          </div>
-                          <div>
-                            <span className="text-[9px] text-slate-400 dark:text-slate-400 block uppercase font-sans">Etapas</span>
+                            <span className="text-[8.5px] text-slate-400 uppercase block font-sans font-bold">Etapas</span>
                             <span className="font-semibold font-sans">{champ.stagesCount} Stages</span>
                           </div>
-                          <div>
-                            <span className="text-[9px] text-slate-400 dark:text-slate-400 block uppercase font-sans">Inscrição</span>
+                          <div className="text-right">
+                            <span className="text-[8.5px] text-slate-400 uppercase block font-sans font-bold">Inscrição</span>
                             <span className="text-blue-600 dark:text-blue-400 font-bold font-sans">R$ {champ.registrationFee}</span>
                           </div>
                         </div>
 
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap gap-1">
-                            {getValidChampModalities(champ.modalities).map((mod) => (
-                              <span key={mod.id} className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded font-bold uppercase">
-                                {mod.name}
-                              </span>
-                            ))}
-                          </div>
-
-                          {/* Action CTA */}
-                          {isFinished ? (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setViewingChampionship(champ);
-                              }}
-                              className="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs py-3 rounded-xl font-bold transition flex items-center justify-center gap-2 cursor-pointer"
-                            >
-                              <Target className="w-4 h-4 text-amber-500" />
-                              Ver Campeonato
-                            </button>
-                          ) : (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setViewingChampionship(champ);
-                              }}
-                              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-3 rounded-xl font-bold shadow-md shadow-blue-100 transition flex items-center justify-center gap-2 cursor-pointer"
-                            >
-                              <Target className="w-4 h-4" />
-                              Ver Campeonato
-                            </button>
+                        <div className="flex flex-wrap gap-1">
+                          {getValidChampModalities(champ.modalities).slice(0, 2).map((mod) => (
+                            <span key={mod.id} className="text-[8.5px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded font-bold uppercase truncate max-w-full">
+                              {mod.name}
+                            </span>
+                          ))}
+                          {getValidChampModalities(champ.modalities).length > 2 && (
+                            <span className="text-[8.5px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded font-bold">
+                              +{getValidChampModalities(champ.modalities).length - 2}
+                            </span>
                           )}
                         </div>
 
+                        {/* Action Button */}
+                        {isFinished ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewingChampionship(champ);
+                            }}
+                            className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10.5px] font-bold py-2 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            Ver Resultados
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewingChampionship(champ);
+                            }}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-[10.5px] font-bold py-2 rounded-xl transition flex items-center justify-center gap-1 shadow-xs cursor-pointer"
+                          >
+                            Ver Etapas
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
