@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `a64fb0c` |
-| Mensagem | `fix: atualiza textos e nomenclaturas do Perfil do Atleta (remove frases de vinculo e ajusta titulos de CR e Anuidade)` |
-| Data/hora | 2026-07-28T09:14:38-03:00 |
+| Hash | `a748a18` |
+| Mensagem | `fix: define menu de servicos do perfil como aberto por padrao` |
+| Data/hora | 2026-07-28T09:20:22-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `a64fb0c` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `a748a18` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -106,11 +106,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
 - **Otimização do Carregamento Inicial (`App.tsx`, `db.ts`)**: Identificado que a função `syncWithBackend` executava 12 requisições HTTP sequenciais uma após a outra, somando latências e acumulando esperas de até 60s~120s. A sincronização foi otimizada para realizar os 11 endpoints em lote paralelo com `Promise.allSettled()`, reduzindo a inicialização para ~1 segundo. Adicionada trava de segurança com `setTimeout` (máximo 3 segundos para encerrar a tela estática) e criados índices no PostgreSQL (`CREATE INDEX IF NOT EXISTS`) nas tabelas `likes`, `comments`, `follows`, `registrations`, `stage_scores` e `posts`.
 - **Paginação e Rolagem Infinita no Feed (`FeedView.tsx`)**: Implementado carregamento progressivo do feed renderizando estritamente **3 postagens iniciais**. Ao rolar a página para baixo, o `IntersectionObserver` detecta a aproximação do final da tela e carrega automaticamente mais 3 postagens por vez. Adicionado também o botão "Carregar mais publicações" como fallback manual e o atributo `loading="lazy"` em todas as tags `<img>`.
-- **Ajustes de Textos e Nomenclaturas no Perfil do Atleta (`MemberProfile.tsx`, `server.ts`)**:
-  1. Removida a exibição da frase `"Atleta federado do G&G Competições"` na biografia e atualizado o valor padrão no backend `server.ts`.
-  2. Removido o subtítulo `"Vínculo fiduciário oficial do clube de tiro."` no card de *Situação Associativa G&G*.
-  3. Alterada a nomenclatura de `"Militares / CR Defesa"` para **`"CR"`**.
-  4. Alterada a nomenclatura de `"Contribuição Anuidade"` para **`"Anuidade"`**.
+- **Menu de Serviços do Perfil Aberto por Padrão (`MemberProfile.tsx`)**: Alterado o estado inicial do menu suspenso de serviços do perfil (`isMobileMenuOpen`) de `false` para `true`, fazendo com que a lista de opções (*Campeonatos, Multi-campeonatos, Minhas inscrições, etc.*) venha expandida/aberta por padrão ao acessar a página de Perfil.
 
 ## Infra / deploy
 
