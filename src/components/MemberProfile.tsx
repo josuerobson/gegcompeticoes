@@ -5,7 +5,7 @@ import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
   Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronLeft, ChevronDown, Info, PlusCircle, X, UserCog, Camera,
-  Clock, Copy, QrCode, Images, Heart, MessageCircle, Send, Bookmark, Maximize2, Share2, Repeat, Loader2
+  Clock, Copy, QrCode, Images, Heart, MessageCircle, Send, Bookmark, Maximize2, Share2, Repeat, Loader2, Menu
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { compressUploadImage } from '../utils/imageCompressor';
@@ -1104,27 +1104,11 @@ export default function MemberProfile({
           <div className="md:hidden relative w-full mb-4 z-20">
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="w-full flex items-center justify-between px-4 py-3 bg-white border border-slate-200 rounded-xl font-semibold text-xs text-slate-800 shadow-xs hover:bg-slate-50 transition cursor-pointer"
+              className="w-full flex items-center justify-between px-4 py-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-800 shadow-sm hover:bg-slate-50 transition cursor-pointer"
             >
-              <div className="flex items-center gap-2">
-                {(() => {
-                  const currentItem = filteredMenuItems.find(item => item.id === profileTab);
-                  if (currentItem) {
-                    const CurrentIcon = currentItem.icon;
-                    return (
-                      <>
-                        <CurrentIcon className="w-4 h-4 text-blue-600" />
-                        <span>{currentItem.label}</span>
-                        {currentItem.count !== undefined && (
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
-                            {currentItem.count}
-                          </span>
-                        )}
-                      </>
-                    );
-                  }
-                  return <span>Selecionar Serviço</span>;
-                })()}
+              <div className="flex items-center gap-2.5">
+                <Menu className="w-5 h-5 text-blue-600" />
+                <span className="font-display font-extrabold uppercase tracking-wider text-slate-900 text-xs">Menu da conta</span>
               </div>
               <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${isMobileMenuOpen ? 'rotate-180' : ''}`} />
             </button>
