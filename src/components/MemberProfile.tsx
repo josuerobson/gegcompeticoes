@@ -871,13 +871,13 @@ export default function MemberProfile({
   const filteredMenuItems = menuItems.filter(item => isMe || item.public);
 
   return (
-    <div className="pt-0.5 pb-6 md:py-6 space-y-4 md:space-y-6">
+    <div className="pt-0.5 pb-6 md:py-6 space-y-3 md:space-y-6">
       
       {/* Main layout container */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-8 items-start">
         
         {/* Left Column: Profile Card & Navigation */}
-        <div className="space-y-6">
+        <div className="space-y-3 md:space-y-6">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-6 flex flex-col items-center relative z-10">
             
             {/* Mobile Header: Photo (1/4) + Name (3/4) in single line */}
@@ -1079,10 +1079,10 @@ export default function MemberProfile({
         </div>
 
         {/* Right Column: Content viewport based on current tab */}
-        <div className="space-y-6 md:col-span-2">
+        <div className="space-y-3 md:space-y-6 md:col-span-2">
           
           {/* MOBILE TAB DROPDOWN (Visible on Mobile) */}
-          <div className="md:hidden relative w-full mb-4 z-20">
+          <div className="md:hidden relative w-full z-20">
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="w-full flex items-center justify-between px-4 py-3 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-800 shadow-sm hover:bg-slate-50 transition cursor-pointer"
