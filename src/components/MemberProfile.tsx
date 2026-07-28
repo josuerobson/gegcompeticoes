@@ -675,6 +675,10 @@ export default function MemberProfile({
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
 
+  // Print & Declaration States
+  const [printMode, setPrintMode] = useState<'certificate' | 'club_card' | 'gg_card' | 'declaration_filiacao' | 'declaration_habitualidade' | null>(null);
+  const [printData, setPrintData] = useState<any>(null);
+
   // Real Training State
   const [trainings, setTrainings] = useState<TrainingSession[]>([]);
   const [loadingTrainings, setLoadingTrainings] = useState(false);
