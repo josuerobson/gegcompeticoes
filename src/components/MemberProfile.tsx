@@ -429,6 +429,7 @@ export default function MemberProfile({
   clubs,
   stages = [],
   users = [],
+  weapons = [],
   onToggleFollow,
   onPaySignature,
   onLogout,
