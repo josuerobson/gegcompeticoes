@@ -2401,38 +2401,17 @@ export default function MemberProfile({
                     )}
 
                     {/* 1. Data e Hora */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
-                          Data e Hora do Treinamento <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="datetime-local"
-                          required
-                          value={trainingForm.dateTime}
-                          onChange={e => setTrainingForm({ ...trainingForm, dateTime: e.target.value })}
-                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
-                          Modalidade / Disciplina
-                        </label>
-                        <select
-                          value={trainingForm.modality}
-                          onChange={e => setTrainingForm({ ...trainingForm, modality: e.target.value })}
-                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
-                        >
-                          <option value="Treino Livre">Treino Livre</option>
-                          <option value="IPSC Handgun">IPSC Handgun</option>
-                          <option value="IDSC">IDSC</option>
-                          <option value="Saque Rápido">Saque Rápido</option>
-                          <option value="Fogo Central">Fogo Central</option>
-                          <option value="Trap Americano">Trap Americano</option>
-                          <option value="Carabina Mira Aberta 10m">Carabina Mira Aberta 10m</option>
-                        </select>
-                      </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
+                        Data e Hora do Treinamento <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="datetime-local"
+                        required
+                        value={trainingForm.dateTime}
+                        onChange={e => setTrainingForm({ ...trainingForm, dateTime: e.target.value })}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
+                      />
                     </div>
 
                     {/* 2. Seleciona a Arma Utilizada com Busca em Tempo Real (Mínimo 3 Caracteres) */}
