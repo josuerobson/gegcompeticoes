@@ -878,40 +878,49 @@ export default function MemberProfile({
         
         {/* Left Column: Profile Card & Navigation */}
         <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col items-center text-center relative z-10">
-            {/* Avatar */}
-            <div className="relative w-28 h-28 rounded-full bg-slate-50 p-[4px] border border-slate-200 shadow-sm">
-              <img
-                src={selectedUser.avatarUrl}
-                alt={selectedUser.username}
-                className="w-full h-full object-cover rounded-full"
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  e.currentTarget.onerror = null;
-                  e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
-                }}
-              />
-              {selectedUser.role === 'admin' && (
-                <div className="absolute bottom-1 right-1 bg-amber-500 text-white p-1 rounded-full border-2 border-white shadow-md">
-                  <ShieldCheck className="w-4 h-4" />
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-6 flex flex-col items-center relative z-10">
+            
+            {/* Mobile Header: Photo (1/4) + Name (3/4) in single line */}
+            <div className="grid grid-cols-4 items-center gap-3.5 w-full md:flex md:flex-col md:items-center">
+              
+              {/* Photo Container (1/4 on mobile, col-span-1) */}
+              <div className="col-span-1 flex justify-center md:w-full">
+                <div className="relative w-20 h-20 md:w-28 md:h-28 rounded-full bg-slate-50 p-[3px] border border-slate-200 shadow-sm flex-shrink-0">
+                  <img
+                    src={selectedUser.avatarUrl}
+                    alt={selectedUser.username}
+                    className="w-full h-full object-cover rounded-full"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                    }}
+                  />
+                  {selectedUser.role === 'admin' && (
+                    <div className="absolute bottom-0 right-0 bg-amber-500 text-white p-1 rounded-full border-2 border-white shadow-md">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                    </div>
+                  )}
+                  {isMe && (
+                    <label
+                      title="Trocar foto de perfil"
+                      className={`absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded-full border-2 border-white shadow-md cursor-pointer transition ${avatarSaving ? 'opacity-60 pointer-events-none' : ''}`}
+                    >
+                      <Camera className="w-3 h-3" />
+                      <input type="file" accept="image/*" onChange={handleAvatarChange} disabled={avatarSaving} className="hidden" />
+                    </label>
+                  )}
                 </div>
-              )}
-              {isMe && (
-                <label
-                  title="Trocar foto de perfil"
-                  className={`absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded-full border-2 border-white shadow-md cursor-pointer transition ${avatarSaving ? 'opacity-60 pointer-events-none' : ''}`}
-                >
-                  <Camera className="w-3.5 h-3.5" />
-                  <input type="file" accept="image/*" onChange={handleAvatarChange} disabled={avatarSaving} className="hidden" />
-                </label>
-              )}
-            </div>
-            {isMe && avatarSaving && <p className="text-[10px] text-slate-400 mt-1.5">Enviando foto...</p>}
-            {isMe && avatarError && <p className="text-[10px] text-red-500 mt-1.5">{avatarError}</p>}
+              </div>
 
-            <div className="mt-4 leading-tight">
-              <h3 className="font-display font-extrabold text-lg text-slate-900">{selectedUser.fullName}</h3>
-              <span className="text-xs text-slate-400 font-mono">@{selectedUser.username}</span>
+              {/* Name Container (3/4 on mobile, col-span-3) */}
+              <div className="col-span-3 text-left md:text-center md:mt-4 leading-tight">
+                <h3 className="font-display font-extrabold text-base md:text-lg text-slate-900 leading-snug">{selectedUser.fullName}</h3>
+                <span className="text-xs text-slate-400 font-mono block mt-0.5">@{selectedUser.username}</span>
+                {isMe && avatarSaving && <p className="text-[10px] text-slate-400 mt-1">Enviando foto...</p>}
+                {isMe && avatarError && <p className="text-[10px] text-red-500 mt-1">{avatarError}</p>}
+              </div>
+
             </div>
 
             {/* Counts */}

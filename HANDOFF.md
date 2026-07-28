@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `main` |
-| Mensagem | `feat: otimiza layout do perfil com remocao da barra de capa, reordenacao do card de situacao associativa e novos indicadores` |
-| Data/hora | 2026-07-28T17:27:15-03:00 |
+| Mensagem | `feat: otimiza cabecalho do perfil no celular alinhando foto (1/4) e nome (3/4) na mesma linha` |
+| Data/hora | 2026-07-28T17:59:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
@@ -106,12 +106,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
 - **Otimização do Carregamento Inicial (`App.tsx`, `db.ts`)**: Identificado que a função `syncWithBackend` executava 12 requisições HTTP sequenciais uma após a outra, somando latências e acumulando esperas de até 60s~120s. A sincronização foi otimizada para realizar os 11 endpoints em lote paralelo com `Promise.allSettled()`, reduzindo a inicialização para ~1 segundo. Adicionada trava de segurança com `setTimeout` (máximo 3 segundos para encerrar a tela estática) e criados índices no PostgreSQL (`CREATE INDEX IF NOT EXISTS`) nas tabelas `likes`, `comments`, `follows`, `registrations`, `stage_scores` e `posts`.
 - **Paginação e Rolagem Infinita no Feed (`FeedView.tsx`)**: Implementado carregamento progressivo do feed renderizando estritamente **3 postagens iniciais**. Ao rolar a página para baixo, o `IntersectionObserver` detecta a aproximação do final da tela e carrega automaticamente mais 3 postagens por vez. Adicionado também o botão "Carregar mais publicações" como fallback manual e o atributo `loading="lazy"` em todas as tags `<img>`.
-- **Reorganização Visual do Perfil do Atleta (`MemberProfile.tsx`)**:
-  1. Removida a barra azul superior/banner de capa para ganho de espaço vertical.
-  2. Reordenado o card "Situação Associativa G&G" no desktop para ficar acima do "Painel de Serviços" (alinhando com a experiência mobile).
-  3. Unificados o **CR** e a **Validade** em uma única linha horizontal no card associativo.
-  4. Adicionado o contador dinâmico de **Habitualidade** (soma dos treinos e participações em etapas de campeonatos nos últimos 12 meses).
-  5. Adicionado o campo de **Guia de Trânsito** (com exibição da data de vencimento).
+- **Otimização do Cabeçalho do Perfil em Dispositivos Móveis (`MemberProfile.tsx`)**: Ajustado o cabeçalho do cartão de perfil para dispositivos móveis utilizando layout responsivo (`grid grid-cols-4`). No celular, a foto ocupa 1/4 da largura (25%) e o nome do atleta ocupa 3/4 da largura (75%), alinhados horizontalmente na mesma linha para ganho de espaço vertical. No computador, preservado o layout centralizado original.
 
 ## Infra / deploy
 
