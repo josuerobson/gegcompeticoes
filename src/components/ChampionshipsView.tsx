@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Championship, User, Registration, StageScore, RankingItem, Modality, Stage, Weapon } from '../types';
-import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, Award, Printer, Copy, CreditCard, ChevronRight, Download, Medal, PlusCircle, X } from 'lucide-react';
+import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, Award, Printer, Copy, CreditCard, ChevronRight, Download, Medal, PlusCircle, X, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ChampionshipsProps {
@@ -64,19 +64,34 @@ export default function ChampionshipsView({
 
   const handleSearchWeapon = async (q: string) => {
     setWeaponSearchQuery(q);
-    if (q.trim().length < 2) {
+    if (q.trim().length < 3) {
       setWeaponSearchResults([]);
       return;
     }
     setSearchingWeapon(true);
     try {
-      const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(q)}`, {
-        headers: { 'x-user-id': currentUser?.id || '' }
-      });
-      const data = await r.json();
-      setWeaponSearchResults(data.weapons || []);
+      const authHeaders = currentUser ? { 'x-user-id': currentUser.id } : {};
+      const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(q)}`, { headers: authHeaders });
+      let results: Weapon[] = [];
+      if (r.ok) {
+        const data = await r.json();
+        results = data.weapons || [];
+      }
+      if (results.length === 0) {
+        const all = weapons || [];
+        const term = q.trim().toLowerCase();
+        results = all.filter(w => 
+          `${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`.toLowerCase().includes(term)
+        );
+      }
+      setWeaponSearchResults(results);
     } catch {
-      setWeaponSearchResults([]);
+      const all = weapons || [];
+      const term = q.trim().toLowerCase();
+      const matches = all.filter(w => 
+        `${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`.toLowerCase().includes(term)
+      );
+      setWeaponSearchResults(matches);
     } finally {
       setSearchingWeapon(false);
     }
@@ -125,7 +140,11 @@ export default function ChampionshipsView({
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedChampReg || !selectedModalityId || !selectedStageId || !selectedWeaponId || !crInput) return;
+    const finalCr = currentUser?.crNumber || 'CR-SIMULADO';
+    if (!selectedChampReg || !selectedModalityId || !selectedStageId || !selectedWeaponId) {
+      setRegisterError('Selecione a arma a ser utilizada pesquisando no mínimo 3 caracteres.');
+      return;
+    }
 
     setRegisterError('');
     setPaymentStep('processing');
@@ -133,7 +152,7 @@ export default function ChampionshipsView({
     // Simulate payment response delay
     setTimeout(async () => {
       try {
-        await onRegister(selectedChampReg.id, selectedModalityId, selectedStageId, selectedWeaponId, crInput, paymentMethod);
+        await onRegister(selectedChampReg.id, selectedModalityId, selectedStageId, selectedWeaponId, finalCr, 'pix');
         setPaymentStep('done');
       } catch (err) {
         setRegisterError(err instanceof Error ? err.message : 'Erro ao realizar inscrição.');
@@ -862,126 +881,98 @@ export default function ChampionshipsView({
                     </select>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-slate-500 uppercase block font-semibold">Arma a ser utilizada</label>
-                    {!showAddWeapon && (
-                      <div className="space-y-2">
-                        {eligibleWeapons.length > 0 ? (
-                          <select
-                            value={selectedWeaponId}
-                            onChange={(e) => setSelectedWeaponId(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
-                          >
-                            <option value="">Selecione a arma</option>
-                            {eligibleWeapons.map(w => (
-                              <option key={w.id} value={w.id}>{w.manufacturer} {w.model} — {w.caliber} {w.sigmaNumber ? `(Sigma ${w.sigmaNumber})` : ''}</option>
-                            ))}
-                            {selectedWeaponId && !eligibleWeapons.some(w => w.id === selectedWeaponId) && (
-                              <option value={selectedWeaponId}>Arma selecionada via busca</option>
-                            )}
-                          </select>
-                        ) : (
-                          <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2">
-                            Nenhuma arma vinculada automaticamente. Use a busca abaixo ou cadastre uma nova.
-                          </p>
-                        )}
-
-                        <div className="relative">
-                          <input
-                            type="text"
-                            placeholder="Ou busque pelo número Sigma/Série..."
-                            value={weaponSearchQuery}
-                            onChange={(e) => handleSearchWeapon(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-mono"
-                          />
-                          {searchingWeapon && <span className="absolute right-3 top-3 text-[9px] text-slate-400 font-semibold">Buscando...</span>}
-                          
-                          {weaponSearchResults.length > 0 && (
-                            <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-40 overflow-y-auto divide-y divide-slate-100">
-                              {weaponSearchResults.map(w => (
-                                <button
-                                  key={w.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedWeaponId(w.id);
-                                    setWeaponSearchResults([]);
-                                    setWeaponSearchQuery(`${w.manufacturer} ${w.model} (Sigma: ${w.sigmaNumber || 'N/A'})`);
-                                  }}
-                                  className="w-full text-left px-3 py-2 text-[11px] text-slate-700 hover:bg-blue-50 font-mono"
-                                >
-                                  {w.manufacturer} {w.model} {w.caliber} - Sigma: {w.sigmaNumber || 'N/A'} (Série: {w.serialNumber})
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    {!showAddWeapon && (
-                      <button
-                        type="button"
-                        onClick={() => setShowAddWeapon(true)}
-                        className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 mt-1"
-                      >
-                        <PlusCircle className="w-3 h-3" /> Adicionar nova arma
-                      </button>
-                    )}
-                    {showAddWeapon && (
-                      <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          <input type="text" placeholder="Fabricante" value={newWeapon.manufacturer} onChange={(e) => setNewWeapon({ ...newWeapon, manufacturer: e.target.value })} className="bg-white border border-slate-200 p-2 rounded-lg text-xs" />
-                          <input type="text" placeholder="Modelo" value={newWeapon.model} onChange={(e) => setNewWeapon({ ...newWeapon, model: e.target.value })} className="bg-white border border-slate-200 p-2 rounded-lg text-xs" />
-                          <input type="text" placeholder="Calibre" value={newWeapon.caliber} onChange={(e) => setNewWeapon({ ...newWeapon, caliber: e.target.value })} className="bg-white border border-slate-200 p-2 rounded-lg text-xs" />
-                          <input type="text" placeholder="Número de série" value={newWeapon.serialNumber} onChange={(e) => setNewWeapon({ ...newWeapon, serialNumber: e.target.value })} className="bg-white border border-slate-200 p-2 rounded-lg text-xs" />
-                        </div>
-                        <div className="flex gap-2">
-                          <button type="button" onClick={() => setShowAddWeapon(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-2 rounded-lg text-[11px] font-semibold">Cancelar</button>
-                          <button type="button" disabled={savingWeapon} onClick={handleSaveNewWeapon} className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white py-2 rounded-lg text-[11px] font-semibold">
-                            {savingWeapon ? 'Salvando...' : 'Salvar Arma'}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-1">
+                  {/* 3. Seleção de Arma via Pesquisa (Mínimo 3 Caracteres) */}
+                  <div className="space-y-1 relative">
                     <label className="text-[10px] text-slate-500 uppercase block font-semibold">
-                      Seu Documento CR (EXÉRCITO BRASILEIRO)
+                      Arma a ser utilizada <span className="text-red-500">*</span> (Pesquise digitando no mínimo 3 caracteres)
                     </label>
-                    <input
-                      type="text"
-                      placeholder="Ex: CR-102938-DF"
-                      value={crInput}
-                      onChange={(e) => setCrInput(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-mono focus:ring-1 focus:ring-blue-500"
-                      required
-                    />
-                    <span className="text-[9px] text-slate-400 block pt-0.5">Obrigatório para registro de atleta em torneio homologado SFPC.</span>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Digite fabricante, modelo, calibre ou número Sigma..."
+                        value={weaponSearchQuery}
+                        onChange={(e) => handleSearchWeapon(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-800 font-medium pl-9 shadow-xs"
+                      />
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                      {searchingWeapon && <span className="absolute right-3 top-3.5 text-[10px] text-blue-600 font-bold">Buscando...</span>}
+                    </div>
+
+                    {weaponSearchQuery.length > 0 && weaponSearchQuery.length < 3 && (
+                      <p className="text-[10.5px] text-amber-600 font-medium mt-1">
+                        Digite mais {3 - weaponSearchQuery.length} caractere(s) para pesquisar nas armas cadastradas...
+                      </p>
+                    )}
+
+                    {/* Weapon Search Results Dropdown */}
+                    {weaponSearchQuery.length >= 3 && (
+                      <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100">
+                        {weaponSearchResults.length === 0 ? (
+                          <div className="p-3 text-center text-slate-500 text-xs">
+                            Nenhuma arma encontrada para "{weaponSearchQuery}".
+                          </div>
+                        ) : (
+                          weaponSearchResults.map(w => (
+                            <button
+                              key={w.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedWeaponId(w.id);
+                                setWeaponSearchQuery(`${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'}) - Sigma: ${w.sigmaNumber || 'N/A'}`.trim());
+                                setWeaponSearchResults([]);
+                              }}
+                              className="w-full text-left p-3 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
+                            >
+                              <div>
+                                <div className="font-bold text-slate-900 text-xs">
+                                  {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[11px]">({w.caliber})</span>
+                                </div>
+                                <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                  Sigma: {w.sigmaNumber || 'N/A'} | Série: {w.serialNumber || 'N/A'}
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                                Selecionar
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+
+                    {/* Selected Weapon Badge Confirmation */}
+                    {selectedWeaponId && (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 flex items-center justify-between mt-2 text-xs">
+                        <div className="flex items-center gap-2 truncate pr-2">
+                          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span className="font-bold text-emerald-950 truncate">Arma: {weaponSearchQuery}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedWeaponId('');
+                            setWeaponSearchQuery('');
+                            setWeaponSearchResults([]);
+                          }}
+                          className="text-[10px] text-slate-500 hover:text-red-600 font-bold underline cursor-pointer shrink-0"
+                        >
+                          Trocar
+                        </button>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Payment selection */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] text-slate-500 uppercase block font-semibold">Meio de Homologação / Pagamento</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('pix')}
-                        className={`p-3 border rounded-xl flex flex-col items-center justify-center gap-1 transition ${paymentMethod === 'pix' ? 'border-blue-600 bg-blue-50 text-blue-900' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
-                      >
-                        <Copy className="w-5 h-5" />
-                        <span className="text-xs font-bold leading-none">PIX</span>
-                        <span className="text-[9px] text-slate-400 font-sans">Aprovação imediata</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('credit_card')}
-                        className={`p-3 border rounded-xl flex flex-col items-center justify-center gap-1 transition ${paymentMethod === 'credit_card' ? 'border-blue-600 bg-blue-50 text-blue-900' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
-                      >
-                        <CreditCard className="w-5 h-5" />
-                        <span className="text-xs font-bold leading-none">Cartão</span>
-                        <span className="text-[9px] text-slate-400 font-sans">Crédito parcelado</span>
-                      </button>
+                  {/* Payment Info: Exclusivamente PIX */}
+                  <div className="space-y-1.5 pt-1">
+                    <label className="text-[10px] text-slate-500 uppercase block font-semibold">Forma de Pagamento</label>
+                    <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
+                        PIX
+                      </div>
+                      <div>
+                        <span className="font-bold text-blue-950 text-xs block">Pagamento via PIX</span>
+                        <span className="text-[10px] text-blue-700">Aprovação e homologação imediata da inscrição</span>
+                      </div>
                     </div>
                   </div>
 
