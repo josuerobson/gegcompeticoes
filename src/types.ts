@@ -295,3 +295,21 @@ export interface RankingItem {
   totalScore: number;
   stageScores: { [stageNum: number]: number };
 }
+
+export interface TrainingSession {
+  id: string;
+  userId: string;
+  clubId?: string;
+  dateTime: string;
+  weaponId?: string;
+  weaponName: string;
+  weaponCaliber?: string;
+  weaponOwnerType: 'propria' | 'clube';
+  totalShots: number;
+  ownAmmoShots: number;
+  clubAmmoShots: number;
+  modality?: string;
+  score?: number;
+  notes?: string;
+  createdAt?: string;
+}

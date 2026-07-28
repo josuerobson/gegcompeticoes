@@ -2085,6 +2085,7 @@ export default function App() {
               clubs={clubs}
               stages={stages}
               users={users}
+              weapons={weapons}
               onToggleFollow={handleToggleFollow}
               onPaySignature={handlePaySignature}
               onLogout={handleLogout}

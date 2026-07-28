@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
-import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption } from './src/types.js';
+import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession } from './src/types.js';
 import { pool, initDB } from './src/db.js';
 import { hashPassword, verifyPassword } from './src/auth.js';
 import { uploadDocument, getDocumentStream, storageEnabled } from './src/storage.js';
@@ -318,6 +318,26 @@ function mapPost(p: any): Post {
     createdAt: p.created_at,
     sharedPost: parsedSharedPost,
     sharesCount: p.shares_count ? Number(p.shares_count) : 0,
+  };
+}
+
+function mapTraining(t: any): TrainingSession {
+  return {
+    id: t.id,
+    userId: t.user_id,
+    clubId: t.club_id || undefined,
+    dateTime: t.date_time,
+    weaponId: t.weapon_id || undefined,
+    weaponName: t.weapon_name,
+    weaponCaliber: t.weapon_caliber || undefined,
+    weaponOwnerType: (t.weapon_owner_type as 'propria' | 'clube') || 'propria',
+    totalShots: Number(t.total_shots ?? 0),
+    ownAmmoShots: Number(t.own_ammo_shots ?? 0),
+    clubAmmoShots: Number(t.club_ammo_shots ?? 0),
+    modality: t.modality || undefined,
+    score: Number(t.score ?? 0),
+    notes: t.notes || undefined,
+    createdAt: t.created_at,
   };
 }
 
@@ -2043,27 +2063,30 @@ app.get('/api/weapons/search', requireAuth, async (req, res) => {
   if (!q || q.length < 2) return res.json({ weapons: [] });
   try {
     let rows;
+    const searchPattern = `%${q}%`;
     if (['master_admin', 'admin'].includes(currentUser.role) && !currentUser.clubId) {
-      // master_admin (without club context) can search all weapons in the system
+      // master_admin can search all weapons in the system
       const r = await pool.query(
         `SELECT w.*, u.full_name as owner_name, c.name as club_name FROM weapons w
          LEFT JOIN users u ON u.id = w.owner_id
          LEFT JOIN clubs c ON c.id = u.club_id OR c.id = w.owner_id
-         WHERE w.sigma_number ILIKE $1 OR w.weapon_number ILIKE $1
-         ORDER BY w.sigma_number LIMIT 20`,
-        [`%${q}%`]
+         WHERE w.sigma_number ILIKE $1 OR w.weapon_number ILIKE $1 OR w.model ILIKE $1 OR w.manufacturer ILIKE $1 OR w.caliber ILIKE $1 OR w.class ILIKE $1 OR u.full_name ILIKE $1
+         ORDER BY w.model, w.manufacturer LIMIT 30`,
+        [searchPattern]
       );
       rows = r.rows;
     } else {
-      // club_admin / admin with club context: search club-owned weapons OR club-member-owned weapons
+      // Search weapons owned by user, or weapons in user's club, or matching query
       const targetClubId = currentUser.clubId || '';
       const r = await pool.query(
         `SELECT w.*, u.full_name as owner_name, c.name as club_name FROM weapons w
          LEFT JOIN users u ON u.id = w.owner_id
          LEFT JOIN clubs c ON c.id = u.club_id OR c.id = w.owner_id
-         WHERE (w.owner_id = $1 OR u.club_id = $1) AND (w.sigma_number ILIKE $2 OR w.weapon_number ILIKE $2)
-         ORDER BY w.sigma_number LIMIT 20`,
-        [targetClubId, `%${q}%`]
+         WHERE (w.owner_id = $1 OR w.owner_id = $2 OR u.club_id = $2 OR $2 = '') AND (
+           w.sigma_number ILIKE $3 OR w.weapon_number ILIKE $3 OR w.model ILIKE $3 OR w.manufacturer ILIKE $3 OR w.caliber ILIKE $3 OR w.class ILIKE $3 OR u.full_name ILIKE $3
+         )
+         ORDER BY w.model, w.manufacturer LIMIT 30`,
+        [currentUser.id, targetClubId, searchPattern]
       );
       rows = r.rows;
     }
@@ -2764,6 +2787,101 @@ app.post('/api/club-templates', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Save club template error:', err);
     res.status(500).json({ error: 'Erro ao salvar template do clube.' });
+  }
+});
+
+// ==========================================
+// 10. REAL TRAINING SESSIONS (Diário de Treinamentos / Habitualidade)
+// ==========================================
+
+app.get('/api/trainings', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const targetUserId = (req.query.userId as string) || currentUser.id;
+  try {
+    const r = await pool.query(
+      `SELECT * FROM trainings WHERE user_id = $1 ORDER BY date_time DESC`,
+      [targetUserId]
+    );
+    res.json({ trainings: r.rows.map(mapTraining) });
+  } catch (err) {
+    console.error('Fetch trainings error:', err);
+    res.status(500).json({ error: 'Erro ao buscar treinamentos.' });
+  }
+});
+
+app.post('/api/trainings', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const {
+    dateTime,
+    weaponId,
+    weaponName,
+    weaponCaliber,
+    weaponOwnerType,
+    ownAmmoShots,
+    clubAmmoShots,
+    modality,
+    score,
+    notes,
+  } = req.body;
+
+  if (!dateTime || !weaponName) {
+    return res.status(400).json({ error: 'Data/Hora e Arma são obrigatórias.' });
+  }
+
+  const own = Math.max(0, Number(ownAmmoShots) || 0);
+  const club = Math.max(0, Number(clubAmmoShots) || 0);
+  const total = own + club;
+  const ownerType = weaponOwnerType === 'clube' ? 'clube' : 'propria';
+  const id = `training_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+
+  try {
+    const r = await pool.query(
+      `INSERT INTO trainings (
+        id, user_id, club_id, date_time, weapon_id, weapon_name, weapon_caliber,
+        weapon_owner_type, total_shots, own_ammo_shots, club_ammo_shots, modality, score, notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      RETURNING *`,
+      [
+        id,
+        currentUser.id,
+        currentUser.clubId || null,
+        dateTime,
+        weaponId || null,
+        weaponName,
+        weaponCaliber || null,
+        ownerType,
+        total,
+        own,
+        club,
+        modality || 'Treino Livre',
+        Number(score) || 0,
+        notes || null,
+      ]
+    );
+    res.status(201).json({ training: mapTraining(r.rows[0]) });
+  } catch (err) {
+    console.error('Create training error:', err);
+    res.status(500).json({ error: 'Erro ao registrar treinamento.' });
+  }
+});
+
+app.delete('/api/trainings/:id', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { id } = req.params;
+  try {
+    const r = await pool.query(`SELECT * FROM trainings WHERE id = $1`, [id]);
+    if (r.rows.length === 0) {
+      return res.status(404).json({ error: 'Treinamento não encontrado.' });
+    }
+    const training = r.rows[0];
+    if (training.user_id !== currentUser.id && !['admin', 'master_admin', 'club_admin'].includes(currentUser.role)) {
+      return res.status(403).json({ error: 'Você não tem permissão para excluir este treinamento.' });
+    }
+    await pool.query(`DELETE FROM trainings WHERE id = $1`, [id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete training error:', err);
+    res.status(500).json({ error: 'Erro ao excluir treinamento.' });
   }
 });
 

@@ -290,6 +290,27 @@ export async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS trainings (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        club_id TEXT,
+        date_time TEXT NOT NULL,
+        weapon_id TEXT REFERENCES weapons(id) ON DELETE SET NULL,
+        weapon_name TEXT NOT NULL,
+        weapon_caliber TEXT,
+        weapon_owner_type TEXT NOT NULL DEFAULT 'propria',
+        total_shots INT NOT NULL DEFAULT 0,
+        own_ammo_shots INT NOT NULL DEFAULT 0,
+        club_ammo_shots INT NOT NULL DEFAULT 0,
+        modality TEXT,
+        score INT DEFAULT 0,
+        notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_trainings_user_id ON trainings(user_id);
+    `);
+
     // Sanitize championships.modalities JSONB array: remove any deleted/orphaned modality IDs
     await client.query(`
       DO $$

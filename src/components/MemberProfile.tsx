@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { User, Post, Registration, StageScore, Championship, Modality, Club, Stage } from '../types';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { User, Post, Registration, StageScore, Championship, Modality, Club, Stage, Weapon, TrainingSession } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
   Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronLeft, ChevronDown, Info, PlusCircle, X, UserCog, Camera,
-  Clock, Copy, QrCode, Images, Heart, MessageCircle, Send, Bookmark, Maximize2, Share2, Repeat, Loader2, Menu
+  Clock, Copy, QrCode, Images, Heart, MessageCircle, Send, Bookmark, Maximize2, Share2, Repeat, Loader2, Menu, Search
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { compressUploadImage } from '../utils/imageCompressor';
@@ -24,6 +24,7 @@ interface MemberProfileProps {
   clubs: Club[];
   stages?: Stage[];
   users?: User[];
+  weapons?: Weapon[];
   onToggleFollow: (userId: string) => Promise<void>;
   onPaySignature: () => Promise<void>;
   onLogout: () => void;
@@ -310,18 +311,6 @@ function ProfileSection({ title, children, onSave, saving, saved }: {
       </div>
     </div>
   );
-}
-
-interface TrainingSession {
-  id: string;
-  date: string;
-  discipline: string;
-  gunModel: string;
-  caliber: string;
-  shots: number;
-  distance: number;
-  score: number;
-  notes?: string;
 }
 
 interface AmmoPurchase {
@@ -685,24 +674,37 @@ export default function MemberProfile({
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
 
-  // New features local states
+  // Real Training State
   const [trainings, setTrainings] = useState<TrainingSession[]>([]);
-  const [ammoPurchases, setAmmoPurchases] = useState<AmmoPurchase[]>([]);
-  const [printMode, setPrintMode] = useState<'certificate' | 'club_card' | 'gg_card' | 'declaration_filiacao' | 'declaration_habitualidade' | null>(null);
-  const [printData, setPrintData] = useState<any>(null);
+  const [loadingTrainings, setLoadingTrainings] = useState(false);
+  const [savingTraining, setSavingTraining] = useState(false);
+  const [trainingError, setTrainingError] = useState('');
+  const [isWeaponDropdownOpen, setIsWeaponDropdownOpen] = useState(false);
 
-  // Form states
-  const [showAddTraining, setShowAddTraining] = useState(false);
   const [trainingForm, setTrainingForm] = useState({
-    date: new Date().toISOString().split('T')[0],
-    discipline: 'IPSC Handgun',
-    gunModel: '',
-    caliber: '9mm',
-    shots: 50,
-    distance: 15,
+    dateTime: new Date().toISOString().slice(0, 16),
+    weaponSearchQuery: '',
+    selectedWeapon: null as Weapon | null,
+    weaponName: '',
+    weaponCaliber: '',
+    weaponOwnerType: 'propria' as 'propria' | 'clube',
+    ownAmmoShots: 50,
+    clubAmmoShots: 0,
+    modality: 'Treino Livre',
     score: 0,
     notes: ''
   });
+
+  // Weapon live search (minimum 3 characters)
+  const searchFilteredWeapons = useMemo(() => {
+    const q = trainingForm.weaponSearchQuery.trim().toLowerCase();
+    if (q.length < 3) return [];
+    const allWeapons = weapons || [];
+    return allWeapons.filter(w => {
+      const fullText = `${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.sigmaNumber || ''} ${w.weaponNumber || ''} ${w.weaponClass || ''}`.toLowerCase();
+      return fullText.includes(q);
+    });
+  }, [trainingForm.weaponSearchQuery, weapons]);
 
   const [showAddAmmo, setShowAddAmmo] = useState(false);
   const [ammoForm, setAmmoForm] = useState({
@@ -768,14 +770,26 @@ export default function MemberProfile({
   const userScores = stageScores.filter(s => s.userId === selectedUser.id);
   const approvedRegs = registrations.filter(r => r.userId === selectedUser.id && r.paymentStatus === 'approved');
 
-  // Load trainings and ammo
-  useEffect(() => {
-    const savedTrainings = localStorage.getItem(`gg_trainings_${selectedUser.id}`);
-    if (savedTrainings) {
-      try { setTrainings(JSON.parse(savedTrainings)); } catch (e) { setTrainings(DEFAULT_TRAININGS); }
-    } else {
-      setTrainings(DEFAULT_TRAININGS);
+  // Fetch real training sessions from PostgreSQL
+  const fetchTrainings = useCallback(async () => {
+    if (!selectedUser?.id) return;
+    setLoadingTrainings(true);
+    try {
+      const authHeaders = currentUser ? { 'x-user-id': currentUser.id } : {};
+      const res = await fetch(`/api/trainings?userId=${selectedUser.id}`, { headers: authHeaders });
+      if (res.ok) {
+        const data = await res.json();
+        setTrainings(data.trainings || []);
+      }
+    } catch (err) {
+      console.error('Error fetching real trainings:', err);
+    } finally {
+      setLoadingTrainings(false);
     }
+  }, [selectedUser.id, currentUser]);
+
+  useEffect(() => {
+    fetchTrainings();
 
     const savedAmmo = localStorage.getItem(`gg_ammo_${selectedUser.id}`);
     if (savedAmmo) {
@@ -783,13 +797,7 @@ export default function MemberProfile({
     } else {
       setAmmoPurchases(DEFAULT_AMMO_PURCHASES);
     }
-  }, [selectedUser.id]);
-
-  // Save changes
-  const saveTrainings = (newTrainings: TrainingSession[]) => {
-    setTrainings(newTrainings);
-    localStorage.setItem(`gg_trainings_${selectedUser.id}`, JSON.stringify(newTrainings));
-  };
+  }, [selectedUser.id, fetchTrainings]);
 
   const saveAmmo = (newAmmo: AmmoPurchase[]) => {
     setAmmoPurchases(newAmmo);
@@ -814,26 +822,83 @@ export default function MemberProfile({
     }, 1800);
   };
 
-  // Add training handler
-  const handleAddTrainingSubmit = (e: React.FormEvent) => {
+  // Real Training Submission Handler
+  const handleAddTrainingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!trainingForm.gunModel) return;
-    const newSession: TrainingSession = {
-      id: 't_' + Date.now(),
-      ...trainingForm
-    };
-    saveTrainings([newSession, ...trainings]);
-    setShowAddTraining(false);
-    setTrainingForm({
-      date: new Date().toISOString().split('T')[0],
-      discipline: 'IPSC Handgun',
-      gunModel: '',
-      caliber: '9mm',
-      shots: 50,
-      distance: 15,
-      score: 0,
-      notes: ''
-    });
+    setTrainingError('');
+
+    if (!trainingForm.dateTime) {
+      setTrainingError('Informe a Data e Hora do treinamento.');
+      return;
+    }
+
+    const nameToSave = trainingForm.weaponName.trim() ||
+      (trainingForm.selectedWeapon ? `${trainingForm.selectedWeapon.manufacturer || ''} ${trainingForm.selectedWeapon.model || ''}`.trim() : trainingForm.weaponSearchQuery.trim());
+
+    if (!nameToSave) {
+      setTrainingError('Selecione ou informe a arma utilizada no treinamento (digite ao menos 3 caracteres para buscar).');
+      return;
+    }
+
+    const own = Math.max(0, Number(trainingForm.ownAmmoShots) || 0);
+    const club = Math.max(0, Number(trainingForm.clubAmmoShots) || 0);
+    if (own === 0 && club === 0) {
+      setTrainingError('Informe a quantidade de tiros com munição própria ou do clube.');
+      return;
+    }
+
+    setSavingTraining(true);
+    try {
+      const authHeaders = currentUser
+        ? { 'x-user-id': currentUser.id, 'Content-Type': 'application/json' }
+        : { 'Content-Type': 'application/json' };
+
+      const payload = {
+        dateTime: trainingForm.dateTime,
+        weaponId: trainingForm.selectedWeapon?.id,
+        weaponName: nameToSave,
+        weaponCaliber: trainingForm.weaponCaliber || trainingForm.selectedWeapon?.caliber || '',
+        weaponOwnerType: trainingForm.weaponOwnerType,
+        ownAmmoShots: own,
+        clubAmmoShots: club,
+        modality: trainingForm.modality,
+        score: Number(trainingForm.score) || 0,
+        notes: trainingForm.notes,
+      };
+
+      const res = await fetch('/api/trainings', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        setShowAddTraining(false);
+        setTrainingForm({
+          dateTime: new Date().toISOString().slice(0, 16),
+          weaponSearchQuery: '',
+          selectedWeapon: null,
+          weaponName: '',
+          weaponCaliber: '',
+          weaponOwnerType: 'propria',
+          ownAmmoShots: 50,
+          clubAmmoShots: 0,
+          modality: 'Treino Livre',
+          score: 0,
+          notes: ''
+        });
+        setIsWeaponDropdownOpen(false);
+        fetchTrainings();
+      } else {
+        const data = await res.json();
+        setTrainingError(data.error || 'Erro ao registrar treinamento.');
+      }
+    } catch (err) {
+      console.error('Error creating training:', err);
+      setTrainingError('Erro de conexão ao salvar treinamento.');
+    } finally {
+      setSavingTraining(false);
+    }
   };
 
   // Add ammo handler
@@ -855,8 +920,20 @@ export default function MemberProfile({
     });
   };
 
-  const deleteTraining = (id: string) => {
-    saveTrainings(trainings.filter(t => t.id !== id));
+  const deleteTraining = async (id: string) => {
+    if (!confirm('Deseja realmente excluir este registro de treinamento?')) return;
+    try {
+      const authHeaders = currentUser ? { 'x-user-id': currentUser.id } : {};
+      const res = await fetch(`/api/trainings/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders,
+      });
+      if (res.ok) {
+        setTrainings(prev => prev.filter(t => t.id !== id));
+      }
+    } catch (err) {
+      console.error('Error deleting training:', err);
+    }
   };
 
   const deleteAmmo = (id: string) => {
@@ -2420,22 +2497,30 @@ export default function MemberProfile({
             </div>
           )}
 
-          {/* 8. Treinamentos (NEW tab) */}
+          {/* 8. Treinamentos (Real Training Sessions Tab) */}
           {profileTab === 'trainings' && (
             <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-6 space-y-6">
-              <div className="flex justify-between items-center border-b border-slate-50 pb-3">
-                <h4 className="font-display font-bold text-slate-800 text-sm uppercase">Diário de Treinamentos</h4>
-                <button
-                  onClick={() => setShowAddTraining(!showAddTraining)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer"
-                >
-                  {showAddTraining ? 'Cancelar' : (
-                    <>
-                      <Plus className="w-4 h-4" />
-                      Registrar Treino
-                    </>
-                  )}
-                </button>
+              <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                <div>
+                  <h4 className="font-display font-bold text-slate-800 text-sm uppercase">Diário de Treinamentos (Habitualidade Real)</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">Registre seus treinos no clube informando arma, posse e munições utilizadas.</p>
+                </div>
+                {isMe && (
+                  <button
+                    onClick={() => {
+                      setShowAddTraining(!showAddTraining);
+                      setTrainingError('');
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3.5 py-2 rounded-xl font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    {showAddTraining ? 'Cancelar' : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        Registrar Treino
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
 
               {/* Training Form */}
@@ -2446,181 +2531,356 @@ export default function MemberProfile({
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
                     onSubmit={handleAddTrainingSubmit}
-                    className="bg-slate-50 p-4 rounded-xl space-y-3 overflow-hidden text-xs text-slate-700 border border-slate-100"
+                    className="bg-slate-50 p-5 rounded-2xl space-y-4 overflow-hidden text-xs text-slate-700 border border-slate-200 shadow-inner"
                   >
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+                      <span className="font-bold text-slate-800 text-xs uppercase flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-blue-600" />
+                        Formulário de Registro de Treinamento
+                      </span>
+                    </div>
+
+                    {trainingError && (
+                      <div className="bg-red-50 text-red-700 p-3 rounded-xl border border-red-200 text-xs font-semibold flex items-center gap-2">
+                        <ShieldAlert className="w-4 h-4 shrink-0 text-red-500" />
+                        <span>{trainingError}</span>
+                      </div>
+                    )}
+
+                    {/* 1. Data e Hora */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-[10px] text-slate-450 font-bold uppercase mb-1">Data</label>
+                        <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
+                          Data e Hora do Treinamento <span className="text-red-500">*</span>
+                        </label>
                         <input
-                          type="date"
+                          type="datetime-local"
                           required
-                          value={trainingForm.date}
-                          onChange={e => setTrainingForm({ ...trainingForm, date: e.target.value })}
-                          className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-blue-500 text-slate-800"
+                          value={trainingForm.dateTime}
+                          onChange={e => setTrainingForm({ ...trainingForm, dateTime: e.target.value })}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
                         />
                       </div>
+
                       <div>
-                        <label className="block text-[10px] text-slate-450 font-bold uppercase mb-1">Disciplina</label>
+                        <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
+                          Modalidade / Disciplina
+                        </label>
                         <select
-                          value={trainingForm.discipline}
-                          onChange={e => setTrainingForm({ ...trainingForm, discipline: e.target.value })}
-                          className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-blue-500 text-slate-850"
+                          value={trainingForm.modality}
+                          onChange={e => setTrainingForm({ ...trainingForm, modality: e.target.value })}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
                         >
-                          <option>IPSC Handgun</option>
-                          <option>Saque Rápido</option>
-                          <option>Fogo Central</option>
-                          <option>Trap Americano</option>
-                          <option>Carabina Mira Aberta 10m</option>
+                          <option value="Treino Livre">Treino Livre</option>
+                          <option value="IPSC Handgun">IPSC Handgun</option>
+                          <option value="IDSC">IDSC</option>
+                          <option value="Saque Rápido">Saque Rápido</option>
+                          <option value="Fogo Central">Fogo Central</option>
+                          <option value="Trap Americano">Trap Americano</option>
+                          <option value="Carabina Mira Aberta 10m">Carabina Mira Aberta 10m</option>
                         </select>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] text-slate-450 font-bold uppercase mb-1">Modelo de Arma</label>
+                    {/* 2. Seleciona a Arma Utilizada com Busca em Tempo Real (Mínimo 3 Caracteres) */}
+                    <div className="relative">
+                      <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
+                        Arma Utilizada <span className="text-red-500">*</span> (Pesquise digitando no mínimo 3 caracteres)
+                      </label>
+                      <div className="relative">
                         <input
                           type="text"
-                          required
-                          placeholder="Ex: Taurus TS9"
-                          value={trainingForm.gunModel}
-                          onChange={e => setTrainingForm({ ...trainingForm, gunModel: e.target.value })}
-                          className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-blue-500 text-slate-800"
+                          value={trainingForm.weaponSearchQuery}
+                          onFocus={() => setIsWeaponDropdownOpen(true)}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setTrainingForm({
+                              ...trainingForm,
+                              weaponSearchQuery: val,
+                              selectedWeapon: null,
+                              weaponName: val,
+                            });
+                            setIsWeaponDropdownOpen(true);
+                          }}
+                          placeholder="Digite modelo, marca, calibre, sigma ou proprietário..."
+                          className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-4 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
                         />
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                       </div>
-                      <div>
-                        <label className="block text-[10px] text-slate-450 font-bold uppercase mb-1">Calibre</label>
-                        <select
-                          value={trainingForm.caliber}
-                          onChange={e => setTrainingForm({ ...trainingForm, caliber: e.target.value })}
-                          className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-blue-500 text-slate-850"
+
+                      {trainingForm.weaponSearchQuery.length > 0 && trainingForm.weaponSearchQuery.length < 3 && (
+                        <p className="text-[10.5px] text-amber-600 mt-1 font-medium">
+                          Digite mais {3 - trainingForm.weaponSearchQuery.length} caractere(s) para pesquisar nas armas do banco de dados...
+                        </p>
+                      )}
+
+                      {/* Weapon Search Results Dropdown */}
+                      {isWeaponDropdownOpen && trainingForm.weaponSearchQuery.length >= 3 && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-56 overflow-y-auto divide-y divide-slate-100">
+                          {searchFilteredWeapons.length === 0 ? (
+                            <div className="p-3 text-center text-slate-500 text-xs">
+                              Nenhuma arma cadastrada encontrada para "{trainingForm.weaponSearchQuery}". Você pode continuar digitando o nome da arma.
+                            </div>
+                          ) : (
+                            searchFilteredWeapons.map(w => {
+                              const isMine = currentUser && w.ownerId === currentUser.id;
+                              return (
+                                <button
+                                  key={w.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setTrainingForm(prev => ({
+                                      ...prev,
+                                      selectedWeapon: w,
+                                      weaponName: `${w.manufacturer || ''} ${w.model || ''}`.trim() || w.weaponNumber || 'Arma Cadastrada',
+                                      weaponCaliber: w.caliber || prev.weaponCaliber,
+                                      weaponOwnerType: isMine ? 'propria' : 'clube',
+                                      weaponSearchQuery: `${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'})`.trim(),
+                                    }));
+                                    setIsWeaponDropdownOpen(false);
+                                  }}
+                                  className="w-full text-left p-3 hover:bg-blue-50/70 transition flex items-center justify-between cursor-pointer"
+                                >
+                                  <div>
+                                    <div className="font-bold text-slate-900 text-xs">
+                                      {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[11px]">({w.caliber})</span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                      Sigma: {w.sigmaNumber || 'N/A'} | Num: {w.weaponNumber || 'N/A'}
+                                    </div>
+                                  </div>
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isMine ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-purple-100 text-purple-800 border border-purple-200'}`}>
+                                    {isMine ? '🎯 Própria' : '🏛️ Clube'}
+                                  </span>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 3. Posse da Arma: Informa se a arma é própria ou do clube */}
+                    <div>
+                      <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1.5">
+                        Origem / Posse da Arma
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setTrainingForm({ ...trainingForm, weaponOwnerType: 'propria' })}
+                          className={`py-2.5 px-4 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                            trainingForm.weaponOwnerType === 'propria'
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                          }`}
                         >
-                          <option value="9mm">9mm Luger</option>
-                          <option value=".380">.380 ACP</option>
-                          <option value=".22 LR">.22 LR</option>
-                          <option value="12 GA">12 Gauge</option>
-                        </select>
+                          <span>🎯</span>
+                          <span>Arma Própria</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTrainingForm({ ...trainingForm, weaponOwnerType: 'clube' })}
+                          className={`py-2.5 px-4 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                            trainingForm.weaponOwnerType === 'clube'
+                              ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>🏛️</span>
+                          <span>Arma do Clube</span>
+                        </button>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-[10px] text-slate-450 font-bold uppercase mb-1">Disparos</label>
-                        <input
-                          type="number"
-                          min="1"
-                          required
-                          value={trainingForm.shots}
-                          onChange={e => setTrainingForm({ ...trainingForm, shots: parseInt(e.target.value) || 0 })}
-                          className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-blue-500 text-slate-800"
-                        />
+                    {/* 4. Registrar total de tiros: Tiros com munição própria vs Munição do Clube */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <span className="font-bold text-slate-800 text-xs uppercase flex items-center gap-1.5">
+                          <Target className="w-4 h-4 text-emerald-600" />
+                          Contagem de Tiros e Munição Disparada
+                        </span>
+                        <span className="text-xs font-bold text-slate-900 bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200 font-mono">
+                          Total: {(Number(trainingForm.ownAmmoShots) || 0) + (Number(trainingForm.clubAmmoShots) || 0)} tiros
+                        </span>
                       </div>
-                      <div>
-                        <label className="block text-[10px] text-slate-450 font-bold uppercase mb-1">Distância (m)</label>
-                        <input
-                          type="number"
-                          min="1"
-                          required
-                          value={trainingForm.distance}
-                          onChange={e => setTrainingForm({ ...trainingForm, distance: parseInt(e.target.value) || 0 })}
-                          className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-blue-500 text-slate-800"
-                        />
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
+                            Tiros com Munição Própria
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={trainingForm.ownAmmoShots}
+                            onChange={e => setTrainingForm({ ...trainingForm, ownAmmoShots: Math.max(0, parseInt(e.target.value) || 0) })}
+                            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-mono font-bold"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
+                            Tiros com Munição do Clube
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={trainingForm.clubAmmoShots}
+                            onChange={e => setTrainingForm({ ...trainingForm, clubAmmoShots: Math.max(0, parseInt(e.target.value) || 0) })}
+                            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-mono font-bold"
+                          />
+                        </div>
                       </div>
+                    </div>
+
+                    {/* Pontuação e Observações */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-[10px] text-slate-450 font-bold uppercase mb-1">Pontos (0-150)</label>
+                        <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">Pontuação Obtida (Pts)</label>
                         <input
                           type="number"
                           min="0"
-                          max="150"
-                          required
                           value={trainingForm.score}
-                          onChange={e => setTrainingForm({ ...trainingForm, score: parseInt(e.target.value) || 0 })}
-                          className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-blue-500 text-slate-800"
+                          onChange={e => setTrainingForm({ ...trainingForm, score: Math.max(0, parseInt(e.target.value) || 0) })}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-mono font-bold"
                         />
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-slate-450 font-bold uppercase mb-1">Notas de Observação</label>
-                      <textarea
-                        rows={2}
-                        placeholder="Ex: Foco no acionamento do gatilho..."
-                        value={trainingForm.notes}
-                        onChange={e => setTrainingForm({ ...trainingForm, notes: e.target.value })}
-                        className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 resize-none"
-                      />
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">Observações do Treino</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Treino de agrupamento a 15m, boa cadência de tiros..."
+                          value={trainingForm.notes}
+                          onChange={e => setTrainingForm({ ...trainingForm, notes: e.target.value })}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
+                        />
+                      </div>
                     </div>
 
                     <button
                       type="submit"
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded font-bold transition cursor-pointer"
+                      disabled={savingTraining}
+                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-3 rounded-xl font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-md text-xs uppercase tracking-wider"
                     >
-                      Salvar Treinamento no Diário
+                      {savingTraining ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Salvando Treinamento...
+                        </>
+                      ) : (
+                        'Confirmar e Salvar Treinamento no Banco de Dados'
+                      )}
                     </button>
                   </motion.form>
                 )}
               </AnimatePresence>
 
               {/* Stats panel */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-center font-mono">
-                <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
-                  <span className="text-[9px] text-slate-450 uppercase block font-sans">Total Sessões</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center font-mono">
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                  <span className="text-[10px] text-slate-500 uppercase block font-sans font-bold">Total Sessões</span>
                   <span className="text-base font-bold text-slate-800">{trainings.length}</span>
                 </div>
-                <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
-                  <span className="text-[9px] text-slate-450 uppercase block font-sans">Munição Disparada</span>
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                  <span className="text-[10px] text-slate-500 uppercase block font-sans font-bold">Munição Própria</span>
                   <span className="text-base font-bold text-blue-600">
-                    {trainings.reduce((sum, t) => sum + t.shots, 0)} cartuchos
+                    {trainings.reduce((sum, t) => sum + (t.ownAmmoShots || 0), 0)} tiros
                   </span>
                 </div>
-                <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100 col-span-2 sm:col-span-1">
-                  <span className="text-[9px] text-slate-450 uppercase block font-sans">Precisão Recorde</span>
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                  <span className="text-[10px] text-slate-500 uppercase block font-sans font-bold">Munição Clube</span>
+                  <span className="text-base font-bold text-purple-600">
+                    {trainings.reduce((sum, t) => sum + (t.clubAmmoShots || 0), 0)} tiros
+                  </span>
+                </div>
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                  <span className="text-[10px] text-slate-500 uppercase block font-sans font-bold">Total Disparos</span>
                   <span className="text-base font-bold text-emerald-600">
-                    {trainings.length > 0 ? Math.max(...trainings.map(t => t.score)) : 0} pts
+                    {trainings.reduce((sum, t) => sum + (t.totalShots || (t.ownAmmoShots || 0) + (t.clubAmmoShots || 0)), 0)} tiros
                   </span>
                 </div>
               </div>
 
-              {/* List */}
-              {trainings.length === 0 ? (
-                <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                  <Activity className="w-10 h-10 text-slate-200 mx-auto mb-2" />
-                  <p className="text-xs">Nenhum treinamento registrado ainda. Clique em "Registrar Treino".</p>
+              {/* Training Sessions List */}
+              {loadingTrainings ? (
+                <div className="py-12 text-center text-slate-500 flex items-center justify-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                  <span className="text-xs font-semibold">Carregando registros de treinamentos...</span>
+                </div>
+              ) : trainings.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  <Activity className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs font-semibold">Nenhum treinamento registrado ainda no banco de dados.</p>
+                  <p className="text-[11px] text-slate-400 mt-1">Clique em "Registrar Treino" para adicionar sua habitualidade.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {trainings.map(t => (
-                    <div key={t.id} className="border border-slate-100 rounded-xl p-4 bg-slate-50/30 relative hover:border-slate-200 transition">
-                      <button
-                        onClick={() => deleteTraining(t.id)}
-                        className="absolute right-4 top-4 text-slate-400 hover:text-red-500 transition p-1 cursor-pointer"
-                        title="Deletar registro"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                      
-                      <div className="flex justify-between items-start border-b border-slate-100 pb-2 mb-2 pr-6">
-                        <div>
-                          <span className="text-[10px] text-slate-450 font-mono font-bold block">{t.date}</span>
-                          <span className="font-bold text-xs text-slate-800 block mt-0.5">{t.discipline}</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-[10.5px] font-bold text-blue-600 block">{t.gunModel} ({t.caliber})</span>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-3 gap-2 font-mono text-[10.5px] text-slate-600 bg-white p-2.5 rounded-lg border border-slate-50">
-                        <div>Disparos: <span className="font-bold text-slate-800">{t.shots}</span></div>
-                        <div>Alvo: <span className="font-bold text-slate-800">{t.distance}m</span></div>
-                        <div>Score: <span className="font-bold text-emerald-600">{t.score} pts</span></div>
-                      </div>
+                  {trainings.map(t => {
+                    const formattedDate = t.dateTime ? new Date(t.dateTime).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'Data não informada';
+                    const isClubWeapon = t.weaponOwnerType === 'clube';
 
-                      {t.notes && (
-                        <p className="text-[10.5px] text-slate-500 italic mt-2 font-sans pl-1.5 border-l-2 border-slate-200">
-                          "{t.notes}"
-                        </p>
-                      )}
-                    </div>
-                  ))}
+                    return (
+                      <div key={t.id} className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50 hover:bg-white hover:border-blue-200 transition shadow-xs">
+                        <div className="flex justify-between items-start border-b border-slate-200/60 pb-3 mb-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-slate-900">{t.weaponName}</span>
+                              {t.weaponCaliber && (
+                                <span className="text-[10.5px] font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                                  {t.weaponCaliber}
+                                </span>
+                              )}
+                              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${isClubWeapon ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                                {isClubWeapon ? '🏛️ Arma do Clube' : '🎯 Arma Própria'}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 flex items-center gap-3">
+                              <span className="flex items-center gap-1 font-mono">
+                                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                {formattedDate}
+                              </span>
+                              {t.modality && (
+                                <span className="font-semibold text-slate-700">• {t.modality}</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {isMe && (
+                            <button
+                              onClick={() => deleteTraining(t.id)}
+                              className="text-slate-400 hover:text-red-500 transition p-1.5 rounded-lg hover:bg-red-50 cursor-pointer"
+                              title="Excluir treinamento"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Shot Details Grid */}
+                        <div className="grid grid-cols-3 gap-3 font-mono text-xs bg-white p-3 rounded-xl border border-slate-100">
+                          <div>
+                            <span className="text-[10px] text-slate-400 uppercase block font-sans font-bold">Munição Própria</span>
+                            <span className="font-bold text-blue-700">{t.ownAmmoShots} tiros</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-400 uppercase block font-sans font-bold">Munição Clube</span>
+                            <span className="font-bold text-purple-700">{t.clubAmmoShots} tiros</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-400 uppercase block font-sans font-bold">Total Disparos</span>
+                            <span className="font-extrabold text-emerald-600">{t.totalShots || (t.ownAmmoShots + t.clubAmmoShots)} tiros</span>
+                          </div>
+                        </div>
+
+                        {t.notes && (
+                          <p className="text-[11px] text-slate-600 italic mt-2.5 font-sans pl-2 border-l-2 border-slate-300">
+                            "{t.notes}"
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
