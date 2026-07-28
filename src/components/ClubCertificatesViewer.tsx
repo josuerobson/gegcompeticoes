@@ -216,7 +216,7 @@ export function ClubCertificatesViewer({
     // Get all scores for this championship & modality
     const matchingScores = stageScores.filter(s =>
       s.championshipId === championshipId &&
-      (s.modalityId === modalityId || (modName && s.modality?.toLowerCase() === modName.toLowerCase()))
+      ((s as any).modalityId === modalityId || (modName && s.modality?.toLowerCase() === modName.toLowerCase()))
     );
 
     // Group scores by athlete/registration

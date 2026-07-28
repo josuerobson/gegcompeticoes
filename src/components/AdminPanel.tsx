@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club } from '../types';
+import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';

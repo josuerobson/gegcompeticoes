@@ -1030,7 +1030,7 @@ export default function FeedView({
 
                               const filesToRead = files.slice(0, remainingSlots);
 
-                              const readPromises = filesToRead.map(file => compressUploadImage(file, 1200, 0.75));
+                              const readPromises = filesToRead.map((file: any) => compressUploadImage(file as File, 1200, 0.75));
 
                               const results = await Promise.all(readPromises);
                               const validResults = results.filter(r => r !== '');

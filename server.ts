@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
-import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession } from './src/types.js';
+import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo } from './src/types.js';
 import { pool, initDB } from './src/db.js';
 import { hashPassword, verifyPassword } from './src/auth.js';
 import { uploadDocument, getDocumentStream, storageEnabled } from './src/storage.js';

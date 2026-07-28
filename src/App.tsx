@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Post, Championship, ChampionshipInput, Registration, StageScore, RankingItem, ShootingResult, Club, Modality, Stage, StageInput, Weapon, WeaponLookupOption, SharedPostInfo } from './types';
+import { User, Post, Championship, ChampionshipInput, Registration, StageScore, RankingItem, ShootingResult, Club, Modality, Stage, StageInput, Weapon, WeaponLookupOption, SharedPostInfo, Comment } from './types';
 import FeedView from './components/FeedView';
 import ChampionshipsView from './components/ChampionshipsView';
 import AdminPanel from './components/AdminPanel';
