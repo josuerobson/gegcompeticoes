@@ -8,15 +8,15 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `e4cedb1` |
-| Mensagem | `fix: atualiza botao do menu mobile no perfil com icone de 3 barras e texto Menu da conta` |
-| Data/hora | 2026-07-28T10:49:05-03:00 |
+| Hash | `86fdd69` |
+| Mensagem | `feat: implementa registro real de treinamentos com busca de armas no DB, filtro por min 3 chars, posse propria/clube e tiros por municao propria/clube` |
+| Data/hora | 2026-07-28T11:27:24-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `e4cedb1` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> `86fdd69` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -106,7 +106,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
 - **Otimização do Carregamento Inicial (`App.tsx`, `db.ts`)**: Identificado que a função `syncWithBackend` executava 12 requisições HTTP sequenciais uma após a outra, somando latências e acumulando esperas de até 60s~120s. A sincronização foi otimizada para realizar os 11 endpoints em lote paralelo com `Promise.allSettled()`, reduzindo a inicialização para ~1 segundo. Adicionada trava de segurança com `setTimeout` (máximo 3 segundos para encerrar a tela estática) e criados índices no PostgreSQL (`CREATE INDEX IF NOT EXISTS`) nas tabelas `likes`, `comments`, `follows`, `registrations`, `stage_scores` e `posts`.
 - **Paginação e Rolagem Infinita no Feed (`FeedView.tsx`)**: Implementado carregamento progressivo do feed renderizando estritamente **3 postagens iniciais**. Ao rolar a página para baixo, o `IntersectionObserver` detecta a aproximação do final da tela e carrega automaticamente mais 3 postagens por vez. Adicionado também o botão "Carregar mais publicações" como fallback manual e o atributo `loading="lazy"` em todas as tags `<img>`.
-- **Identificação do Menu da Conta em Dispositivos Móveis (`MemberProfile.tsx`)**: Atualizado o botão disparador do menu suspenso no perfil em dispositivos móveis. Substituída a exibição do nome do item individual selecionado pelo ícone de três barras (`Menu`) e pelo título explícito **`"Menu da conta"`**, tornando a navegação perfeitamente identificável em telas menores.
+- **Registro de Treinamento Real no Perfil do Atleta (`MemberProfile.tsx`, `server.ts`, `db.ts`)**: Implementada persistência real no PostgreSQL para os treinos de habitualidade (tabela `trainings` e endpoints `GET/POST/DELETE /api/trainings`). O formulário inicia com registro de Data/Hora (`datetime-local`), seguido pela busca interativa da arma cadastrada no banco com trava mínima de 3 caracteres (`q.length >= 3`), seletor de origem da arma (`Arma Própria` ou `Arma do Clube`), campos numéricos para contagem de tiros com munição própria vs munição do clube (com cálculo automático do total de disparos) e funcionalidade de exclusão com confirmação.
 
 ## Infra / deploy
 
