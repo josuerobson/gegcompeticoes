@@ -37,6 +37,7 @@ export interface User {
   docRgCnhUploaded?: boolean;
   docCrUploaded?: boolean;
   docDeclaracaoUploaded?: boolean;
+  guiaTransitoExpiry?: string;
 }
 
 export interface Club {

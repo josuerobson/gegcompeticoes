@@ -1633,7 +1633,8 @@ export default function AdminPanel({
   const [memberEditForm, setMemberEditForm] = useState({
     fullName: '', birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
     fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', nationality: '',
-    phone: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
+    phone: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '',
+    guiaTransitoExpiry: '', signatureExpiry: ''
   });
   const [memberSavingSection, setMemberSavingSection] = useState<string | null>(null);
   const [memberSavedSection, setMemberSavedSection] = useState<string | null>(null);
@@ -1663,7 +1664,9 @@ export default function AdminPanel({
       complement: selectedMember.complement || '',
       neighborhood: selectedMember.neighborhood || '',
       city: selectedMember.city || '',
-      state: selectedMember.state || ''
+      state: selectedMember.state || '',
+      guiaTransitoExpiry: selectedMember.guiaTransitoExpiry || '',
+      signatureExpiry: selectedMember.signatureExpiry ? selectedMember.signatureExpiry.split('T')[0] : ''
     });
   }, [selectedMember?.id]);
 
@@ -2231,6 +2234,30 @@ export default function AdminPanel({
                     <MemberField label="Validade CR" type="date" value={memberEditForm.crValidity} onChange={v => setMemberEditForm({ ...memberEditForm, crValidity: v })} />
                     <MemberField label="Região Militar" value={memberEditForm.militaryRegion} onChange={v => setMemberEditForm({ ...memberEditForm, militaryRegion: v })} />
                     <MemberField label="Nacionalidade" value={memberEditForm.nationality} onChange={v => setMemberEditForm({ ...memberEditForm, nationality: v })} />
+                  </MemberSection>
+
+                  {/* Vencimento Guia de Trânsito e Vencimento Anuidade (Exclusivo Painel Diretor > Gerenciamento Clube > Cadastrar Membros) */}
+                  <MemberSection
+                    title="Validades do Clube (Exclusivo Diretor)"
+                    onSave={() => saveMemberSection('member_club_validities', {
+                      guiaTransitoExpiry: memberEditForm.guiaTransitoExpiry,
+                      signatureExpiry: memberEditForm.signatureExpiry
+                    })}
+                    saving={memberSavingSection === 'member_club_validities'}
+                    saved={memberSavedSection === 'member_club_validities'}
+                  >
+                    <MemberField
+                      label="Vencimento Guia de Trânsito"
+                      type="date"
+                      value={memberEditForm.guiaTransitoExpiry}
+                      onChange={v => setMemberEditForm({ ...memberEditForm, guiaTransitoExpiry: v })}
+                    />
+                    <MemberField
+                      label="Vencimento Anuidade"
+                      type="date"
+                      value={memberEditForm.signatureExpiry}
+                      onChange={v => setMemberEditForm({ ...memberEditForm, signatureExpiry: v })}
+                    />
                   </MemberSection>
 
                   <MemberSection

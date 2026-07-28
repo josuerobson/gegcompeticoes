@@ -65,6 +65,7 @@ function mapUser(u: any): User {
     docRgCnhUploaded: Boolean(u.doc_rg_cnh_key),
     docCrUploaded: Boolean(u.doc_cr_key),
     docDeclaracaoUploaded: Boolean(u.doc_declaracao_key),
+    guiaTransitoExpiry: u.guia_transito_expiry || undefined,
   };
 }
 
@@ -927,6 +928,8 @@ const USER_PROFILE_COLUMNS: Record<string, string> = {
   neighborhood: 'neighborhood',
   city: 'city',
   state: 'state',
+  guiaTransitoExpiry: 'guia_transito_expiry',
+  signatureExpiry: 'signature_expiry',
 };
 
 // Shared by a member editing their own "Meu Cadastro" and a club admin
