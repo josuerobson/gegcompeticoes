@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `main` |
-| Mensagem | `feat: adiciona campos Vencimento Guia de Transito e Vencimento Anuidade editaveis no menu Cadastrar Membros do Painel Diretor` |
-| Data/hora | 2026-07-28T19:43:50-03:00 |
+| Mensagem | `feat: ordena campeonatos de forma decrescente pelo campo Ordem e por padrao pelo ultimo registro cadastrado` |
+| Data/hora | 2026-07-28T19:47:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
@@ -106,7 +106,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
 - **Otimização do Carregamento Inicial (`App.tsx`, `db.ts`)**: Identificado que a função `syncWithBackend` executava 12 requisições HTTP sequenciais uma após a outra, somando latências e acumulando esperas de até 60s~120s. A sincronização foi otimizada para realizar os 11 endpoints em lote paralelo com `Promise.allSettled()`, reduzindo a inicialização para ~1 segundo. Adicionada trava de segurança com `setTimeout` (máximo 3 segundos para encerrar a tela estática) e criados índices no PostgreSQL (`CREATE INDEX IF NOT EXISTS`) nas tabelas `likes`, `comments`, `follows`, `registrations`, `stage_scores` e `posts`.
 - **Paginação e Rolagem Infinita no Feed (`FeedView.tsx`)**: Implementado carregamento progressivo do feed renderizando estritamente **3 postagens iniciais**. Ao rolar a página para baixo, o `IntersectionObserver` detecta a aproximação do final da tela e carrega automaticamente mais 3 postagens por vez. Adicionado também o botão "Carregar mais publicações" como fallback manual e o atributo `loading="lazy"` em todas as tags `<img>`.
-- **Campos de Validades no Painel Diretor (`AdminPanel.tsx`, `server.ts`, `types.ts`)**: Adicionados os campos **Vencimento Guia de Trânsito** e **Vencimento Anuidade** na ficha de edição completa do sócio exclusivamente dentro do menu **Painel Diretor > Gerenciamento Clube > Cadastrar Membros**. Apenas diretores possuem permissão para alterar essas datas de validade, que são refletidas automaticamente de forma somente leitura no perfil público do atleta.
+- **Ordenação Decrescente de Campeonatos (`App.tsx`, `server.ts`)**: Implementada a ordenação dos campeonatos na tela "Campeonatos" priorizando em ordem **decrescente pelo campo 'Ordem' (`ordemExibicao`)**. Quando o campo 'Ordem' não é preenchido ou é idêntico, o sistema aplica ordenação decrescente por padrão exibindo os últimos registros cadastrados primeiro (`ORDER BY COALESCE(ordem_exibicao, 0) DESC, id DESC`).
 
 ## Infra / deploy
 

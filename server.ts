@@ -1315,7 +1315,7 @@ app.delete('/api/posts/:id', requireAuth, async (req, res) => {
 // 4. Championships, Modalities & Staging
 app.get('/api/championships', async (req, res) => {
   try {
-    const champsRes = await pool.query('SELECT * FROM championships');
+    const champsRes = await pool.query('SELECT * FROM championships ORDER BY COALESCE(ordem_exibicao, 0) DESC, id DESC');
     const championships = champsRes.rows.map(mapChampionship);
     res.json({ championships });
   } catch (err) {

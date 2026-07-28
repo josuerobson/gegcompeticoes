@@ -1869,7 +1869,31 @@ export default function App() {
     return matchesUser || matchesContent || matchesDiscipline || matchesGun;
   });
 
-  const filteredChampionshipsList = championships.filter(champ => {
+  const sortedChampionshipsList = React.useMemo(() => {
+    return [...championships].sort((a, b) => {
+      // Primary: Ordem de exibição em ordem decrescente (maior número primeiro)
+      const orderA = a.ordemExibicao ?? (a as any).ordem ?? 0;
+      const orderB = b.ordemExibicao ?? (b as any).ordem ?? 0;
+      if (orderA !== orderB) {
+        return orderB - orderA;
+      }
+      // Secondary / Default: Ordem decrescente de criação/ID (último registro primeiro)
+      const parseIdNum = (idStr: string | number) => typeof idStr === 'number' ? idStr : (parseInt(String(idStr).replace(/\D/g, '')) || 0);
+      const numA = parseIdNum(a.id);
+      const numB = parseIdNum(b.id);
+      if (numA !== numB) {
+        return numB - numA;
+      }
+      // String comparison fallback for non-numeric IDs
+      if (a.id !== b.id) {
+        return String(b.id).localeCompare(String(a.id));
+      }
+      // Fallback: data de início decrescente
+      return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
+    });
+  }, [championships]);
+
+  const filteredChampionshipsList = sortedChampionshipsList.filter(champ => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     const matchesTitle = champ.title.toLowerCase().includes(query);
