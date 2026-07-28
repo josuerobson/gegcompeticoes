@@ -572,7 +572,7 @@ app.post('/api/auth/register', async (req, res) => {
       await client.query(
         `INSERT INTO users (id, email, username, full_name, avatar_url, bio, cr_number, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, cpf, rg, phone, password_hash, birth_date, sex, rg_issuer, rg_issue_date, father_name, mother_name, cr_validity, military_region, nationality, cep, address, address_number, complement, neighborhood, city, state)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)`,
-        [userId, email, username, fullName, DEFAULT_AVATAR, 'Atleta federado do G&G Competições.', crNumber || null, true, new Date().toISOString().split('T')[0], 'member', false, clubId, false, cpf, rg || null, phone || null, hashPassword(password), birthDate || null, sex || null, rgIssuer || null, rgIssueDate || null, fatherName || null, motherName || null, crValidity || null, militaryRegion || null, nationality || null, cep || null, address || null, addressNumber || null, complement || null, neighborhood || null, city || null, state || null]
+        [userId, email, username, fullName, DEFAULT_AVATAR, 'Atleta G&G Competições.', crNumber || null, true, new Date().toISOString().split('T')[0], 'member', false, clubId, false, cpf, rg || null, phone || null, hashPassword(password), birthDate || null, sex || null, rgIssuer || null, rgIssueDate || null, fatherName || null, motherName || null, crValidity || null, militaryRegion || null, nationality || null, cep || null, address || null, addressNumber || null, complement || null, neighborhood || null, city || null, state || null]
       );
       await recomputeUserProfileComplete(client, userId);
       await client.query('COMMIT');
@@ -628,7 +628,7 @@ app.post('/api/admin/members', requireAdmin, async (req, res) => {
     await client.query(
       `INSERT INTO users (id, email, username, full_name, avatar_url, bio, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, cpf, password_hash)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-      [userId, email, username, fullName, DEFAULT_AVATAR, 'Atleta federado do G&G Competições.', true, new Date().toISOString().split('T')[0], 'member', false, currentUser.clubId, false, cpf, hashPassword(password)]
+      [userId, email, username, fullName, DEFAULT_AVATAR, 'Atleta G&G Competições.', true, new Date().toISOString().split('T')[0], 'member', false, currentUser.clubId, false, cpf, hashPassword(password)]
     );
     await client.query('COMMIT');
 

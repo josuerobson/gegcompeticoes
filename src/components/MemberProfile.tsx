@@ -986,9 +986,16 @@ export default function MemberProfile({
             </div>
 
             {/* Bio */}
-            <p className="text-xs text-slate-600 leading-relaxed py-4 italic whitespace-pre-wrap">
-              "{selectedUser.bio}"
-            </p>
+            {(() => {
+              const rawBio = selectedUser.bio || '';
+              const cleanBio = rawBio.replace(/Atleta federado do G&G Competições\.?/gi, '').trim();
+              if (!cleanBio) return null;
+              return (
+                <p className="text-xs text-slate-600 leading-relaxed py-4 italic whitespace-pre-wrap">
+                  "{cleanBio}"
+                </p>
+              );
+            })()}
 
             {/* Action buttons */}
             <div className="w-full space-y-2 pt-2">
@@ -1052,17 +1059,16 @@ export default function MemberProfile({
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
             <div>
               <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Situação Associativa G&G</h4>
-              <p className="text-[10px] text-slate-450 mt-0.5">Vínculo fiduciário oficial do clube de tiro.</p>
             </div>
 
             <div className="space-y-3 font-mono text-xs">
               <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                <span className="text-slate-450 font-sans text-[11px]">Militares / CR Defesa</span>
+                <span className="text-slate-450 font-sans text-[11px]">CR</span>
                 <span className="font-bold text-slate-800">{selectedUser.crNumber || 'Emitindo...'}</span>
               </div>
 
               <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                <span className="text-slate-450 font-sans text-[11px]">Contribuição Anuidade</span>
+                <span className="text-slate-450 font-sans text-[11px]">Anuidade</span>
                 {selectedUser.hasPaidSignature ? (
                   <span className="font-bold text-emerald-600 flex items-center gap-1">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" /> REGULAR
