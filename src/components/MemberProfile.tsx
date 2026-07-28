@@ -871,7 +871,7 @@ export default function MemberProfile({
   const filteredMenuItems = menuItems.filter(item => isMe || item.public);
 
   return (
-    <div className="py-6 space-y-6">
+    <div className="pt-0.5 pb-6 md:py-6 space-y-4 md:space-y-6">
       
       {/* Main layout container */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">

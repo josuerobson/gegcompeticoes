@@ -1995,7 +1995,7 @@ export default function App() {
       </header>
 
       {/* Main layout container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 mb-16 md:mb-4">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 pt-2 sm:pt-6 pb-4 sm:pb-6 mb-16 md:mb-4">
         
         {/* Modern App content viewport based on current routing state */}
         <div className="min-h-[70vh]">
