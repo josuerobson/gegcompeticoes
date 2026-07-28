@@ -541,8 +541,8 @@ export default function MemberProfile({
     weaponName: '',
     weaponCaliber: '',
     weaponOwnerType: 'propria' as 'propria' | 'clube',
-    ownAmmoShots: 50,
-    clubAmmoShots: 0,
+    ownAmmoShots: '' as number | string,
+    clubAmmoShots: '' as number | string,
     modality: 'Treino Livre',
     score: 0,
     notes: ''
@@ -734,8 +734,8 @@ export default function MemberProfile({
           weaponName: '',
           weaponCaliber: '',
           weaponOwnerType: 'propria',
-          ownAmmoShots: 50,
-          clubAmmoShots: 0,
+          ownAmmoShots: '',
+          clubAmmoShots: '',
           modality: 'Treino Livre',
           score: 0,
           notes: ''
@@ -2596,8 +2596,9 @@ export default function MemberProfile({
                           <input
                             type="number"
                             min="0"
+                            placeholder="0"
                             value={trainingForm.ownAmmoShots}
-                            onChange={e => setTrainingForm({ ...trainingForm, ownAmmoShots: Math.max(0, parseInt(e.target.value) || 0) })}
+                            onChange={e => setTrainingForm({ ...trainingForm, ownAmmoShots: e.target.value })}
                             className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-mono font-bold"
                           />
                         </div>
@@ -2609,35 +2610,12 @@ export default function MemberProfile({
                           <input
                             type="number"
                             min="0"
+                            placeholder="0"
                             value={trainingForm.clubAmmoShots}
-                            onChange={e => setTrainingForm({ ...trainingForm, clubAmmoShots: Math.max(0, parseInt(e.target.value) || 0) })}
+                            onChange={e => setTrainingForm({ ...trainingForm, clubAmmoShots: e.target.value })}
                             className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-mono font-bold"
                           />
                         </div>
-                      </div>
-                    </div>
-
-                    {/* Pontuação e Observações */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">Pontuação Obtida (Pts)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={trainingForm.score}
-                          onChange={e => setTrainingForm({ ...trainingForm, score: Math.max(0, parseInt(e.target.value) || 0) })}
-                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-mono font-bold"
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">Observações do Treino</label>
-                        <input
-                          type="text"
-                          placeholder="Ex: Treino de agrupamento a 15m, boa cadência de tiros..."
-                          value={trainingForm.notes}
-                          onChange={e => setTrainingForm({ ...trainingForm, notes: e.target.value })}
-                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
-                        />
                       </div>
                     </div>
 
