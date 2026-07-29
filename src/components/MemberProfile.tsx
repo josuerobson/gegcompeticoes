@@ -1017,7 +1017,7 @@ export default function MemberProfile({
 
               {/* Habitualidade */}
               <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                <span className="text-slate-450 font-sans text-[11px]">Habitualidade</span>
+                <span className="text-slate-450 font-sans text-[11px]">Habitualidade: Últimos 12 meses</span>
                 <span className="font-extrabold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-100 font-sans text-xs">
                   {habitualidadeCount}
                 </span>

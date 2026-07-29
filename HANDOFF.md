@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `main` |
-| Mensagem | `feat: padroniza a geracao e exibicao de certificados no perfil do atleta integrando o ClubCertificatesViewer restrito ao atleta` |
-| Data/hora | 2026-07-29T12:36:35-03:00 |
+| Mensagem | `style: atualiza o texto de Habitualidade no card Situacao Associativa G&G para Habitualidade: Ultimos 12 meses` |
+| Data/hora | 2026-07-29T14:55:15-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
@@ -106,7 +106,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
 - **Otimização do Carregamento Inicial (`App.tsx`, `db.ts`)**: Identificado que a função `syncWithBackend` executava 12 requisições HTTP sequenciais uma após a outra, somando latências e acumulando esperas de até 60s~120s. A sincronização foi otimizada para realizar os 11 endpoints em lote paralelo com `Promise.allSettled()`, reduzindo a inicialização para ~1 segundo. Adicionada trava de segurança com `setTimeout` (máximo 3 segundos para encerrar a tela estática) e criados índices no PostgreSQL (`CREATE INDEX IF NOT EXISTS`) nas tabelas `likes`, `comments`, `follows`, `registrations`, `stage_scores` e `posts`.
 - **Paginação e Rolagem Infinita no Feed (`FeedView.tsx`)**: Implementado carregamento progressivo do feed renderizando estritamente **3 postagens iniciais**. Ao rolar a página para baixo, o `IntersectionObserver` detecta a aproximação do final da tela e carrega automaticamente mais 3 postagens por vez. Adicionado também o botão "Carregar mais publicações" como fallback manual e o atributo `loading="lazy"` em todas as tags `<img>`.
-- **Padronização de Certificados no Perfil do Atleta (`MemberProfile.tsx`, `ClubCertificatesViewer.tsx`)**: Integrado o componente oficial `ClubCertificatesViewer` na aba `Certificados` da página de Perfil com o parâmetro `restrictedToUserId={selectedUser.id}`. Assim, o atleta visualiza exclusivamente os seus certificados homologados com o mesmo layout oficial, modelo de fundo customizado, validação por QR Code, posições e dados idênticos ao menu do Painel Diretor.
+- **Rótulo do Card Situação Associativa G&G (`MemberProfile.tsx`)**: Atualizado o texto da linha "Habitualidade" para `"Habitualidade: Últimos 12 meses"`.
 
 ## Infra / deploy
 
