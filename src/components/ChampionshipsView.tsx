@@ -122,7 +122,9 @@ export default function ChampionshipsView({
   const registrationPrice = selectedChampReg 
     ? (isAlreadyRegistered 
         ? (selectedChampReg.valorReinscricao ?? selectedChampReg.registrationFee)
-        : (selectedChampReg.valorInscricaoIndividual ?? selectedChampReg.registrationFee))
+        : (currentUser?.role === 'club_admin'
+            ? (selectedChampReg.valorInscricaoClube ?? selectedChampReg.registrationFee)
+            : (selectedChampReg.valorInscricaoIndividual ?? selectedChampReg.registrationFee)))
     : 0;
 
   // Selected Certificate to show print preview
@@ -555,7 +557,11 @@ export default function ChampionshipsView({
                           </div>
                           <div className="text-right">
                             <span className="text-[8.5px] text-slate-400 uppercase block font-sans font-bold">Inscrição</span>
-                            <span className="text-blue-600 dark:text-blue-400 font-bold font-sans">R$ {champ.registrationFee}</span>
+                            <span className="text-blue-600 dark:text-blue-400 font-bold font-sans">
+                              R$ {currentUser?.role === 'club_admin'
+                                ? (champ.valorInscricaoClube ?? champ.registrationFee ?? 0)
+                                : (champ.valorInscricaoIndividual ?? champ.registrationFee ?? 0)}
+                            </span>
                           </div>
                         </div>
 
