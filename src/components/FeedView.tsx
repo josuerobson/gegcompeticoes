@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Post, User, Comment, ShootingResult, SharedPostInfo } from '../types';
-import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat, Trash2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat, Trash2, ZoomIn, ZoomOut, RotateCcw, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { shootingImages } from '../data/mockData';
 import likeIcon from '@/assets/like_icon.png';
@@ -488,6 +488,31 @@ export default function FeedView({
     return () => observer.disconnect();
   }, [displayPosts.length, visibleCount]);
 
+  // Track views for visible posts (register 1 view per post per session)
+  const trackedPostViewsRef = useRef<Set<string>>(new Set());
+
+  const handleTrackPostView = React.useCallback(async (postId: string) => {
+    if (!postId || trackedPostViewsRef.current.has(postId)) return;
+    trackedPostViewsRef.current.add(postId);
+
+    try {
+      const res = await fetch(`/api/posts/${postId}/view`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success && typeof data.viewsCount === 'number') {
+        setDisplayPosts(prev => prev.map(p => p.id === postId ? { ...p, viewsCount: data.viewsCount } : p));
+      }
+    } catch (e) {
+      console.error('Failed to track view for post', postId, e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (displayPosts.length === 0) return;
+    displayPosts.slice(0, visibleCount).forEach(post => {
+      handleTrackPostView(post.id);
+    });
+  }, [displayPosts, visibleCount, handleTrackPostView]);
+
   // Merge updated likes/comments and newly added posts into displayPosts without breaking order
   useEffect(() => {
     setDisplayPosts(prev => {
@@ -957,6 +982,11 @@ export default function FeedView({
                             <span className="font-semibold text-xs">{post.sharesCount}</span>
                           ) : null}
                         </button>
+
+                        <div className="flex items-center gap-1.5 text-slate-500 text-sm select-none" title="Visualizações">
+                          <Eye className="w-4.5 h-4.5 text-slate-400" />
+                          <span className="font-semibold text-xs">{post.viewsCount || 0}</span>
+                        </div>
                       </div>
 
                       <button className="text-slate-400 hover:text-blue-600 transition">

@@ -319,6 +319,7 @@ function mapPost(p: any): Post {
     createdAt: p.created_at,
     sharedPost: parsedSharedPost,
     sharesCount: p.shares_count ? Number(p.shares_count) : 0,
+    viewsCount: p.views_count ? Number(p.views_count) : 0,
   };
 }
 
@@ -1209,6 +1210,22 @@ app.post('/api/posts', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Create post database error:', err);
     res.status(500).json({ error: 'Erro ao criar publicação.' });
+  }
+});
+
+// Increment post view count (registro de visualizações)
+app.post('/api/posts/:id/view', async (req, res) => {
+  const postId = req.params.id;
+  try {
+    const updateRes = await pool.query(
+      'UPDATE posts SET views_count = COALESCE(views_count, 0) + 1 WHERE id = $1 RETURNING views_count',
+      [postId]
+    );
+    const newViewsCount = updateRes.rows[0]?.views_count ? Number(updateRes.rows[0].views_count) : 0;
+    res.json({ success: true, viewsCount: newViewsCount });
+  } catch (err) {
+    console.error('Error incrementing post views:', err);
+    res.status(500).json({ error: 'Erro ao registrar visualização.' });
   }
 });
 

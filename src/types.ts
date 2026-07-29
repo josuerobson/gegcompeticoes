@@ -109,6 +109,7 @@ export interface Post {
   createdAt: string;
   sharedPost?: SharedPostInfo;
   sharesCount?: number;
+  viewsCount?: number;
 }
 
 export interface Modality {

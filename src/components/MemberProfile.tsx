@@ -5,7 +5,7 @@ import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
   Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronLeft, ChevronDown, Info, PlusCircle, X, UserCog, Camera,
-  Clock, Copy, QrCode, Images, Heart, MessageCircle, Send, Bookmark, Maximize2, Share2, Repeat, Loader2, Menu, Search
+  Clock, Copy, QrCode, Images, Heart, MessageCircle, Send, Bookmark, Maximize2, Share2, Repeat, Loader2, Menu, Search, Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { compressUploadImage } from '../utils/imageCompressor';
@@ -1672,6 +1672,11 @@ export default function MemberProfile({
                                   <span className="font-semibold text-xs">{post.sharesCount}</span>
                                 ) : null}
                               </button>
+
+                              <div className="flex items-center gap-1.5 text-slate-500 text-sm select-none" title="Visualizações">
+                                <Eye className="w-4.5 h-4.5 text-slate-400" />
+                                <span className="font-semibold text-xs">{post.viewsCount || 0}</span>
+                              </div>
                             </div>
 
                             <button className="text-slate-400 hover:text-blue-600 transition">
