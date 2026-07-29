@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `main` |
-| Mensagem | `fix: exibe valor de inscricao dinamico na grade de campeonatos conforme o tipo de usuario logado (atleta individual vs clube)` |
-| Data/hora | 2026-07-29T10:27:40-03:00 |
+| Mensagem | `style: define o menu da pagina de Perfil no celular como inicialmente fechado` |
+| Data/hora | 2026-07-29T10:43:15-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
@@ -106,7 +106,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
 - **Otimização do Carregamento Inicial (`App.tsx`, `db.ts`)**: Identificado que a função `syncWithBackend` executava 12 requisições HTTP sequenciais uma após a outra, somando latências e acumulando esperas de até 60s~120s. A sincronização foi otimizada para realizar os 11 endpoints em lote paralelo com `Promise.allSettled()`, reduzindo a inicialização para ~1 segundo. Adicionada trava de segurança com `setTimeout` (máximo 3 segundos para encerrar a tela estática) e criados índices no PostgreSQL (`CREATE INDEX IF NOT EXISTS`) nas tabelas `likes`, `comments`, `follows`, `registrations`, `stage_scores` e `posts`.
 - **Paginação e Rolagem Infinita no Feed (`FeedView.tsx`)**: Implementado carregamento progressivo do feed renderizando estritamente **3 postagens iniciais**. Ao rolar a página para baixo, o `IntersectionObserver` detecta a aproximação do final da tela e carrega automaticamente mais 3 postagens por vez. Adicionado também o botão "Carregar mais publicações" como fallback manual e o atributo `loading="lazy"` em todas as tags `<img>`.
-- **Exibição Dinâmica do Valor de Inscrição em Campeonatos (`ChampionshipsView.tsx`)**: Atualizados os cartões de campeonatos para exibir o valor de inscrição correspondente ao perfil logado: para atletas (`member`), exibe o valor de inscrição individual (`valorInscricaoIndividual`); para administradores de clube (`club_admin`), exibe o valor de inscrição do clube (`valorInscricaoClube`), caindo como fallback em `registrationFee` apenas se não houver valor específico cadastrado.
+- **Estado Inicial do Menu do Perfil (`MemberProfile.tsx`)**: Alterado o estado inicial `isMobileMenuOpen` para `false` para que o menu de navegação da conta na página de Perfil inicie fechado por padrão no celular.
 
 ## Infra / deploy
 

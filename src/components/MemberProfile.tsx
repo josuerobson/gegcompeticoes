@@ -360,7 +360,7 @@ export default function MemberProfile({
   // Tabs expanded
   type ProfileTabType = 'my_profile' | 'posts' | 'championships' | 'multi_championships' | 'my_registrations' | 'results' | 'certificates' | 'club_card' | 'gg_card' | 'trainings' | 'declarations' | 'ammo';
   const [profileTab, setProfileTab] = useState<ProfileTabType>('posts');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Avatar change
   const [avatarSaving, setAvatarSaving] = useState(false);
