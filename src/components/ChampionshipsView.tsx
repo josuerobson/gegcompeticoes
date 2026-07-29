@@ -565,19 +565,6 @@ export default function ChampionshipsView({
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap gap-1">
-                          {getValidChampModalities(champ.modalities).slice(0, 2).map((mod) => (
-                            <span key={mod.id} className="text-[8.5px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded font-bold uppercase truncate max-w-full">
-                              {mod.name}
-                            </span>
-                          ))}
-                          {getValidChampModalities(champ.modalities).length > 2 && (
-                            <span className="text-[8.5px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded font-bold">
-                              +{getValidChampModalities(champ.modalities).length - 2}
-                            </span>
-                          )}
-                        </div>
-
                         {/* Action Button */}
                         {isFinished ? (
                           <button
