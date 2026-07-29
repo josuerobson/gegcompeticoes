@@ -206,8 +206,8 @@ export default function ChampionshipsView({
       {/* Title & Navigation Tabs */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
-          <h2 className="text-2xl font-display font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Trophy className="w-6 h-6 text-blue-600" />
+          <h2 className="text-[14.5px] sm:text-xl md:text-2xl font-display font-bold text-slate-900 tracking-tight flex items-center gap-1.5 whitespace-nowrap">
+            <Trophy className="w-4.5 h-4.5 sm:w-6 sm:h-6 text-blue-600 shrink-0" />
             Arena de Campeonatos e Rankings
           </h2>
           <p className="text-xs text-slate-500 mt-1">
