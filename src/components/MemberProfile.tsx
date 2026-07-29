@@ -363,6 +363,12 @@ export default function MemberProfile({
   const [profileTab, setProfileTab] = useState<ProfileTabType>('posts');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  useEffect(() => {
+    if (profileTab === 'championships') {
+      onNavigateToChampionships();
+    }
+  }, [profileTab, onNavigateToChampionships]);
+
   // Avatar change
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [avatarError, setAvatarError] = useState('');
@@ -1052,7 +1058,13 @@ export default function MemberProfile({
                 return (
                   <button
                     key={item.id}
-                    onClick={() => setProfileTab(item.id as ProfileTabType)}
+                    onClick={() => {
+                      if (item.id === 'championships') {
+                        onNavigateToChampionships();
+                      } else {
+                        setProfileTab(item.id as ProfileTabType);
+                      }
+                    }}
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold tracking-wide transition duration-150 cursor-pointer text-left ${active ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-600' : 'text-slate-650 hover:bg-slate-50'}`}
                   >
                     <div className="flex items-center gap-2">
@@ -1096,8 +1108,12 @@ export default function MemberProfile({
                     <button
                       key={item.id}
                       onClick={() => {
-                        setProfileTab(item.id as ProfileTabType);
                         setIsMobileMenuOpen(false);
+                        if (item.id === 'championships') {
+                          onNavigateToChampionships();
+                        } else {
+                          setProfileTab(item.id as ProfileTabType);
+                        }
                       }}
                       className={`w-full flex items-center justify-between px-4 py-2.5 text-left text-xs font-semibold transition ${active ? 'bg-blue-50 text-blue-700 font-bold border-l-4 border-blue-600' : 'text-slate-650 hover:bg-slate-50'}`}
                     >
