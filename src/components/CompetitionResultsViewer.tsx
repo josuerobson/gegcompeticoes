@@ -63,37 +63,29 @@ export function CompetitionResultsViewer({
             Nenhum campeonato cadastrado no sistema ainda.
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {displayChamps.map((champ) => {
               const totalInscritos = registrations.filter(r => r.championshipId === champ.id).length;
               return (
                 <div
                   key={champ.id}
                   onClick={() => setSelectedResultChampId(champ.id)}
-                  className="group border border-slate-200 rounded-xl overflow-hidden bg-slate-50/30 hover:bg-white hover:border-blue-400 hover:shadow-md transition duration-200 cursor-pointer flex flex-col"
+                  className="group border border-slate-200 rounded-xl p-3 bg-slate-50/30 hover:bg-white hover:border-blue-400 hover:shadow-md transition duration-200 cursor-pointer flex flex-col justify-between space-y-2.5"
                 >
-                  <div className="h-28 overflow-hidden relative">
-                    <img
-                      src={champ.bannerUrl}
-                      alt=""
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80';
-                      }}
-                    />
-                    <div className="absolute top-2 right-2 bg-slate-900/80 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                      {champ.status === 'open' ? 'Aberto' : champ.status === 'completed' ? 'Finalizado' : 'Rascunho'}
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center gap-1">
+                      <span className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded uppercase ${champ.status === 'open' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'}`}>
+                        {champ.status === 'open' ? 'Aberto' : champ.status === 'completed' ? 'Finalizado' : 'Rascunho'}
+                      </span>
                     </div>
+                    <h4 className="font-bold text-slate-800 text-xs group-hover:text-blue-600 transition line-clamp-2 mt-1 leading-snug">
+                      {champ.title}
+                    </h4>
                   </div>
-                  <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
-                    <div>
-                      <h4 className="font-bold text-slate-800 text-xs group-hover:text-blue-600 transition truncate">{champ.title}</h4>
-                      <p className="text-[10px] text-slate-400 line-clamp-2 mt-1">{champ.description}</p>
-                    </div>
-                    <div className="flex justify-between items-center text-[10px] text-slate-500 pt-2 border-t border-slate-100 font-mono">
-                      <span>Etapas: <strong className="text-slate-700">{champ.stagesCount}</strong></span>
-                      <span>Inscritos: <strong className="text-slate-700">{totalInscritos}</strong></span>
-                    </div>
+
+                  <div className="flex justify-between items-center text-[9.5px] text-slate-500 pt-2 border-t border-slate-100 font-mono">
+                    <span>Etapas: <strong className="text-slate-700">{champ.stagesCount}</strong></span>
+                    <span>Inscritos: <strong className="text-slate-700">{totalInscritos}</strong></span>
                   </div>
                 </div>
               );
