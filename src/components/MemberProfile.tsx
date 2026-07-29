@@ -1014,14 +1014,6 @@ export default function MemberProfile({
                 )}
               </div>
 
-              {/* Validade do Certificado */}
-              {selectedUser.hasPaidSignature && selectedUser.signatureExpiry && (
-                <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                  <span className="text-slate-450 font-sans text-[11px]">Validade do Certificado</span>
-                  <span className="font-bold text-slate-600">{new Date(selectedUser.signatureExpiry).toLocaleDateString('pt-BR')}</span>
-                </div>
-              )}
-
               {/* Habitualidade */}
               <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                 <span className="text-slate-450 font-sans text-[11px]">Habitualidade</span>
