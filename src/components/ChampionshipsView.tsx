@@ -387,7 +387,7 @@ export default function ChampionshipsView({
                     <h2 className="font-display font-black text-2xl sm:text-3xl text-blue-950 uppercase tracking-tight mt-0.5">
                       {viewingChampionship.title}
                     </h2>
-                    {viewingChampionship.description && (
+                    {viewingChampionship.description && viewingChampionship.description.trim() !== '' && viewingChampionship.description.trim().toLowerCase() !== viewingChampionship.title.trim().toLowerCase() && (
                       <p className="text-xs text-slate-500 mt-1 max-w-3xl leading-relaxed">{viewingChampionship.description}</p>
                     )}
                   </div>
