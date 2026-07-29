@@ -1319,7 +1319,7 @@ export default function App() {
         {/* Dynamic Status Text with Animated Spinner */}
         <div className="flex items-center gap-2 text-xs text-blue-300 font-mono tracking-wide">
           <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-          <span>Conectando atiradores federados de alta precisão...</span>
+          <span>Conectando Atletas do Tiro Esportivo...</span>
         </div>
       </div>
     );
