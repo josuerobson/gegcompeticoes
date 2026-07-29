@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Post, User, Comment, ShootingResult, SharedPostInfo } from '../types';
-import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat, Trash2 } from 'lucide-react';
+import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat, Trash2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { shootingImages } from '../data/mockData';
 import likeIcon from '@/assets/like_icon.png';
@@ -17,6 +17,183 @@ interface FeedProps {
   onToggleFollow: (userId: string) => Promise<void>;
   defaultImage?: string;
   onViewProfile: (username: string) => void;
+}
+
+function PinchZoomImage({
+  src,
+  alt,
+  onNext,
+  onPrev,
+  hasMultiple
+}: {
+  key?: React.Key;
+  src: string;
+  alt: string;
+  onNext?: () => void;
+  onPrev?: () => void;
+  hasMultiple?: boolean;
+}) {
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+
+  const distanceRef = useRef<number | null>(null);
+  const startScaleRef = useRef(1);
+  const lastTouchRef = useRef<{ x: number; y: number } | null>(null);
+  const lastTapRef = useRef<number>(0);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+  }, [src]);
+
+  const handleZoomIn = () => {
+    setScale(prev => Math.min(4, Number((prev + 0.5).toFixed(1))));
+  };
+
+  const handleZoomOut = () => {
+    setScale(prev => {
+      const next = Math.max(1, Number((prev - 0.5).toFixed(1)));
+      if (next === 1) setPosition({ x: 0, y: 0 });
+      return next;
+    });
+  };
+
+  const handleResetZoom = () => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      distanceRef.current = dist;
+      startScaleRef.current = scale;
+    } else if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
+      touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+
+      const now = Date.now();
+      if (now - lastTapRef.current < 300) {
+        if (scale > 1) {
+          handleResetZoom();
+        } else {
+          setScale(2.5);
+        }
+      }
+      lastTapRef.current = now;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2 && distanceRef.current !== null) {
+      const currentDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const factor = currentDist / distanceRef.current;
+      const newScale = Math.min(4, Math.max(1, startScaleRef.current * factor));
+      setScale(newScale);
+      if (newScale === 1) setPosition({ x: 0, y: 0 });
+    } else if (e.touches.length === 1 && lastTouchRef.current) {
+      const touch = e.touches[0];
+      const dx = touch.clientX - lastTouchRef.current.x;
+      const dy = touch.clientY - lastTouchRef.current.y;
+      lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
+
+      if (scale > 1) {
+        setPosition(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+      }
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length < 2) {
+      distanceRef.current = null;
+    }
+    if (e.touches.length === 0) {
+      if (scale === 1 && touchStartPosRef.current && lastTouchRef.current && hasMultiple) {
+        const deltaX = lastTouchRef.current.x - touchStartPosRef.current.x;
+        if (deltaX < -50 && onNext) {
+          onNext();
+        } else if (deltaX > 50 && onPrev) {
+          onPrev();
+        }
+      }
+      lastTouchRef.current = null;
+      touchStartPosRef.current = null;
+    }
+  };
+
+  return (
+    <div className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden select-none">
+      <div className="absolute top-2 right-2 sm:right-4 z-30 flex items-center gap-1.5 bg-black/75 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/20 text-white text-xs shadow-xl">
+        <button
+          type="button"
+          onClick={handleZoomOut}
+          disabled={scale <= 1}
+          className="hover:text-blue-400 disabled:opacity-30 p-1 cursor-pointer font-bold transition"
+          title="Reduzir zoom"
+        >
+          <ZoomOut className="w-4 h-4" />
+        </button>
+        <span className="font-mono text-[11px] font-bold px-1 min-w-[38px] text-center">
+          {Math.round(scale * 100)}%
+        </span>
+        <button
+          type="button"
+          onClick={handleZoomIn}
+          disabled={scale >= 4}
+          className="hover:text-blue-400 disabled:opacity-30 p-1 cursor-pointer font-bold transition"
+          title="Ampliar zoom"
+        >
+          <ZoomIn className="w-4 h-4" />
+        </button>
+        {scale > 1 && (
+          <button
+            type="button"
+            onClick={handleResetZoom}
+            className="hover:text-amber-400 p-1 cursor-pointer font-bold border-l border-white/20 pl-2 text-[10px] uppercase flex items-center gap-1 text-amber-300"
+            title="Redefinir tamanho (100%)"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            100%
+          </button>
+        )}
+      </div>
+
+      {scale === 1 && (
+        <div className="absolute bottom-2 z-20 pointer-events-none bg-black/60 text-white/80 text-[10px] px-3 py-1 rounded-full backdrop-blur-xs font-sans tracking-wide">
+          Use a pinça com 2 dedos para ampliar a foto ou toque duplo
+        </div>
+      )}
+
+      <div
+        className="w-full h-full flex items-center justify-center touch-none overflow-hidden cursor-grab active:cursor-grabbing"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <img
+          src={src}
+          alt={alt}
+          style={{
+            transform: `translate3d(${position.x}px, ${position.y}px, 0) scale(${scale})`,
+            transition: distanceRef.current ? 'none' : 'transform 0.15s ease-out',
+            maxHeight: '75vh',
+            maxWidth: '100%',
+            objectFit: 'contain'
+          }}
+          className="mx-auto rounded-xl shadow-2xl pointer-events-none select-none"
+          referrerPolicy="no-referrer"
+        />
+      </div>
+    </div>
+  );
 }
 
 export function PostImageCarousel({
@@ -1327,29 +1504,14 @@ export default function FeedView({
                 </button>
               )}
 
-              {/* Enlarged Photo with Mobile Touch Swipe Navigation */}
-              <motion.img
+              {/* Enlarged Photo with Pinch-to-Zoom & Touch Navigation */}
+              <PinchZoomImage
                 key={lightboxState.currentIndex}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.2 }}
-                drag={lightboxState.images.length > 1 ? "x" : false}
-                dragConstraints={{ left: 0, right: 0 }}
-                dragElastic={0.2}
-                onDragEnd={(e, { offset }) => {
-                  if (lightboxState.images.length <= 1) return;
-                  if (offset.x < -40) {
-                    // Swiped Left -> Next Photo
-                    setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex + 1) % prev.images.length } : null);
-                  } else if (offset.x > 40) {
-                    // Swiped Right -> Previous Photo
-                    setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex - 1 + prev.images.length) % prev.images.length } : null);
-                  }
-                }}
                 src={lightboxState.images[lightboxState.currentIndex]}
                 alt={`Foto ${lightboxState.currentIndex + 1}`}
-                className="max-w-full max-h-[75vh] w-auto h-auto object-contain mx-auto shadow-2xl rounded-xl cursor-grab active:cursor-grabbing touch-pan-y select-none"
-                referrerPolicy="no-referrer"
+                hasMultiple={lightboxState.images.length > 1}
+                onNext={() => setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex + 1) % prev.images.length } : null)}
+                onPrev={() => setLightboxState(prev => prev ? { ...prev, currentIndex: (prev.currentIndex - 1 + prev.images.length) % prev.images.length } : null)}
               />
 
               {/* Right Arrow Button */}
