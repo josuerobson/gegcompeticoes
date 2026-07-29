@@ -534,13 +534,15 @@ export default function FeedView({
     e.preventDefault();
     setIsSubmittingPost(true);
     try {
-      const singleFallbackImg = customImagePreview !== '' 
-        ? customImagePreview 
-        : (customImageUrl.trim() !== '' ? customImageUrl.trim() : selectedImagePreset);
-      
-      const finalImagesList = postImages.length > 0
-        ? postImages.slice(0, 5)
-        : (singleFallbackImg ? [singleFallbackImg] : undefined);
+      let finalImagesList: string[] | undefined = undefined;
+
+      if (postImages.length > 0) {
+        finalImagesList = postImages.slice(0, 5);
+      } else if (customImagePreview && customImagePreview !== '') {
+        finalImagesList = [customImagePreview];
+      } else if (customImageUrl && customImageUrl.trim() !== '') {
+        finalImagesList = [customImageUrl.trim()];
+      }
 
       let scoreObj: ShootingResult | undefined;
       
