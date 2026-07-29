@@ -139,6 +139,30 @@ export default function App() {
     default_image: 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80'
   });
 
+  const sortedChampionshipsList = React.useMemo(() => {
+    return [...championships].sort((a, b) => {
+      // Primary: Ordem de exibição em ordem decrescente (maior número primeiro)
+      const orderA = a.ordemExibicao ?? (a as any).ordem ?? 0;
+      const orderB = b.ordemExibicao ?? (b as any).ordem ?? 0;
+      if (orderA !== orderB) {
+        return orderB - orderA;
+      }
+      // Secondary / Default: Ordem decrescente de criação/ID (último registro primeiro)
+      const parseIdNum = (idStr: string | number) => typeof idStr === 'number' ? idStr : (parseInt(String(idStr).replace(/\D/g, '')) || 0);
+      const numA = parseIdNum(a.id);
+      const numB = parseIdNum(b.id);
+      if (numA !== numB) {
+        return numB - numA;
+      }
+      // String comparison fallback for non-numeric IDs
+      if (a.id !== b.id) {
+        return String(b.id).localeCompare(String(a.id));
+      }
+      // Fallback: data de início decrescente
+      return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
+    });
+  }, [championships]);
+
   // UI States
   const [activeTab, setActiveTab] = useState<'feed' | 'championships' | 'admin' | 'profile'>('feed');
   const [selectedProfileUser, setSelectedProfileUser] = useState<User | null>(null);
@@ -1868,30 +1892,6 @@ export default function App() {
     const matchesGun = post.targetScore?.gunModel.toLowerCase().includes(query) || false;
     return matchesUser || matchesContent || matchesDiscipline || matchesGun;
   });
-
-  const sortedChampionshipsList = React.useMemo(() => {
-    return [...championships].sort((a, b) => {
-      // Primary: Ordem de exibição em ordem decrescente (maior número primeiro)
-      const orderA = a.ordemExibicao ?? (a as any).ordem ?? 0;
-      const orderB = b.ordemExibicao ?? (b as any).ordem ?? 0;
-      if (orderA !== orderB) {
-        return orderB - orderA;
-      }
-      // Secondary / Default: Ordem decrescente de criação/ID (último registro primeiro)
-      const parseIdNum = (idStr: string | number) => typeof idStr === 'number' ? idStr : (parseInt(String(idStr).replace(/\D/g, '')) || 0);
-      const numA = parseIdNum(a.id);
-      const numB = parseIdNum(b.id);
-      if (numA !== numB) {
-        return numB - numA;
-      }
-      // String comparison fallback for non-numeric IDs
-      if (a.id !== b.id) {
-        return String(b.id).localeCompare(String(a.id));
-      }
-      // Fallback: data de início decrescente
-      return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
-    });
-  }, [championships]);
 
   const filteredChampionshipsList = sortedChampionshipsList.filter(champ => {
     if (!searchQuery) return true;
