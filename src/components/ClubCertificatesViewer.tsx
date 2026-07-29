@@ -12,6 +12,7 @@ interface ClubCertificatesViewerProps {
   stages: Stage[];
   stageScores: StageScore[];
   modalities: Modality[];
+  restrictedToUserId?: string;
 }
 
 interface CertificatePrintModalData {
@@ -137,7 +138,8 @@ export function ClubCertificatesViewer({
   championships,
   stages,
   stageScores,
-  modalities
+  modalities,
+  restrictedToUserId
 }: ClubCertificatesViewerProps) {
   const [selectedClubId, setSelectedClubId] = useState<string>(currentUser?.clubId || clubs[0]?.id || 'c1');
   const [searchQuery, setSearchQuery] = useState('');
@@ -319,11 +321,13 @@ export function ClubCertificatesViewer({
     };
   };
 
-  // Filter approved registrations for the selected club
+  // Filter approved registrations for the selected club (or restricted athlete)
   const eligibleRegistrations = registrations.filter(r => {
     if (r.paymentStatus !== 'approved') return false;
 
-    if (effectiveClubId && r.clubId && r.clubId !== effectiveClubId) {
+    if (restrictedToUserId) {
+      if (r.userId !== restrictedToUserId) return false;
+    } else if (effectiveClubId && r.clubId && r.clubId !== effectiveClubId) {
       const athlete = users.find(u => u.id === r.userId);
       if (athlete?.clubId !== effectiveClubId && r.registeredByUserId !== currentUser?.id) {
         return false;
@@ -441,7 +445,7 @@ export function ClubCertificatesViewer({
         </div>
 
         {/* Master Club Selector */}
-        {isMaster && (
+        {!restrictedToUserId && isMaster && (
           <div className="flex items-center gap-2">
             <label className="text-xs font-bold text-slate-500">Clube:</label>
             <select

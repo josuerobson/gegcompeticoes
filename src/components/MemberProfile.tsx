@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, Post, Registration, StageScore, Championship, Modality, Club, Stage, Weapon, TrainingSession } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
+import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
@@ -2142,66 +2143,19 @@ export default function MemberProfile({
             </div>
           )}
 
-          {/* 5. Certificados (NEW tab) */}
+          {/* 5. Certificados (Utiliza o visualizador oficial de certificados do clube filtrado para o atleta) */}
           {profileTab === 'certificates' && (
-            <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-6 space-y-6">
-              <div className="flex justify-between items-center">
-                <h4 className="font-display font-bold text-slate-800 text-sm uppercase">Certificados de Competição</h4>
-                <Award className="w-5 h-5 text-blue-600" />
-              </div>
-
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Aqui são listados os certificados oficiais de participação referentes aos campeonatos nos quais você realizou inscrição e concluiu etapas regulamentadas.
-              </p>
-
-              {approvedRegs.length === 0 ? (
-                <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-xl">
-                  <Award className="w-10 h-10 text-slate-200 mx-auto mb-2" />
-                  <p className="text-xs">Nenhum certificado disponível. Inscreva-se em um campeonato e conclua suas etapas.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {approvedRegs.map((reg) => {
-                    const champName = getChampionshipName(reg.championshipId);
-                    const scoresForChamp = userScores.filter(s => s.championshipId === reg.championshipId);
-                    const totalPoints = scoresForChamp.reduce((sum, s) => sum + s.score, 0);
-                    return (
-                      <div key={reg.id} className="border border-slate-100 rounded-xl p-4 flex flex-col justify-between bg-slate-50/50 hover:bg-slate-50 transition">
-                        <div className="space-y-1">
-                          <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-wider">
-                            HOMOLOGADO
-                          </span>
-                          <h5 className="font-bold text-slate-800 text-xs mt-1.5">{champName}</h5>
-                          <div className="text-[10px] text-slate-450 font-mono">
-                            <div>Mod: {modalityName(reg.modalityId)}</div>
-                            <div>Etapas: {scoresForChamp.length} concluídas</div>
-                          </div>
-                        </div>
-                        
-                        <button
-                          onClick={() => {
-                            setPrintData({
-                              fullName: selectedUser.fullName,
-                              crNumber: selectedUser.crNumber || 'Emitindo...',
-                              championshipTitle: champName,
-                              modality: modalityName(reg.modalityId),
-                              score: totalPoints,
-                              date: new Date(reg.registeredAt).toISOString().split('T')[0],
-                              hash: `GG-CERT-${reg.id.slice(0, 8).toUpperCase()}`
-                            });
-                            setPrintMode('certificate');
-                          }}
-                          className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-2 rounded-lg font-bold transition flex items-center justify-center gap-1 cursor-pointer"
-                        >
-                          <Printer className="w-3.5 h-3.5" />
-                          Gerar Certificado
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            <ClubCertificatesViewer
+              currentUser={currentUser}
+              clubs={clubs}
+              users={users || (selectedUser ? [selectedUser] : [])}
+              registrations={registrations}
+              championships={championships}
+              stages={stages || []}
+              stageScores={stageScores}
+              modalities={modalities}
+              restrictedToUserId={selectedUser.id}
+            />
           )}
 
           {/* 6. Carteirinha Clube (NEW tab) */}
