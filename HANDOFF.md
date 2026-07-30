@@ -8,11 +8,11 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `main` |
+| Hash | `c9e493e` |
 | Mensagem | `feat: atualiza layout e pre-configuracao de carteirinhas de atleta conforme imagem de referencia` |
 | Data/hora | 2026-07-30T20:42:00-03:00 |
-| Push feito? | ❌ Não (trabalho em andamento) |
-| Deploy EasyPanel confirmado? | ⏳ Pendente (disparo em lote a seguir) |
+| Push feito? | ✅ Sim |
+| Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
