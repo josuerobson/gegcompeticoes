@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Championship, User, Registration, StageScore, RankingItem, Modality, Stage, Weapon } from '../types';
+import { Championship, User, Registration, StageScore, RankingItem, Modality, Stage, Weapon, WeaponLookupOption } from '../types';
 import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, Award, Printer, Copy, CreditCard, ChevronRight, Download, Medal, PlusCircle, X, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -11,6 +11,7 @@ interface ChampionshipsProps {
   modalities: Modality[];
   stages: Stage[];
   weapons: Weapon[];
+  weaponLookupOptions?: WeaponLookupOption[];
   onRegister: (championshipId: string, modalityId: string, stageId: string, weaponId: string, crNumber: string, paymentMethod: 'pix' | 'credit_card') => Promise<void>;
   onAddWeapon: (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; serialNumber?: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string; weaponType?: string }) => Promise<void>;
   globalRankings: RankingItem[];
@@ -28,6 +29,7 @@ export default function ChampionshipsView({
   modalities,
   stages,
   weapons,
+  weaponLookupOptions = [],
   onRegister,
   onAddWeapon,
   globalRankings,
@@ -53,9 +55,20 @@ export default function ChampionshipsView({
   const [pixCopied, setPixCopied] = useState(false);
   const [registerError, setRegisterError] = useState('');
   const [showAddWeapon, setShowAddWeapon] = useState(false);
-  const [newWeapon, setNewWeapon] = useState({ manufacturer: '', model: '', caliber: '', serialNumber: '', weaponType: 'Pistola' });
+  const [newWeaponData, setNewWeaponData] = useState({
+    weaponNumber: '',
+    sigmaNumber: '',
+    weaponClass: '',
+    model: '',
+    caliber: '',
+    manufacturer: '',
+    registrySystem: '',
+    permissionStatus: ''
+  });
   const [savingWeapon, setSavingWeapon] = useState(false);
   const [showProfileIncompleteNotice, setShowProfileIncompleteNotice] = useState(false);
+
+  const weaponLookup = (kind: string) => weaponLookupOptions.filter(o => o.kind === kind);
 
   // Weapon search states
   const [weaponSearchQuery, setWeaponSearchQuery] = useState('');
@@ -99,38 +112,54 @@ export default function ChampionshipsView({
 
   const handleSaveNewWeapon = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newWeapon.manufacturer.trim() || !newWeapon.model.trim() || !newWeapon.caliber.trim()) {
-      alert('Preencha Fabricante, Modelo e Calibre.');
+    const manufacturer = newWeaponData.manufacturer.trim();
+    const model = newWeaponData.model.trim();
+    const caliber = newWeaponData.caliber.trim();
+
+    if (!manufacturer || !model || !caliber) {
+      alert('Preencha os campos obrigatórios: Fabricante, Modelo e Calibre.');
       return;
     }
     setSavingWeapon(true);
     try {
       await onAddWeapon({
-        manufacturer: newWeapon.manufacturer.trim(),
-        model: newWeapon.model.trim(),
-        caliber: newWeapon.caliber.trim(),
-        serialNumber: newWeapon.serialNumber.trim() || undefined,
-        sigmaNumber: newWeapon.serialNumber.trim() || undefined,
-        weaponClass: newWeapon.weaponType || 'Pistola',
-        ownerId: currentUser?.id
+        ownerId: currentUser?.id,
+        manufacturer,
+        model,
+        caliber,
+        weaponNumber: newWeaponData.weaponNumber.trim() || undefined,
+        sigmaNumber: newWeaponData.sigmaNumber.trim() || undefined,
+        serialNumber: newWeaponData.sigmaNumber.trim() || newWeaponData.weaponNumber.trim() || undefined,
+        weaponClass: newWeaponData.weaponClass || undefined,
+        registrySystem: newWeaponData.registrySystem || undefined,
+        permissionStatus: newWeaponData.permissionStatus || undefined,
       });
 
-      const label = `${newWeapon.manufacturer.trim()} ${newWeapon.model.trim()} (${newWeapon.caliber.trim()}) - Sigma: ${newWeapon.serialNumber.trim() || 'N/A'}`;
+      const label = `${manufacturer} ${model} (${caliber}) - Sigma: ${newWeaponData.sigmaNumber.trim() || 'N/A'}`;
       setWeaponSearchQuery(label);
 
       // Auto fetch the newly registered weapon to select it
-      const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(newWeapon.model.trim())}`, {
+      const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(model)}`, {
         headers: currentUser ? { 'x-user-id': currentUser.id } : {}
       });
       if (r.ok) {
         const data = await r.json();
         if (data.weapons && data.weapons.length > 0) {
-          const matched = data.weapons.find((w: Weapon) => w.manufacturer === newWeapon.manufacturer.trim() && w.model === newWeapon.model.trim()) || data.weapons[0];
+          const matched = data.weapons.find((w: Weapon) => w.manufacturer === manufacturer && w.model === model) || data.weapons[0];
           setSelectedWeaponId(matched.id);
         }
       }
 
-      setNewWeapon({ manufacturer: '', model: '', caliber: '', serialNumber: '', weaponType: 'Pistola' });
+      setNewWeaponData({
+        weaponNumber: '',
+        sigmaNumber: '',
+        weaponClass: '',
+        model: '',
+        caliber: '',
+        manufacturer: '',
+        registrySystem: '',
+        permissionStatus: ''
+      });
       setShowAddWeapon(false);
       setWeaponSearchResults([]);
     } catch (err: any) {
@@ -940,7 +969,7 @@ export default function ChampionshipsView({
                         <button
                           type="button"
                           onClick={() => {
-                            setNewWeapon(prev => ({ ...prev, model: weaponSearchQuery }));
+                            setNewWeaponData(prev => ({ ...prev, model: weaponSearchQuery }));
                             setShowAddWeapon(true);
                           }}
                           className="text-[10.5px] font-bold text-blue-600 hover:underline cursor-pointer"
@@ -959,7 +988,7 @@ export default function ChampionshipsView({
                             <button
                               type="button"
                               onClick={() => {
-                                setNewWeapon(prev => ({ ...prev, model: weaponSearchQuery }));
+                                setNewWeaponData(prev => ({ ...prev, model: weaponSearchQuery }));
                                 setShowAddWeapon(true);
                               }}
                               className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 mx-auto cursor-pointer shadow-xs"
@@ -1196,66 +1225,121 @@ export default function ChampionshipsView({
               </div>
 
               <form onSubmit={handleSaveNewWeapon} className="space-y-3 text-xs">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Fabricante *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Taurus, Imbel, Glock, CBC..."
-                    value={newWeapon.manufacturer}
-                    onChange={(e) => setNewWeapon(prev => ({ ...prev, manufacturer: e.target.value }))}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium"
-                  />
+                {/* Número da arma & Número Sigma */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Número da arma</label>
+                    <input
+                      type="text"
+                      placeholder="Número da arma"
+                      value={newWeaponData.weaponNumber}
+                      onChange={(e) => setNewWeaponData(prev => ({ ...prev, weaponNumber: e.target.value }))}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Número Sigma</label>
+                    <input
+                      type="text"
+                      placeholder="Número Sigma"
+                      value={newWeaponData.sigmaNumber}
+                      onChange={(e) => setNewWeaponData(prev => ({ ...prev, sigmaNumber: e.target.value }))}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium"
+                    />
+                  </div>
                 </div>
 
+                {/* Classe */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Classe</label>
+                  <select
+                    value={newWeaponData.weaponClass}
+                    onChange={(e) => setNewWeaponData(prev => ({ ...prev, weaponClass: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium cursor-pointer"
+                  >
+                    <option value="">Classe...</option>
+                    {weaponLookup('classe').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                    {!weaponLookup('classe').some(o => o.label === 'Pistola') && <option value="Pistola">Pistola</option>}
+                    {!weaponLookup('classe').some(o => o.label === 'Revólver') && <option value="Revólver">Revólver</option>}
+                    {!weaponLookup('classe').some(o => o.label === 'Espingarda') && <option value="Espingarda">Espingarda</option>}
+                    {!weaponLookup('classe').some(o => o.label === 'Fuzil') && <option value="Fuzil">Fuzil</option>}
+                    {!weaponLookup('classe').some(o => o.label === 'Carabina') && <option value="Carabina">Carabina</option>}
+                  </select>
+                </div>
+
+                {/* Modelo & Calibre */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Modelo *</label>
                     <input
                       type="text"
                       required
-                      placeholder="Ex: G3c, PT92, 1911, T4..."
-                      value={newWeapon.model}
-                      onChange={(e) => setNewWeapon(prev => ({ ...prev, model: e.target.value }))}
+                      placeholder="Digite ou selecione..."
+                      list="weapon-model-list"
+                      value={newWeaponData.model}
+                      onChange={(e) => setNewWeaponData(prev => ({ ...prev, model: e.target.value }))}
                       className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium"
                     />
+                    <datalist id="weapon-model-list">
+                      {weaponLookup('modelo').map(o => <option key={o.id} value={o.label} />)}
+                    </datalist>
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Calibre *</label>
                     <input
                       type="text"
                       required
-                      placeholder="Ex: 9mm, .40, .380, .38 SPL..."
-                      value={newWeapon.caliber}
-                      onChange={(e) => setNewWeapon(prev => ({ ...prev, caliber: e.target.value }))}
+                      placeholder="Digite ou selecione..."
+                      list="weapon-caliber-list"
+                      value={newWeaponData.caliber}
+                      onChange={(e) => setNewWeaponData(prev => ({ ...prev, caliber: e.target.value }))}
                       className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium"
                     />
+                    <datalist id="weapon-caliber-list">
+                      {weaponLookup('calibre').map(o => <option key={o.id} value={o.label} />)}
+                    </datalist>
                   </div>
                 </div>
 
+                {/* Fabricante */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Fabricante *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Digite ou selecione fabricante..."
+                    list="weapon-manufacturer-list"
+                    value={newWeaponData.manufacturer}
+                    onChange={(e) => setNewWeaponData(prev => ({ ...prev, manufacturer: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium"
+                  />
+                  <datalist id="weapon-manufacturer-list">
+                    {weaponLookup('fabricante').map(o => <option key={o.id} value={o.label} />)}
+                  </datalist>
+                </div>
+
+                {/* Arma é... & Status de permissão... */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Nº SIGMA / Registro</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: 123456789"
-                      value={newWeapon.serialNumber}
-                      onChange={(e) => setNewWeapon(prev => ({ ...prev, serialNumber: e.target.value }))}
-                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Espécie / Tipo</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Arma é...</label>
                     <select
-                      value={newWeapon.weaponType}
-                      onChange={(e) => setNewWeapon(prev => ({ ...prev, weaponType: e.target.value }))}
+                      value={newWeaponData.registrySystem}
+                      onChange={(e) => setNewWeaponData(prev => ({ ...prev, registrySystem: e.target.value }))}
                       className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium cursor-pointer"
                     >
-                      <option value="Pistola">Pistola</option>
-                      <option value="Revólver">Revólver</option>
-                      <option value="Espingarda">Espingarda</option>
-                      <option value="Fuzil">Fuzil</option>
-                      <option value="Carabina">Carabina</option>
+                      <option value="">Arma é...</option>
+                      {weaponLookup('tipo_arma').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Status de permissão...</label>
+                    <select
+                      value={newWeaponData.permissionStatus}
+                      onChange={(e) => setNewWeaponData(prev => ({ ...prev, permissionStatus: e.target.value }))}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium cursor-pointer"
+                    >
+                      <option value="">Status de permissão...</option>
+                      {weaponLookup('permissao_arma').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
                     </select>
                   </div>
                 </div>
@@ -1264,7 +1348,7 @@ export default function ChampionshipsView({
                   <button
                     type="button"
                     onClick={() => setShowAddWeapon(false)}
-                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold transition"
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold transition cursor-pointer"
                   >
                     Cancelar
                   </button>
@@ -1273,7 +1357,7 @@ export default function ChampionshipsView({
                     disabled={savingWeapon}
                     className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
                   >
-                    {savingWeapon ? 'Cadastrando...' : 'Cadastrar e Usar'}
+                    {savingWeapon ? 'Cadastrando...' : 'Salvar e Selecionar'}
                   </button>
                 </div>
               </form>

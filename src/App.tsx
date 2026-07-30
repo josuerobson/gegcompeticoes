@@ -2047,6 +2047,7 @@ export default function App() {
               modalities={modalities}
               stages={stages}
               weapons={weapons}
+              weaponLookupOptions={weaponLookupOptions}
               onRegister={handleRegisterChamp}
               onAddWeapon={handleAddWeapon}
               globalRankings={globalRankings}
