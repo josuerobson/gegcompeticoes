@@ -138,162 +138,162 @@ const DEFAULT_ELEMENTS: Record<string, TextElement[]> = {
     {
       id: 'k1',
       text: 'ATIRADOR DESPORTIVO ★ PREMIUM ★',
-      x: 30,
-      y: 8,
-      fontSize: 11,
+      x: 20,
+      y: 22,
+      fontSize: 9,
       fontWeight: '900',
       fontStyle: 'normal',
-      color: '#67e8f9',
+      color: '#0284c7',
       textAlign: 'center',
-      width: 45
+      width: 60
     },
     {
       id: 'k2',
       text: 'CADASTRO Nº {CADASTRO_NUMERO}',
-      x: 30,
-      y: 20,
-      fontSize: 10,
+      x: 20,
+      y: 25,
+      fontSize: 8.5,
       fontWeight: '900',
       fontStyle: 'normal',
-      color: '#a5f3fc',
-      textAlign: 'left',
-      width: 50
+      color: '#0369a1',
+      textAlign: 'center',
+      width: 60
     },
     {
       id: 'k3',
       text: 'Nome: {NOME_ATLETA}',
-      x: 30,
-      y: 30,
-      fontSize: 11,
+      x: 20,
+      y: 28.5,
+      fontSize: 9,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#0f172a',
       textAlign: 'left',
-      width: 65
+      width: 60
     },
     {
       id: 'k4',
       text: 'CPF: {CPF_ATLETA} | RG: {RG_ATLETA} | CR: {CR_ATLETA} | VALIDADE: {DATA_VALIDADE}',
-      x: 4,
-      y: 56,
-      fontSize: 8.5,
+      x: 20,
+      y: 33,
+      fontSize: 7.5,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#1e293b',
       textAlign: 'left',
-      width: 92
+      width: 60
     },
     {
       id: 'k5',
       text: 'Clube: {NOME_CLUBE} | Cidade: {CIDADE} | ESTADO: {UF}',
-      x: 4,
-      y: 78,
-      fontSize: 8.5,
+      x: 20,
+      y: 36.5,
+      fontSize: 7.5,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#1e293b',
       textAlign: 'left',
-      width: 92
+      width: 60
     }
   ],
   playoff_card: [
     {
       id: 'p1',
       text: 'FILIADO PLAYOFF',
-      x: 42,
-      y: 10,
-      fontSize: 13,
+      x: 20,
+      y: 22,
+      fontSize: 10,
       fontWeight: '900',
       fontStyle: 'normal',
-      color: '#ffffff',
-      textAlign: 'left',
-      width: 50
+      color: '#b45309',
+      textAlign: 'center',
+      width: 60
     },
     {
       id: 'p2',
-      text: '{NOME_ATLETA}',
-      x: 42,
-      y: 35,
-      fontSize: 14,
+      text: 'Nome: {NOME_ATLETA}',
+      x: 20,
+      y: 28,
+      fontSize: 9,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#0f172a',
       textAlign: 'left',
-      width: 55
+      width: 60
     },
     {
       id: 'p3',
       text: 'CPF: {CPF_ATLETA} | RG: {RG_ATLETA} | CR: {CR_ATLETA}',
-      x: 8,
-      y: 54,
-      fontSize: 9,
+      x: 20,
+      y: 33,
+      fontSize: 7.5,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#1e293b',
       textAlign: 'left',
-      width: 84
+      width: 60
     },
     {
       id: 'p4',
       text: 'Clube: {NOME_CLUBE} - {CIDADE}/{UF}',
-      x: 8,
-      y: 76,
-      fontSize: 9,
+      x: 20,
+      y: 36.5,
+      fontSize: 7.5,
       fontWeight: 'normal',
       fontStyle: 'normal',
       color: '#334155',
       textAlign: 'left',
-      width: 84
+      width: 60
     }
   ],
   shooter_card: [
     {
       id: 's1',
       text: 'ATIRADOR DESPORTIVO PREMIUM',
-      x: 42,
-      y: 10,
-      fontSize: 12,
+      x: 20,
+      y: 22,
+      fontSize: 10,
       fontWeight: '900',
       fontStyle: 'normal',
-      color: '#ffffff',
-      textAlign: 'left',
-      width: 55
+      color: '#0369a1',
+      textAlign: 'center',
+      width: 60
     },
     {
       id: 's2',
-      text: '{NOME_ATLETA}',
-      x: 42,
-      y: 35,
-      fontSize: 14,
+      text: 'Nome: {NOME_ATLETA}',
+      x: 20,
+      y: 28,
+      fontSize: 9,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#0f172a',
       textAlign: 'left',
-      width: 55
+      width: 60
     },
     {
       id: 's3',
       text: 'CPF: {CPF_ATLETA} | RG: {RG_ATLETA} | CR: {CR_ATLETA}',
-      x: 8,
-      y: 54,
-      fontSize: 9,
+      x: 20,
+      y: 33,
+      fontSize: 7.5,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#1e293b',
       textAlign: 'left',
-      width: 84
+      width: 60
     },
     {
       id: 's4',
       text: 'Clube: {NOME_CLUBE} - {CIDADE}/{UF}',
-      x: 8,
-      y: 76,
-      fontSize: 9,
+      x: 20,
+      y: 36.5,
+      fontSize: 7.5,
       fontWeight: 'normal',
       fontStyle: 'normal',
       color: '#334155',
       textAlign: 'left',
-      width: 84
+      width: 60
     }
   ]
 };
@@ -328,9 +328,11 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-
+  
   // Mode: edit mode vs test data preview mode
   const [isPreviewWithTestData, setIsPreviewWithTestData] = useState(false);
+  // Format mode: A4 sheet (default for paper printing) vs CR-80 PVC card
+  const [cardFormat, setCardFormat] = useState<'a4' | 'cr80'>('a4');
 
   // Current tab state
   const [bgUrl, setBgUrl] = useState('');
@@ -436,7 +438,7 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
       text: 'Novo Texto ou {NOME_ATLETA}',
       x: 25,
       y: 40,
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#0f172a',
@@ -449,7 +451,9 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
 
   const handleDeleteElement = (id: string) => {
     setElements(elements.filter(el => el.id !== id));
-    if (selectedElementId === id) setSelectedElementId(null);
+    if (selectedElementId === id) {
+      setSelectedElementId(null);
+    }
   };
 
   const updateSelectedElement = (updates: Partial<TextElement>) => {
@@ -459,7 +463,6 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
 
   // Mouse Drag Logic
   const handleMouseDown = (e: React.MouseEvent, id: string) => {
-    e.preventDefault();
     e.stopPropagation();
     setSelectedElementId(id);
 
@@ -467,20 +470,27 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const elem = elements.find(el => el.id === id);
-    if (!elem) return;
-
     const startX = e.clientX;
     const startY = e.clientY;
-    const initialX = elem.x;
-    const initialY = elem.y;
+
+    const targetEl = elements.find(el => el.id === id);
+    if (!targetEl) return;
+
+    const startXPercent = targetEl.x;
+    const startYPercent = targetEl.y;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaXPercent = ((moveEvent.clientX - startX) / rect.width) * 100;
-      const deltaYPercent = ((moveEvent.clientY - startY) / rect.height) * 100;
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
 
-      const newX = Math.max(0, Math.min(95, initialX + deltaXPercent));
-      const newY = Math.max(0, Math.min(95, initialY + deltaYPercent));
+      const deltaXPercent = (deltaX / rect.width) * 100;
+      const deltaYPercent = (deltaY / rect.height) * 100;
+
+      let newX = Math.round((startXPercent + deltaXPercent) * 10) / 10;
+      let newY = Math.round((startYPercent + deltaYPercent) * 10) / 10;
+
+      newX = Math.max(0, Math.min(95, newX));
+      newY = Math.max(0, Math.min(95, newY));
 
       setElements(prev => prev.map(el => el.id === id ? { ...el, x: newX, y: newY } : el));
     };
@@ -502,6 +512,8 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
       .replace(/{CPF_ATLETA}/g, '123.456.789-00')
       .replace(/{RG_ATLETA}/g, 'MG-12.345.678')
       .replace(/{CR_ATLETA}/g, '572103')
+      .replace(/{DATA_VALIDADE}/g, '31/12/2026')
+      .replace(/{CADASTRO_NUMERO}/g, '00123')
       .replace(/{NOME_CLUBE}/g, selectedClub?.name || 'Clube de Tiro & Caça Aranãs Ltda')
       .replace(/{CAMPEONATO}/g, '1ª Competição de Tiro de Precisão 2023')
       .replace(/{ETAPA}/g, 'Etapa Única')
@@ -521,6 +533,7 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
 
   const activeElement = elements.find(el => el.id === selectedElementId);
   const isCardTab = activeTab.includes('card');
+  const isA4Format = !isCardTab || cardFormat === 'a4';
 
   // Print Test PDF
   const handlePrintTest = () => {
@@ -531,7 +544,7 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
       styleElem.innerHTML = `
         @media print {
           @page {
-            size: ${isCardTab ? 'landscape' : 'A4 portrait'};
+            size: ${isA4Format ? 'A4 portrait' : 'landscape'};
             margin: 0;
           }
           body * {
@@ -544,8 +557,8 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
             position: fixed !important;
             left: 0 !important;
             top: 0 !important;
-            width: ${isCardTab ? '85.6mm' : '210mm'} !important;
-            height: ${isCardTab ? '54mm' : '297mm'} !important;
+            width: ${isA4Format ? '210mm' : '85.6mm'} !important;
+            height: ${isA4Format ? '297mm' : '54mm'} !important;
             max-width: none !important;
             max-height: none !important;
             box-shadow: none !important;
@@ -563,7 +576,7 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
       styleElem.innerHTML = `
         @media print {
           @page {
-            size: ${isCardTab ? 'landscape' : 'A4 portrait'};
+            size: ${isA4Format ? 'A4 portrait' : 'landscape'};
             margin: 0;
           }
           body * {
@@ -576,8 +589,8 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
             position: fixed !important;
             left: 0 !important;
             top: 0 !important;
-            width: ${isCardTab ? '85.6mm' : '210mm'} !important;
-            height: ${isCardTab ? '54mm' : '297mm'} !important;
+            width: ${isA4Format ? '210mm' : '85.6mm'} !important;
+            height: ${isA4Format ? '297mm' : '54mm'} !important;
             max-width: none !important;
             max-height: none !important;
             box-shadow: none !important;
@@ -691,7 +704,7 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
         </button>
       </div>
 
-      {/* Toolbar: Upload, Add Text, Toggle Test View & Save */}
+      {/* Toolbar: Upload, Add Text, Page Format Toggle, Toggle Test View & Save */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
         <div className="flex flex-wrap items-center gap-2">
           {/* Background Upload Button */}
@@ -705,6 +718,34 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
               className="hidden"
             />
           </label>
+
+          {/* Paper Format Selector Toggle */}
+          {isCardTab && (
+            <div className="flex items-center bg-white rounded-xl border border-slate-300 p-0.5 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setCardFormat('a4')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  cardFormat === 'a4'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                📄 Papel A4 (Impressão)
+              </button>
+              <button
+                type="button"
+                onClick={() => setCardFormat('cr80')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  cardFormat === 'cr80'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                💳 Cartão PVC CR-80
+              </button>
+            </div>
+          )}
 
           {/* Add Text Element Button */}
           <button
@@ -761,8 +802,8 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
             id="editor-canvas-print-area"
             ref={canvasRef}
             style={{
-              width: isCardTab ? '420px' : '520px',
-              height: isCardTab ? '260px' : '735px',
+              width: isA4Format ? '520px' : '420px',
+              height: isA4Format ? '735px' : '260px',
               position: 'relative',
               backgroundColor: '#ffffff',
               backgroundImage: bgUrl ? `url("${bgUrl}")` : undefined,
@@ -770,7 +811,7 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
               backgroundPosition: 'center',
               backgroundRepeat: 'no-repeat',
               boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-              borderRadius: isCardTab ? '16px' : '4px',
+              borderRadius: isA4Format ? '4px' : '16px',
               overflow: 'hidden',
               userSelect: 'none',
               WebkitPrintColorAdjust: 'exact',
