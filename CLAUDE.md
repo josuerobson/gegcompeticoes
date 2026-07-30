@@ -35,9 +35,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Legacy system parity.** Several `Painel Diretor` cadastro screens were rebuilt to match field-for-field specs from a legacy PHP system the user is migrating off of (raw HTML forms with generic field names like `info1`, `id4` were used as the source of truth — those internal names are not meaningful, only the field's label/position/options matter). Where this repo's data model needed to diverge from a first guess based on the legacy system, the actual legacy HTML always won. See "Painel Diretor module status" below for what's been aligned this way — don't assume an unconverted screen's fields are correct without checking for a legacy reference first.
 
-## Painel Diretor module status (as of 2026-07-23)
+## Painel Diretor module status (as of 2026-07-30)
 
 Real (backed by actual DB tables/endpoints, tested end-to-end):
+- **Gerenciamento Plataforma > Site > Certificados e Carteirinhas** — layout pré-configurado de Carteirinhas de Atleta (Clube e G&G) com fundo azul metalizado cyan/blue, foto 3x4 do atleta em moldura branca, badge `ATIRADOR DESPORTIVO PREMIUM`, `CADASTRO Nº`, caixas brancas com dados (`Nome`, `CPF`, `RG`, `CR`, `VALIDADE`, `Clube`, `Cidade`, `ESTADO`) e verso com padrão d'água `G&G EMPREENDIMENTOS` e QR Code centralizado para validação de autenticidade (conforme imagem de referência do usuário).
 - **Gerenciamento Plataforma > Novo Clube** — creates a club + its `club_admin` login.
 - **Gerenciamento Plataforma > Modalidades** — 5 fields only (Modalidade, Quantidade de séries, Tiros por série, Tempo por série em minutos, Tipo de avaliação). No "categoria" field — it doesn't exist in the real legacy form; `modalities.discipline` is a vestigial nullable column, unused going forward.
 - **Gerenciamento Plataforma > Novo Campeonato** — full cadastro (~40 fields: PIX config, valores de inscrição/reinscrição, percentuais com validação de soma 100%, cascata de premiação atleta/todas-etapas/ouro-prata-bronze, pontuação mínima atleta/equipe, regulamento/súmula PDF). The modality picker here selects from real `modalities` by id and does **not** allow overriding séries/tiros/tempo/avaliação — those are fixed on the modality itself, by design (mirrors the legacy system so data can be imported without losing that constraint).

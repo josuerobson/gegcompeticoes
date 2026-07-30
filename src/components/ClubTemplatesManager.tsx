@@ -137,51 +137,63 @@ const DEFAULT_ELEMENTS: Record<string, TextElement[]> = {
   club_card: [
     {
       id: 'k1',
-      text: 'FILIADO PREMIUM',
-      x: 42,
-      y: 10,
-      fontSize: 13,
+      text: 'ATIRADOR DESPORTIVO ★ PREMIUM ★',
+      x: 30,
+      y: 8,
+      fontSize: 11,
       fontWeight: '900',
       fontStyle: 'normal',
-      color: '#ffffff',
+      color: '#67e8f9',
+      textAlign: 'center',
+      width: 45
+    },
+    {
+      id: 'k2',
+      text: 'CADASTRO Nº {CADASTRO_NUMERO}',
+      x: 30,
+      y: 20,
+      fontSize: 10,
+      fontWeight: '900',
+      fontStyle: 'normal',
+      color: '#a5f3fc',
       textAlign: 'left',
       width: 50
     },
     {
-      id: 'k2',
-      text: '{NOME_ATLETA}',
-      x: 42,
-      y: 35,
-      fontSize: 14,
+      id: 'k3',
+      text: 'Nome: {NOME_ATLETA}',
+      x: 30,
+      y: 30,
+      fontSize: 11,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#0f172a',
       textAlign: 'left',
-      width: 55
+      width: 65
     },
     {
-      id: 'k3',
-      text: 'CPF: {CPF_ATLETA} | RG: {RG_ATLETA} | CR: {CR_ATLETA}',
-      x: 8,
-      y: 54,
-      fontSize: 9,
+      id: 'k4',
+      text: 'CPF: {CPF_ATLETA} | RG: {RG_ATLETA} | CR: {CR_ATLETA} | VALIDADE: {DATA_VALIDADE}',
+      x: 4,
+      y: 56,
+      fontSize: 8.5,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#1e293b',
       textAlign: 'left',
-      width: 84
+      width: 92
     },
     {
-      id: 'k4',
-      text: 'Clube: {NOME_CLUBE} - {CIDADE}/{UF}',
-      x: 8,
-      y: 76,
-      fontSize: 9,
-      fontWeight: 'normal',
+      id: 'k5',
+      text: 'Clube: {NOME_CLUBE} | Cidade: {CIDADE} | ESTADO: {UF}',
+      x: 4,
+      y: 78,
+      fontSize: 8.5,
+      fontWeight: 'bold',
       fontStyle: 'normal',
-      color: '#334155',
+      color: '#1e293b',
       textAlign: 'left',
-      width: 84
+      width: 92
     }
   ],
   playoff_card: [

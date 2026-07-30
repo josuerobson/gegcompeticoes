@@ -2184,72 +2184,153 @@ export default function MemberProfile({
 
               <div className="flex flex-col lg:flex-row gap-6 items-center justify-center py-4">
                 
-                {/* Front Preview */}
-                <div style={{ backgroundColor: '#0f172a', color: '#f1f5f9' }} className="w-[340px] h-[210px] rounded-xl p-4 flex flex-col justify-between relative shadow-lg overflow-hidden border border-slate-800 select-none">
-                  {/* Background decoration */}
-                  <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none">
-                    <Target className="w-44 h-44 text-white translate-x-10 translate-y-10" />
-                  </div>
-                  
-                  {/* Header */}
-                  <div className="flex justify-between items-start border-b border-slate-800 pb-1.5">
-                    <div>
-                      <span className="font-display font-extrabold text-[12px] tracking-wider text-amber-400 block">G&G CLUBE DE TIRO</span>
-                      <span className="text-[8px] font-sans text-slate-400 tracking-widest block mt-0.5">FILIADO OFICIAL</span>
+                {/* Front Preview matching reference image */}
+                <div className="w-[340px] h-[215px] rounded-xl p-2.5 flex flex-col justify-between relative shadow-xl overflow-hidden border border-slate-700 select-none bg-[linear-gradient(135deg,#06b6d4_0%,#1d4ed8_45%,#090d16_90%)] text-white">
+                  {/* Top Header Grid: Photo (Left) + Header/Badge/Logo (Right) */}
+                  <div className="flex gap-2 items-start">
+                    {/* Left: Photo Frame 3x4 */}
+                    <div className="w-[70px] h-[86px] rounded-lg bg-white p-0.5 border border-white/80 shadow-md shrink-0 overflow-hidden flex items-center justify-center">
+                      <img
+                        src={selectedUser.avatarUrl}
+                        alt={selectedUser.username}
+                        className="w-full h-full rounded object-cover"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                        }}
+                      />
                     </div>
-                    <div className="bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-[8px] font-bold text-emerald-400 uppercase tracking-widest">
-                      ATIVO
+
+                    {/* Right: Header details */}
+                    <div className="flex-1 min-w-0 space-y-1 text-left">
+                      {/* Top row: Badge + Logo */}
+                      <div className="flex items-center justify-between gap-1">
+                        {/* Badge ATIRADOR DESPORTIVO PREMIUM */}
+                        <div className="bg-slate-900/90 border border-blue-400/40 rounded-md px-1.5 py-0.5 text-center shadow-xs">
+                          <span className="text-[6.5px] font-black text-cyan-300 block uppercase tracking-widest leading-none">
+                            ATIRADOR DESPORTIVO
+                          </span>
+                          <span className="text-[7.5px] font-black text-white block uppercase tracking-wider leading-tight mt-0.5">
+                            ★ PREMIUM ★
+                          </span>
+                        </div>
+
+                        {/* Logo G&G COMPETIÇÕES */}
+                        <div className="text-right">
+                          <span className="font-display font-black text-[11px] tracking-tighter text-white block leading-none">
+                            G<span className="text-cyan-300">&</span>G
+                          </span>
+                          <span className="text-[5.5px] font-mono text-cyan-200 tracking-widest block uppercase leading-none mt-0.5">
+                            COMPETIÇÕES
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* CADASTRO Nº */}
+                      <div className="pt-0.5">
+                        <span className="text-[9px] font-black text-cyan-200 uppercase tracking-wide block leading-tight font-mono">
+                          CADASTRO Nº {selectedUser.id.slice(-5).toUpperCase() || '00123'}
+                        </span>
+                      </div>
+
+                      {/* Nome Field Box */}
+                      <div className="bg-white rounded-md px-1.5 py-0.5 border border-slate-200 text-left">
+                        <span className="text-[6.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">
+                          Nome:
+                        </span>
+                        <span className="text-[8.5px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">
+                          {selectedUser.fullName || selectedUser.username}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Body info */}
-                  <div className="flex gap-3 items-center my-2">
-                    <img
-                      src={selectedUser.avatarUrl}
-                      alt={selectedUser.username}
-                      className="w-14 h-14 rounded-lg object-cover border border-slate-700 bg-slate-900"
-                      onError={(e) => {
-                        e.currentTarget.onerror = null;
-                        e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
-                      }}
-                    />
-                    <div className="text-[10px] space-y-0.5 leading-tight">
-                      <div className="font-bold text-white text-[11px] truncate w-[190px]">{selectedUser.fullName}</div>
-                      <div><span className="text-slate-450 font-mono">CR nº:</span> <span className="text-white font-mono font-bold">{selectedUser.crNumber || 'EMISSÃO...'}</span></div>
-                      <div><span className="text-slate-450">Categoria:</span> <span className="text-amber-300 font-bold">Sócio Contribuinte</span></div>
-                      <div><span className="text-slate-450">Emissão:</span> <span className="text-slate-300 font-mono">01/02/2026</span></div>
+                  {/* Middle Row 1: 4 Columns (CPF | RG | CR | VALIDADE) */}
+                  <div className="grid grid-cols-4 gap-1 text-left">
+                    <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
+                      <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">CPF:</span>
+                      <span className="text-[7px] font-bold text-slate-900 font-mono truncate block leading-tight">{selectedUser.cpf || '000.000.000-00'}</span>
+                    </div>
+                    <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
+                      <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">RG:</span>
+                      <span className="text-[7px] font-bold text-slate-900 font-mono truncate block leading-tight">{selectedUser.rg || '00.000.000-0'}</span>
+                    </div>
+                    <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
+                      <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">CR:</span>
+                      <span className="text-[7px] font-bold text-slate-900 font-mono truncate block leading-tight">{selectedUser.crNumber || '123456'}</span>
+                    </div>
+                    <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
+                      <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">VALIDADE:</span>
+                      <span className="text-[7px] font-bold text-slate-900 font-mono truncate block leading-tight">
+                        {selectedUser.signatureExpiry ? new Date(selectedUser.signatureExpiry).toLocaleDateString('pt-BR') : '31/12/2026'}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Footer */}
-                  <div className="flex justify-between items-center text-[8px] font-mono text-slate-400 border-t border-slate-800 pt-1.5">
-                    <span>REG: GG-MEM-{selectedUser.id.slice(0, 6).toUpperCase()}</span>
-                    <span>Val: {selectedUser.signatureExpiry ? new Date(selectedUser.signatureExpiry).toLocaleDateString() : '01/02/2027'}</span>
+                  {/* Middle Row 2: 3 Columns (Clube | Cidade | ESTADO) */}
+                  <div className="grid grid-cols-3 gap-1 text-left">
+                    <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 col-span-1 min-w-0">
+                      <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">Clube:</span>
+                      <span className="text-[7px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">
+                        G&G CLUBE DE TIRO
+                      </span>
+                    </div>
+                    <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
+                      <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">Cidade:</span>
+                      <span className="text-[7px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">
+                        {selectedUser.city || 'SANTA LUZIA'}
+                      </span>
+                    </div>
+                    <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
+                      <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">ESTADO:</span>
+                      <span className="text-[7px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">
+                        {selectedUser.state || 'MG'}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Back Preview */}
-                <div style={{ backgroundColor: '#ffffff', color: '#1e293b' }} className="w-[340px] h-[210px] rounded-xl p-4 flex flex-col justify-between relative shadow-lg overflow-hidden border border-slate-200 select-none text-slate-750">
-                  <div className="text-[7.5px] leading-tight space-y-1">
-                    <p className="font-bold border-b border-slate-100 pb-1 uppercase tracking-wider text-slate-900">Regras de Segurança & Conduta</p>
-                    <p>1. O portador deste documento compromete-se a cumprir rigorosamente as normas de segurança do G&G Clube de Tiro.</p>
-                    <p>2. A circulação com armamento nas dependências do clube deve obedecer às diretrizes do SFPC.</p>
-                    <p>3. Este documento é pessoal, intransferível e comprova vínculo social regularizado.</p>
+                {/* Back Preview matching reference image */}
+                <div className="w-[340px] h-[215px] rounded-xl p-3 flex flex-col items-center justify-between relative shadow-xl overflow-hidden border border-slate-300 select-none bg-white text-slate-800">
+                  {/* Watermark Background Pattern G&G EMPREENDIMENTOS */}
+                  <div className="absolute inset-0 grid grid-cols-4 gap-2 opacity-15 pointer-events-none p-2 content-between text-center select-none">
+                    {Array.from({ length: 20 }).map((_, i) => (
+                      <div key={i} className="text-[6px] font-black text-blue-900 uppercase font-mono tracking-tighter leading-none">
+                        G&G EMPREENDIMENTOS
+                      </div>
+                    ))}
                   </div>
 
-                  <div className="flex justify-between items-end mt-2 pt-2 border-t border-slate-100">
-                    <div className="space-y-1 text-left">
-                      <span className="text-[8px] block font-mono font-bold text-slate-800">CNPJ: 45.981.042/0001-12</span>
-                      <div className="h-4 bg-slate-900 w-28 flex items-center justify-center text-[7px] text-white tracking-widest font-mono">
-                        ||||||| | ||||| | |||
+                  {/* Centered QR Code with Logo */}
+                  <div className="relative z-10 my-auto flex flex-col items-center justify-center">
+                    <div className="bg-white p-2 border-2 border-slate-900 rounded-xl shadow-md relative">
+                      <svg viewBox="0 0 100 100" className="w-24 h-24 text-slate-900">
+                        <rect width="100" height="100" fill="white" />
+                        <rect x="5" y="5" width="25" height="25" fill="currentColor" />
+                        <rect x="70" y="5" width="25" height="25" fill="currentColor" />
+                        <rect x="5" y="70" width="25" height="25" fill="currentColor" />
+                        <rect x="10" y="10" width="15" height="15" fill="white" />
+                        <rect x="75" y="10" width="15" height="15" fill="white" />
+                        <rect x="10" y="75" width="15" height="15" fill="white" />
+                        <rect x="14" y="14" width="7" height="7" fill="currentColor" />
+                        <rect x="79" y="14" width="7" height="7" fill="currentColor" />
+                        <rect x="14" y="79" width="7" height="7" fill="currentColor" />
+                        <rect x="35" y="5" width="8" height="15" fill="currentColor" />
+                        <rect x="50" y="10" width="12" height="6" fill="currentColor" />
+                        <rect x="35" y="80" width="15" height="10" fill="currentColor" />
+                        <rect x="60" y="75" width="8" height="18" fill="currentColor" />
+                        <rect x="5" y="40" width="20" height="6" fill="currentColor" />
+                        <rect x="75" y="35" width="18" height="8" fill="currentColor" />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-6 h-6 bg-white border border-slate-900 rounded-full flex items-center justify-center shadow-xs">
+                          <Target className="w-4 h-4 text-blue-700" />
+                        </div>
                       </div>
                     </div>
-                    <div className="text-[8px] text-right font-mono flex flex-col items-end">
-                      <div className="w-10 h-10 bg-slate-100 border border-slate-200 rounded flex items-center justify-center text-[7px]">
-                        [QR-CODE]
-                      </div>
-                      <span className="mt-1 text-[6.5px] text-slate-400">Assinatura Eletrônica G&G</span>
-                    </div>
+                    <span className="text-[7.5px] font-bold text-slate-700 font-mono mt-1.5 bg-white/80 px-2 py-0.5 rounded border border-slate-200">
+                      VALIDAÇÃO CADASTRAL AUTÊNTICA G&G
+                    </span>
                   </div>
                 </div>
 
@@ -3394,62 +3475,113 @@ export default function MemberProfile({
               {printMode === 'club_card' && (
                 <div className="flex flex-col gap-6 items-center justify-center p-4">
                   {/* Front card body */}
-                  <div style={{ backgroundColor: '#0f172a', color: '#f1f5f9' }} className="w-[325px] h-[200px] rounded-xl p-4 flex flex-col justify-between relative border border-slate-800 shadow-md">
-                    <div className="flex justify-between items-start border-b border-slate-800 pb-1">
-                      <div>
-                        <span className="font-display font-extrabold text-[11px] tracking-wider text-amber-400 block">G&G CLUBE DE TIRO</span>
-                        <span className="text-[7.5px] font-sans text-slate-400 tracking-widest block mt-0.5">FILIADO OFICIAL</span>
+                  <div className="w-[325px] h-[200px] rounded-xl p-2.5 flex flex-col justify-between relative shadow-md overflow-hidden border border-slate-700 bg-[linear-gradient(135deg,#06b6d4_0%,#1d4ed8_45%,#090d16_90%)] text-white">
+                    <div className="flex gap-2 items-start">
+                      <div className="w-[66px] h-[80px] rounded bg-white p-0.5 border border-white/80 shrink-0 overflow-hidden flex items-center justify-center">
+                        <img
+                          src={selectedUser.avatarUrl}
+                          alt="avatar"
+                          className="w-full h-full rounded object-cover"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                          }}
+                        />
                       </div>
-                      <div className="bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-[8px] font-bold text-emerald-400 uppercase">
-                        ATIVO
+                      <div className="flex-1 min-w-0 space-y-1 text-left">
+                        <div className="flex items-center justify-between gap-1">
+                          <div className="bg-slate-900/90 border border-blue-400/40 rounded px-1.5 py-0.5 text-center">
+                            <span className="text-[6px] font-black text-cyan-300 block uppercase tracking-widest leading-none">ATIRADOR DESPORTIVO</span>
+                            <span className="text-[7px] font-black text-white block uppercase tracking-wider leading-tight mt-0.5">★ PREMIUM ★</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-display font-black text-[10px] tracking-tighter text-white block leading-none">G<span className="text-cyan-300">&</span>G</span>
+                            <span className="text-[5px] font-mono text-cyan-200 tracking-widest block uppercase leading-none mt-0.5">COMPETIÇÕES</span>
+                          </div>
+                        </div>
+                        <div className="pt-0.5">
+                          <span className="text-[8.5px] font-black text-cyan-200 uppercase tracking-wide block leading-tight font-mono">
+                            CADASTRO Nº {selectedUser.id.slice(-5).toUpperCase() || '00123'}
+                          </span>
+                        </div>
+                        <div className="bg-white rounded px-1 py-0.5 border border-slate-200 text-left">
+                          <span className="text-[6px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">Nome:</span>
+                          <span className="text-[8px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">{printData.fullName}</span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex gap-3 items-center my-1">
-                      <img
-                        src={selectedUser.avatarUrl}
-                        alt="avatar"
-                        className="w-12 h-12 rounded object-cover border border-slate-700 bg-slate-900"
-                        onError={(e) => {
-                          e.currentTarget.onerror = null;
-                          e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
-                        }}
-                      />
-                      <div className="text-[9.5px] space-y-0.5 leading-tight">
-                        <div className="font-bold text-white text-[10.5px] truncate w-[180px]">{printData.fullName}</div>
-                        <div><span className="text-slate-450">CR nº:</span> <span className="text-white font-mono font-bold">{printData.crNumber}</span></div>
-                        <div><span className="text-slate-450">Categoria:</span> <span className="text-amber-300 font-bold">Sócio Contribuinte</span></div>
+                    <div className="grid grid-cols-4 gap-1 text-left">
+                      <div className="bg-white rounded px-1 py-0.5 border border-slate-200 min-w-0">
+                        <span className="text-[5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">CPF:</span>
+                        <span className="text-[6.5px] font-bold text-slate-900 font-mono truncate block leading-tight">{selectedUser.cpf || '000.000.000-00'}</span>
+                      </div>
+                      <div className="bg-white rounded px-1 py-0.5 border border-slate-200 min-w-0">
+                        <span className="text-[5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">RG:</span>
+                        <span className="text-[6.5px] font-bold text-slate-900 font-mono truncate block leading-tight">{selectedUser.rg || '00.000.000-0'}</span>
+                      </div>
+                      <div className="bg-white rounded px-1 py-0.5 border border-slate-200 min-w-0">
+                        <span className="text-[5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">CR:</span>
+                        <span className="text-[6.5px] font-bold text-slate-900 font-mono truncate block leading-tight">{printData.crNumber}</span>
+                      </div>
+                      <div className="bg-white rounded px-1 py-0.5 border border-slate-200 min-w-0">
+                        <span className="text-[5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">VALIDADE:</span>
+                        <span className="text-[6.5px] font-bold text-slate-900 font-mono truncate block leading-tight">{printData.valDate}</span>
                       </div>
                     </div>
 
-                    <div className="flex justify-between items-center text-[7.5px] font-mono text-slate-400 border-t border-slate-800 pt-1">
-                      <span>REG: {printData.regId}</span>
-                      <span>Validade: {printData.valDate}</span>
+                    <div className="grid grid-cols-3 gap-1 text-left">
+                      <div className="bg-white rounded px-1 py-0.5 border border-slate-200 col-span-1 min-w-0">
+                        <span className="text-[5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">Clube:</span>
+                        <span className="text-[6.5px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">G&G CLUBE DE TIRO</span>
+                      </div>
+                      <div className="bg-white rounded px-1 py-0.5 border border-slate-200 min-w-0">
+                        <span className="text-[5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">Cidade:</span>
+                        <span className="text-[6.5px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">{selectedUser.city || 'SANTA LUZIA'}</span>
+                      </div>
+                      <div className="bg-white rounded px-1 py-0.5 border border-slate-200 min-w-0">
+                        <span className="text-[5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">ESTADO:</span>
+                        <span className="text-[6.5px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">{selectedUser.state || 'MG'}</span>
+                      </div>
                     </div>
                   </div>
 
                   {/* Back card body */}
-                  <div style={{ backgroundColor: '#ffffff', color: '#1e293b' }} className="w-[325px] h-[200px] rounded-xl p-4 flex flex-col justify-between relative border border-slate-350 shadow-md text-slate-850">
-                    <div className="text-[7px] leading-tight space-y-1 text-slate-700">
-                      <p className="font-bold border-b border-slate-100 pb-0.5 uppercase tracking-wider text-slate-900 text-[7.5px]">Normas G&G Clube de Tiro</p>
-                      <p>1. Respeite todas as regras de segurança descritas na portaria.</p>
-                      <p>2. Armas frias e desmuniciadas devem transitar sempre em coldre ou maleta.</p>
-                      <p>3. Este documento é pessoal e intransferível.</p>
+                  <div className="w-[325px] h-[200px] rounded-xl p-2.5 flex flex-col items-center justify-between relative shadow-md overflow-hidden border border-slate-300 bg-white text-slate-800">
+                    <div className="absolute inset-0 grid grid-cols-4 gap-2 opacity-15 pointer-events-none p-2 content-between text-center select-none">
+                      {Array.from({ length: 20 }).map((_, i) => (
+                        <div key={i} className="text-[5.5px] font-black text-blue-900 uppercase font-mono tracking-tighter leading-none">
+                          G&G EMPREENDIMENTOS
+                        </div>
+                      ))}
                     </div>
-
-                    <div className="flex justify-between items-end mt-2 pt-2 border-t border-slate-100">
-                      <div className="space-y-1">
-                        <span className="text-[7.5px] block font-mono text-slate-800 font-bold">CNPJ: 45.981.042/0001-12</span>
-                        <div className="h-4 bg-slate-900 w-24 flex items-center justify-center text-[7px] text-white tracking-widest font-mono">
-                          ||||||| | ||||| | |||
+                    <div className="relative z-10 my-auto flex flex-col items-center justify-center">
+                      <div className="bg-white p-1.5 border-2 border-slate-900 rounded-lg shadow-xs relative">
+                        <svg viewBox="0 0 100 100" className="w-20 h-20 text-slate-900">
+                          <rect width="100" height="100" fill="white" />
+                          <rect x="5" y="5" width="25" height="25" fill="currentColor" />
+                          <rect x="70" y="5" width="25" height="25" fill="currentColor" />
+                          <rect x="5" y="70" width="25" height="25" fill="currentColor" />
+                          <rect x="10" y="10" width="15" height="15" fill="white" />
+                          <rect x="75" y="10" width="15" height="15" fill="white" />
+                          <rect x="10" y="75" width="15" height="15" fill="white" />
+                          <rect x="14" y="14" width="7" height="7" fill="currentColor" />
+                          <rect x="79" y="14" width="7" height="7" fill="currentColor" />
+                          <rect x="14" y="79" width="7" height="7" fill="currentColor" />
+                          <rect x="35" y="5" width="8" height="15" fill="currentColor" />
+                          <rect x="50" y="10" width="12" height="6" fill="currentColor" />
+                          <rect x="35" y="80" width="15" height="10" fill="currentColor" />
+                          <rect x="60" y="75" width="8" height="18" fill="currentColor" />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-5 h-5 bg-white border border-slate-900 rounded-full flex items-center justify-center">
+                            <Target className="w-3 h-3 text-blue-700" />
+                          </div>
                         </div>
                       </div>
-                      <div className="text-[7px] text-right font-mono flex flex-col items-end">
-                        <div className="w-8 h-8 bg-slate-100 border border-slate-200 rounded flex items-center justify-center">
-                          [QR]
-                        </div>
-                        <span className="mt-0.5 text-[6px] text-slate-400 font-sans">Presidente G&G</span>
-                      </div>
+                      <span className="text-[7px] font-bold text-slate-700 font-mono mt-1 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                        VALIDAÇÃO CADASTRAL AUTÊNTICA G&G
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -3459,61 +3591,109 @@ export default function MemberProfile({
               {printMode === 'gg_card' && (
                 <div className="flex flex-col gap-6 items-center justify-center p-4">
                   {/* Front card body */}
-                  <div style={{ backgroundColor: '#090d16', color: '#f8fafc', borderColor: '#d97706' }} className="w-[325px] h-[200px] rounded-xl p-4 flex flex-col justify-between relative border-2 shadow-md">
-                    <div className="flex justify-between items-start border-b border-amber-600/30 pb-1">
-                      <div>
-                        <span className="font-display font-extrabold text-[10px] tracking-wider text-amber-500 block">G&G COMPETIÇÕES</span>
-                        <span className="text-[7.5px] font-sans text-slate-400 tracking-widest block mt-0.5">CIRCUITO NACIONAL DE ATLETAS</span>
+                  <div className="w-[325px] h-[200px] rounded-xl p-2.5 flex flex-col justify-between relative shadow-md overflow-hidden border border-slate-700 bg-[linear-gradient(135deg,#06b6d4_0%,#1d4ed8_45%,#090d16_90%)] text-white">
+                    <div className="flex gap-2 items-start">
+                      <div className="w-[66px] h-[80px] rounded bg-white p-0.5 border border-white/80 shrink-0 overflow-hidden flex items-center justify-center">
+                        <img
+                          src={selectedUser.avatarUrl}
+                          alt="avatar"
+                          className="w-full h-full rounded object-cover"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                          }}
+                        />
                       </div>
-                      <div className="bg-amber-500 text-slate-950 px-1 py-0.5 rounded text-[7.5px] font-black uppercase">
-                        FEDERADO
+                      <div className="flex-1 min-w-0 space-y-1 text-left">
+                        <div className="flex items-center justify-between gap-1">
+                          <div className="bg-slate-900/90 border border-amber-400/40 rounded px-1.5 py-0.5 text-center">
+                            <span className="text-[6px] font-black text-amber-300 block uppercase tracking-widest leading-none">ATIRADOR FEDERADO</span>
+                            <span className="text-[7px] font-black text-white block uppercase tracking-wider leading-tight mt-0.5">★ NACIONAL ★</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-display font-black text-[10px] tracking-tighter text-white block leading-none">G<span className="text-amber-400">&</span>G</span>
+                            <span className="text-[5px] font-mono text-amber-200 tracking-widest block uppercase leading-none mt-0.5">COMPETIÇÕES</span>
+                          </div>
+                        </div>
+                        <div className="pt-0.5">
+                          <span className="text-[8.5px] font-black text-amber-200 uppercase tracking-wide block leading-tight font-mono">
+                            CADASTRO Nº {selectedUser.id.slice(-5).toUpperCase() || '00123'}
+                          </span>
+                        </div>
+                        <div className="bg-white rounded px-1 py-0.5 border border-slate-200 text-left">
+                          <span className="text-[6px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">Nome:</span>
+                          <span className="text-[8px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">{printData.fullName}</span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex gap-3 items-center my-1">
-                      <img
-                        src={selectedUser.avatarUrl}
-                        alt="avatar"
-                        className="w-12 h-12 rounded object-cover border-2 border-amber-500/40 bg-slate-900"
-                        onError={(e) => {
-                          e.currentTarget.onerror = null;
-                          e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
-                        }}
-                      />
-                      <div className="text-[9.5px] space-y-0.5 leading-tight">
-                        <div className="font-bold text-white text-[10.5px] truncate w-[180px]">{printData.fullName}</div>
-                        <div><span className="text-slate-400">CR nº:</span> <span className="text-white font-mono font-bold">{printData.crNumber}</span></div>
-                        <div><span className="text-slate-450">Categoria:</span> <span className="text-amber-400 font-bold">Classe A - Pistola</span></div>
+                    <div className="grid grid-cols-4 gap-1 text-left">
+                      <div className="bg-white rounded px-1 py-0.5 border border-slate-200 min-w-0">
+                        <span className="text-[5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">CPF:</span>
+                        <span className="text-[6.5px] font-bold text-slate-900 font-mono truncate block leading-tight">{selectedUser.cpf || '000.000.000-00'}</span>
+                      </div>
+                      <div className="bg-white rounded px-1 py-0.5 border border-slate-200 min-w-0">
+                        <span className="text-[5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">RG:</span>
+                        <span className="text-[6.5px] font-bold text-slate-900 font-mono truncate block leading-tight">{selectedUser.rg || '00.000.000-0'}</span>
+                      </div>
+                      <div className="bg-white rounded px-1 py-0.5 border border-slate-200 min-w-0">
+                        <span className="text-[5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">CR:</span>
+                        <span className="text-[6.5px] font-bold text-slate-900 font-mono truncate block leading-tight">{printData.crNumber}</span>
+                      </div>
+                      <div className="bg-white rounded px-1 py-0.5 border border-slate-200 min-w-0">
+                        <span className="text-[5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">VALIDADE:</span>
+                        <span className="text-[6.5px] font-bold text-slate-900 font-mono truncate block leading-tight">31/12/2026</span>
                       </div>
                     </div>
 
-                    <div className="flex justify-between items-center text-[7px] font-mono text-slate-400 border-t border-amber-600/30 pt-1">
-                      <span>FEDERAÇÃO FILIADA G&G</span>
-                      <span className="text-amber-500 font-bold">REG: {printData.fedId}</span>
+                    <div className="grid grid-cols-3 gap-1 text-left">
+                      <div className="bg-white rounded px-1 py-0.5 border border-slate-200 col-span-1 min-w-0">
+                        <span className="text-[5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">Clube:</span>
+                        <span className="text-[6.5px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">FEDERAÇÃO G&G</span>
+                      </div>
+                      <div className="bg-white rounded px-1 py-0.5 border border-slate-200 min-w-0">
+                        <span className="text-[5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">Cidade:</span>
+                        <span className="text-[6.5px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">{selectedUser.city || 'SANTA LUZIA'}</span>
+                      </div>
+                      <div className="bg-white rounded px-1 py-0.5 border border-slate-200 min-w-0">
+                        <span className="text-[5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">ESTADO:</span>
+                        <span className="text-[6.5px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">{selectedUser.state || 'MG'}</span>
+                      </div>
                     </div>
                   </div>
 
                   {/* Back card body */}
-                  <div style={{ backgroundColor: '#ffffff', color: '#1e293b' }} className="w-[325px] h-[200px] rounded-xl p-4 flex flex-col justify-between relative border border-slate-350 shadow-md text-slate-850">
-                    <div className="text-[7.5px] leading-tight space-y-1 text-slate-700">
-                      <p className="font-bold border-b border-slate-100 pb-0.5 uppercase tracking-wider text-slate-900 text-[8px]">Amparo Legal de Atleta</p>
-                      <p className="italic font-sans text-[7px] text-slate-500">"Resguardada a prerrogativa de Porte de Trânsito para atiradores desportivos com guia de tráfego, conforme Lei Geral do Esporte nº 14.597/23."</p>
-                      <p>Contato oficial G&G Competições: suporte@gegpistol.online</p>
+                  <div className="w-[325px] h-[200px] rounded-xl p-2.5 flex flex-col items-center justify-between relative shadow-md overflow-hidden border border-slate-300 bg-white text-slate-800">
+                    <div className="absolute inset-0 grid grid-cols-4 gap-2 opacity-15 pointer-events-none p-2 content-between text-center select-none">
+                      {Array.from({ length: 20 }).map((_, i) => (
+                        <div key={i} className="text-[5.5px] font-black text-blue-900 uppercase font-mono tracking-tighter leading-none">
+                          G&G EMPREENDIMENTOS
+                        </div>
+                      ))}
                     </div>
-
-                    <div className="flex justify-between items-end mt-2 pt-2 border-t border-slate-100">
-                      <div className="space-y-1">
-                        <span className="text-[7.5px] block font-mono text-slate-800 font-bold">CNPJ: 45.981.042/0001-12</span>
-                        <div className="h-4 bg-slate-900 w-24 flex items-center justify-center text-[7px] text-white tracking-widest font-mono">
-                          ||||||| | ||||| | |||
+                    <div className="relative z-10 my-auto flex flex-col items-center justify-center">
+                      <div className="bg-white p-1.5 border-2 border-slate-900 rounded-lg shadow-xs relative">
+                        <svg viewBox="0 0 100 100" className="w-20 h-20 text-slate-900">
+                          <rect width="100" height="100" fill="white" />
+                          <rect x="5" y="5" width="25" height="25" fill="currentColor" />
+                          <rect x="70" y="5" width="25" height="25" fill="currentColor" />
+                          <rect x="5" y="70" width="25" height="25" fill="currentColor" />
+                          <rect x="10" y="10" width="15" height="15" fill="white" />
+                          <rect x="75" y="10" width="15" height="15" fill="white" />
+                          <rect x="10" y="75" width="15" height="15" fill="white" />
+                          <rect x="14" y="14" width="7" height="7" fill="currentColor" />
+                          <rect x="79" y="14" width="7" height="7" fill="currentColor" />
+                          <rect x="14" y="79" width="7" height="7" fill="currentColor" />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-5 h-5 bg-white border border-slate-900 rounded-full flex items-center justify-center">
+                            <Target className="w-3 h-3 text-amber-600" />
+                          </div>
                         </div>
                       </div>
-                      <div className="text-[7px] text-right font-mono flex flex-col items-end">
-                        <div className="w-8 h-8 bg-slate-100 border border-slate-200 rounded flex items-center justify-center">
-                          [QR]
-                        </div>
-                        <span className="mt-0.5 text-[6px] text-slate-400 font-sans">Presidente G&G</span>
-                      </div>
+                      <span className="text-[7px] font-bold text-slate-700 font-mono mt-1 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                        VALIDAÇÃO CADASTRAL AUTÊNTICA G&G
+                      </span>
                     </div>
                   </div>
                 </div>
