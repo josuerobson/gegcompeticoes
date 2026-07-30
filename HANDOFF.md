@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `main` |
-| Mensagem | `style: reduz tamanho do titulo Arena de Campeonatos e Rankings no celular para manter em linha unica sem quebras` |
-| Data/hora | 2026-07-29T17:26:40-03:00 |
+| Mensagem | `fix: armazena imagens de posts diretamente no PostgreSQL e remove fallback automatico para imagem padrao de arma em fotos quebradas` |
+| Data/hora | 2026-07-30T07:54:30-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
@@ -106,7 +106,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
 - **Otimização do Carregamento Inicial (`App.tsx`, `db.ts`)**: Identificado que a função `syncWithBackend` executava 12 requisições HTTP sequenciais uma após a outra, somando latências e acumulando esperas de até 60s~120s. A sincronização foi otimizada para realizar os 11 endpoints em lote paralelo com `Promise.allSettled()`, reduzindo a inicialização para ~1 segundo. Adicionada trava de segurança com `setTimeout` (máximo 3 segundos para encerrar a tela estática) e criados índices no PostgreSQL (`CREATE INDEX IF NOT EXISTS`) nas tabelas `likes`, `comments`, `follows`, `registrations`, `stage_scores` e `posts`.
 - **Paginação e Rolagem Infinita no Feed (`FeedView.tsx`)**: Implementado carregamento progressivo do feed renderizando estritamente **3 postagens iniciais**. Ao rolar a página para baixo, o `IntersectionObserver` detecta a aproximação do final da tela e carrega automaticamente mais 3 postagens por vez. Adicionado também o botão "Carregar mais publicações" como fallback manual e o atributo `loading="lazy"` em todas as tags `<img>`.
-- **Ajuste de Fonte no Título do Campeonato (`ChampionshipsView.tsx`)**: Ajustada a classe do título `"Arena de Campeonatos e Rankings"` para `text-[14.5px] sm:text-xl md:text-2xl whitespace-nowrap`, garantindo exibição em linha única contínua em dispositivos móveis, mantendo a escala proporcional em telas maiores.
+- **Persistência de Imagens de Publicações (`server.ts`, `FeedView.tsx`)**: Corrigido problema em que imagens de posts eram salvas em disco efêmero do container Docker (`./public/uploads/posts/`), fazendo com que fossem apagadas após reinicializações/deploys no EasyPanel e subsequentemente substituídas pela imagem padrão de arma Unsplash via evento `onError`. Agora, as imagens em Base64 são salvas diretamente no banco PostgreSQL (`image_url`), garantindo persistência permanente a cada publicação, e o evento `onError` oculta imagens indisponíveis em vez de forçar substituição por fotos de armas.
 
 ## Infra / deploy
 

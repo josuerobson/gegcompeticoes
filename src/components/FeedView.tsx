@@ -256,7 +256,7 @@ export function PostImageCarousel({
           referrerPolicy="no-referrer"
           onError={(e) => {
             e.currentTarget.onerror = null;
-            if (defaultImage) e.currentTarget.src = defaultImage;
+            e.currentTarget.style.display = 'none';
           }}
         />
       </div>
