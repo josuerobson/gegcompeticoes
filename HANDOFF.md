@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `main` |
-| Mensagem | `style: exibe os botoes de baixar regulamento e sumula na mesma linha no celular e reduz espacamento entre cartoes em telas moveis` |
-| Data/hora | 2026-07-30T09:57:10-03:00 |
+| Mensagem | `feat: adiciona opcao de cadastrar nova arma diretamente na ficha de inscricao em campeonatos` |
+| Data/hora | 2026-07-30T13:03:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
@@ -106,7 +106,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
 - **Otimização do Carregamento Inicial (`App.tsx`, `db.ts`)**: Identificado que a função `syncWithBackend` executava 12 requisições HTTP sequenciais uma após a outra, somando latências e acumulando esperas de até 60s~120s. A sincronização foi otimizada para realizar os 11 endpoints em lote paralelo com `Promise.allSettled()`, reduzindo a inicialização para ~1 segundo. Adicionada trava de segurança com `setTimeout` (máximo 3 segundos para encerrar a tela estática) e criados índices no PostgreSQL (`CREATE INDEX IF NOT EXISTS`) nas tabelas `likes`, `comments`, `follows`, `registrations`, `stage_scores` e `posts`.
 - **Paginação e Rolagem Infinita no Feed (`FeedView.tsx`)**: Implementado carregamento progressivo do feed renderizando estritamente **3 postagens iniciais**. Ao rolar a página para baixo, o `IntersectionObserver` detecta a aproximação do final da tela e carrega automaticamente mais 3 postagens por vez. Adicionado também o botão "Carregar mais publicações" como fallback manual e o atributo `loading="lazy"` em todas as tags `<img>`.
-- **Botões Lado a Lado e Espaçamento Compacto no Celular (`ChampionshipsView.tsx`)**: Ajustados os botões "Baixar Regulamento" e "Baixar Súmula" no detalhe do campeonato para `grid grid-cols-2 gap-2 w-full`, forçando exibição em linha única no celular. Reduzidos também os preenchimentos e espaçamentos entre cartões de campeonatos, modalidades e etapas em dispositivos móveis (`p-2.5 sm:p-4`, `gap-2 sm:gap-4`, `space-y-2.5 sm:space-y-4`).
+- **Cadastro de Nova Arma na Ficha de Inscrição (`ChampionshipsView.tsx`)**: Adicionado o botão `+ Cadastrar Nova Arma` no cabeçalho do campo "Arma a ser utilizada" e como opção complementar na busca/dropdown. Abre um sub-modal dinâmico para o atleta informar Fabricante, Modelo, Calibre, SIGMA e Espécie, cadastrando a arma no banco e auto-selecionando-a para a inscrição.
 
 ## Infra / deploy
 
