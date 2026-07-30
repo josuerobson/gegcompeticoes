@@ -1101,7 +1101,7 @@ app.post('/api/users/:id/follow', requireAuth, async (req, res) => {
 app.get('/api/posts', async (req, res) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || (req.query.all === 'true' ? 1000 : 20);
+    const limit = parseInt(req.query.limit as string) || 1000;
     const offset = (page - 1) * limit;
 
     const postsRes = await pool.query(

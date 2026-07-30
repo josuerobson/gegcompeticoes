@@ -251,7 +251,7 @@ export default function App() {
         settingsResult
       ] = await Promise.allSettled([
         fetch('/api/users', { headers: authHeaders }).then(r => r.json()),
-        fetch('/api/posts', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/posts?limit=1000', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/championships', { headers: authHeaders }).then(r => r.json()),
         targetUserId ? fetch('/api/registrations', { headers: authHeaders }).then(r => r.json()) : Promise.resolve({ registrations: [] }),
         fetch('/api/scores', { headers: authHeaders }).then(r => r.json()),

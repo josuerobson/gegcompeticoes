@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `main` |
-| Mensagem | `feat: atualiza formulario de cadastro de arma na inscricao para seguir o mesmo processo e campos do Painel Diretor (lookups de classe, modelo, calibre, fabricante, tipo e permissao)` |
-| Data/hora | 2026-07-30T13:13:00-03:00 |
+| Mensagem | `fix: remove limite padrao de 20 postagens no endpoint GET /api/posts evitando a ilusao de delecao de posts antigos` |
+| Data/hora | 2026-07-30T16:09:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
 | Tarefa estava completa? | ✅ Sim |
@@ -106,7 +106,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Layout Específico para "Todas as etapas" no Modal de Premiação (`ChampionshipsView.tsx`)**: Quando a opção `"Todas as etapas"` está selecionada, o modal oculta as colunas por medalha (`OURO`, `PRATA`, `BRONZE`) e exibe exclusivamente a tabela de premiação acumulada do campeonato do 1º ao 5º lugar (`Premiações Todas as Etapas`), utilizando os percentuais do ranking acumulado (`% 1º lugar` a `% 5º lugar`). Ao selecionar uma etapa individual (`1ª ETAPA`, `2ª ETAPA`), o modal volta a exibir a divisão tradicional por medalhas Ouro/Prata/Bronze.
 - **Otimização do Carregamento Inicial (`App.tsx`, `db.ts`)**: Identificado que a função `syncWithBackend` executava 12 requisições HTTP sequenciais uma após a outra, somando latências e acumulando esperas de até 60s~120s. A sincronização foi otimizada para realizar os 11 endpoints em lote paralelo com `Promise.allSettled()`, reduzindo a inicialização para ~1 segundo. Adicionada trava de segurança com `setTimeout` (máximo 3 segundos para encerrar a tela estática) e criados índices no PostgreSQL (`CREATE INDEX IF NOT EXISTS`) nas tabelas `likes`, `comments`, `follows`, `registrations`, `stage_scores` e `posts`.
 - **Paginação e Rolagem Infinita no Feed (`FeedView.tsx`)**: Implementado carregamento progressivo do feed renderizando estritamente **3 postagens iniciais**. Ao rolar a página para baixo, o `IntersectionObserver` detecta a aproximação do final da tela e carrega automaticamente mais 3 postagens por vez. Adicionado também o botão "Carregar mais publicações" como fallback manual e o atributo `loading="lazy"` em todas as tags `<img>`.
-- **Padronização do Cadastro de Armas na Inscrição (`ChampionshipsView.tsx`, `App.tsx`)**: Atualizado o modal de cadastro de arma da ficha de inscrição para seguir exatamente o mesmo processo e os 8 campos do *Painel Diretor > Gerenciamento Plataforma > Adm > Cadastro de Armas*: Número da arma, Número Sigma, Classe (select/lookups), Modelo (datalist/lookups), Calibre (datalist/lookups), Fabricante (datalist/lookups), Arma é... (`tipo_arma`) e Status de permissão... (`permissao_arma`).
+- **Investigação e Correção do Limite Visual de Postagens (`server.ts`, `App.tsx`)**: Confirmado que o banco PostgreSQL não possui nenhuma rotina ou trigger para deletar postagens ativas. O problema relatado (sumiço da 1ª postagem ao publicar a 20ª) ocorria porque o endpoint `GET /api/posts` em `server.ts` possuía a regra `limit = req.query.limit || 20`. Ao sincronizar dados na inicialização em `App.tsx`, o backend retornava estritamente as 20 postagens mais recentes. A 21ª postagem fazia com que a 1ª ficasse fora da janela dos 20 itens, dando a falsa impressão de deleção. A restrição foi removida alterando o valor padrão para 1000 postagens tanto no servidor (`server.ts`) quanto na requisição inicial (`App.tsx?limit=1000`).
 
 ## Infra / deploy
 
