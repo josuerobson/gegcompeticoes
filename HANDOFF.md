@@ -8,11 +8,11 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `1ebb6a3` |
-| Mensagem | `feat: simplifica editor de carteirinhas com abas dedicadas para Frente e Verso e exibe medidas exatas da imagem` |
-| Data/hora | 2026-07-31T08:13:00-03:00 |
-| Push feito? | ✅ Sim |
-| Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
+| Hash | `main` |
+| Mensagem | `feat: exibe e imprime a carteirinha personalizada do clube no Perfil do Atleta` |
+| Data/hora | 2026-07-31T08:39:00-03:00 |
+| Push feito? | ❌ Não (trabalho em andamento) |
+| Deploy EasyPanel confirmado? | ⏳ Pendente (disparo em lote a seguir) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit

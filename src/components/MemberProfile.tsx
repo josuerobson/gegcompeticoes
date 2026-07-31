@@ -530,7 +530,43 @@ export default function MemberProfile({
   const [printMode, setPrintMode] = useState<'certificate' | 'club_card' | 'gg_card' | 'declaration_filiacao' | 'declaration_habitualidade' | null>(null);
   const [printData, setPrintData] = useState<any>(null);
 
-  // Real Training State
+  // Club Custom Templates State
+  const [clubTemplates, setClubTemplates] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    const fetchClubTemplates = async () => {
+      try {
+        const clubId = selectedUser.clubId || 'c1';
+        const res = await fetch(`/api/club-templates?clubId=${clubId}`, {
+          headers: { 'x-user-id': currentUser?.id || '' }
+        }).then(r => r.json());
+        if (res.templates && Array.isArray(res.templates)) {
+          const map: Record<string, any> = {};
+          res.templates.forEach((t: any) => {
+            map[t.template_type] = t;
+          });
+          setClubTemplates(map);
+        }
+      } catch (err) {
+        console.error('Error fetching club templates:', err);
+      }
+    };
+    fetchClubTemplates();
+  }, [selectedUser.clubId, currentUser]);
+
+  const replaceMemberToken = (text: string) => {
+    const userClub = clubs.find(c => c.id === selectedUser.clubId);
+    return text
+      .replace(/{NOME_ATLETA}/g, (selectedUser.fullName || selectedUser.username).toUpperCase())
+      .replace(/{CPF_ATLETA}/g, selectedUser.cpf || '000.000.000-00')
+      .replace(/{RG_ATLETA}/g, selectedUser.rg || '00.000.000-0')
+      .replace(/{CR_ATLETA}/g, selectedUser.crNumber || '123456')
+      .replace(/{DATA_VALIDADE}/g, selectedUser.signatureExpiry ? new Date(selectedUser.signatureExpiry).toLocaleDateString('pt-BR') : '31/12/2026')
+      .replace(/{CADASTRO_NUMERO}/g, selectedUser.id.slice(-5).toUpperCase() || '00123')
+      .replace(/{NOME_CLUBE}/g, (userClub?.name || 'G&G CLUBE DE TIRO').toUpperCase())
+      .replace(/{CIDADE}/g, (selectedUser.city || userClub?.city || 'SANTA LUZIA').toUpperCase())
+      .replace(/{UF}/g, (selectedUser.state || userClub?.state || 'MG').toUpperCase());
+  };
   const [trainings, setTrainings] = useState<TrainingSession[]>([]);
   const [loadingTrainings, setLoadingTrainings] = useState(false);
   const [savingTraining, setSavingTraining] = useState(false);
@@ -2183,157 +2219,277 @@ export default function MemberProfile({
               </div>
 
               <div className="flex flex-col lg:flex-row gap-6 items-center justify-center py-4">
-                
-                {/* Front Preview matching reference image */}
-                <div className="w-[340px] h-[215px] rounded-xl p-2.5 flex flex-col justify-between relative shadow-xl overflow-hidden border border-slate-700 select-none bg-[linear-gradient(135deg,#06b6d4_0%,#1d4ed8_45%,#090d16_90%)] text-white">
-                  {/* Top Header Grid: Photo (Left) + Header/Badge/Logo (Right) */}
-                  <div className="flex gap-2 items-start">
-                    {/* Left: Photo Frame 3x4 */}
-                    <div className="w-[70px] h-[86px] rounded-lg bg-white p-0.5 border border-white/80 shadow-md shrink-0 overflow-hidden flex items-center justify-center">
-                      <img
-                        src={selectedUser.avatarUrl}
-                        alt={selectedUser.username}
-                        className="w-full h-full rounded object-cover"
-                        onError={(e) => {
-                          e.currentTarget.onerror = null;
-                          e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                {/* Front Preview: Custom template if created, else default design */}
+                {(() => {
+                  const tmpl = clubTemplates['club_card'];
+                  const bgUrl = tmpl?.background_url;
+                  const elements = tmpl?.layout_config?.elements;
+
+                  if (bgUrl || (elements && elements.length > 0)) {
+                    return (
+                      <div
+                        style={{
+                          backgroundImage: bgUrl ? `url("${bgUrl}")` : undefined,
+                          backgroundSize: '100% 100%',
+                          backgroundPosition: 'center',
+                          backgroundRepeat: 'no-repeat',
+                          backgroundColor: '#0f172a'
                         }}
-                      />
-                    </div>
+                        className="w-[340px] h-[215px] rounded-xl relative shadow-xl overflow-hidden border border-slate-700 select-none text-white"
+                      >
+                        {elements && elements.map((el: any) => {
+                          const isQrToken = el.text.trim() === '{QR_CODE}';
+                          const displayText = replaceMemberToken(el.text);
 
-                    {/* Right: Header details */}
-                    <div className="flex-1 min-w-0 space-y-1 text-left">
-                      {/* Top row: Badge + Logo */}
-                      <div className="flex items-center justify-between gap-1">
-                        {/* Badge ATIRADOR DESPORTIVO PREMIUM */}
-                        <div className="bg-slate-900/90 border border-blue-400/40 rounded-md px-1.5 py-0.5 text-center shadow-xs">
-                          <span className="text-[6.5px] font-black text-cyan-300 block uppercase tracking-widest leading-none">
-                            ATIRADOR DESPORTIVO
-                          </span>
-                          <span className="text-[7.5px] font-black text-white block uppercase tracking-wider leading-tight mt-0.5">
-                            ★ PREMIUM ★
-                          </span>
+                          return (
+                            <div
+                              key={el.id}
+                              style={{
+                                position: 'absolute',
+                                left: `${el.x}%`,
+                                top: `${el.y}%`,
+                                width: el.width ? `${el.width}%` : 'auto',
+                                fontSize: `${el.fontSize}px`,
+                                fontWeight: el.fontWeight || 'bold',
+                                fontStyle: el.fontStyle || 'normal',
+                                color: el.color || '#ffffff',
+                                textAlign: el.textAlign || 'left',
+                                lineHeight: '1.25',
+                                whiteSpace: 'pre-line'
+                              }}
+                            >
+                              {isQrToken ? (
+                                <div className="flex flex-col items-center justify-center p-1 bg-white border border-slate-300 rounded shadow-2xs">
+                                  <QrCode className="w-9 h-9 text-slate-900" />
+                                  <span className="text-[6px] font-mono text-slate-500">[QR CODE]</span>
+                                </div>
+                              ) : (
+                                <span>{displayText}</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="w-[340px] h-[215px] rounded-xl p-2.5 flex flex-col justify-between relative shadow-xl overflow-hidden border border-slate-700 select-none bg-[linear-gradient(135deg,#06b6d4_0%,#1d4ed8_45%,#090d16_90%)] text-white">
+                      {/* Top Header Grid: Photo (Left) + Header/Badge/Logo (Right) */}
+                      <div className="flex gap-2 items-start">
+                        {/* Left: Photo Frame 3x4 */}
+                        <div className="w-[70px] h-[86px] rounded-lg bg-white p-0.5 border border-white/80 shadow-md shrink-0 overflow-hidden flex items-center justify-center">
+                          <img
+                            src={selectedUser.avatarUrl}
+                            alt={selectedUser.username}
+                            className="w-full h-full rounded object-cover"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                            }}
+                          />
                         </div>
 
-                        {/* Logo G&G COMPETIÇÕES */}
-                        <div className="text-right">
-                          <span className="font-display font-black text-[11px] tracking-tighter text-white block leading-none">
-                            G<span className="text-cyan-300">&</span>G
-                          </span>
-                          <span className="text-[5.5px] font-mono text-cyan-200 tracking-widest block uppercase leading-none mt-0.5">
-                            COMPETIÇÕES
+                        {/* Right: Header details */}
+                        <div className="flex-1 min-w-0 space-y-1 text-left">
+                          {/* Top row: Badge + Logo */}
+                          <div className="flex items-center justify-between gap-1">
+                            {/* Badge ATIRADOR DESPORTIVO PREMIUM */}
+                            <div className="bg-slate-900/90 border border-blue-400/40 rounded-md px-1.5 py-0.5 text-center shadow-xs">
+                              <span className="text-[6.5px] font-black text-cyan-300 block uppercase tracking-widest leading-none">
+                                ATIRADOR DESPORTIVO
+                              </span>
+                              <span className="text-[7.5px] font-black text-white block uppercase tracking-wider leading-tight mt-0.5">
+                                ★ PREMIUM ★
+                              </span>
+                            </div>
+
+                            {/* Logo G&G COMPETIÇÕES */}
+                            <div className="text-right">
+                              <span className="font-display font-black text-[11px] tracking-tighter text-white block leading-none">
+                                G<span className="text-cyan-300">&</span>G
+                              </span>
+                              <span className="text-[5.5px] font-mono text-cyan-200 tracking-widest block uppercase leading-none mt-0.5">
+                                COMPETIÇÕES
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* CADASTRO Nº */}
+                          <div className="pt-0.5">
+                            <span className="text-[9px] font-black text-cyan-200 uppercase tracking-wide block leading-tight font-mono">
+                              CADASTRO Nº {selectedUser.id.slice(-5).toUpperCase() || '00123'}
+                            </span>
+                          </div>
+
+                          {/* Nome Field Box */}
+                          <div className="bg-white rounded-md px-1.5 py-0.5 border border-slate-200 text-left">
+                            <span className="text-[6.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">
+                              Nome:
+                            </span>
+                            <span className="text-[8.5px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">
+                              {selectedUser.fullName || selectedUser.username}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Middle Row 1: 4 Columns (CPF | RG | CR | VALIDADE) */}
+                      <div className="grid grid-cols-4 gap-1 text-left">
+                        <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
+                          <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">CPF:</span>
+                          <span className="text-[7px] font-bold text-slate-900 font-mono truncate block leading-tight">{selectedUser.cpf || '000.000.000-00'}</span>
+                        </div>
+                        <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
+                          <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">RG:</span>
+                          <span className="text-[7px] font-bold text-slate-900 font-mono truncate block leading-tight">{selectedUser.rg || '00.000.000-0'}</span>
+                        </div>
+                        <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
+                          <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">CR:</span>
+                          <span className="text-[7px] font-bold text-slate-900 font-mono truncate block leading-tight">{selectedUser.crNumber || '123456'}</span>
+                        </div>
+                        <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
+                          <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">VALIDADE:</span>
+                          <span className="text-[7px] font-bold text-slate-900 font-mono truncate block leading-tight">
+                            {selectedUser.signatureExpiry ? new Date(selectedUser.signatureExpiry).toLocaleDateString('pt-BR') : '31/12/2026'}
                           </span>
                         </div>
                       </div>
 
-                      {/* CADASTRO Nº */}
-                      <div className="pt-0.5">
-                        <span className="text-[9px] font-black text-cyan-200 uppercase tracking-wide block leading-tight font-mono">
-                          CADASTRO Nº {selectedUser.id.slice(-5).toUpperCase() || '00123'}
-                        </span>
-                      </div>
-
-                      {/* Nome Field Box */}
-                      <div className="bg-white rounded-md px-1.5 py-0.5 border border-slate-200 text-left">
-                        <span className="text-[6.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">
-                          Nome:
-                        </span>
-                        <span className="text-[8.5px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">
-                          {selectedUser.fullName || selectedUser.username}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Middle Row 1: 4 Columns (CPF | RG | CR | VALIDADE) */}
-                  <div className="grid grid-cols-4 gap-1 text-left">
-                    <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
-                      <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">CPF:</span>
-                      <span className="text-[7px] font-bold text-slate-900 font-mono truncate block leading-tight">{selectedUser.cpf || '000.000.000-00'}</span>
-                    </div>
-                    <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
-                      <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">RG:</span>
-                      <span className="text-[7px] font-bold text-slate-900 font-mono truncate block leading-tight">{selectedUser.rg || '00.000.000-0'}</span>
-                    </div>
-                    <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
-                      <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">CR:</span>
-                      <span className="text-[7px] font-bold text-slate-900 font-mono truncate block leading-tight">{selectedUser.crNumber || '123456'}</span>
-                    </div>
-                    <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
-                      <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">VALIDADE:</span>
-                      <span className="text-[7px] font-bold text-slate-900 font-mono truncate block leading-tight">
-                        {selectedUser.signatureExpiry ? new Date(selectedUser.signatureExpiry).toLocaleDateString('pt-BR') : '31/12/2026'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Middle Row 2: 3 Columns (Clube | Cidade | ESTADO) */}
-                  <div className="grid grid-cols-3 gap-1 text-left">
-                    <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 col-span-1 min-w-0">
-                      <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">Clube:</span>
-                      <span className="text-[7px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">
-                        G&G CLUBE DE TIRO
-                      </span>
-                    </div>
-                    <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
-                      <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">Cidade:</span>
-                      <span className="text-[7px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">
-                        {selectedUser.city || 'SANTA LUZIA'}
-                      </span>
-                    </div>
-                    <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
-                      <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">ESTADO:</span>
-                      <span className="text-[7px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">
-                        {selectedUser.state || 'MG'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Back Preview matching reference image */}
-                <div className="w-[340px] h-[215px] rounded-xl p-3 flex flex-col items-center justify-between relative shadow-xl overflow-hidden border border-slate-300 select-none bg-white text-slate-800">
-                  {/* Watermark Background Pattern G&G EMPREENDIMENTOS */}
-                  <div className="absolute inset-0 grid grid-cols-4 gap-2 opacity-15 pointer-events-none p-2 content-between text-center select-none">
-                    {Array.from({ length: 20 }).map((_, i) => (
-                      <div key={i} className="text-[6px] font-black text-blue-900 uppercase font-mono tracking-tighter leading-none">
-                        G&G EMPREENDIMENTOS
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Centered QR Code with Logo */}
-                  <div className="relative z-10 my-auto flex flex-col items-center justify-center">
-                    <div className="bg-white p-2 border-2 border-slate-900 rounded-xl shadow-md relative">
-                      <svg viewBox="0 0 100 100" className="w-24 h-24 text-slate-900">
-                        <rect width="100" height="100" fill="white" />
-                        <rect x="5" y="5" width="25" height="25" fill="currentColor" />
-                        <rect x="70" y="5" width="25" height="25" fill="currentColor" />
-                        <rect x="5" y="70" width="25" height="25" fill="currentColor" />
-                        <rect x="10" y="10" width="15" height="15" fill="white" />
-                        <rect x="75" y="10" width="15" height="15" fill="white" />
-                        <rect x="10" y="75" width="15" height="15" fill="white" />
-                        <rect x="14" y="14" width="7" height="7" fill="currentColor" />
-                        <rect x="79" y="14" width="7" height="7" fill="currentColor" />
-                        <rect x="14" y="79" width="7" height="7" fill="currentColor" />
-                        <rect x="35" y="5" width="8" height="15" fill="currentColor" />
-                        <rect x="50" y="10" width="12" height="6" fill="currentColor" />
-                        <rect x="35" y="80" width="15" height="10" fill="currentColor" />
-                        <rect x="60" y="75" width="8" height="18" fill="currentColor" />
-                        <rect x="5" y="40" width="20" height="6" fill="currentColor" />
-                        <rect x="75" y="35" width="18" height="8" fill="currentColor" />
-                      </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-6 h-6 bg-white border border-slate-900 rounded-full flex items-center justify-center shadow-xs">
-                          <Target className="w-4 h-4 text-blue-700" />
+                      {/* Middle Row 2: 3 Columns (Clube | Cidade | ESTADO) */}
+                      <div className="grid grid-cols-3 gap-1 text-left">
+                        <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 col-span-1 min-w-0">
+                          <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">Clube:</span>
+                          <span className="text-[7px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">
+                            G&G CLUBE DE TIRO
+                          </span>
+                        </div>
+                        <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
+                          <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">Cidade:</span>
+                          <span className="text-[7px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">
+                            {selectedUser.city || 'SANTA LUZIA'}
+                          </span>
+                        </div>
+                        <div className="bg-white rounded-md px-1 py-0.5 border border-slate-200 min-w-0">
+                          <span className="text-[5.5px] font-extrabold text-blue-900 uppercase block tracking-tighter leading-none">ESTADO:</span>
+                          <span className="text-[7px] font-bold text-slate-900 truncate block leading-tight uppercase font-sans">
+                            {selectedUser.state || 'MG'}
+                          </span>
                         </div>
                       </div>
                     </div>
-                    <span className="text-[7.5px] font-bold text-slate-700 font-mono mt-1.5 bg-white/80 px-2 py-0.5 rounded border border-slate-200">
-                      VALIDAÇÃO CADASTRAL AUTÊNTICA G&G
-                    </span>
-                  </div>
-                </div>
+                  );
+                })()}
 
+                {/* Back Preview: Custom template if created, else default design */}
+                {(() => {
+                  const tmpl = clubTemplates['club_card_back'];
+                  const bgUrl = tmpl?.background_url;
+                  const elements = tmpl?.layout_config?.elements;
+
+                  if (bgUrl || (elements && elements.length > 0)) {
+                    return (
+                      <div
+                        style={{
+                          backgroundImage: bgUrl ? `url("${bgUrl}")` : undefined,
+                          backgroundSize: '100% 100%',
+                          backgroundPosition: 'center',
+                          backgroundRepeat: 'no-repeat',
+                          backgroundColor: '#ffffff'
+                        }}
+                        className="w-[340px] h-[215px] rounded-xl relative shadow-xl overflow-hidden border border-slate-300 select-none text-slate-900"
+                      >
+                        {elements && elements.map((el: any) => {
+                          const isQrToken = el.text.trim() === '{QR_CODE}';
+                          const displayText = replaceMemberToken(el.text);
+
+                          return (
+                            <div
+                              key={el.id}
+                              style={{
+                                position: 'absolute',
+                                left: `${el.x}%`,
+                                top: `${el.y}%`,
+                                width: el.width ? `${el.width}%` : 'auto',
+                                fontSize: `${el.fontSize}px`,
+                                fontWeight: el.fontWeight || 'bold',
+                                fontStyle: el.fontStyle || 'normal',
+                                color: el.color || '#0f172a',
+                                textAlign: el.textAlign || 'left',
+                                lineHeight: '1.25',
+                                whiteSpace: 'pre-line'
+                              }}
+                            >
+                              {isQrToken ? (
+                                <div className="flex flex-col items-center justify-center p-1.5 bg-white border-2 border-slate-900 rounded-xl shadow-md">
+                                  <svg viewBox="0 0 100 100" className="w-16 h-16 text-slate-900">
+                                    <rect width="100" height="100" fill="white" />
+                                    <rect x="5" y="5" width="25" height="25" fill="currentColor" />
+                                    <rect x="70" y="5" width="25" height="25" fill="currentColor" />
+                                    <rect x="5" y="70" width="25" height="25" fill="currentColor" />
+                                    <rect x="10" y="10" width="15" height="15" fill="white" />
+                                    <rect x="75" y="10" width="15" height="15" fill="white" />
+                                    <rect x="10" y="75" width="15" height="15" fill="white" />
+                                    <rect x="14" y="14" width="7" height="7" fill="currentColor" />
+                                    <rect x="79" y="14" width="7" height="7" fill="currentColor" />
+                                    <rect x="14" y="79" width="7" height="7" fill="currentColor" />
+                                  </svg>
+                                </div>
+                              ) : (
+                                <span>{displayText}</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="w-[340px] h-[215px] rounded-xl p-3 flex flex-col items-center justify-between relative shadow-xl overflow-hidden border border-slate-300 select-none bg-white text-slate-800">
+                      {/* Watermark Background Pattern G&G EMPREENDIMENTOS */}
+                      <div className="absolute inset-0 grid grid-cols-4 gap-2 opacity-15 pointer-events-none p-2 content-between text-center select-none">
+                        {Array.from({ length: 20 }).map((_, i) => (
+                          <div key={i} className="text-[6px] font-black text-blue-900 uppercase font-mono tracking-tighter leading-none">
+                            G&G EMPREENDIMENTOS
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Centered QR Code with Logo */}
+                      <div className="relative z-10 my-auto flex flex-col items-center justify-center">
+                        <div className="bg-white p-2 border-2 border-slate-900 rounded-xl shadow-md relative">
+                          <svg viewBox="0 0 100 100" className="w-24 h-24 text-slate-900">
+                            <rect width="100" height="100" fill="white" />
+                            <rect x="5" y="5" width="25" height="25" fill="currentColor" />
+                            <rect x="70" y="5" width="25" height="25" fill="currentColor" />
+                            <rect x="5" y="70" width="25" height="25" fill="currentColor" />
+                            <rect x="10" y="10" width="15" height="15" fill="white" />
+                            <rect x="75" y="10" width="15" height="15" fill="white" />
+                            <rect x="10" y="75" width="15" height="15" fill="white" />
+                            <rect x="14" y="14" width="7" height="7" fill="currentColor" />
+                            <rect x="79" y="14" width="7" height="7" fill="currentColor" />
+                            <rect x="14" y="79" width="7" height="7" fill="currentColor" />
+                            <rect x="35" y="5" width="8" height="15" fill="currentColor" />
+                            <rect x="50" y="10" width="12" height="6" fill="currentColor" />
+                            <rect x="35" y="80" width="15" height="10" fill="currentColor" />
+                            <rect x="60" y="75" width="8" height="18" fill="currentColor" />
+                            <rect x="5" y="40" width="20" height="6" fill="currentColor" />
+                            <rect x="75" y="35" width="18" height="8" fill="currentColor" />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-6 h-6 bg-white border border-slate-900 rounded-full flex items-center justify-center shadow-xs">
+                              <Target className="w-4 h-4 text-blue-700" />
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-[7.5px] font-bold text-slate-700 font-mono mt-1.5 bg-white/80 px-2 py-0.5 rounded border border-slate-200">
+                          VALIDAÇÃO CADASTRAL AUTÊNTICA G&G
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <button
