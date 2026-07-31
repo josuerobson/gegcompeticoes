@@ -331,6 +331,15 @@ export default function App() {
   useEffect(() => {
     if (booting) return;
     
+    if (validationUserId) {
+      document.title = 'G&G Competições - Autenticidade da Carteirinha';
+      const targetPath = `/validar/carteirinha/${validationUserId}`;
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState(null, '', targetPath);
+      }
+      return;
+    }
+
     if (!currentUser) {
       document.title = showLoginModal ? 'G&G Competições - Entrar na Plataforma' : 'G&G Competições - Estande e Tiro Esportivo';
       const targetPath = showLoginModal ? '/login' : '/';
@@ -365,7 +374,7 @@ export default function App() {
     if (window.location.pathname !== targetPath) {
       window.history.pushState(null, '', targetPath);
     }
-  }, [activeTab, selectedProfileUser, currentUser, showLoginModal, booting]);
+  }, [activeTab, selectedProfileUser, currentUser, showLoginModal, booting, validationUserId]);
 
   // Handler para processar a rota da URL e setar os estados
   const handleRouteNavigation = (pathname: string) => {
@@ -449,15 +458,22 @@ export default function App() {
 
     const initApp = async () => {
       await syncWithBackend();
-      const userId = localStorage.getItem('gg_user_id');
-      if (!userId) {
-        const cleanPath = window.location.pathname.replace(/\/$/, '') || '/';
-        if (cleanPath === '/login') {
-          setShowLoginModal(true);
-        } else {
-          setShowLoginModal(false);
-          if (cleanPath !== '/') {
-            window.history.replaceState(null, '', '/');
+      const cleanPath = window.location.pathname.replace(/\/$/, '') || '/';
+      if (cleanPath.startsWith('/validar/carteirinha/')) {
+        const valId = cleanPath.split('/validar/carteirinha/')[1];
+        if (valId) {
+          setValidationUserId(valId);
+        }
+      } else {
+        const userId = localStorage.getItem('gg_user_id');
+        if (!userId) {
+          if (cleanPath === '/login') {
+            setShowLoginModal(true);
+          } else {
+            setShowLoginModal(false);
+            if (cleanPath !== '/') {
+              window.history.replaceState(null, '', '/');
+            }
           }
         }
       }
