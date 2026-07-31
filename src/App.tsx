@@ -4,6 +4,7 @@ import FeedView from './components/FeedView';
 import ChampionshipsView from './components/ChampionshipsView';
 import AdminPanel from './components/AdminPanel';
 import MemberProfile from './components/MemberProfile';
+import CardValidationView from './components/CardValidationView';
 import { Target, Trophy, ShieldCheck, User as UserIcon, Home, Zap, Loader2, Sparkles, CheckCircle2, Sun, Moon, ChevronDown, LogOut } from 'lucide-react';
 import { motion } from 'motion/react';
 import shootingDarkBg from '@/assets/shooting_dark_bg.png';
@@ -186,6 +187,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [booting, setBooting] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [validationUserId, setValidationUserId] = useState<string | null>(null);
 
   // Estados adicionais da Landing Page
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -369,6 +371,16 @@ export default function App() {
   const handleRouteNavigation = (pathname: string) => {
     const cleanPath = pathname.replace(/\/$/, '') || '/';
     
+    if (cleanPath.startsWith('/validar/carteirinha/')) {
+      const valId = cleanPath.split('/validar/carteirinha/')[1];
+      if (valId) {
+        setValidationUserId(valId);
+        return;
+      }
+    } else {
+      setValidationUserId(null);
+    }
+
     if (!currentUser) {
       if (cleanPath === '/login') {
         setShowLoginModal(true);
@@ -1322,6 +1334,21 @@ export default function App() {
           <span>Conectando Atletas do Tiro Esportivo...</span>
         </div>
       </div>
+    );
+  }
+
+  /* ==================================================== */
+  /* PUBLIC CARD VALIDATION SCREEN                        */
+  /* ==================================================== */
+  if (validationUserId) {
+    return (
+      <CardValidationView
+        userId={validationUserId}
+        onGoHome={() => {
+          setValidationUserId(null);
+          window.history.pushState(null, '', currentUser ? '/campeonatos' : '/');
+        }}
+      />
     );
   }
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Club } from '../types';
+import { QRCodeView } from './QRCodeView';
 import {
   FileUp, Save, RefreshCw, CheckCircle2, QrCode, FileText, CreditCard, Sparkles,
   Trophy, Target, Eye, Plus, Trash2, Bold, Italic, AlignLeft, AlignCenter, AlignRight,
@@ -999,8 +1000,11 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
                 >
                   {isQrToken ? (
                     <div className="flex flex-col items-center justify-center p-1 bg-white border border-slate-300 rounded shadow-xs">
-                      <QrCode className="w-12 h-12 text-slate-900" />
-                      <span className="text-[8px] font-mono text-slate-500">[QR CODE]</span>
+                      <QRCodeView
+                        value={`${window.location.origin}/validar/carteirinha/user_123456789`}
+                        size={55}
+                      />
+                      <span className="text-[7px] font-mono text-slate-500 font-bold mt-0.5">[QR CODE OFICIAL]</span>
                     </div>
                   ) : isFotoToken ? (
                     <div className="flex flex-col items-center justify-center bg-slate-100/90 border-2 border-dashed border-slate-400 rounded-md p-1 shadow-xs aspect-[3/4] min-h-[90px]">

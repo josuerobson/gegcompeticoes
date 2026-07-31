@@ -1,0 +1,266 @@
+/**
+ * Utility to generate SVG QR Codes dynamically in pure TypeScript/JavaScript.
+ * Supports Byte Mode (UTF-8 URLs) with Reed-Solomon error correction.
+ */
+
+// Reed-Solomon Galois Field 256 math tables
+const GF256_EXP = new Uint8Array(512);
+const GF256_LOG = new Uint8Array(256);
+
+(function initGF256() {
+  let x = 1;
+  for (let i = 0; i < 255; i++) {
+    GF256_EXP[i] = x;
+    GF256_EXP[i + 255] = x;
+    GF256_LOG[x] = i;
+    x = (x << 1) ^ (x & 0x80 ? 0x11d : 0);
+  }
+})();
+
+function gfMul(x: number, y: number): number {
+  if (x === 0 || y === 0) return 0;
+  return GF256_EXP[GF256_LOG[x] + GF256_LOG[y]];
+}
+
+function rsGeneratorPoly(nsym: number): number[] {
+  let g = [1];
+  for (let i = 0; i < nsym; i++) {
+    const nextG = new Array(g.length + 1).fill(0);
+    for (let j = 0; j < g.length; j++) {
+      nextG[j] ^= g[j];
+      nextG[j + 1] ^= gfMul(g[j], GF256_EXP[i]);
+    }
+    g = nextG;
+  }
+  return g;
+}
+
+function rsEncode(data: number[], nsym: number): number[] {
+  const gen = rsGeneratorPoly(nsym);
+  const res = new Array(data.length + nsym).fill(0);
+  for (let i = 0; i < data.length; i++) {
+    res[i] = data[i];
+  }
+  for (let i = 0; i < data.length; i++) {
+    const coef = res[i];
+    if (coef !== 0) {
+      for (let j = 0; j < gen.length; j++) {
+        res[i + j] ^= gfMul(gen[j], coef);
+      }
+    }
+  }
+  return res.slice(data.length);
+}
+
+// QR Code Specifications Table for Low (L) Error Correction (Versions 1..10)
+interface QRVersionSpec {
+  ver: number;
+  size: number;
+  totalBytes: number;
+  dataBytes: number;
+  ecBytes: number;
+  alignPos: number[];
+}
+
+const QR_SPECS: QRVersionSpec[] = [
+  { ver: 1, size: 21, totalBytes: 26, dataBytes: 19, ecBytes: 7, alignPos: [] },
+  { ver: 2, size: 25, totalBytes: 44, dataBytes: 34, ecBytes: 10, alignPos: [6, 18] },
+  { ver: 3, size: 29, totalBytes: 70, dataBytes: 55, ecBytes: 15, alignPos: [6, 22] },
+  { ver: 4, size: 33, totalBytes: 100, dataBytes: 80, ecBytes: 20, alignPos: [6, 26] },
+  { ver: 5, size: 37, totalBytes: 134, dataBytes: 108, ecBytes: 26, alignPos: [6, 30] },
+  { ver: 6, size: 41, totalBytes: 172, dataBytes: 136, ecBytes: 36, alignPos: [6, 34] },
+  { ver: 7, size: 45, totalBytes: 196, dataBytes: 156, ecBytes: 40, alignPos: [6, 22, 38] },
+  { ver: 8, size: 49, totalBytes: 242, dataBytes: 194, ecBytes: 48, alignPos: [6, 24, 42] },
+  { ver: 9, size: 53, totalBytes: 292, dataBytes: 232, ecBytes: 60, alignPos: [6, 26, 46] },
+  { ver: 10, size: 57, totalBytes: 346, dataBytes: 274, ecBytes: 72, alignPos: [6, 28, 50] }
+];
+
+export function generateQRCodeMatrix(text: string): boolean[][] {
+  const encoder = new TextEncoder();
+  const utf8Bytes = Array.from(encoder.encode(text));
+
+  // Determine smallest version that fits
+  let spec = QR_SPECS.find(s => s.dataBytes >= utf8Bytes.length + 3);
+  if (!spec) {
+    spec = QR_SPECS[QR_SPECS.length - 1];
+  }
+
+  const { size, dataBytes, ecBytes, alignPos } = spec;
+
+  // Build Bit Stream (Mode: Byte = 0100)
+  const bits: number[] = [];
+  function pushBits(val: number, len: number) {
+    for (let i = len - 1; i >= 0; i--) {
+      bits.push((val >> i) & 1);
+    }
+  }
+
+  // Mode 4 = Byte
+  pushBits(0b0100, 4);
+  // Character count (8 bits for V1-9, 16 bits for V10+)
+  const countBits = spec.ver < 10 ? 8 : 16;
+  pushBits(utf8Bytes.length, countBits);
+  for (const b of utf8Bytes) {
+    pushBits(b, 8);
+  }
+
+  // Terminator & padding
+  const totalDataBits = dataBytes * 8;
+  while (bits.length < totalDataBits && bits.length % 8 !== 0) {
+    bits.push(0);
+  }
+  const padBytes = [0xec, 0x11];
+  let padIdx = 0;
+  while (bits.length < totalDataBits) {
+    pushBits(padBytes[padIdx % 2], 8);
+    padIdx++;
+  }
+
+  // Convert bits to data byte array
+  const dataBytesArray: number[] = [];
+  for (let i = 0; i < dataBytes; i++) {
+    let byteVal = 0;
+    for (let j = 0; j < 8; j++) {
+      byteVal = (byteVal << 1) | bits[i * 8 + j];
+    }
+    dataBytesArray.push(byteVal);
+  }
+
+  // Calculate RS Error Correction Bytes
+  const ecBytesArray = rsEncode(dataBytesArray, ecBytes);
+
+  // Combine Data + EC
+  const finalCodewords = [...dataBytesArray, ...ecBytesArray];
+
+  // Initialize Matrix
+  const matrix: (boolean | null)[][] = Array.from({ length: size }, () => new Array(size).fill(null));
+
+  // Helper to draw Finder Pattern (7x7)
+  function drawFinder(r: number, c: number) {
+    for (let dr = -1; dr <= 7; dr++) {
+      for (let dc = -1; dc <= 7; dc++) {
+        const nr = r + dr;
+        const nc = c + dc;
+        if (nr >= 0 && nr < size && nc >= 0 && nc < size) {
+          if (dr >= 0 && dr <= 6 && dc >= 0 && dc <= 6) {
+            const isBlack = (dr === 0 || dr === 6 || dc === 0 || dc === 6) || (dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4);
+            matrix[nr][nc] = isBlack;
+          } else {
+            matrix[nr][nc] = false; // Separator
+          }
+        }
+      }
+    }
+  }
+
+  drawFinder(0, 0);
+  drawFinder(0, size - 7);
+  drawFinder(size - 7, 0);
+
+  // Timing patterns
+  for (let i = 8; i < size - 8; i++) {
+    if (matrix[6][i] === null) matrix[6][i] = i % 2 === 0;
+    if (matrix[i][6] === null) matrix[i][6] = i % 2 === 0;
+  }
+
+  // Alignment patterns
+  if (alignPos.length > 0) {
+    for (const r of alignPos) {
+      for (const c of alignPos) {
+        if (matrix[r][c] !== null) continue;
+        for (let dr = -2; dr <= 2; dr++) {
+          for (let dc = -2; dc <= 2; dc++) {
+            const isBlack = Math.abs(dr) === 2 || Math.abs(dc) === 2 || (dr === 0 && dc === 0);
+            matrix[r + dr][c + dc] = isBlack;
+          }
+        }
+      }
+    }
+  }
+
+  // Dark module
+  matrix[4 * spec.ver + 9][8] = true;
+
+  // Reserve Format Information Area
+  for (let i = 0; i < 9; i++) {
+    if (matrix[8][i] === null) matrix[8][i] = false;
+    if (matrix[i][8] === null) matrix[i][8] = false;
+    if (matrix[8][size - 1 - i] === null) matrix[8][size - 1 - i] = false;
+    if (matrix[size - 1 - i][8] === null) matrix[size - 1 - i][8] = false;
+  }
+
+  // Convert codewords to bit stream for placement
+  const allBits: number[] = [];
+  for (const cw of finalCodewords) {
+    for (let i = 7; i >= 0; i--) {
+      allBits.push((cw >> i) & 1);
+    }
+  }
+
+  // Place Bits in Matrix (zig-zag pattern)
+  let bitIdx = 0;
+  let dir = -1; // up
+  let col = size - 1;
+  while (col > 0) {
+    if (col === 6) col--; // Skip vertical timing column
+    const rowStart = dir === -1 ? size - 1 : 0;
+    const rowEnd = dir === -1 ? -1 : size;
+    const step = dir === -1 ? -1 : 1;
+
+    for (let r = rowStart; r !== rowEnd; r += step) {
+      for (let c = 0; c < 2; c++) {
+        const currCol = col - c;
+        if (matrix[r][currCol] === null) {
+          const bit = bitIdx < allBits.length ? allBits[bitIdx++] : 0;
+          matrix[r][currCol] = bit === 1;
+        }
+      }
+    }
+    dir = -dir;
+    col -= 2;
+  }
+
+  // Masking (Pattern 0: (row + col) % 2 == 0)
+  const result: boolean[][] = Array.from({ length: size }, () => new Array(size).fill(false));
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      const isReserved = (r <= 8 && c <= 8) || (r <= 8 && c >= size - 8) || (r >= size - 8 && c <= 8) || r === 6 || c === 6;
+      let val = Boolean(matrix[r][c]);
+      if (!isReserved) {
+        if ((r + c) % 2 === 0) {
+          val = !val;
+        }
+      }
+      result[r][c] = val;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Returns an SVG string representation of a QR code.
+ */
+export function generateQRCodeSVG(text: string, sizePx: number = 180, fgColor: string = '#000000', bgColor: string = '#ffffff'): string {
+  const matrix = generateQRCodeMatrix(text);
+  const n = matrix.length;
+  const quietZone = 2;
+  const totalModules = n + quietZone * 2;
+  const cellSize = sizePx / totalModules;
+
+  let pathD = '';
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (matrix[r][c]) {
+        const x = (c + quietZone) * cellSize;
+        const y = (r + quietZone) * cellSize;
+        pathD += `M${x.toFixed(2)},${y.toFixed(2)}h${cellSize.toFixed(2)}v${cellSize.toFixed(2)}h-${cellSize.toFixed(2)}z `;
+      }
+    }
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${sizePx} ${sizePx}" width="${sizePx}" height="${sizePx}">
+    <rect width="${sizePx}" height="${sizePx}" fill="${bgColor}" />
+    <path d="${pathD}" fill="${fgColor}" />
+  </svg>`;
+}

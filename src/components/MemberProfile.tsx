@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, Post, Registration, StageScore, Championship, Modality, Club, Stage, Weapon, TrainingSession } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
+import { QRCodeView } from './QRCodeView';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
@@ -2434,19 +2435,11 @@ export default function MemberProfile({
                               }}
                             >
                               {isQrToken ? (
-                                <div className="flex flex-col items-center justify-center p-1.5 bg-white border-2 border-slate-900 rounded-xl shadow-md">
-                                  <svg viewBox="0 0 100 100" className="w-16 h-16 text-slate-900">
-                                    <rect width="100" height="100" fill="white" />
-                                    <rect x="5" y="5" width="25" height="25" fill="currentColor" />
-                                    <rect x="70" y="5" width="25" height="25" fill="currentColor" />
-                                    <rect x="5" y="70" width="25" height="25" fill="currentColor" />
-                                    <rect x="10" y="10" width="15" height="15" fill="white" />
-                                    <rect x="75" y="10" width="15" height="15" fill="white" />
-                                    <rect x="10" y="75" width="15" height="15" fill="white" />
-                                    <rect x="14" y="14" width="7" height="7" fill="currentColor" />
-                                    <rect x="79" y="14" width="7" height="7" fill="currentColor" />
-                                    <rect x="14" y="79" width="7" height="7" fill="currentColor" />
-                                  </svg>
+                                <div className="flex flex-col items-center justify-center p-1 bg-white border border-slate-300 rounded-lg shadow-xs">
+                                  <QRCodeView
+                                    value={`${window.location.origin}/validar/carteirinha/${selectedUser.id}`}
+                                    size={64}
+                                  />
                                 </div>
                               ) : (
                                 <span>{displayText}</span>
@@ -2471,32 +2464,13 @@ export default function MemberProfile({
 
                       {/* Centered QR Code with Logo */}
                       <div className="relative z-10 my-auto flex flex-col items-center justify-center">
-                        <div className="bg-white p-2 border-2 border-slate-900 rounded-xl shadow-md relative">
-                          <svg viewBox="0 0 100 100" className="w-24 h-24 text-slate-900">
-                            <rect width="100" height="100" fill="white" />
-                            <rect x="5" y="5" width="25" height="25" fill="currentColor" />
-                            <rect x="70" y="5" width="25" height="25" fill="currentColor" />
-                            <rect x="5" y="70" width="25" height="25" fill="currentColor" />
-                            <rect x="10" y="10" width="15" height="15" fill="white" />
-                            <rect x="75" y="10" width="15" height="15" fill="white" />
-                            <rect x="10" y="75" width="15" height="15" fill="white" />
-                            <rect x="14" y="14" width="7" height="7" fill="currentColor" />
-                            <rect x="79" y="14" width="7" height="7" fill="currentColor" />
-                            <rect x="14" y="79" width="7" height="7" fill="currentColor" />
-                            <rect x="35" y="5" width="8" height="15" fill="currentColor" />
-                            <rect x="50" y="10" width="12" height="6" fill="currentColor" />
-                            <rect x="35" y="80" width="15" height="10" fill="currentColor" />
-                            <rect x="60" y="75" width="8" height="18" fill="currentColor" />
-                            <rect x="5" y="40" width="20" height="6" fill="currentColor" />
-                            <rect x="75" y="35" width="18" height="8" fill="currentColor" />
-                          </svg>
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-6 h-6 bg-white border border-slate-900 rounded-full flex items-center justify-center shadow-xs">
-                              <Target className="w-4 h-4 text-blue-700" />
-                            </div>
-                          </div>
+                        <div className="bg-white p-1.5 border-2 border-slate-900 rounded-xl shadow-md flex items-center justify-center">
+                          <QRCodeView
+                            value={`${window.location.origin}/validar/carteirinha/${selectedUser.id}`}
+                            size={85}
+                          />
                         </div>
-                        <span className="text-[7.5px] font-bold text-slate-700 font-mono mt-1.5 bg-white/80 px-2 py-0.5 rounded border border-slate-200">
+                        <span className="text-[7.5px] font-bold text-slate-700 font-mono mt-1 bg-white/80 px-2 py-0.5 rounded border border-slate-200">
                           VALIDAÇÃO CADASTRAL AUTÊNTICA G&G
                         </span>
                       </div>

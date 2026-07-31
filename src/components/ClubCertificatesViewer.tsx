@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Club, Registration, Championship, StageScore, Stage, Modality } from '../types';
 import { Award, Search, Printer, CheckCircle2, QrCode, FileText, X, Filter } from 'lucide-react';
 import { TextElement } from './ClubTemplatesManager';
+import { QRCodeView } from './QRCodeView';
 
 interface ClubCertificatesViewerProps {
   currentUser: User | null;
@@ -664,7 +665,10 @@ export function ClubCertificatesViewer({
                       >
                         {isQr ? (
                           <div className="flex flex-col items-center justify-center p-1 bg-white border border-slate-300 rounded shadow-xs">
-                            <QrCode className="w-12 h-12 text-slate-900" />
+                            <QRCodeView
+                              value={`${window.location.origin}/validar/carteirinha/${activeCert?.hash || 'validacao'}`}
+                              size={55}
+                            />
                           </div>
                         ) : (
                           <span>{renderDynamicToken(el.text, activeCert)}</span>

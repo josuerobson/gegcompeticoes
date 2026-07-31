@@ -2797,6 +2797,98 @@ app.post('/api/club-templates', requireAuth, async (req, res) => {
   }
 });
 
+// Public Membership Card Validation Route (QR Code verification - No auth required)
+app.get('/api/public/validar/carteirinha/:userId', async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const userRes = await pool.query(`SELECT * FROM users WHERE id = $1`, [userId]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({
+        valid: false,
+        statusMessage: 'CARTEIRINHA NÃO ENCONTRADA OU INVÁLIDA',
+        error: 'Atleta não encontrado no registro nacional G&G.'
+      });
+    }
+
+    const u = userRes.rows[0];
+
+    // Fetch club info
+    let club: any = null;
+    if (u.club_id) {
+      const clubRes = await pool.query(`SELECT * FROM clubs WHERE id = $1`, [u.club_id]);
+      if (clubRes.rows.length > 0) {
+        const c = clubRes.rows[0];
+        club = {
+          id: c.id,
+          name: c.name,
+          cnpj: c.cnpj,
+          crNumber: c.cr_number,
+          city: c.city,
+          state: c.state,
+          logoUrl: c.logo_url
+        };
+      }
+    }
+
+    // Mask CPF for LGPD privacy (e.g. 123.***.***-00)
+    let cpfMasked = '***.***.***-**';
+    if (u.cpf) {
+      const clean = String(u.cpf).replace(/\D/g, '');
+      if (clean.length === 11) {
+        cpfMasked = `${clean.slice(0, 3)}.***.***-${clean.slice(9)}`;
+      } else {
+        cpfMasked = `${u.cpf.slice(0, 3)}...${u.cpf.slice(-2)}`;
+      }
+    }
+
+    // Check validity date
+    const now = new Date();
+    let expiryDate: Date | null = null;
+    if (u.signature_expiry) {
+      expiryDate = new Date(u.signature_expiry);
+    } else if (u.cr_validity) {
+      expiryDate = new Date(u.cr_validity);
+    } else {
+      // Default to end of current year
+      expiryDate = new Date(now.getFullYear(), 11, 31);
+    }
+
+    const isValid = expiryDate >= new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const athlete = {
+      id: u.id,
+      fullName: u.full_name,
+      avatarUrl: u.avatar_url,
+      crNumber: u.cr_number || 'Sem CR registrado',
+      cpfMasked,
+      city: u.city || 'Não informada',
+      state: u.state || 'UF',
+      memberSince: u.member_since || '2024-01-01',
+      crValidity: u.cr_validity ? new Date(u.cr_validity).toLocaleDateString('pt-BR') : undefined,
+      signatureExpiry: u.signature_expiry ? new Date(u.signature_expiry).toLocaleDateString('pt-BR') : undefined,
+      role: u.role
+    };
+
+    // Simple hash calculation for authenticity verification banner
+    const hash = `GG-AUT-${u.id.slice(-6).toUpperCase()}-${expiryDate.getFullYear()}`;
+
+    res.json({
+      valid: isValid,
+      statusMessage: isValid ? 'CARTEIRINHA VÁLIDA E HOMOLOGADA' : 'CARTEIRINHA EXPIRADA OU SUSPENSA',
+      expirationDate: expiryDate.toLocaleDateString('pt-BR'),
+      athlete,
+      club: club || { name: 'G&G Clube de Tiro', city: 'Santa Luzia', state: 'MG' },
+      validationHash: hash,
+      validatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Validation API error:', err);
+    res.status(500).json({ error: 'Erro ao validar carteirinha.' });
+  }
+});
+
+
 // ==========================================
 // 10. REAL TRAINING SESSIONS (Diário de Treinamentos / Habitualidade)
 // ==========================================
