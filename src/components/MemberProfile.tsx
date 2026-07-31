@@ -626,7 +626,7 @@ export default function MemberProfile({
                   <div className="flex flex-col items-center justify-center p-1 bg-white border border-slate-300 rounded shadow-2xs">
                     <QRCodeView
                       value={`${window.location.origin}/validar/carteirinha/${selectedUser.id}`}
-                      size={60}
+                      size={el.qrSize || 64}
                     />
                   </div>
                 ) : isFotoToken ? (
@@ -811,7 +811,7 @@ export default function MemberProfile({
                   <div className="flex flex-col items-center justify-center p-1 bg-white border border-slate-300 rounded-lg shadow-xs">
                     <QRCodeView
                       value={`${window.location.origin}/validar/carteirinha/${selectedUser.id}`}
-                      size={64}
+                      size={el.qrSize || 64}
                     />
                   </div>
                 ) : (

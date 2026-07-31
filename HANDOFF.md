@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix: forca a impressao de imagens de fundo e estilos exatos no dialogo de impressao da carteirinha` |
-| Data/hora | 2026-07-31T14:18:00-03:00 |
+| Mensagem | `feat: permite redimensionar o tamanho do QR Code de forma proporcional no editor e carteirinha` |
+| Data/hora | 2026-07-31T14:31:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -110,6 +110,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Validação de Autenticidade da Carteirinha via QR Code (`{QR_CODE}`)**: Desenvolvido gerador dinâmico em TypeScript puro (`src/utils/qrCodeGenerator.ts` e `src/components/QRCodeView.tsx`) que substitui o SVG mock/estático por um QR Code vetorizado legível por câmeras de smartphone. O QR Code direciona para a rota pública de auditoria `/validar/carteirinha/:userId`, que consome o endpoint sem autenticação `GET /api/public/validar/carteirinha/:userId` e exibe em `CardValidationView.tsx` o selo oficial G&G Competições de carteirinha VÁLIDA (com foto 3x4, CR, clube filiado e CPF mascarado para LGPD `123.***.***-00`) ou EXPIRADA.
 - **Unificação do Modal de Impressão da Carteirinha (`MemberProfile.tsx`)**: Refatorada a renderização da carteirinha do clube criando as funções reutilizáveis `renderClubCardFront()` and `renderClubCardBack()`. O modal de impressão (*Pré-visualização do Documento*) agora renderiza rigorosamente o mesmo modelo customizado configurado pelo clube (template verde, elementos dinâmicos, plano de fundo e QR Code vetorizado) usado na visualização em tela, eliminando a inconsistência do layout padrão azul hardcoded.
 - **Preservação de Imagens de Fundo no Diálogo de Impressão (`index.css`, `MemberProfile.tsx`)**: Adicionado a tag `<img src={bgUrl}>` com `z-0` e a propriedade CSS `-webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;` tanto globalmente em `@media print` quanto inline nos cartões. Isso força o Chrome, Edge e Firefox a renderizarem e imprimirem os planos de fundo coloridos e marcas d'água das carteirinhas mesmo quando a opção "Gráficos de segundo plano" estiver desativada por padrão na impressora.
+- **Redimensionamento Proporcional do QR Code (`ClubTemplatesManager.tsx`, `MemberProfile.tsx`)**: Adicionada a propriedade `qrSize` aos elementos de layout e criado um painel de controle interativo na barra lateral do editor (*Certificados e Carteirinhas*) com barra deslizante (slider) e caixa numérica (40px a 200px) para ajustar a dimensão do QR Code mantendo a proporção 1:1. O tamanho configurado é refletido instantaneamente na tela do editor, na carteirinha do perfil e nas impressões/PDF.
 
 ## Infra / deploy
 

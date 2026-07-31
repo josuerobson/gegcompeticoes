@@ -18,6 +18,7 @@ export interface TextElement {
   color: string;
   textAlign: 'left' | 'center' | 'right';
   width?: number; // Percentage width
+  qrSize?: number; // px size for QR Code (proportional 1:1)
 }
 
 interface ClubTemplateData {
@@ -1002,7 +1003,7 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
                     <div className="flex flex-col items-center justify-center p-1 bg-white border border-slate-300 rounded shadow-xs">
                       <QRCodeView
                         value={`${window.location.origin}/validar/carteirinha/user_123456789`}
-                        size={55}
+                        size={el.qrSize || 65}
                       />
                       <span className="text-[7px] font-mono text-slate-500 font-bold mt-0.5">[QR CODE OFICIAL]</span>
                     </div>
@@ -1055,6 +1056,51 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
                     className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-mono text-xs text-slate-800 outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+
+                {/* QR Code Proportional Dimension Adjustment (If block contains {QR_CODE}) */}
+                {activeElement.text.includes('{QR_CODE}') && (
+                  <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-3.5 space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-blue-900 uppercase text-[10px] flex items-center gap-1.5">
+                        <QrCode className="w-4 h-4 text-blue-600" /> Tamanho do QR Code (Px):
+                      </label>
+                      <span className="font-mono text-xs font-black text-blue-700 bg-white px-2 py-0.5 rounded-md border border-blue-200 shadow-2xs">
+                        {activeElement.qrSize || 65} × {activeElement.qrSize || 65} px
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min={40}
+                        max={180}
+                        step={2}
+                        value={activeElement.qrSize || 65}
+                        onChange={(e) => updateSelectedElement({ qrSize: Number(e.target.value) })}
+                        className="flex-1 accent-blue-600 cursor-pointer h-2 bg-blue-200 rounded-lg"
+                      />
+                      <input
+                        type="number"
+                        min={40}
+                        max={200}
+                        value={activeElement.qrSize || 65}
+                        onChange={(e) => updateSelectedElement({ qrSize: Number(e.target.value) || 65 })}
+                        className="w-16 bg-white border border-slate-300 rounded-lg p-1.5 font-mono text-xs text-center text-slate-900 font-bold focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between text-[9.5px] text-blue-600 font-medium pt-0.5">
+                      <span>Proporção: 1:1 (Largura x Altura)</span>
+                      <button
+                        type="button"
+                        onClick={() => updateSelectedElement({ qrSize: 65 })}
+                        className="text-blue-700 underline font-semibold hover:text-blue-900 cursor-pointer"
+                      >
+                        Redefinir Padrão
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Variable Token Quick Buttons */}
                 <div className="space-y-1">
