@@ -22,7 +22,7 @@ export interface TextElement {
 interface ClubTemplateData {
   id?: string;
   club_id?: string;
-  template_type: 'certificate' | 'club_card' | 'playoff_card' | 'shooter_card';
+  template_type: 'certificate' | 'club_card' | 'club_card_back' | 'playoff_card' | 'shooter_card';
   background_url: string;
   body_template: string;
   layout_config?: {
@@ -138,33 +138,33 @@ const DEFAULT_ELEMENTS: Record<string, TextElement[]> = {
     {
       id: 'k1',
       text: 'ATIRADOR DESPORTIVO ★ PREMIUM ★',
-      x: 20,
-      y: 22,
-      fontSize: 9,
+      x: 35,
+      y: 8,
+      fontSize: 11,
       fontWeight: '900',
       fontStyle: 'normal',
-      color: '#0284c7',
-      textAlign: 'center',
-      width: 60
+      color: '#67e8f9',
+      textAlign: 'left',
+      width: 55
     },
     {
       id: 'k2',
       text: 'CADASTRO Nº {CADASTRO_NUMERO}',
-      x: 20,
-      y: 25,
-      fontSize: 8.5,
+      x: 35,
+      y: 20,
+      fontSize: 10,
       fontWeight: '900',
       fontStyle: 'normal',
-      color: '#0369a1',
-      textAlign: 'center',
-      width: 60
+      color: '#a5f3fc',
+      textAlign: 'left',
+      width: 55
     },
     {
       id: 'k3',
       text: 'Nome: {NOME_ATLETA}',
-      x: 20,
-      y: 28.5,
-      fontSize: 9,
+      x: 35,
+      y: 32,
+      fontSize: 11,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#0f172a',
@@ -173,48 +173,74 @@ const DEFAULT_ELEMENTS: Record<string, TextElement[]> = {
     },
     {
       id: 'k4',
-      text: 'CPF: {CPF_ATLETA} | RG: {RG_ATLETA} | CR: {CR_ATLETA} | VALIDADE: {DATA_VALIDADE}',
-      x: 20,
-      y: 33,
-      fontSize: 7.5,
+      text: 'CPF: {CPF_ATLETA} | RG: {RG_ATLETA} | CR: {CR_ATLETA} | VAL: {DATA_VALIDADE}',
+      x: 4,
+      y: 62,
+      fontSize: 8.5,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#1e293b',
       textAlign: 'left',
-      width: 60
+      width: 92
     },
     {
       id: 'k5',
-      text: 'Clube: {NOME_CLUBE} | Cidade: {CIDADE} | ESTADO: {UF}',
-      x: 20,
-      y: 36.5,
-      fontSize: 7.5,
+      text: 'Clube: {NOME_CLUBE} | Cidade: {CIDADE}/{UF}',
+      x: 4,
+      y: 82,
+      fontSize: 8.5,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#1e293b',
       textAlign: 'left',
-      width: 60
+      width: 92
+    }
+  ],
+  club_card_back: [
+    {
+      id: 'kb1',
+      text: '{QR_CODE}',
+      x: 40,
+      y: 20,
+      fontSize: 12,
+      fontWeight: 'normal',
+      fontStyle: 'normal',
+      color: '#000000',
+      textAlign: 'center',
+      width: 20
+    },
+    {
+      id: 'kb2',
+      text: 'VALIDAÇÃO CADASTRAL AUTÊNTICA G&G',
+      x: 10,
+      y: 72,
+      fontSize: 9.5,
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      color: '#334155',
+      textAlign: 'center',
+      width: 80
     }
   ],
   playoff_card: [
     {
       id: 'p1',
       text: 'FILIADO PLAYOFF',
-      x: 20,
-      y: 22,
-      fontSize: 10,
+      x: 35,
+      y: 8,
+      fontSize: 11,
       fontWeight: '900',
       fontStyle: 'normal',
       color: '#b45309',
-      textAlign: 'center',
-      width: 60
+      textAlign: 'left',
+      width: 55
     },
     {
       id: 'p2',
       text: 'Nome: {NOME_ATLETA}',
-      x: 20,
+      x: 35,
       y: 28,
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#0f172a',
@@ -224,47 +250,47 @@ const DEFAULT_ELEMENTS: Record<string, TextElement[]> = {
     {
       id: 'p3',
       text: 'CPF: {CPF_ATLETA} | RG: {RG_ATLETA} | CR: {CR_ATLETA}',
-      x: 20,
-      y: 33,
-      fontSize: 7.5,
+      x: 4,
+      y: 62,
+      fontSize: 8.5,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#1e293b',
       textAlign: 'left',
-      width: 60
+      width: 92
     },
     {
       id: 'p4',
       text: 'Clube: {NOME_CLUBE} - {CIDADE}/{UF}',
-      x: 20,
-      y: 36.5,
-      fontSize: 7.5,
+      x: 4,
+      y: 82,
+      fontSize: 8.5,
       fontWeight: 'normal',
       fontStyle: 'normal',
       color: '#334155',
       textAlign: 'left',
-      width: 60
+      width: 92
     }
   ],
   shooter_card: [
     {
       id: 's1',
       text: 'ATIRADOR DESPORTIVO PREMIUM',
-      x: 20,
-      y: 22,
-      fontSize: 10,
+      x: 35,
+      y: 8,
+      fontSize: 11,
       fontWeight: '900',
       fontStyle: 'normal',
       color: '#0369a1',
-      textAlign: 'center',
-      width: 60
+      textAlign: 'left',
+      width: 55
     },
     {
       id: 's2',
       text: 'Nome: {NOME_ATLETA}',
-      x: 20,
+      x: 35,
       y: 28,
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#0f172a',
@@ -274,26 +300,26 @@ const DEFAULT_ELEMENTS: Record<string, TextElement[]> = {
     {
       id: 's3',
       text: 'CPF: {CPF_ATLETA} | RG: {RG_ATLETA} | CR: {CR_ATLETA}',
-      x: 20,
-      y: 33,
-      fontSize: 7.5,
+      x: 4,
+      y: 62,
+      fontSize: 8.5,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#1e293b',
       textAlign: 'left',
-      width: 60
+      width: 92
     },
     {
       id: 's4',
       text: 'Clube: {NOME_CLUBE} - {CIDADE}/{UF}',
-      x: 20,
-      y: 36.5,
-      fontSize: 7.5,
+      x: 4,
+      y: 82,
+      fontSize: 8.5,
       fontWeight: 'normal',
       fontStyle: 'normal',
       color: '#334155',
       textAlign: 'left',
-      width: 60
+      width: 92
     }
   ]
 };
@@ -674,9 +700,9 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
         </button>
 
         <button
-          onClick={() => setActiveTab('club_card')}
+          onClick={() => setActiveTab(activeTab === 'club_card_back' ? 'club_card_back' : 'club_card')}
           className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-bold text-xs transition cursor-pointer ${
-            activeTab === 'club_card' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+            activeTab === 'club_card' || activeTab === 'club_card_back' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
           }`}
         >
           <CreditCard className="w-4 h-4" />
@@ -703,6 +729,41 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
           4. Carteirinha Atirador
         </button>
       </div>
+
+      {/* Recommended Dimension Banner */}
+      {isCardTab && (
+        <div className="bg-blue-50/90 border border-blue-200 rounded-xl p-3 text-xs text-blue-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+            <div>
+              <span className="font-extrabold text-blue-950 block">Medidas Recomendadas para Imagem de Fundo (Frente e Verso):</span>
+              <span className="text-[11px] text-blue-850">
+                Resolução Ideal HD (300 DPI): <strong className="font-mono bg-white px-1 py-0.5 rounded border border-blue-200 text-blue-900">1012 x 638 px</strong> (ou <strong className="font-mono bg-white px-1 py-0.5 rounded border border-blue-200 text-blue-900">856 x 539 px</strong>) &bull; Tamanho Físico: <strong>85.6 mm x 53.9 mm</strong> (Formato CR-80)
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 bg-white border border-blue-200 rounded-xl p-1 shrink-0 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setActiveTab('club_card')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                activeTab === 'club_card' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🖼️ Frente
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('club_card_back')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                activeTab === 'club_card_back' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🔄 Verso
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Toolbar: Upload, Add Text, Page Format Toggle, Toggle Test View & Save */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
