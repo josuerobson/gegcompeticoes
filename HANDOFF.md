@@ -8,11 +8,11 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `53febb8` |
-| Mensagem | `feat: exibe e imprime a carteirinha personalizada do clube no Perfil do Atleta` |
-| Data/hora | 2026-07-31T08:39:00-03:00 |
+| Hash | `HEAD (main)` |
+| Mensagem | `feat: adiciona suporte ao token FOTO_ATLETA e separa tokens em caixas individuais no template de carteirinha` |
+| Data/hora | 2026-07-31T09:35:00-03:00 |
 | Push feito? | ✅ Sim |
-| Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push) |
+| Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
 
 > **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit

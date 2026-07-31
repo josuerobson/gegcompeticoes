@@ -3,7 +3,7 @@ import { User, Club } from '../types';
 import {
   FileUp, Save, RefreshCw, CheckCircle2, QrCode, FileText, CreditCard, Sparkles,
   Trophy, Target, Eye, Plus, Trash2, Bold, Italic, AlignLeft, AlignCenter, AlignRight,
-  Move, Printer, Palette, Type
+  Move, Printer, Palette, Type, Camera
 } from 'lucide-react';
 
 export interface TextElement {
@@ -136,64 +136,124 @@ const DEFAULT_ELEMENTS: Record<string, TextElement[]> = {
   ],
   club_card: [
     {
-      id: 'k1',
-      text: 'ATIRADOR DESPORTIVO ★ PREMIUM ★',
-      x: 35,
-      y: 8,
-      fontSize: 11,
-      fontWeight: '900',
+      id: 'k0',
+      text: '{FOTO_ATLETA}',
+      x: 4.5,
+      y: 7,
+      fontSize: 12,
+      fontWeight: 'bold',
       fontStyle: 'normal',
-      color: '#67e8f9',
-      textAlign: 'left',
-      width: 55
+      color: '#000000',
+      textAlign: 'center',
+      width: 28
     },
     {
-      id: 'k2',
-      text: 'CADASTRO Nº {CADASTRO_NUMERO}',
-      x: 35,
-      y: 20,
+      id: 'k1',
+      text: '{CADASTRO_NUMERO}',
+      x: 35.5,
+      y: 28,
       fontSize: 10,
       fontWeight: '900',
       fontStyle: 'normal',
-      color: '#a5f3fc',
+      color: '#ffffff',
+      textAlign: 'left',
+      width: 30
+    },
+    {
+      id: 'k2',
+      text: '{NOME_ATLETA}',
+      x: 36.5,
+      y: 50.5,
+      fontSize: 10,
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      color: '#0f172a',
       textAlign: 'left',
       width: 55
     },
     {
       id: 'k3',
-      text: 'Nome: {NOME_ATLETA}',
-      x: 35,
-      y: 32,
-      fontSize: 11,
+      text: '{CPF_ATLETA}',
+      x: 5,
+      y: 65,
+      fontSize: 8.5,
       fontWeight: 'bold',
       fontStyle: 'normal',
       color: '#0f172a',
       textAlign: 'left',
-      width: 60
+      width: 21
     },
     {
       id: 'k4',
-      text: 'CPF: {CPF_ATLETA} | RG: {RG_ATLETA} | CR: {CR_ATLETA} | VAL: {DATA_VALIDADE}',
-      x: 4,
-      y: 62,
+      text: '{RG_ATLETA}',
+      x: 30.5,
+      y: 65,
       fontSize: 8.5,
       fontWeight: 'bold',
       fontStyle: 'normal',
-      color: '#1e293b',
+      color: '#0f172a',
       textAlign: 'left',
-      width: 92
+      width: 14
     },
     {
       id: 'k5',
-      text: 'Clube: {NOME_CLUBE} | Cidade: {CIDADE}/{UF}',
-      x: 4,
-      y: 82,
+      text: '{CR_ATLETA}',
+      x: 49,
+      y: 65,
       fontSize: 8.5,
       fontWeight: 'bold',
       fontStyle: 'normal',
-      color: '#1e293b',
+      color: '#0f172a',
       textAlign: 'left',
-      width: 92
+      width: 20
+    },
+    {
+      id: 'k6',
+      text: '{DATA_VALIDADE}',
+      x: 73.5,
+      y: 65,
+      fontSize: 8.5,
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      color: '#0f172a',
+      textAlign: 'left',
+      width: 19
+    },
+    {
+      id: 'k7',
+      text: '{NOME_CLUBE}',
+      x: 5,
+      y: 81.5,
+      fontSize: 8.5,
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      color: '#0f172a',
+      textAlign: 'left',
+      width: 41
+    },
+    {
+      id: 'k8',
+      text: '{CIDADE}',
+      x: 50.5,
+      y: 81.5,
+      fontSize: 8.5,
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      color: '#0f172a',
+      textAlign: 'left',
+      width: 30
+    },
+    {
+      id: 'k9',
+      text: '{UF}',
+      x: 85,
+      y: 81.5,
+      fontSize: 8.5,
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      color: '#0f172a',
+      textAlign: 'left',
+      width: 8
     }
   ],
   club_card_back: [
@@ -325,10 +385,13 @@ const DEFAULT_ELEMENTS: Record<string, TextElement[]> = {
 };
 
 const VARIABLE_TOKENS = [
+  { token: '{FOTO_ATLETA}', label: 'Foto do Atleta (3x4)' },
   { token: '{NOME_ATLETA}', label: 'Nome do Atleta' },
   { token: '{CPF_ATLETA}', label: 'CPF Atleta' },
   { token: '{RG_ATLETA}', label: 'RG Atleta' },
   { token: '{CR_ATLETA}', label: 'CR Atleta' },
+  { token: '{CADASTRO_NUMERO}', label: 'Número de Cadastro' },
+  { token: '{DATA_VALIDADE}', label: 'Data de Validade/Filiação' },
   { token: '{NOME_CLUBE}', label: 'Nome do Clube' },
   { token: '{CAMPEONATO}', label: 'Campeonato' },
   { token: '{ETAPA}', label: 'Etapa' },
@@ -900,6 +963,7 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
               const isSelected = selectedElementId === el.id;
               const displayText = isPreviewWithTestData ? replaceTestData(el.text) : el.text;
               const isQrToken = el.text.trim() === '{QR_CODE}';
+              const isFotoToken = el.text.trim() === '{FOTO_ATLETA}';
 
               return (
                 <div
@@ -930,6 +994,11 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
                     <div className="flex flex-col items-center justify-center p-1 bg-white border border-slate-300 rounded shadow-xs">
                       <QrCode className="w-12 h-12 text-slate-900" />
                       <span className="text-[8px] font-mono text-slate-500">[QR CODE]</span>
+                    </div>
+                  ) : isFotoToken ? (
+                    <div className="flex flex-col items-center justify-center bg-slate-100/90 border-2 border-dashed border-slate-400 rounded-md p-1 shadow-xs aspect-[3/4] min-h-[90px]">
+                      <Camera className="w-6 h-6 text-slate-600" />
+                      <span className="text-[8px] font-mono font-black text-slate-700 mt-1">FOTO 3X4</span>
                     </div>
                   ) : (
                     <span>{displayText}</span>

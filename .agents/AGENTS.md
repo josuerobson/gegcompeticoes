@@ -36,11 +36,18 @@ itens que surgiram durante a implementação.
 
 ---
 
-## 🚀 Rastreamento de commit e estado de deploy
+## 🚀 Rastreamento de commit e estado de deploy (REGRA ABSOLUTA DE PUSH ÚNICO)
 
-> **Toda vez que fizer push para o GitHub, registre o commit no `HANDOFF.md`** na seção
-> **"Último commit / estado de deploy"**. Isso permite que uma IA que assuma no meio do
-> processo saiba exatamente onde a anterior parou e se o deploy subiu.
+> **⚠️ ATENÇÃO: NUNCA FAÇA DOIS PUSHES SEGUIDOS NO GITHUB!**
+> Fazer um 2º push poucos segundos após o 1º cancela (kill) o build em andamento no EasyPanel, quebrando a publicação e exigindo que o usuário faça o deploy manual.
+
+### 🛑 Protocolo Obrigatório de Push Único:
+
+1. **Atualize o `HANDOFF.md` e `CLAUDE.md` ANTES de fazer o `git commit`**.
+2. No `HANDOFF.md`, informe o hash como `HEAD` ou `main` e a mensagem do commit pretendida na mesma edição do código.
+3. Adicione tudo com `git add .` em um único comando.
+4. Faça apenas **UM `git commit`** e **UM `git push origin main`**.
+5. **JAMAIS faça um 2º commit/push apenas para colocar o hash retornado no `HANDOFF.md`**. Isso é a causa de todos os cancelamentos no EasyPanel!
 
 ### Seção obrigatória no HANDOFF.md
 
@@ -51,28 +58,13 @@ Mantenha sempre esta seção atualizada no topo do `HANDOFF.md` (logo após o t�
 
 | Campo | Valor |
 |-------|-------|
-| Hash | `xxxxxxx` |
+| Hash | `HEAD (main)` |
 | Mensagem | `feat: descrição do que foi feito` |
 | Data/hora | YYYY-MM-DDTHH:MM:SS-03:00 |
-| Push feito? | ✅ Sim / ❌ Não (trabalho em andamento) |
-| Deploy EasyPanel confirmado? | ✅ Sim / ⏳ Pendente / ❌ Falhou |
-| Tarefa estava completa? | ✅ Sim / ⚠️ Parcial (descreva o que faltou) |
+| Push feito? | ✅ Sim |
+| Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
+| Tarefa estava completa? | ✅ Sim |
 ```
-
-### Como verificar se o deploy subiu (para a próxima IA)
-
-1. Leia o hash registrado no `HANDOFF.md`
-2. Rode `git log --oneline -5` — se o hash está lá, o código foi commitado localmente
-3. Rode `git status` — se não há nada pendente, o push foi feito
-4. Para checar o deploy no EasyPanel, consulte os logs de build/runtime em
-   `gegcompeticoes-web.5450wp.easypanel.host` (peça o token ao usuário se necessário)
-5. Se o deploy estiver pendente ou falho, **execute-o antes de continuar** com novas features
-
-### Se você assumiu no meio de uma tarefa incompleta
-
-- Leia a seção "Tarefa estava completa?" no `HANDOFF.md`
-- Se marcada como ⚠️ Parcial, leia a descrição do que faltou antes de começar
-- Nunca assuma que o estado atual do código = estado esperado sem verificar o HANDOFF
 
 ---
 

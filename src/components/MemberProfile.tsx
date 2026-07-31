@@ -2239,6 +2239,7 @@ export default function MemberProfile({
                       >
                         {elements && elements.map((el: any) => {
                           const isQrToken = el.text.trim() === '{QR_CODE}';
+                          const isFotoToken = el.text.trim() === '{FOTO_ATLETA}';
                           const displayText = replaceMemberToken(el.text);
 
                           return (
@@ -2262,6 +2263,18 @@ export default function MemberProfile({
                                 <div className="flex flex-col items-center justify-center p-1 bg-white border border-slate-300 rounded shadow-2xs">
                                   <QrCode className="w-9 h-9 text-slate-900" />
                                   <span className="text-[6px] font-mono text-slate-500">[QR CODE]</span>
+                                </div>
+                              ) : isFotoToken ? (
+                                <div className="w-[85px] h-[105px] rounded bg-white p-0.5 border border-white/80 shadow-md shrink-0 overflow-hidden flex items-center justify-center">
+                                  <img
+                                    src={selectedUser.avatarUrl}
+                                    alt={selectedUser.username}
+                                    className="w-full h-full rounded object-cover"
+                                    onError={(e) => {
+                                      e.currentTarget.onerror = null;
+                                      e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                                    }}
+                                  />
                                 </div>
                               ) : (
                                 <span>{displayText}</span>
