@@ -420,8 +420,8 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
   
   // Mode: edit mode vs test data preview mode
   const [isPreviewWithTestData, setIsPreviewWithTestData] = useState(false);
-  // Format mode: A4 sheet (default for paper printing) vs CR-80 PVC card
-  const [cardFormat, setCardFormat] = useState<'a4' | 'cr80'>('a4');
+  // Format mode: A4 sheet vs CR-80 PVC card (defaults to cr80 for cards)
+  const [cardFormat, setCardFormat] = useState<'a4' | 'cr80'>('cr80');
 
   // Current tab state
   const [bgUrl, setBgUrl] = useState('');
@@ -439,7 +439,14 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
     if (currentTmpl) {
       setBgUrl(currentTmpl.background_url || '');
       if (currentTmpl.layout_config?.elements && currentTmpl.layout_config.elements.length > 0) {
-        setElements(currentTmpl.layout_config.elements);
+        const hasOldConcatenated = currentTmpl.layout_config.elements.some(
+          (e: any) => e.text.includes('|') || e.text.startsWith('Nome:') || e.text.startsWith('CPF:')
+        );
+        if (activeTab === 'club_card' && hasOldConcatenated) {
+          setElements(DEFAULT_ELEMENTS.club_card);
+        } else {
+          setElements(currentTmpl.layout_config.elements);
+        }
       } else {
         setElements(DEFAULT_ELEMENTS[activeTab] || []);
       }
@@ -926,8 +933,8 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
             id="editor-canvas-print-area"
             ref={canvasRef}
             style={{
-              width: isA4Format ? '520px' : '420px',
-              height: isA4Format ? '735px' : '260px',
+              width: '520px',
+              height: isA4Format ? '735px' : '328px',
               position: 'relative',
               backgroundColor: '#ffffff',
               backgroundImage: bgUrl ? `url("${bgUrl}")` : undefined,

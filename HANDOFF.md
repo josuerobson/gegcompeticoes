@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: adiciona suporte ao token FOTO_ATLETA e separa tokens em caixas individuais no template de carteirinha` |
-| Data/hora | 2026-07-31T09:35:00-03:00 |
+| Mensagem | `fix: força formato horizontal CR-80 no editor de carteirinhas e atualiza elementos legados automaticamente` |
+| Data/hora | 2026-07-31T10:58:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
