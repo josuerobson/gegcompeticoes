@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: validação de autenticidade da carteirinha do atleta via QR Code e rota pública` |
-| Data/hora | 2026-07-31T13:48:00-03:00 |
+| Mensagem | `fix: alinha o modal de impressão da carteirinha do clube com o modelo customizado e QR code` |
+| Data/hora | 2026-07-31T14:12:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -108,6 +108,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Paginação e Rolagem Infinita no Feed (`FeedView.tsx`)**: Implementado carregamento progressivo do feed renderizando estritamente **3 postagens iniciais**. Ao rolar a página para baixo, o `IntersectionObserver` detecta a aproximação do final da tela e carrega automaticamente mais 3 postagens por vez. Adicionado também o botão "Carregar mais publicações" como fallback manual e o atributo `loading="lazy"` em todas as tags `<img>`.
 - **Investigação e Correção do Limite Visual de Postagens (`server.ts`, `App.tsx`)**: Confirmado que o banco PostgreSQL não possui nenhuma rotina ou trigger para deletar postagens ativas. O problema relatado (sumiço da 1ª postagem ao publicar a 20ª) ocorria porque o endpoint `GET /api/posts` em `server.ts` possuía a regra `limit = req.query.limit || 20`. Ao sincronizar dados na inicialização em `App.tsx`, o backend retornava estritamente as 20 postagens mais recentes. A 21ª postagem fazia com que a 1ª ficasse fora da janela dos 20 itens, dando a falsa impressão de deleção. A restrição foi removida alterando o valor padrão para 1000 postagens tanto no servidor (`server.ts`) quanto na requisição inicial (`App.tsx?limit=1000`).
 - **Validação de Autenticidade da Carteirinha via QR Code (`{QR_CODE}`)**: Desenvolvido gerador dinâmico em TypeScript puro (`src/utils/qrCodeGenerator.ts` e `src/components/QRCodeView.tsx`) que substitui o SVG mock/estático por um QR Code vetorizado legível por câmeras de smartphone. O QR Code direciona para a rota pública de auditoria `/validar/carteirinha/:userId`, que consome o endpoint sem autenticação `GET /api/public/validar/carteirinha/:userId` e exibe em `CardValidationView.tsx` o selo oficial G&G Competições de carteirinha VÁLIDA (com foto 3x4, CR, clube filiado e CPF mascarado para LGPD `123.***.***-00`) ou EXPIRADA.
+- **Unificação do Modal de Impressão da Carteirinha (`MemberProfile.tsx`)**: Refatorada a renderização da carteirinha do clube criando as funções reutilizáveis `renderClubCardFront()` e `renderClubCardBack()`. O modal de impressão (*Pré-visualização do Documento*) agora renderiza rigorosamente o mesmo modelo customizado configurado pelo clube (template verde, elementos dinâmicos, plano de fundo e QR Code vetorizado) usado na visualização em tela, eliminando a inconsistência do layout padrão azul hardcoded.
 
 ## Infra / deploy
 
