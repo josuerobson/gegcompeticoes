@@ -582,10 +582,21 @@ export default function MemberProfile({
             backgroundSize: '100% 100%',
             backgroundPosition: 'center',
             backgroundRepeat: 'no-repeat',
-            backgroundColor: '#0f172a'
+            backgroundColor: '#0f172a',
+            WebkitPrintColorAdjust: 'exact',
+            printColorAdjust: 'exact'
           }}
           className="w-[340px] h-[215px] rounded-xl relative shadow-xl overflow-hidden border border-slate-700 select-none text-white shrink-0"
         >
+          {bgUrl && (
+            <img
+              src={bgUrl}
+              alt="Plano de Fundo Carteirinha"
+              className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-0"
+              style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+            />
+          )}
+
           {elements && elements.map((el: any) => {
             const isQrToken = el.text.trim() === '{QR_CODE}';
             const isFotoToken = el.text.trim() === '{FOTO_ATLETA}';
@@ -605,7 +616,10 @@ export default function MemberProfile({
                   color: el.color || '#ffffff',
                   textAlign: el.textAlign || 'left',
                   lineHeight: '1.25',
-                  whiteSpace: 'pre-line'
+                  whiteSpace: 'pre-line',
+                  zIndex: 10,
+                  WebkitPrintColorAdjust: 'exact',
+                  printColorAdjust: 'exact'
                 }}
               >
                 {isQrToken ? (
@@ -640,7 +654,10 @@ export default function MemberProfile({
     const userClub = clubs.find(c => c.id === selectedUser.clubId);
 
     return (
-      <div className="w-[340px] h-[215px] rounded-xl p-2.5 flex flex-col justify-between relative shadow-xl overflow-hidden border border-slate-700 select-none bg-[linear-gradient(135deg,#06b6d4_0%,#1d4ed8_45%,#090d16_90%)] text-white shrink-0">
+      <div
+        style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+        className="w-[340px] h-[215px] rounded-xl p-2.5 flex flex-col justify-between relative shadow-xl overflow-hidden border border-slate-700 select-none bg-[linear-gradient(135deg,#06b6d4_0%,#1d4ed8_45%,#090d16_90%)] text-white shrink-0"
+      >
         {/* Top Header Grid: Photo (Left) + Header/Badge/Logo (Right) */}
         <div className="flex gap-2 items-start">
           <div className="w-[70px] h-[86px] rounded-lg bg-white p-0.5 border border-white/80 shadow-md shrink-0 overflow-hidden flex items-center justify-center">
@@ -751,10 +768,21 @@ export default function MemberProfile({
             backgroundSize: '100% 100%',
             backgroundPosition: 'center',
             backgroundRepeat: 'no-repeat',
-            backgroundColor: '#ffffff'
+            backgroundColor: '#ffffff',
+            WebkitPrintColorAdjust: 'exact',
+            printColorAdjust: 'exact'
           }}
           className="w-[340px] h-[215px] rounded-xl relative shadow-xl overflow-hidden border border-slate-300 select-none text-slate-900 shrink-0"
         >
+          {bgUrl && (
+            <img
+              src={bgUrl}
+              alt="Plano de Fundo Verso Carteirinha"
+              className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-0"
+              style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+            />
+          )}
+
           {elements && elements.map((el: any) => {
             const isQrToken = el.text.trim() === '{QR_CODE}';
             const displayText = replaceMemberToken(el.text);
@@ -773,7 +801,10 @@ export default function MemberProfile({
                   color: el.color || '#0f172a',
                   textAlign: el.textAlign || 'left',
                   lineHeight: '1.25',
-                  whiteSpace: 'pre-line'
+                  whiteSpace: 'pre-line',
+                  zIndex: 10,
+                  WebkitPrintColorAdjust: 'exact',
+                  printColorAdjust: 'exact'
                 }}
               >
                 {isQrToken ? (
@@ -794,7 +825,10 @@ export default function MemberProfile({
     }
 
     return (
-      <div className="w-[340px] h-[215px] rounded-xl p-3 flex flex-col items-center justify-between relative shadow-xl overflow-hidden border border-slate-300 select-none bg-white text-slate-800 shrink-0">
+      <div
+        style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+        className="w-[340px] h-[215px] rounded-xl p-3 flex flex-col items-center justify-between relative shadow-xl overflow-hidden border border-slate-300 select-none bg-white text-slate-800 shrink-0"
+      >
         <div className="absolute inset-0 grid grid-cols-4 gap-2 opacity-15 pointer-events-none p-2 content-between text-center select-none">
           {Array.from({ length: 20 }).map((_, i) => (
             <div key={i} className="text-[6px] font-black text-blue-900 uppercase font-mono tracking-tighter leading-none">

@@ -124,9 +124,16 @@ header, main, footer, div, section, button, span, a, input, select, textarea {
 
 /* Print/Certificate view rules */
 @media print {
-  body {
-    background: white;
-    color: black;
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  body, html {
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   .no-print {
     display: none !important;
