@@ -187,7 +187,15 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [booting, setBooting] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [validationUserId, setValidationUserId] = useState<string | null>(null);
+  const [validationUserId, setValidationUserId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const cleanPath = window.location.pathname.replace(/\/$/, '') || '/';
+      if (cleanPath.startsWith('/validar/carteirinha/')) {
+        return cleanPath.split('/validar/carteirinha/')[1] || null;
+      }
+    }
+    return null;
+  });
 
   // Estados adicionais da Landing Page
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -1301,6 +1309,21 @@ export default function App() {
     }
   };
 
+  /* ==================================================== */
+  /* PUBLIC CARD VALIDATION SCREEN                        */
+  /* ==================================================== */
+  if (validationUserId) {
+    return (
+      <CardValidationView
+        userId={validationUserId}
+        onGoHome={() => {
+          setValidationUserId(null);
+          window.history.pushState(null, '', currentUser ? '/campeonatos' : '/');
+        }}
+      />
+    );
+  }
+
   if (booting) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center text-white p-6 font-sans relative overflow-hidden select-none">
@@ -1350,21 +1373,6 @@ export default function App() {
           <span>Conectando Atletas do Tiro Esportivo...</span>
         </div>
       </div>
-    );
-  }
-
-  /* ==================================================== */
-  /* PUBLIC CARD VALIDATION SCREEN                        */
-  /* ==================================================== */
-  if (validationUserId) {
-    return (
-      <CardValidationView
-        userId={validationUserId}
-        onGoHome={() => {
-          setValidationUserId(null);
-          window.history.pushState(null, '', currentUser ? '/campeonatos' : '/');
-        }}
-      />
     );
   }
 

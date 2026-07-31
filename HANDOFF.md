@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix: preserva rota publica de auditoria da carteirinha sem redirecionar para login` |
-| Data/hora | 2026-07-31T15:30:00-03:00 |
+| Mensagem | `fix: inicializacao sincrona da rota de validacao da carteirinha e busca flexivel de atleta` |
+| Data/hora | 2026-07-31T15:45:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -112,7 +112,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Preservação de Imagens de Fundo no Diálogo de Impressão (`index.css`, `MemberProfile.tsx`)**: Adicionado a tag `<img src={bgUrl}>` com `z-0` e a propriedade CSS `-webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;` tanto globalmente em `@media print` quanto inline nos cartões. Isso força o Chrome, Edge e Firefox a renderizarem e imprimirem os planos de fundo coloridos e marcas d'água das carteirinhas mesmo quando a opção "Gráficos de segundo plano" estiver desativada por padrão na impressora.
 - **Redimensionamento Proporcional do QR Code (`ClubTemplatesManager.tsx`, `MemberProfile.tsx`)**: Adicionada a propriedade `qrSize` aos elementos de layout e criado um painel de controle interativo na barra lateral do editor (*Certificados e Carteirinhas*) com barra deslizante (slider) e caixa numérica (40px a 200px) para ajustar a dimensão do QR Code mantendo a proporção 1:1. O tamanho configurado é refletido instantaneamente na tela do editor, na carteirinha do perfil e nas impressões/PDF.
 - **Substituição do Gerador pela Biblioteca Oficial `qrcode` (`qrCodeGenerator.ts`, `package.json`)**: Instalada a biblioteca padrão da indústria `qrcode` e refatorado `qrCodeGenerator.ts` para utilizar o motor oficial de codificação Reed-Solomon e matrizes ISO 18004. Isso garante 100% de compatibilidade e leitura instantânea em qualquer câmera de smartphone (iPhone, Android, Google Lens).
-- **Preservação da Rota Pública de Auditoria sem Redirecionamento (`App.tsx`)**: Ajustado o roteador de inicialização do cliente em `App.tsx` para reconhecer `/validar/carteirinha/:userId` como rota pública livre sem exigir autenticação. Corrigida a condição no `initApp` e no `useEffect` de SEO que forçavam a alteração da URL para `/` ou `/login` quando o visitante não estava logado, permitindo que a tela de auditoria oficial `CardValidationView` exiba o selo de autenticidade, foto 3x4 e dados cadastrais diretamente na tela do smartphone.
+- **Inicialização Síncrona e Renderização Prioritária da Auditoria (`App.tsx`, `server.ts`)**: Corrigido a condição de corrida no React inicializando `validationUserId` de forma síncrona diretamente na declaração do estado `useState` a partir de `window.location.pathname`. A checagem `if (validationUserId)` foi posicionada ANTES do bloco `if (booting)`, permitindo a renderização instantânea do `<CardValidationView />` no 1º frame do navegador. Além disso, o endpoint `GET /api/public/validar/carteirinha/:userId` foi atualizado para efetuar busca flexível aceitando IDs dinâmicos de timestamps, IDs normais, username ou CPF.
 
 ## Infra / deploy
 

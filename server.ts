@@ -2802,7 +2802,18 @@ app.get('/api/public/validar/carteirinha/:userId', async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const userRes = await pool.query(`SELECT * FROM users WHERE id = $1`, [userId]);
+    let userRes = await pool.query(
+      `SELECT * FROM users WHERE id = $1 OR username = $1 OR replace(replace(cpf, '.', ''), '-', '') = replace(replace($1, '.', ''), '-', '')`,
+      [userId]
+    );
+    if (userRes.rows.length === 0) {
+      const cleanTerm = userId.replace(/^user_/, '');
+      userRes = await pool.query(
+        `SELECT * FROM users WHERE id ILIKE $1 OR username ILIKE $1 OR id ILIKE $2 LIMIT 1`,
+        [`%${cleanTerm}%`, `%${userId}%`]
+      );
+    }
+
     if (userRes.rows.length === 0) {
       return res.status(404).json({
         valid: false,
