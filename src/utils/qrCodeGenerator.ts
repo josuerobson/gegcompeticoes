@@ -1,6 +1,7 @@
 /**
- * Utility to generate SVG QR Codes dynamically in pure TypeScript/JavaScript.
- * Supports Byte Mode (UTF-8 URLs) with Reed-Solomon error correction.
+ * Utility to generate ISO 18004 compliant SVG QR Codes in pure TypeScript.
+ * Supports Byte Mode (UTF-8 URLs), Galois Field 256 Reed-Solomon error correction,
+ * 15-bit BCH format information strings, and standard 4-module quiet zones.
  */
 
 // Reed-Solomon Galois Field 256 math tables
@@ -75,6 +76,18 @@ const QR_SPECS: QRVersionSpec[] = [
   { ver: 10, size: 57, totalBytes: 346, dataBytes: 274, ecBytes: 72, alignPos: [6, 28, 50] }
 ];
 
+function getFormatBits(ecLevel: 'L' | 'M' | 'Q' | 'H', maskPattern: number): number {
+  const ecBits = ecLevel === 'L' ? 1 : ecLevel === 'M' ? 0 : ecLevel === 'Q' ? 3 : 2;
+  const data = (ecBits << 3) | maskPattern;
+  let rem = data << 10;
+  for (let i = 4; i >= 0; i--) {
+    if ((rem >> (i + 10)) & 1) {
+      rem ^= 0x537 << i;
+    }
+  }
+  return ((data << 10) | rem) ^ 0x5412;
+}
+
 export function generateQRCodeMatrix(text: string): boolean[][] {
   const encoder = new TextEncoder();
   const utf8Bytes = Array.from(encoder.encode(text));
@@ -87,7 +100,7 @@ export function generateQRCodeMatrix(text: string): boolean[][] {
 
   const { size, dataBytes, ecBytes, alignPos } = spec;
 
-  // Build Bit Stream (Mode: Byte = 0100)
+  // Build Bit Stream (Mode 4 = Byte)
   const bits: number[] = [];
   function pushBits(val: number, len: number) {
     for (let i = len - 1; i >= 0; i--) {
@@ -95,11 +108,8 @@ export function generateQRCodeMatrix(text: string): boolean[][] {
     }
   }
 
-  // Mode 4 = Byte
   pushBits(0b0100, 4);
-  // Character count (8 bits for V1-9, 16 bits for V10+)
-  const countBits = spec.ver < 10 ? 8 : 16;
-  pushBits(utf8Bytes.length, countBits);
+  pushBits(utf8Bytes.length, spec.ver < 10 ? 8 : 16);
   for (const b of utf8Bytes) {
     pushBits(b, 8);
   }
@@ -128,25 +138,29 @@ export function generateQRCodeMatrix(text: string): boolean[][] {
 
   // Calculate RS Error Correction Bytes
   const ecBytesArray = rsEncode(dataBytesArray, ecBytes);
-
-  // Combine Data + EC
   const finalCodewords = [...dataBytesArray, ...ecBytesArray];
 
-  // Initialize Matrix
-  const matrix: (boolean | null)[][] = Array.from({ length: size }, () => new Array(size).fill(null));
+  // Initialize Matrix & Reservation Map
+  const modules: boolean[][] = Array.from({ length: size }, () => new Array(size).fill(false));
+  const isReserved: boolean[][] = Array.from({ length: size }, () => new Array(size).fill(false));
 
-  // Helper to draw Finder Pattern (7x7)
-  function drawFinder(r: number, c: number) {
-    for (let dr = -1; dr <= 7; dr++) {
-      for (let dc = -1; dc <= 7; dc++) {
-        const nr = r + dr;
-        const nc = c + dc;
+  function setModule(r: number, c: number, val: boolean) {
+    modules[r][c] = val;
+    isReserved[r][c] = true;
+  }
+
+  // Draw 7x7 Finder Pattern with 1-module white separator
+  function drawFinder(r0: number, c0: number) {
+    for (let r = -1; r <= 7; r++) {
+      for (let c = -1; c <= 7; c++) {
+        const nr = r0 + r;
+        const nc = c0 + c;
         if (nr >= 0 && nr < size && nc >= 0 && nc < size) {
-          if (dr >= 0 && dr <= 6 && dc >= 0 && dc <= 6) {
-            const isBlack = (dr === 0 || dr === 6 || dc === 0 || dc === 6) || (dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4);
-            matrix[nr][nc] = isBlack;
+          if (r >= 0 && r <= 6 && c >= 0 && c <= 6) {
+            const isBlack = (r === 0 || r === 6 || c === 0 || c === 6) || (r >= 2 && r <= 4 && c >= 2 && c <= 4);
+            setModule(nr, nc, isBlack);
           } else {
-            matrix[nr][nc] = false; // Separator
+            setModule(nr, nc, false); // White separator ring
           }
         }
       }
@@ -157,39 +171,42 @@ export function generateQRCodeMatrix(text: string): boolean[][] {
   drawFinder(0, size - 7);
   drawFinder(size - 7, 0);
 
-  // Timing patterns
-  for (let i = 8; i < size - 8; i++) {
-    if (matrix[6][i] === null) matrix[6][i] = i % 2 === 0;
-    if (matrix[i][6] === null) matrix[i][6] = i % 2 === 0;
-  }
-
-  // Alignment patterns
+  // Alignment Patterns (for V2+)
   if (alignPos.length > 0) {
     for (const r of alignPos) {
       for (const c of alignPos) {
-        if (matrix[r][c] !== null) continue;
+        const inFinderArea = (r <= 8 && c <= 8) || (r <= 8 && c >= size - 8) || (r >= size - 8 && c <= 8);
+        if (inFinderArea) continue;
         for (let dr = -2; dr <= 2; dr++) {
           for (let dc = -2; dc <= 2; dc++) {
             const isBlack = Math.abs(dr) === 2 || Math.abs(dc) === 2 || (dr === 0 && dc === 0);
-            matrix[r + dr][c + dc] = isBlack;
+            setModule(r + dr, c + dc, isBlack);
           }
         }
       }
     }
   }
 
+  // Timing Patterns (Row 6 and Column 6)
+  for (let i = 8; i < size - 8; i++) {
+    if (!isReserved[6][i]) setModule(6, i, i % 2 === 0);
+    if (!isReserved[i][6]) setModule(i, 6, i % 2 === 0);
+  }
+
   // Dark module
-  matrix[4 * spec.ver + 9][8] = true;
+  setModule(4 * spec.ver + 9, 8, true);
 
   // Reserve Format Information Area
   for (let i = 0; i < 9; i++) {
-    if (matrix[8][i] === null) matrix[8][i] = false;
-    if (matrix[i][8] === null) matrix[i][8] = false;
-    if (matrix[8][size - 1 - i] === null) matrix[8][size - 1 - i] = false;
-    if (matrix[size - 1 - i][8] === null) matrix[size - 1 - i][8] = false;
+    if (i < size) {
+      if (!isReserved[8][i]) isReserved[8][i] = true;
+      if (!isReserved[i][8]) isReserved[i][8] = true;
+      if (!isReserved[8][size - 1 - i]) isReserved[8][size - 1 - i] = true;
+      if (!isReserved[size - 1 - i][8]) isReserved[size - 1 - i][8] = true;
+    }
   }
 
-  // Convert codewords to bit stream for placement
+  // Place Codeword Bits in Matrix (Zig-Zag pattern)
   const allBits: number[] = [];
   for (const cw of finalCodewords) {
     for (let i = 7; i >= 0; i--) {
@@ -197,9 +214,8 @@ export function generateQRCodeMatrix(text: string): boolean[][] {
     }
   }
 
-  // Place Bits in Matrix (zig-zag pattern)
   let bitIdx = 0;
-  let dir = -1; // up
+  let dir = -1;
   let col = size - 1;
   while (col > 0) {
     if (col === 6) col--; // Skip vertical timing column
@@ -210,9 +226,9 @@ export function generateQRCodeMatrix(text: string): boolean[][] {
     for (let r = rowStart; r !== rowEnd; r += step) {
       for (let c = 0; c < 2; c++) {
         const currCol = col - c;
-        if (matrix[r][currCol] === null) {
+        if (!isReserved[r][currCol]) {
           const bit = bitIdx < allBits.length ? allBits[bitIdx++] : 0;
-          matrix[r][currCol] = bit === 1;
+          modules[r][currCol] = bit === 1;
         }
       }
     }
@@ -220,31 +236,53 @@ export function generateQRCodeMatrix(text: string): boolean[][] {
     col -= 2;
   }
 
-  // Masking (Pattern 0: (row + col) % 2 == 0)
-  const result: boolean[][] = Array.from({ length: size }, () => new Array(size).fill(false));
+  // Apply Mask Pattern 0 ((row + col) % 2 === 0)
+  const maskPattern = 0;
   for (let r = 0; r < size; r++) {
     for (let c = 0; c < size; c++) {
-      const isReserved = (r <= 8 && c <= 8) || (r <= 8 && c >= size - 8) || (r >= size - 8 && c <= 8) || r === 6 || c === 6;
-      let val = Boolean(matrix[r][c]);
-      if (!isReserved) {
+      if (!isReserved[r][c]) {
         if ((r + c) % 2 === 0) {
-          val = !val;
+          modules[r][c] = !modules[r][c];
         }
       }
-      result[r][c] = val;
     }
   }
 
-  return result;
+  // Write BCH(15,5) Format Information Bits
+  const formatVal = getFormatBits('L', maskPattern);
+  const formatBitsArr: number[] = [];
+  for (let i = 14; i >= 0; i--) {
+    formatBitsArr.push((formatVal >> i) & 1);
+  }
+
+  const formatCoords1 = [
+    [8,0],[8,1],[8,2],[8,3],[8,4],[8,5],[8,7],[8,8],
+    [7,8],[5,8],[4,8],[3,8],[2,8],[1,8],[0,8]
+  ];
+
+  const formatCoords2 = [
+    [size-1, 8],[size-2, 8],[size-3, 8],[size-4, 8],[size-5, 8],[size-6, 8],[size-7, 8],
+    [8, size-8],[8, size-7],[8, size-6],[8, size-5],[8, size-4],[8, size-3],[8, size-2],[8, size-1]
+  ];
+
+  for (let i = 0; i < 15; i++) {
+    const bitVal = formatBitsArr[14 - i] === 1;
+    const [r1, c1] = formatCoords1[i];
+    const [r2, c2] = formatCoords2[i];
+    modules[r1][c1] = bitVal;
+    modules[r2][c2] = bitVal;
+  }
+
+  return modules;
 }
 
 /**
- * Returns an SVG string representation of a QR code.
+ * Returns an ISO 18004 compliant SVG string representation of a QR code.
  */
 export function generateQRCodeSVG(text: string, sizePx: number = 180, fgColor: string = '#000000', bgColor: string = '#ffffff'): string {
   const matrix = generateQRCodeMatrix(text);
   const n = matrix.length;
-  const quietZone = 2;
+  const quietZone = 4; // ISO 18004 standard specifies 4 modules quiet zone
   const totalModules = n + quietZone * 2;
   const cellSize = sizePx / totalModules;
 

@@ -32,7 +32,7 @@ export function QRCodeView({
   }
 
   const n = matrix.length;
-  const quietZone = 2;
+  const quietZone = 4;
   const totalModules = n + quietZone * 2;
   const cellSize = size / totalModules;
 
