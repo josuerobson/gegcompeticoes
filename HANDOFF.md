@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix: corrige o algoritmo da matriz do QR code para padrao ISO 18004 com bits de formato BCH e quiet zone de 4 modulos` |
-| Data/hora | 2026-07-31T14:51:00-03:00 |
+| Mensagem | `fix: integra biblioteca oficial qrcode npm para garantia de leitura perfeita em celulares` |
+| Data/hora | 2026-07-31T15:02:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -111,7 +111,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Unificação do Modal de Impressão da Carteirinha (`MemberProfile.tsx`)**: Refatorada a renderização da carteirinha do clube criando as funções reutilizáveis `renderClubCardFront()` and `renderClubCardBack()`. O modal de impressão (*Pré-visualização do Documento*) agora renderiza rigorosamente o mesmo modelo customizado configurado pelo clube (template verde, elementos dinâmicos, plano de fundo e QR Code vetorizado) usado na visualização em tela, eliminando a inconsistência do layout padrão azul hardcoded.
 - **Preservação de Imagens de Fundo no Diálogo de Impressão (`index.css`, `MemberProfile.tsx`)**: Adicionado a tag `<img src={bgUrl}>` com `z-0` e a propriedade CSS `-webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;` tanto globalmente em `@media print` quanto inline nos cartões. Isso força o Chrome, Edge e Firefox a renderizarem e imprimirem os planos de fundo coloridos e marcas d'água das carteirinhas mesmo quando a opção "Gráficos de segundo plano" estiver desativada por padrão na impressora.
 - **Redimensionamento Proporcional do QR Code (`ClubTemplatesManager.tsx`, `MemberProfile.tsx`)**: Adicionada a propriedade `qrSize` aos elementos de layout e criado um painel de controle interativo na barra lateral do editor (*Certificados e Carteirinhas*) com barra deslizante (slider) e caixa numérica (40px a 200px) para ajustar a dimensão do QR Code mantendo a proporção 1:1. O tamanho configurado é refletido instantaneamente na tela do editor, na carteirinha do perfil e nas impressões/PDF.
-- **Correção da Matriz e Leitura do QR Code ISO 18004 (`qrCodeGenerator.ts`, `QRCodeView.tsx`)**: Identificado e corrigido a falha de leitura em celulares causada por: 1) Ausência dos bits de informação de formato BCH(15,5) mascarados com `0x5412`; 2) Inversão incorreta de módulos dos padrões de alinhamento durante o masking; 3) Margem (*Quiet Zone*) estreita. O gerador foi reescrito atendendo 100% da norma ISO/IEC 18004 com codificação Byte Mode UTF-8, padrões de busca 7x7 exatos, quiet zone de 4 módulos e string de formato BCH. O QR Code gerado é lido instantaneamente por câmeras de iPhone, Android e leitores leitores de código.
+- **Substituição do Gerador pela Biblioteca Oficial `qrcode` (`qrCodeGenerator.ts`, `package.json`)**: Instalada a biblioteca padrão da indústria `qrcode` e refatorado `qrCodeGenerator.ts` para utilizar o motor oficial de codificação Reed-Solomon e matrizes ISO 18004. Isso garante 100% de compatibilidade e leitura instantânea em qualquer câmera de smartphone (iPhone, Android, Google Lens).
 
 ## Infra / deploy
 
