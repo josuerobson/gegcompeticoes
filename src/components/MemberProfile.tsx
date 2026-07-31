@@ -360,7 +360,7 @@ export default function MemberProfile({
   }, [lightboxState]);
 
   // Tabs expanded
-  type ProfileTabType = 'my_profile' | 'posts' | 'championships' | 'multi_championships' | 'my_registrations' | 'results' | 'certificates' | 'club_card' | 'gg_card' | 'trainings' | 'declarations' | 'ammo';
+  type ProfileTabType = 'my_profile' | 'posts' | 'championships' | 'multi_championships' | 'my_registrations' | 'results' | 'certificates' | 'club_card' | 'playoff_card' | 'shooter_card' | 'gg_card' | 'trainings' | 'declarations' | 'ammo';
   const [profileTab, setProfileTab] = useState<ProfileTabType>('posts');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -853,6 +853,228 @@ export default function MemberProfile({
   };
   const [trainings, setTrainings] = useState<TrainingSession[]>([]);
   const [loadingTrainings, setLoadingTrainings] = useState(false);
+
+  // ─── Reusable element renderer (shared by playoff / shooter cards) ───────────
+  const renderCardElements = (elements: any[], bgColor = '#0f172a', borderColor = 'border-slate-700') => (
+    elements && elements.map((el: any) => {
+      const isQrToken = el.text.trim() === '{QR_CODE}';
+      const isFotoToken = el.text.trim() === '{FOTO_ATLETA}';
+      const displayText = replaceMemberToken(el.text);
+      return (
+        <div
+          key={el.id}
+          style={{
+            position: 'absolute',
+            left: `${el.x}%`,
+            top: `${el.y}%`,
+            width: el.width ? `${el.width}%` : 'auto',
+            fontSize: `${el.fontSize}px`,
+            fontWeight: el.fontWeight || 'bold',
+            fontStyle: el.fontStyle || 'normal',
+            color: el.color || '#ffffff',
+            textAlign: el.textAlign || 'left',
+            lineHeight: '1.25',
+            whiteSpace: 'pre-line',
+            zIndex: 10,
+            WebkitPrintColorAdjust: 'exact',
+            printColorAdjust: 'exact'
+          }}
+        >
+          {isQrToken ? (
+            <div className="flex flex-col items-center justify-center p-1 bg-white border border-slate-300 rounded shadow-2xs">
+              <QRCodeView
+                value={`${window.location.origin}/validar/carteirinha/${selectedUser.id}`}
+                size={el.qrSize || 64}
+              />
+            </div>
+          ) : isFotoToken ? (
+            <div className="w-[85px] h-[105px] rounded bg-white p-0.5 border border-white/80 shadow-md shrink-0 overflow-hidden flex items-center justify-center">
+              <img
+                src={selectedUser.avatarUrl}
+                alt={selectedUser.username}
+                className="w-full h-full rounded object-cover"
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+                }}
+              />
+            </div>
+          ) : (
+            <span>{displayText}</span>
+          )}
+        </div>
+      );
+    })
+  );
+
+  // ─── Playoff Card ─────────────────────────────────────────────────────────────
+  const renderPlayoffCardFront = () => {
+    const tmpl = clubTemplates['playoff_card'];
+    const bgUrl = tmpl?.background_url;
+    const els = tmpl?.layout_config?.elements;
+    if (bgUrl || (els && els.length > 0)) {
+      return (
+        <div
+          style={{
+            backgroundImage: bgUrl ? `url("${bgUrl}")` : undefined,
+            backgroundSize: '100% 100%',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            backgroundColor: '#78350f',
+            WebkitPrintColorAdjust: 'exact',
+            printColorAdjust: 'exact'
+          }}
+          className="w-[340px] h-[215px] rounded-xl relative shadow-xl overflow-hidden border border-amber-800 select-none text-white shrink-0"
+        >
+          {bgUrl && (
+            <img src={bgUrl} alt="Fundo Carteirinha Playoff" className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-0" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }} />
+          )}
+          {renderCardElements(els || [])}
+        </div>
+      );
+    }
+    // Fallback default
+    const userClub = clubs.find(c => c.id === selectedUser.clubId);
+    return (
+      <div style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+        className="w-[340px] h-[215px] rounded-xl p-2.5 flex flex-col justify-between relative shadow-xl overflow-hidden border border-amber-700 select-none bg-[linear-gradient(135deg,#f59e0b_0%,#b45309_45%,#1c0a00_90%)] text-white shrink-0">
+        <div className="text-[10px] font-black text-amber-200 uppercase tracking-widest">🏆 FILIADO PLAYOFF</div>
+        <div className="font-bold text-sm">{(selectedUser.fullName || selectedUser.username).toUpperCase()}</div>
+        <div className="text-[8px] font-mono">CPF: {selectedUser.cpf} | CR: {selectedUser.crNumber}</div>
+        <div className="text-[8px]">{userClub?.name || 'G&G CLUBE'} — {selectedUser.city}/{selectedUser.state}</div>
+      </div>
+    );
+  };
+
+  const renderPlayoffCardBack = () => {
+    const tmpl = clubTemplates['playoff_card_back'];
+    const bgUrl = tmpl?.background_url;
+    const els = tmpl?.layout_config?.elements;
+    if (bgUrl || (els && els.length > 0)) {
+      return (
+        <div
+          style={{
+            backgroundImage: bgUrl ? `url("${bgUrl}")` : undefined,
+            backgroundSize: '100% 100%',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            backgroundColor: '#ffffff',
+            WebkitPrintColorAdjust: 'exact',
+            printColorAdjust: 'exact'
+          }}
+          className="w-[340px] h-[215px] rounded-xl relative shadow-xl overflow-hidden border border-amber-300 select-none text-slate-900 shrink-0"
+        >
+          {bgUrl && (
+            <img src={bgUrl} alt="Verso Carteirinha Playoff" className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-0" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }} />
+          )}
+          {renderCardElements(els || [])}
+        </div>
+      );
+    }
+    // Fallback default
+    return (
+      <div style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+        className="w-[340px] h-[215px] rounded-xl p-3 flex flex-col items-center justify-between relative shadow-xl overflow-hidden border border-amber-300 select-none bg-white text-slate-800 shrink-0">
+        <div className="absolute inset-0 grid grid-cols-4 gap-2 opacity-10 pointer-events-none p-2 content-between text-center select-none">
+          {Array.from({ length: 20 }).map((_, i) => (
+            <div key={i} className="text-[6px] font-black text-amber-700 uppercase font-mono tracking-tighter leading-none">G&G PLAYOFF</div>
+          ))}
+        </div>
+        <div className="relative z-10 my-auto flex flex-col items-center justify-center">
+          <div className="bg-white p-1.5 border-2 border-amber-700 rounded-xl shadow-md flex items-center justify-center">
+            <QRCodeView value={`${window.location.origin}/validar/carteirinha/${selectedUser.id}`} size={85} />
+          </div>
+          <span className="text-[7.5px] font-bold text-amber-800 font-mono mt-1 bg-white/80 px-2 py-0.5 rounded border border-amber-200">VALIDAÇÃO CADASTRAL AUTÊNTICA G&G — PLAYOFF</span>
+        </div>
+      </div>
+    );
+  };
+
+  // ─── Shooter Card ─────────────────────────────────────────────────────────────
+  const renderShooterCardFront = () => {
+    const tmpl = clubTemplates['shooter_card'];
+    const bgUrl = tmpl?.background_url;
+    const els = tmpl?.layout_config?.elements;
+    if (bgUrl || (els && els.length > 0)) {
+      return (
+        <div
+          style={{
+            backgroundImage: bgUrl ? `url("${bgUrl}")` : undefined,
+            backgroundSize: '100% 100%',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            backgroundColor: '#0c2040',
+            WebkitPrintColorAdjust: 'exact',
+            printColorAdjust: 'exact'
+          }}
+          className="w-[340px] h-[215px] rounded-xl relative shadow-xl overflow-hidden border border-indigo-700 select-none text-white shrink-0"
+        >
+          {bgUrl && (
+            <img src={bgUrl} alt="Fundo Carteirinha Atirador" className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-0" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }} />
+          )}
+          {renderCardElements(els || [])}
+        </div>
+      );
+    }
+    // Fallback default
+    const userClub = clubs.find(c => c.id === selectedUser.clubId);
+    return (
+      <div style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+        className="w-[340px] h-[215px] rounded-xl p-2.5 flex flex-col justify-between relative shadow-xl overflow-hidden border border-indigo-700 select-none bg-[linear-gradient(135deg,#6366f1_0%,#1e40af_45%,#0c1830_90%)] text-white shrink-0">
+        <div className="text-[10px] font-black text-indigo-200 uppercase tracking-widest">🎯 ATIRADOR DESPORTIVO PREMIUM</div>
+        <div className="font-bold text-sm">{(selectedUser.fullName || selectedUser.username).toUpperCase()}</div>
+        <div className="text-[8px] font-mono">CPF: {selectedUser.cpf} | CR: {selectedUser.crNumber}</div>
+        <div className="text-[8px]">{userClub?.name || 'G&G CLUBE'} — {selectedUser.city}/{selectedUser.state}</div>
+      </div>
+    );
+  };
+
+  const renderShooterCardBack = () => {
+    const tmpl = clubTemplates['shooter_card_back'];
+    const bgUrl = tmpl?.background_url;
+    const els = tmpl?.layout_config?.elements;
+    if (bgUrl || (els && els.length > 0)) {
+      return (
+        <div
+          style={{
+            backgroundImage: bgUrl ? `url("${bgUrl}")` : undefined,
+            backgroundSize: '100% 100%',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            backgroundColor: '#ffffff',
+            WebkitPrintColorAdjust: 'exact',
+            printColorAdjust: 'exact'
+          }}
+          className="w-[340px] h-[215px] rounded-xl relative shadow-xl overflow-hidden border border-indigo-300 select-none text-slate-900 shrink-0"
+        >
+          {bgUrl && (
+            <img src={bgUrl} alt="Verso Carteirinha Atirador" className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-0" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }} />
+          )}
+          {renderCardElements(els || [])}
+        </div>
+      );
+    }
+    // Fallback default
+    return (
+      <div style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+        className="w-[340px] h-[215px] rounded-xl p-3 flex flex-col items-center justify-between relative shadow-xl overflow-hidden border border-indigo-300 select-none bg-white text-slate-800 shrink-0">
+        <div className="absolute inset-0 grid grid-cols-4 gap-2 opacity-10 pointer-events-none p-2 content-between text-center select-none">
+          {Array.from({ length: 20 }).map((_, i) => (
+            <div key={i} className="text-[6px] font-black text-indigo-700 uppercase font-mono tracking-tighter leading-none">G&G ATIRADOR</div>
+          ))}
+        </div>
+        <div className="relative z-10 my-auto flex flex-col items-center justify-center">
+          <div className="bg-white p-1.5 border-2 border-indigo-700 rounded-xl shadow-md flex items-center justify-center">
+            <QRCodeView value={`${window.location.origin}/validar/carteirinha/${selectedUser.id}`} size={85} />
+          </div>
+          <span className="text-[7.5px] font-bold text-indigo-800 font-mono mt-1 bg-white/80 px-2 py-0.5 rounded border border-indigo-200">VALIDAÇÃO CADASTRAL AUTÊNTICA G&G — ATIRADOR</span>
+        </div>
+      </div>
+    );
+  };
+
+
+
   const [savingTraining, setSavingTraining] = useState(false);
   const [trainingError, setTrainingError] = useState('');
   const [isWeaponDropdownOpen, setIsWeaponDropdownOpen] = useState(false);
@@ -1189,6 +1411,8 @@ export default function MemberProfile({
     { id: 'results', label: 'Resultados', icon: Trophy, count: userScores.length, public: true },
     { id: 'certificates', label: 'Certificados', icon: Award, count: approvedRegs.length, public: false },
     { id: 'club_card', label: 'Carteirinha Clube', icon: CreditCard, public: false },
+    { id: 'playoff_card', label: 'Carteirinha Playoff', icon: Trophy, public: false },
+    { id: 'shooter_card', label: 'Carteirinha Atirador', icon: Target, public: false },
     { id: 'gg_card', label: 'Carteirinha G&G', icon: CreditCard, public: false },
     { id: 'trainings', label: 'Treinamentos', icon: PlusCircle, count: trainings.length, public: false },
     { id: 'declarations', label: 'Declarações', icon: FileText, public: false },
@@ -2521,6 +2745,67 @@ export default function MemberProfile({
               >
                 <Printer className="w-4 h-4" />
                 Imprimir Carteirinha do Clube
+              </button>
+            </div>
+          )}
+
+
+          {/* 6b. Carteirinha Playoff */}
+          {profileTab === 'playoff_card' && (
+            <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-6 space-y-6">
+              <div className="flex justify-between items-center border-b border-slate-50 pb-3">
+                <h4 className="font-display font-bold text-slate-800 text-sm uppercase">Carteirinha Playoff</h4>
+                <Trophy className="w-5 h-5 text-amber-600" />
+              </div>
+
+              <div className="flex flex-col lg:flex-row gap-6 items-center justify-center py-4">
+                {renderPlayoffCardFront()}
+                {renderPlayoffCardBack()}
+              </div>
+
+              <button
+                onClick={() => {
+                  setPrintData({
+                    fullName: selectedUser.fullName,
+                    crNumber: selectedUser.crNumber || 'Emitindo...',
+                    regId: `GG-PLY-${selectedUser.id.slice(0, 6).toUpperCase()}`,
+                  });
+                  setPrintMode('club_card');
+                }}
+                className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs py-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                Imprimir Carteirinha Playoff
+              </button>
+            </div>
+          )}
+
+          {/* 6c. Carteirinha Atirador */}
+          {profileTab === 'shooter_card' && (
+            <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-6 space-y-6">
+              <div className="flex justify-between items-center border-b border-slate-50 pb-3">
+                <h4 className="font-display font-bold text-slate-800 text-sm uppercase">Carteirinha Atirador Desportivo</h4>
+                <Target className="w-5 h-5 text-indigo-600" />
+              </div>
+
+              <div className="flex flex-col lg:flex-row gap-6 items-center justify-center py-4">
+                {renderShooterCardFront()}
+                {renderShooterCardBack()}
+              </div>
+
+              <button
+                onClick={() => {
+                  setPrintData({
+                    fullName: selectedUser.fullName,
+                    crNumber: selectedUser.crNumber || 'Emitindo...',
+                    regId: `GG-ATI-${selectedUser.id.slice(0, 6).toUpperCase()}`,
+                  });
+                  setPrintMode('club_card');
+                }}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs py-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                Imprimir Carteirinha Atirador
               </button>
             </div>
           )}

@@ -24,7 +24,7 @@ export interface TextElement {
 interface ClubTemplateData {
   id?: string;
   club_id?: string;
-  template_type: 'certificate' | 'club_card' | 'club_card_back' | 'playoff_card' | 'shooter_card';
+  template_type: 'certificate' | 'club_card' | 'club_card_back' | 'playoff_card' | 'playoff_card_back' | 'shooter_card' | 'shooter_card_back';
   background_url: string;
   body_template: string;
   layout_config?: {
@@ -334,6 +334,32 @@ const DEFAULT_ELEMENTS: Record<string, TextElement[]> = {
       width: 92
     }
   ],
+  playoff_card_back: [
+    {
+      id: 'pb1',
+      text: '{QR_CODE}',
+      x: 40,
+      y: 20,
+      fontSize: 12,
+      fontWeight: 'normal',
+      fontStyle: 'normal',
+      color: '#000000',
+      textAlign: 'center',
+      width: 20
+    },
+    {
+      id: 'pb2',
+      text: 'VALIDAÇÃO CADASTRAL AUTÊNTICA G&G\nCARTEIRINHA PLAYOFF',
+      x: 10,
+      y: 68,
+      fontSize: 9.5,
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      color: '#92400e',
+      textAlign: 'center',
+      width: 80
+    }
+  ],
   shooter_card: [
     {
       id: 's1',
@@ -383,6 +409,32 @@ const DEFAULT_ELEMENTS: Record<string, TextElement[]> = {
       textAlign: 'left',
       width: 92
     }
+  ],
+  shooter_card_back: [
+    {
+      id: 'sb1',
+      text: '{QR_CODE}',
+      x: 40,
+      y: 20,
+      fontSize: 12,
+      fontWeight: 'normal',
+      fontStyle: 'normal',
+      color: '#000000',
+      textAlign: 'center',
+      width: 20
+    },
+    {
+      id: 'sb2',
+      text: 'VALIDAÇÃO CADASTRAL AUTÊNTICA G&G\nCARTEIRINHA ATIRADOR DESPORTIVO',
+      x: 10,
+      y: 68,
+      fontSize: 9.5,
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      color: '#1e3a5f',
+      textAlign: 'center',
+      width: 80
+    }
   ]
 };
 
@@ -413,7 +465,7 @@ const VARIABLE_TOKENS = [
 ];
 
 export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManagerProps) {
-  const [activeTab, setActiveTab] = useState<'certificate' | 'club_card' | 'playoff_card' | 'shooter_card'>('certificate');
+  const [activeTab, setActiveTab] = useState<'certificate' | 'club_card' | 'club_card_back' | 'playoff_card' | 'playoff_card_back' | 'shooter_card' | 'shooter_card_back'>('certificate');
   const [selectedClubId, setSelectedClubId] = useState<string>(currentUser?.clubId || clubs[0]?.id || 'c1');
   const [templates, setTemplates] = useState<Record<string, ClubTemplateData>>({});
   const [saving, setSaving] = useState(false);
@@ -782,9 +834,9 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
         </button>
 
         <button
-          onClick={() => setActiveTab('playoff_card')}
+          onClick={() => setActiveTab(activeTab === 'playoff_card_back' ? 'playoff_card_back' : 'playoff_card')}
           className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-bold text-xs transition cursor-pointer ${
-            activeTab === 'playoff_card' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+            activeTab === 'playoff_card' || activeTab === 'playoff_card_back' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
           }`}
         >
           <Trophy className="w-4 h-4" />
@@ -792,9 +844,9 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
         </button>
 
         <button
-          onClick={() => setActiveTab('shooter_card')}
+          onClick={() => setActiveTab(activeTab === 'shooter_card_back' ? 'shooter_card_back' : 'shooter_card')}
           className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-bold text-xs transition cursor-pointer ${
-            activeTab === 'shooter_card' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+            activeTab === 'shooter_card' || activeTab === 'shooter_card_back' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
           }`}
         >
           <Target className="w-4 h-4" />
@@ -802,24 +854,24 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
         </button>
       </div>
 
-      {/* Recommended Dimension Banner */}
-      {isCardTab && (
-        <div className="bg-blue-50/90 border border-blue-200 rounded-xl p-3 text-xs text-blue-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+      {/* Recommended Dimension Banner — club card */}
+      {(activeTab === 'club_card' || activeTab === 'club_card_back') && (
+        <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-2.5">
-            <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+            <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
             <div>
-              <span className="font-extrabold text-blue-950 block">Medidas Recomendadas para Imagem de Fundo (Frente e Verso):</span>
-              <span className="text-[11px] text-blue-850">
-                Resolução Ideal HD (300 DPI): <strong className="font-mono bg-white px-1 py-0.5 rounded border border-blue-200 text-blue-900">1012 x 638 px</strong> (ou <strong className="font-mono bg-white px-1 py-0.5 rounded border border-blue-200 text-blue-900">856 x 539 px</strong>) &bull; Tamanho Físico: <strong>85.6 mm x 53.9 mm</strong> (Formato CR-80)
+              <span className="font-extrabold text-emerald-950 block">2. Carteirinha Clube — Frente e Verso Independentes:</span>
+              <span className="text-[11px] text-emerald-800">
+                Resolução Ideal HD (300 DPI): <strong className="font-mono bg-white px-1 py-0.5 rounded border border-emerald-200 text-emerald-900">1012 x 638 px</strong> (ou <strong className="font-mono bg-white px-1 py-0.5 rounded border border-emerald-200 text-emerald-900">856 x 539 px</strong>) &bull; Formato CR-80
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-1 bg-white border border-blue-200 rounded-xl p-1 shrink-0 shadow-2xs">
+          <div className="flex items-center gap-1 bg-white border border-emerald-200 rounded-xl p-1 shrink-0 shadow-2xs">
             <button
               type="button"
               onClick={() => setActiveTab('club_card')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                activeTab === 'club_card' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                activeTab === 'club_card' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               🖼️ Frente
@@ -828,7 +880,77 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
               type="button"
               onClick={() => setActiveTab('club_card_back')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                activeTab === 'club_card_back' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                activeTab === 'club_card_back' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🔄 Verso
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Recommended Dimension Banner — playoff card */}
+      {(activeTab === 'playoff_card' || activeTab === 'playoff_card_back') && (
+        <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-3 text-xs text-amber-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <Trophy className="w-4 h-4 text-amber-600 shrink-0" />
+            <div>
+              <span className="font-extrabold text-amber-950 block">3. Carteirinha Playoff — Frente e Verso Independentes:</span>
+              <span className="text-[11px] text-amber-800">
+                Resolução Ideal HD (300 DPI): <strong className="font-mono bg-white px-1 py-0.5 rounded border border-amber-200 text-amber-900">1012 x 638 px</strong> (ou <strong className="font-mono bg-white px-1 py-0.5 rounded border border-amber-200 text-amber-900">856 x 539 px</strong>) &bull; Formato CR-80
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 bg-white border border-amber-200 rounded-xl p-1 shrink-0 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setActiveTab('playoff_card')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                activeTab === 'playoff_card' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🖼️ Frente
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('playoff_card_back')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                activeTab === 'playoff_card_back' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🔄 Verso
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Recommended Dimension Banner — shooter card */}
+      {(activeTab === 'shooter_card' || activeTab === 'shooter_card_back') && (
+        <div className="bg-indigo-50/90 border border-indigo-200 rounded-xl p-3 text-xs text-indigo-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <Target className="w-4 h-4 text-indigo-600 shrink-0" />
+            <div>
+              <span className="font-extrabold text-indigo-950 block">4. Carteirinha Atirador — Frente e Verso Independentes:</span>
+              <span className="text-[11px] text-indigo-800">
+                Resolução Ideal HD (300 DPI): <strong className="font-mono bg-white px-1 py-0.5 rounded border border-indigo-200 text-indigo-900">1012 x 638 px</strong> (ou <strong className="font-mono bg-white px-1 py-0.5 rounded border border-indigo-200 text-indigo-900">856 x 539 px</strong>) &bull; Formato CR-80
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 bg-white border border-indigo-200 rounded-xl p-1 shrink-0 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setActiveTab('shooter_card')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                activeTab === 'shooter_card' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🖼️ Frente
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('shooter_card_back')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                activeTab === 'shooter_card_back' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               🔄 Verso

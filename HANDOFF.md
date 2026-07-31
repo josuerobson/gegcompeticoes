@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix: inicializacao sincrona da rota de validacao da carteirinha e busca flexivel de atleta` |
-| Data/hora | 2026-07-31T15:45:00-03:00 |
+| Mensagem | `feat: frente e verso independentes para carteirinhas playoff e atirador com QR Code` |
+| Data/hora | 2026-07-31T16:07:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
