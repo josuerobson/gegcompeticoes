@@ -282,21 +282,19 @@ export function ClubCertificatesViewer({
       }
     });
 
-    // Find target athlete position by userId
-    const rankIndex = sortedList.findIndex(item =>
+    // Find target athlete position in overall ranking
+    const overallRankIndex = sortedList.findIndex(item =>
       (userId && item.userId === userId) ||
       (registrationId && item.registrationId === registrationId) ||
       (userName && item.shooterName.toLowerCase() === userName.toLowerCase())
     );
 
-    const positionNum = rankIndex >= 0 ? rankIndex + 1 : 1;
-    const targetPerf = rankIndex >= 0 ? sortedList[rankIndex] : null;
+    const overallPosNum = overallRankIndex >= 0 ? overallRankIndex + 1 : 1;
+    const targetPerf = overallRankIndex >= 0 ? sortedList[overallRankIndex] : null;
 
     const totalScore = targetPerf ? targetPerf.totalScore : 0;
     const stageCount = targetPerf && targetPerf.stageCount > 0 ? targetPerf.stageCount : 1;
     const bestHitFactor = targetPerf ? targetPerf.hitFactor : 0;
-
-    const posicaoStr = `${positionNum}º`;
 
     // Determine medal: check championship minimum cutoffs first
     const goldMin = champObj?.pontuacaoMinimaAtletaOuro || 0;
@@ -312,14 +310,40 @@ export function ClubCertificatesViewer({
       medalhaStr = 'BRONZE';
     } else {
       // Fallback by rank if no cutoffs defined
-      if (positionNum === 1) medalhaStr = 'OURO';
-      else if (positionNum === 2) medalhaStr = 'PRATA';
-      else if (positionNum === 3) medalhaStr = 'BRONZE';
+      if (overallPosNum === 1) medalhaStr = 'OURO';
+      else if (overallPosNum === 2) medalhaStr = 'PRATA';
+      else if (overallPosNum === 3) medalhaStr = 'BRONZE';
     }
 
+    // Filter sortedList for athletes in the same medal category
+    const sameMedalList = sortedList.filter(item => {
+      if (goldMin > 0 || silverMin > 0 || bronzeMin > 0) {
+        if (medalhaStr === 'OURO' && goldMin > 0) return item.totalScore >= goldMin;
+        if (medalhaStr === 'PRATA' && silverMin > 0) return item.totalScore >= silverMin && (goldMin > 0 ? item.totalScore < goldMin : true);
+        if (medalhaStr === 'BRONZE' && bronzeMin > 0) return item.totalScore >= bronzeMin && (silverMin > 0 ? item.totalScore < silverMin : goldMin > 0 ? item.totalScore < goldMin : true);
+      }
+      return true;
+    });
+
+    const categoryRankIndex = sameMedalList.findIndex(item =>
+      (userId && item.userId === userId) ||
+      (registrationId && item.registrationId === registrationId) ||
+      (userName && item.shooterName.toLowerCase() === userName.toLowerCase())
+    );
+    const categoryPosNum = categoryRankIndex >= 0 ? categoryRankIndex + 1 : overallPosNum;
+
+    // Use category position when medal cutoffs exist so the award position matches category rank (e.g. 3º Ouro)
+    const displayPosNum = (goldMin > 0 || silverMin > 0 || bronzeMin > 0) && sameMedalList.length > 0
+      ? categoryPosNum
+      : overallPosNum;
+
+    const posicaoStr = `${displayPosNum}º`;
+
     return {
-      positionNum,
+      positionNum: displayPosNum,
       posicaoStr,
+      posicaoGeralStr: `${overallPosNum}º`,
+      posicaoCategoriaStr: `${categoryPosNum}º`,
       totalScore,
       stageCount,
       bestHitFactor,
@@ -417,10 +441,10 @@ export function ClubCertificatesViewer({
       .replace(/{CAMPEONATO}/g, cert.championshipTitle)
       .replace(/{ETAPA}/g, `${cert.stageCount} Etapa(s) Homologada(s)`)
       .replace(/{MODALIDADE}/g, cert.modalityName)
-      .replace(/{PONTOS}/g, cert.totalScore.toFixed(2))
       .replace(/{POSICAO_GERAL}/g, cert.posicao)
+      .replace(/{POSICAO}/g, cert.posicao)
       .replace(/{MEDALHA}/g, cert.medalha)
-      .replace(/{POSICAO_CATEGORIA}/g, '')
+      .replace(/{POSICAO_CATEGORIA}/g, cert.posicao)
       .replace(/{DATA_INICIO}/g, startDateFormatted)
       .replace(/{DATA_FIM}/g, endDateFormatted)
       .replace(/{LOCAL_PROVA}/g, clubObj?.name || 'Clube de Tiro Aranãs')

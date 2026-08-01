@@ -3092,6 +3092,7 @@ app.get('/api/public/validar/certificado/:certId', async (req, res) => {
     let regRes = await pool.query(
       `SELECT r.*,
               c.title as championship_title, c.start_date, c.end_date,
+              c.pontuacao_minima_atleta_ouro, c.pontuacao_minima_atleta_prata, c.pontuacao_minima_atleta_bronze,
               m.name as modality_name, m.evaluation_type,
               u.full_name as athlete_name, u.cpf as athlete_cpf, u.cr_number as athlete_cr, u.avatar_url as athlete_avatar,
               cl.name as club_name, cl.city as club_city, cl.state as club_state, cl.logo_url as club_logo
@@ -3110,6 +3111,7 @@ app.get('/api/public/validar/certificado/:certId', async (req, res) => {
       regRes = await pool.query(
         `SELECT r.*,
                 c.title as championship_title, c.start_date, c.end_date,
+                c.pontuacao_minima_atleta_ouro, c.pontuacao_minima_atleta_prata, c.pontuacao_minima_atleta_bronze,
                 m.name as modality_name, m.evaluation_type,
                 u.full_name as athlete_name, u.cpf as athlete_cpf, u.cr_number as athlete_cr, u.avatar_url as athlete_avatar,
                 cl.name as club_name, cl.city as club_city, cl.state as club_state, cl.logo_url as club_logo
@@ -3150,6 +3152,11 @@ app.get('/api/public/validar/certificado/:certId', async (req, res) => {
       totalScore = Number(scoreRes.rows[0].total_score);
     }
 
+    // Determine medal classification based on championship minimum cutoffs
+    const goldMin = Number(reg.pontuacao_minima_atleta_ouro) || 0;
+    const silverMin = Number(reg.pontuacao_minima_atleta_prata) || 0;
+    const bronzeMin = Number(reg.pontuacao_minima_atleta_bronze) || 0;
+
     // Determine ranking position among all unique athletes in this modality & championship
     const rankRes = await pool.query(
       `SELECT COALESCE(ss.user_id, r.user_id) as athlete_id, COALESCE(SUM(ss.score), 0) as total_pts
@@ -3162,15 +3169,37 @@ app.get('/api/public/validar/certificado/:certId', async (req, res) => {
     );
 
     if (rankRes.rows.length > 0) {
-      const rankIdx = rankRes.rows.findIndex(
+      const overallRankIdx = rankRes.rows.findIndex(
         (r: any) => r.athlete_id === reg.user_id
       );
-      if (rankIdx >= 0) {
-        positionStr = `${rankIdx + 1}º`;
-        if (rankIdx === 0) medalStr = 'OURO';
-        else if (rankIdx === 1) medalStr = 'PRATA';
-        else if (rankIdx === 2) medalStr = 'BRONZE';
+
+      if (goldMin > 0 && totalScore >= goldMin) {
+        medalStr = 'OURO';
+      } else if (silverMin > 0 && totalScore >= silverMin) {
+        medalStr = 'PRATA';
+      } else if (bronzeMin > 0 && totalScore >= bronzeMin) {
+        medalStr = 'BRONZE';
+      } else if (overallRankIdx >= 0) {
+        if (overallRankIdx === 0) medalStr = 'OURO';
+        else if (overallRankIdx === 1) medalStr = 'PRATA';
+        else if (overallRankIdx === 2) medalStr = 'BRONZE';
       }
+
+      // Filter rankRes for athletes in the same medal category tier
+      let categoryRankRows = rankRes.rows;
+      if (goldMin > 0 || silverMin > 0 || bronzeMin > 0) {
+        if (medalStr === 'OURO' && goldMin > 0) {
+          categoryRankRows = rankRes.rows.filter((r: any) => Number(r.total_pts) >= goldMin);
+        } else if (medalStr === 'PRATA' && silverMin > 0) {
+          categoryRankRows = rankRes.rows.filter((r: any) => Number(r.total_pts) >= silverMin && (goldMin > 0 ? Number(r.total_pts) < goldMin : true));
+        } else if (medalStr === 'BRONZE' && bronzeMin > 0) {
+          categoryRankRows = rankRes.rows.filter((r: any) => Number(r.total_pts) >= bronzeMin && (silverMin > 0 ? Number(r.total_pts) < silverMin : goldMin > 0 ? Number(r.total_pts) < goldMin : true));
+        }
+      }
+
+      const catIdx = categoryRankRows.findIndex((r: any) => r.athlete_id === reg.user_id);
+      const displayIdx = catIdx >= 0 ? catIdx : (overallRankIdx >= 0 ? overallRankIdx : 0);
+      positionStr = `${displayIdx + 1}º`;
     }
 
     // Mask CPF for LGPD privacy (e.g. 123.***.***-00)
