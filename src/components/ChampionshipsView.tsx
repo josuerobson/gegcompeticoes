@@ -612,7 +612,7 @@ export default function ChampionshipsView({
                         <div className="grid grid-cols-2 gap-1 text-[10px] font-mono text-slate-600 dark:text-slate-300">
                           <div>
                             <span className="text-[8.5px] text-slate-400 uppercase block font-sans font-bold">Etapas</span>
-                            <span className="font-semibold font-sans">{champ.stagesCount} Stages</span>
+                            <span className="font-semibold font-sans">{champ.stagesCount}</span>
                           </div>
                           <div className="text-right">
                             <span className="text-[8.5px] text-slate-400 uppercase block font-sans font-bold">Inscrição</span>
