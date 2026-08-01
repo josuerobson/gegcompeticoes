@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Post, Championship, ChampionshipInput, Registration, StageScore, RankingItem, ShootingResult, Club, Modality, Stage, StageInput, Weapon, WeaponLookupOption, SharedPostInfo, Comment } from './types';
+import { User, Post, Championship, ChampionshipInput, Registration, StageScore, RankingItem, ShootingResult, Club, Modality, Stage, StageInput, Weapon, WeaponLookupOption, SharedPostInfo, Comment, MultiChampionship } from './types';
 import FeedView from './components/FeedView';
 import ChampionshipsView from './components/ChampionshipsView';
 import AdminPanel from './components/AdminPanel';
@@ -127,6 +127,7 @@ export default function App() {
   const [users, setUsers] = useState<User[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [championships, setChampionships] = useState<Championship[]>([]);
+  const [multiChampionships, setMultiChampionships] = useState<MultiChampionship[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [stageScores, setStageScores] = useState<StageScore[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
@@ -258,7 +259,8 @@ export default function App() {
         stagesResult,
         weaponsResult,
         weaponLookupsResult,
-        settingsResult
+        settingsResult,
+        multiChampResult
       ] = await Promise.allSettled([
         fetch('/api/users', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/posts?limit=1000', { headers: authHeaders }).then(r => r.json()),
@@ -270,7 +272,8 @@ export default function App() {
         fetch('/api/stages', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/weapons', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/weapon-lookups', { headers: authHeaders }).then(r => r.json()),
-        fetch('/api/settings', { headers: authHeaders }).then(r => r.json())
+        fetch('/api/settings', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/multi-championships').then(r => r.json())
       ]);
 
       if (usersResult.status === 'fulfilled' && usersResult.value?.users) {
@@ -320,6 +323,10 @@ export default function App() {
 
       if (settingsResult.status === 'fulfilled' && settingsResult.value?.settings) {
         setSettings(settingsResult.value.settings);
+      }
+
+      if ((multiChampResult as any).status === 'fulfilled' && (multiChampResult as any).value?.multiChampionships) {
+        setMultiChampionships((multiChampResult as any).value.multiChampionships);
       }
 
       if (fetchedChamps.length > 0 && !selectedRankingModality) {
@@ -2106,6 +2113,8 @@ export default function App() {
               selectedRankingModality={selectedRankingModality}
               defaultImage={settings.default_image}
               onViewProfile={handleViewProfile}
+              multiChampionships={multiChampionships}
+              onRefreshData={syncWithBackend}
             />
           )}
 
@@ -2146,6 +2155,7 @@ export default function App() {
               onUploadMemberDocument={handleUploadMemberDocument}
               clubs={clubs}
               onCreateClub={handleCreateClub}
+              multiChampionships={multiChampionships}
             />
           )}
 

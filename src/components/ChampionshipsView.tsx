@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Championship, User, Registration, StageScore, RankingItem, Modality, Stage, Weapon, WeaponLookupOption } from '../types';
-import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, Award, Printer, Copy, CreditCard, ChevronRight, Download, Medal, PlusCircle, X, Search } from 'lucide-react';
+import { Championship, User, Registration, StageScore, RankingItem, Modality, Stage, Weapon, WeaponLookupOption, MultiChampionship } from '../types';
+import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, Award, Printer, Copy, CreditCard, ChevronRight, Download, Medal, PlusCircle, X, Search, Layers, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ChampionshipsProps {
@@ -19,6 +19,8 @@ interface ChampionshipsProps {
   selectedRankingModality: string;
   defaultImage?: string;
   onViewProfile?: (username: string) => void;
+  multiChampionships?: MultiChampionship[];
+  onRefreshData?: () => Promise<void>;
 }
 
 export default function ChampionshipsView({
@@ -36,13 +38,74 @@ export default function ChampionshipsView({
   onSelectModalityRanking,
   selectedRankingModality,
   defaultImage,
-  onViewProfile
+  onViewProfile,
+  multiChampionships = [],
+  onRefreshData
 }: ChampionshipsProps) {
   // Navigation states
-  const [activeTab, setActiveTab] = useState<'tournaments' | 'rankings' | 'certificates'>('tournaments');
+  const [activeTab, setActiveTab] = useState<'tournaments' | 'multicampeonatos' | 'certificates'>('tournaments');
   const [viewingChampionship, setViewingChampionship] = useState<Championship | null>(null);
   const [selectedPremiacaoModal, setSelectedPremiacaoModal] = useState<{ champ: Championship; modality: Modality } | null>(null);
   const [selectedPremiacaoStageId, setSelectedPremiacaoStageId] = useState<string>('');
+
+  // Multi-championship registration modal states
+  const [selectedMultiReg, setSelectedMultiReg] = useState<MultiChampionship | null>(null);
+  const [multiStageId, setMultiStageId] = useState('');
+  const [multiModalityId, setMultiModalityId] = useState('');
+  const [multiWeaponId, setMultiWeaponId] = useState('');
+  const [multiCrInput, setMultiCrInput] = useState(currentUser?.crNumber || '');
+  const [multiPaymentMethod, setMultiPaymentMethod] = useState<'pix' | 'credit_card'>('pix');
+  const [multiSubmitting, setMultiSubmitting] = useState(false);
+  const [multiError, setMultiError] = useState('');
+  const [multiSuccessMsg, setMultiSuccessMsg] = useState('');
+
+  const handleRegisterMultiSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMultiReg || !multiStageId || !multiModalityId || !multiWeaponId) {
+      setMultiError('Selecione a etapa, a modalidade e a arma.');
+      return;
+    }
+
+    setMultiError('');
+    setMultiSubmitting(true);
+
+    try {
+      const res = await fetch(`/api/multi-championships/${selectedMultiReg.id}/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser?.id || ''
+        },
+        body: JSON.stringify({
+          stageId: multiStageId,
+          modalityId: multiModalityId,
+          weaponId: multiWeaponId,
+          crNumber: currentUser?.crNumber || multiCrInput || 'CR-SIMULADO',
+          paymentMethod: multiPaymentMethod
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao realizar inscrição no multicampeonato.');
+
+      setMultiSuccessMsg(`Inscrição unificada realizada com sucesso! ${data.inscricoesGeradas} inscrição(ões) gerada(s).`);
+      if (onRefreshData) await onRefreshData();
+    } catch (err: any) {
+      setMultiError(err.message);
+    } finally {
+      setMultiSubmitting(false);
+    }
+  };
+
+  const closeMultiRegModal = () => {
+    setSelectedMultiReg(null);
+    setMultiStageId('');
+    setMultiModalityId('');
+    setMultiWeaponId('');
+    setMultiError('');
+    setMultiSuccessMsg('');
+    setMultiSubmitting(false);
+  };
 
   // Registration and payment popup state
   const [selectedChampReg, setSelectedChampReg] = useState<Championship | null>(null);
@@ -282,10 +345,10 @@ export default function ChampionshipsView({
             Campeonatos
           </button>
           <button
-            onClick={() => { setActiveTab('rankings'); setActiveCertificate(null); }}
-            className={`px-4 py-2 text-xs font-semibold rounded-lg transition duration-200 ${activeTab === 'rankings' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+            onClick={() => { setActiveTab('multicampeonatos'); setActiveCertificate(null); }}
+            className={`px-4 py-2 text-xs font-semibold rounded-lg transition duration-200 ${activeTab === 'multicampeonatos' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
           >
-            Líderes e Rankings
+            Multicampeonatos
           </button>
           <button
             onClick={() => { setActiveTab('certificates'); }}
@@ -654,120 +717,96 @@ export default function ChampionshipsView({
             )
           )}
 
-          {activeTab === 'rankings' && (
+          {activeTab === 'multicampeonatos' && (
             /* ==================================================== */
-            /* LEADERBOARDS AND RESULTS SCREEN                      */
+            /* MULTICAMPEONATOS TAB FOR ATHLETES                    */
             /* ==================================================== */
             <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-5 space-y-6">
-              
-              {/* Modality selectors */}
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-4">
                 <div>
-                  <h3 className="font-display font-semibold text-slate-900 text-sm uppercase tracking-wider">Tabela Geral do Campeonato</h3>
-                  <p className="text-xs text-slate-400">Classificação oficial calculada pelas somas dos estágios de competição.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500 font-medium">Modalidade:</span>
-                  <select
-                    value={selectedRankingModality}
-                    onChange={(e) => onSelectModalityRanking(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 text-xs px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-100 text-slate-700 font-semibold"
-                  >
-                    {allModalities.map((mod, i) => (
-                      <option key={i} value={mod}>{mod}</option>
-                    ))}
-                  </select>
+                  <h3 className="font-display font-bold text-slate-900 text-base flex items-center gap-2">
+                    <Layers className="w-5 h-5 text-blue-600" /> Multi-campeonatos G&G
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Inscreva-se em pacotes promocionais de campeonatos com valor único de inscrição.
+                  </p>
                 </div>
               </div>
 
-              {/* Leaderboard list table */}
-              <div className="overflow-x-auto text-sm">
-                {globalRankings.length === 0 ? (
-                  <div className="text-center py-10">
-                    <Medal className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                    <p className="text-slate-500 font-medium">Nenhum placar homologado nesta categoria ainda.</p>
-                    <p className="text-xs text-slate-400">A equipe diretiva começará a postar as notas das etapas em breve.</p>
-                  </div>
-                ) : (
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase font-bold font-mono tracking-wider">
-                        <th className="py-3 px-2">Colocação</th>
-                        <th className="py-3 px-4">Atleta G&G</th>
-                        {stages.length > 0 ? (
-                          stages.map((s, idx) => (
-                            <th key={s.id || idx} className="py-3 px-4 text-center">{s.title || `Etapa ${s.stageNum || idx + 1}`}</th>
-                          ))
-                        ) : (
-                          <>
-                            <th className="py-3 px-4 text-center">Etapa 1</th>
-                            <th className="py-3 px-4 text-center">Etapa 2</th>
-                            <th className="py-3 px-4 text-center">Etapa 3</th>
-                            <th className="py-3 px-4 text-center">Etapa 4</th>
-                          </>
-                        )}
-                        <th className="py-3 px-4 text-right">Resultado Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {globalRankings.map((ranking, index) => {
-                        const position = index + 1;
-                        let medalColor = '';
-                        if (position === 1) medalColor = 'bg-amber-100 text-amber-700 border-amber-300';
-                        else if (position === 2) medalColor = 'bg-slate-100 text-slate-700 border-slate-300';
-                        else if (position === 3) medalColor = 'bg-orange-100 text-orange-700 border-orange-300';
+              {multiChampionships.filter(m => m.status === 'active').length === 0 ? (
+                <div className="text-center py-12 border border-dashed border-slate-200 rounded-xl">
+                  <Trophy className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                  <p className="text-slate-500 font-medium text-sm">Nenhum multicampeonato disponível para inscrição no momento.</p>
+                  <p className="text-xs text-slate-400">Novos pacotes de campeonatos serão publicados em breve pela direção.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {multiChampionships.filter(m => m.status === 'active').map(multi => {
+                    const includedChamps = championships.filter(c => multi.championshipIds.includes(c.id));
+                    return (
+                      <div key={multi.id} className="bg-slate-50/50 border border-slate-200 rounded-2xl p-5 space-y-4 flex flex-col justify-between hover:shadow-md transition">
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-start gap-2">
+                            <div>
+                              <span className="text-[10px] font-extrabold uppercase bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full">
+                                Pacote Promocional
+                              </span>
+                              <h4 className="font-display font-bold text-slate-900 text-lg mt-1">{multi.title}</h4>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-xs text-slate-400 block font-semibold">Valor Único</span>
+                              <span className="text-xl font-extrabold text-blue-600">R$ {Number(multi.registrationFee).toFixed(2)}</span>
+                            </div>
+                          </div>
 
-                        return (
-                          <tr key={ranking.userId} className="hover:bg-slate-50/50 transition">
-                            <td className="py-3 px-2 font-mono font-bold">
-                              {position <= 3 ? (
-                                <div className={`w-6 h-6 rounded-full border text-center flex items-center justify-center text-xs font-bold leading-none ${medalColor}`}>
-                                  {position}
+                          {multi.description && (
+                            <p className="text-xs text-slate-600 leading-relaxed bg-white/60 p-3 rounded-xl border border-slate-100">
+                              {multi.description}
+                            </p>
+                          )}
+
+                          <div className="space-y-2 pt-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                              Campeonatos Incluídos ({includedChamps.length}):
+                            </span>
+                            <div className="space-y-1.5">
+                              {includedChamps.map(ic => (
+                                <div key={ic.id} className="bg-white border border-slate-200/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-2 font-bold text-slate-800">
+                                    <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
+                                    <span>{ic.title}</span>
+                                  </div>
+                                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                                    Incluído
+                                  </span>
                                 </div>
-                              ) : (
-                                <span className="text-slate-500 pl-2">#{position}</span>
-                              )}
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="flex items-center gap-3 cursor-pointer hover:opacity-85 transition" onClick={() => onViewProfile && onViewProfile(ranking.username)}>
-                                <img
-                                  src={ranking.avatarUrl}
-                                  alt={ranking.username}
-                                  className="w-8 h-8 rounded-full object-cover border border-slate-200"
-                                  referrerPolicy="no-referrer"
-                                  onError={(e) => {
-                                    e.currentTarget.onerror = null;
-                                    e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
-                                  }}
-                                />
-                                <div>
-                                  <span className="font-semibold text-slate-900 block text-xs">{ranking.fullName}</span>
-                                  <span className="text-[10px] text-slate-400">@{ranking.username}</span>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="py-3 px-4 text-center font-mono font-bold text-xs text-slate-600">
-                              {ranking.stageScores[1] !== undefined ? ranking.stageScores[1] : '-'}
-                            </td>
-                            <td className="py-3 px-4 text-center font-mono font-bold text-xs text-slate-600">
-                              {ranking.stageScores[2] !== undefined ? ranking.stageScores[2] : '-'}
-                            </td>
-                            <td className="py-3 px-4 text-center font-mono font-bold text-xs text-slate-600">
-                              {ranking.stageScores[3] !== undefined ? ranking.stageScores[3] : '-'}
-                            </td>
-                            <td className="py-3 px-4 text-center font-mono font-bold text-xs text-slate-600">
-                              {ranking.stageScores[4] !== undefined ? ranking.stageScores[4] : '-'}
-                            </td>
-                            <td className="py-3 px-4 text-right font-mono font-extrabold text-blue-700 text-xs">
-                              {ranking.totalScore} pts
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-3 border-t border-slate-200/80">
+                          <button
+                            onClick={() => {
+                              if (!currentUser) {
+                                alert('Faça login para se inscrever no multicampeonato.');
+                                return;
+                              }
+                              setSelectedMultiReg(multi);
+                              setMultiStageId(stages.length > 0 ? stages[0].id : '');
+                              setMultiModalityId(modalities.length > 0 ? modalities[0].id : '');
+                              setMultiWeaponId(weapons.length > 0 ? weapons[0].id : '');
+                            }}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-3 rounded-xl transition shadow-md shadow-blue-100 flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <Target className="w-4 h-4" /> Inscrever-se neste Multicampeonato
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -1676,6 +1715,149 @@ export default function ChampionshipsView({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Modal de Inscrição em Multicampeonato */}
+      {selectedMultiReg && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl border border-slate-100 my-8 text-slate-800"
+          >
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <div>
+                <span className="text-[10px] font-bold uppercase bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">Inscrição Unificada</span>
+                <h3 className="font-display font-bold text-slate-900 text-lg mt-1">{selectedMultiReg.title}</h3>
+              </div>
+              <button onClick={closeMultiRegModal} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {multiSuccessMsg ? (
+              <div className="bg-emerald-50 text-emerald-800 p-4 rounded-xl space-y-3 text-xs font-semibold text-center">
+                <CheckCircle className="w-8 h-8 text-emerald-600 mx-auto" />
+                <p className="text-sm font-bold">{multiSuccessMsg}</p>
+                <p className="text-slate-500 text-[11px]">Sua inscrição em todos os campeonatos deste pacote foi confirmada automaticamente.</p>
+                <button
+                  onClick={closeMultiRegModal}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl transition cursor-pointer"
+                >
+                  Concluir
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleRegisterMultiSubmit} className="space-y-4">
+                {multiError && (
+                  <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{multiError}</div>
+                )}
+
+                <div className="bg-slate-50 p-3 rounded-xl text-xs text-slate-600 space-y-1">
+                  <div className="flex justify-between font-bold">
+                    <span>Valor Total da Inscrição:</span>
+                    <span className="text-blue-700 font-extrabold text-sm">R$ {Number(selectedMultiReg.registrationFee).toFixed(2)}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400">Esta taxa única garante sua inscrição em todos os {selectedMultiReg.championshipIds?.length || 0} campeonatos do pacote.</p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Etapa Única das Competições</label>
+                    <select
+                      value={multiStageId}
+                      onChange={e => setMultiStageId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-700"
+                    >
+                      <option value="">Selecione a etapa...</option>
+                      {stages.map(s => (
+                        <option key={s.id} value={s.id}>{s.title || `Etapa ${s.stageNum}`} ({s.date.split('T')[0]})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade / Divisão</label>
+                    <select
+                      value={multiModalityId}
+                      onChange={e => setMultiModalityId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-700"
+                    >
+                      <option value="">Selecione a modalidade...</option>
+                      {modalities.map(m => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Arma Utilizada</label>
+                    <select
+                      value={multiWeaponId}
+                      onChange={e => setMultiWeaponId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-700"
+                    >
+                      <option value="">Selecione sua arma...</option>
+                      {weapons.map(w => (
+                        <option key={w.id} value={w.id}>
+                          {w.manufacturer} {w.model} ({w.caliber}) - Sigma: {w.sigmaNumber || 'N/A'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Número do CR</label>
+                    <input
+                      type="text"
+                      value={multiCrInput}
+                      onChange={e => setMultiCrInput(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-700"
+                      placeholder="Ex: 123456"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Forma de Pagamento</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setMultiPaymentMethod('pix')}
+                        className={`p-2.5 border rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${multiPaymentMethod === 'pix' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-slate-200 text-slate-600'}`}
+                      >
+                        <Zap className="w-4 h-4" /> PIX Instantâneo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMultiPaymentMethod('credit_card')}
+                        className={`p-2.5 border rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${multiPaymentMethod === 'credit_card' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-slate-200 text-slate-600'}`}
+                      >
+                        <CreditCard className="w-4 h-4" /> Cartão de Crédito
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={closeMultiRegModal}
+                    className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={multiSubmitting}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold text-xs px-6 py-2.5 rounded-xl transition shadow-sm cursor-pointer"
+                  >
+                    {multiSubmitting ? 'Inscrito...' : 'Confirmar e Pagar'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </motion.div>
         </div>
       )}
 

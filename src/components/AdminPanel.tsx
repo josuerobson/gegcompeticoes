@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post } from '../types';
+import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
@@ -63,6 +63,7 @@ interface AdminPanelProps {
   onUploadMemberDocument: (memberId: string, kind: string, file: File) => Promise<boolean>;
   clubs: Club[];
   onCreateClub: (fields: { name: string; cnpj: string; responsibleName: string; email: string; password: string; phone?: string; crNumber?: string; city?: string; state?: string }) => Promise<{ club?: Club; error?: string }>;
+  multiChampionships?: MultiChampionship[];
 }
 
 // Labeled input matching this panel's existing form style (see the
@@ -1191,6 +1192,297 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
   );
 }
 
+// =============================================================================
+// MultiChampionshipsManager — Painel CRUD de Multicampeonatos
+// =============================================================================
+interface MultiChampionshipsManagerProps {
+  championships: Championship[];
+  multiChampionships?: MultiChampionship[];
+  currentUser: User | null;
+  onRefreshData?: () => Promise<void>;
+}
+
+function MultiChampionshipsManager({ championships, multiChampionships = [], currentUser, onRefreshData }: MultiChampionshipsManagerProps) {
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [selectedChampIds, setSelectedChampIds] = useState<string[]>([]);
+  const [registrationFee, setRegistrationFee] = useState('');
+  const [clubRegistrationFee, setClubRegistrationFee] = useState('');
+  const [pixKey, setPixKey] = useState('');
+  const [pixType, setPixType] = useState('celular');
+  const [pixName, setPixName] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
+  const [status, setStatus] = useState<'active' | 'inactive'>('active');
+
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const resetForm = () => {
+    setTitle('');
+    setDescription('');
+    setSelectedChampIds([]);
+    setRegistrationFee('');
+    setClubRegistrationFee('');
+    setPixKey('');
+    setPixType('celular');
+    setPixName('');
+    setWhatsapp('');
+    setStatus('active');
+    setEditingId(null);
+    setShowForm(false);
+    setError('');
+  };
+
+  const handleEdit = (multi: MultiChampionship) => {
+    setEditingId(multi.id);
+    setTitle(multi.title);
+    setDescription(multi.description || '');
+    setSelectedChampIds(multi.championshipIds || []);
+    setRegistrationFee(String(multi.registrationFee || 0));
+    setClubRegistrationFee(multi.clubRegistrationFee ? String(multi.clubRegistrationFee) : '');
+    setPixKey(multi.pixKey || '');
+    setPixType(multi.pixType || 'celular');
+    setPixName(multi.pixName || '');
+    setWhatsapp(multi.whatsapp || '');
+    setStatus(multi.status || 'active');
+    setShowForm(true);
+    setError('');
+  };
+
+  const handleToggleChamp = (champId: string) => {
+    setSelectedChampIds(prev =>
+      prev.includes(champId) ? prev.filter(id => id !== champId) : [...prev, champId]
+    );
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) { setError('Título é obrigatório.'); return; }
+    if (selectedChampIds.length === 0) { setError('Selecione pelo menos um campeonato.'); return; }
+    if (!registrationFee || Number(registrationFee) <= 0) { setError('Informe o valor da inscrição.'); return; }
+
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const url = editingId ? `/api/multi-championships/${editingId}` : '/api/multi-championships';
+      const method = editingId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser?.id || ''
+        },
+        body: JSON.stringify({
+          title,
+          description: description || undefined,
+          championshipIds: selectedChampIds,
+          registrationFee: Number(registrationFee),
+          clubRegistrationFee: clubRegistrationFee ? Number(clubRegistrationFee) : undefined,
+          pixKey: pixKey || undefined,
+          pixType: pixType || undefined,
+          pixName: pixName || undefined,
+          whatsapp: whatsapp || undefined,
+          status
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar multicampeonato.');
+
+      setSuccess(editingId ? 'Multicampeonato atualizado!' : 'Multicampeonato criado com sucesso!');
+      resetForm();
+      if (onRefreshData) await onRefreshData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Deseja realmente remover este multicampeonato?')) return;
+    try {
+      const res = await fetch(`/api/multi-championships/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      if (!res.ok) throw new Error('Erro ao remover multicampeonato');
+      if (onRefreshData) await onRefreshData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  return (
+    <div className="space-y-6 text-slate-800">
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
+        <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+          <div>
+            <h3 className="font-display font-bold text-slate-900 text-base">Gerenciamento de Multi-campeonatos</h3>
+            <p className="text-xs text-slate-400">Crie pacotes de campeonatos com valor único de inscrição.</p>
+          </div>
+          <button
+            onClick={() => { if (showForm) resetForm(); else setShowForm(true); }}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+          >
+            {showForm ? <X className="w-4 h-4" /> : <PlusCircle className="w-4 h-4" />}
+            {showForm ? 'Cancelar' : 'Novo Multi-campeonato'}
+          </button>
+        </div>
+
+        {success && <div className="bg-emerald-50 text-emerald-700 p-3 rounded-xl text-xs font-semibold flex items-center gap-1.5"><CheckCircle className="w-4 h-4" />{success}</div>}
+        {error && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{error}</div>}
+
+        {showForm && (
+          <form onSubmit={handleSubmit} className="bg-slate-50/70 p-5 border border-slate-200 rounded-2xl space-y-4">
+            <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wider">
+              {editingId ? 'Editar Multi-campeonato' : 'Cadastrar Novo Multi-campeonato'}
+            </h4>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <ChampField label="Nome do Multi-campeonato" value={title} onChange={setTitle} placeholder="Ex: Grupo 2026 de Campeonatos" />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Descrição / Instruções (Opcional)</label>
+                <textarea
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  placeholder="Instruções para o atleta ao se inscrever neste pacote..."
+                  className="w-full bg-white border border-slate-200 outline-none p-3 rounded-xl text-xs text-slate-700 h-20"
+                />
+              </div>
+
+              <div className="sm:col-span-2 space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase block">Selecione os Campeonatos Incluídos ({selectedChampIds.length})</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-3 bg-white border border-slate-200 rounded-xl">
+                  {championships.map(c => {
+                    const isChecked = selectedChampIds.includes(c.id);
+                    return (
+                      <label key={c.id} className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${isChecked ? 'bg-blue-50/60 border-blue-200 text-blue-900 font-bold' : 'border-slate-100 hover:bg-slate-50 text-slate-700'}`}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleToggleChamp(c.id)}
+                          className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                        />
+                        <span>{c.title}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <ChampField label="Valor Inscrição Única Atleta (R$)" type="number" value={registrationFee} onChange={setRegistrationFee} placeholder="150.00" />
+              <ChampField label="Valor Inscrição Clube (R$)" type="number" value={clubRegistrationFee} onChange={setClubRegistrationFee} placeholder="Opcional" />
+
+              <div className="sm:col-span-2 pt-2 border-t border-slate-200">
+                <h5 className="font-bold text-[11px] text-slate-600 uppercase mb-2">Dados PIX para Pagamento</h5>
+              </div>
+
+              <ChampSelect label="Tipo de PIX" value={pixType} onChange={setPixType} options={[
+                { value: 'celular', label: 'Celular' }, { value: 'cpf', label: 'CPF' }, { value: 'cnpj', label: 'CNPJ' }, { value: 'aleatoria', label: 'Chave Aleatória' }
+              ]} />
+              <ChampField label="Chave PIX" value={pixKey} onChange={setPixKey} placeholder="Sua chave PIX" />
+              <ChampField label="Nome Exibido no PIX" value={pixName} onChange={setPixName} placeholder="Razão social / Nome" />
+              <ChampField label="WhatsApp para Comprovante" value={whatsapp} onChange={setWhatsapp} placeholder="61999998888" />
+
+              <ChampSelect label="Status" value={status} onChange={v => setStatus(v as 'active' | 'inactive')} options={[
+                { value: 'active', label: 'Ativo' }, { value: 'inactive', label: 'Inativo' }
+              ]} />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold px-6 py-2.5 rounded-xl transition shadow-sm cursor-pointer"
+              >
+                {saving ? 'Salvando...' : editingId ? 'Atualizar Multi-campeonato' : 'Criar Multi-campeonato'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Multi-championships List */}
+        <div className="space-y-4">
+          <h4 className="font-bold text-xs text-slate-700 uppercase tracking-wider">Multicampeonatos Cadastrados ({multiChampionships.length})</h4>
+          {multiChampionships.length === 0 ? (
+            <div className="text-center py-8 text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
+              Nenhum multicampeonato cadastrado ainda. Crie o primeiro clicando no botão acima.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
+              {multiChampionships.map(m => {
+                const includedChamps = championships.filter(c => m.championshipIds.includes(c.id));
+                return (
+                  <div key={m.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/40 hover:bg-slate-50 transition space-y-3">
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b border-slate-150 pb-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h5 className="font-bold text-slate-900 text-sm">{m.title}</h5>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${m.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                            {m.status === 'active' ? 'Ativo' : 'Inativo'}
+                          </span>
+                        </div>
+                        {m.description && <p className="text-xs text-slate-500 mt-0.5">{m.description}</p>}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="font-extrabold text-blue-700 text-sm">R$ {Number(m.registrationFee).toFixed(2)}</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleEdit(m)}
+                            className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                            title="Editar"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(m.id)}
+                            className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">Campeonatos Incluídos ({includedChamps.length}):</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {includedChamps.map(ic => (
+                          <span key={ic.id} className="bg-white border border-slate-200 text-slate-700 text-[11px] font-medium px-2.5 py-1 rounded-md shadow-2xs flex items-center gap-1">
+                            <Trophy className="w-3 h-3 text-amber-500" /> {ic.title}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPanel({
   currentUser,
   championships,
@@ -1226,7 +1518,8 @@ export default function AdminPanel({
   onUpdateMemberProfile,
   onUploadMemberDocument,
   clubs,
-  onCreateClub
+  onCreateClub,
+  multiChampionships = []
 }: AdminPanelProps) {
   const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
 
@@ -2006,49 +2299,12 @@ export default function AdminPanel({
 
       case 'multi_championships':
         return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-display font-bold text-slate-900 text-base">Dashboard Multi-Campeonatos</h3>
-                <p className="text-xs text-slate-400">Acompanhamento consolidado de atiradores em múltiplas divisões.</p>
-              </div>
-              <Layers className="w-5 h-5 text-blue-600" />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {users.slice(0, 4).map((user) => {
-                const userRegs = registrations.filter(r => r.userId === user.id && r.paymentStatus === 'approved');
-                const userScores = stageScores.filter(s => s.userId === user.id);
-                if (userRegs.length <= 1) return null;
-
-                return (
-                  <div key={user.id} className="border border-slate-150 rounded-xl p-4 bg-slate-50/50 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <img src={user.avatarUrl} alt={user.username} className="w-8 h-8 rounded-full object-cover" />
-                      <div>
-                        <h4 className="font-bold text-xs text-slate-800">{user.fullName}</h4>
-                        <span className="text-[10px] text-slate-450 block font-mono">@{user.username}</span>
-                      </div>
-                    </div>
-                    <div className="border-t border-slate-200/60 pt-2 grid grid-cols-3 gap-2 text-[10px] font-mono text-center text-slate-600">
-                      <div>
-                        <span className="block text-[8px] text-slate-400 font-sans uppercase">Inscrições</span>
-                        <span className="font-bold text-slate-800">{userRegs.length} Categorias</span>
-                      </div>
-                      <div>
-                        <span className="block text-[8px] text-slate-400 font-sans uppercase">Total Pontos</span>
-                        <span className="font-bold text-blue-600">{userScores.reduce((sum, s) => sum + s.score, 0).toFixed(1)}</span>
-                      </div>
-                      <div>
-                        <span className="block text-[8px] text-slate-400 font-sans uppercase">Etapas</span>
-                        <span className="font-bold text-emerald-600">{userScores.length} Disputadas</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <MultiChampionshipsManager
+            championships={championships}
+            multiChampionships={multiChampionships}
+            currentUser={currentUser}
+            onRefreshData={onRefreshData}
+          />
         );
 
       case 'resultados':
@@ -3764,6 +4020,16 @@ export default function AdminPanel({
           onRefreshData={onRefreshData}
           isPlataformaScope={true}
         />;
+
+      case 'multi_campeonatos':
+        return (
+          <MultiChampionshipsManager
+            championships={championships}
+            multiChampionships={multiChampionships}
+            currentUser={currentUser}
+            onRefreshData={onRefreshData}
+          />
+        );
 
       case 'consulta_inscricoes':
         return (

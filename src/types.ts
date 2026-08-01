@@ -272,6 +272,7 @@ export interface Registration {
   totalMinutos?: string; totalMilesegundos?: number;
   seriesPontos?: any[]; seriesTempos?: any[];
   codigoInscricao?: number;
+  multiChampionshipId?: string; // Presente quando a inscrição foi gerada por um multicampeonato
 }
 
 export interface StageScore {
@@ -314,4 +315,21 @@ export interface TrainingSession {
   score?: number;
   notes?: string;
   createdAt?: string;
+}
+
+// ─── Multi-campeonatos ────────────────────────────────────────────────────────
+// Pacote de campeonatos agrupados com inscrição unificada (valor único).
+export interface MultiChampionship {
+  id: string;
+  title: string;
+  description?: string;
+  championshipIds: string[];
+  registrationFee: number;
+  clubRegistrationFee?: number;
+  pixKey?: string;
+  pixType?: string;
+  pixName?: string;
+  whatsapp?: string;
+  status: 'active' | 'inactive';
+  createdAt: string;
 }

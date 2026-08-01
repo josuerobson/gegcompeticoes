@@ -841,6 +841,33 @@ export async function initDB() {
         AND (registrations.valor_pago = 120 OR registrations.valor_pago IS NULL);
     `);
 
+    // ─── Multi-campeonatos ───────────────────────────────────────────────────
+    // Nova tabela para pacotes de campeonatos com inscrição unificada.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS multi_championships (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        championship_ids TEXT[] NOT NULL DEFAULT '{}',
+        registration_fee NUMERIC(10,2) NOT NULL DEFAULT 0,
+        club_registration_fee NUMERIC(10,2),
+        pix_key TEXT,
+        pix_type TEXT,
+        pix_name TEXT,
+        whatsapp TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Rastreamento: coluna que aponta qual multicampeonato originou a inscrição.
+    // Aditiva — inscrições individuais existentes ficam com NULL.
+    await client.query(`
+      ALTER TABLE registrations
+        ADD COLUMN IF NOT EXISTS multi_championship_id TEXT;
+    `);
+
     console.log('Database seed check complete.');
 
     try {
