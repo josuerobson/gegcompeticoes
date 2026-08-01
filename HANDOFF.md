@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix: remover palavra Stages dos cards de campeonato` |
-| Data/hora | 2026-08-01T11:22:00-03:00 |
+| Mensagem | `fix: botoes baixar regulamento e sumula lado a lado no desktop` |
+| Data/hora | 2026-08-01T11:24:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |

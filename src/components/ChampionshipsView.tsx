@@ -452,26 +452,26 @@ export default function ChampionshipsView({
                   </div>
                 </div>
 
-                {/* Download Document Buttons (Side-by-side on Mobile) */}
-                <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto sm:flex-wrap sm:gap-3">
+                {/* Download Document Buttons (Side-by-side) */}
+                <div className="flex flex-wrap gap-2 sm:gap-3">
                   <button
                     onClick={() => {
                       window.open(`/api/championships/${viewingChampionship.id}/documents/regulamento`, '_blank');
                     }}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] sm:text-xs font-bold px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl transition flex items-center justify-center gap-1 sm:gap-2 shadow-xs cursor-pointer truncate"
+                    className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] sm:text-sm font-bold px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
                   >
-                    <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-                    <span className="truncate">Baixar Regulamento</span>
+                    <Download className="w-4 h-4 shrink-0" />
+                    Baixar Regulamento
                   </button>
 
                   <button
                     onClick={() => {
                       window.open(`/api/championships/${viewingChampionship.id}/documents/sumula`, '_blank');
                     }}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] sm:text-xs font-bold px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl transition flex items-center justify-center gap-1 sm:gap-2 shadow-xs cursor-pointer truncate"
+                    className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] sm:text-sm font-bold px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
                   >
-                    <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-                    <span className="truncate">Baixar Súmula</span>
+                    <Download className="w-4 h-4 shrink-0" />
+                    Baixar Súmula
                   </button>
                 </div>
 
