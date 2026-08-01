@@ -210,16 +210,20 @@ export function ClubCertificatesViewer({
     userName: string,
     championshipId: string,
     modalityId: string,
-    registrationId?: string
+    registrationId?: string,
+    stageId?: string
   ) => {
     const modObj = modalities.find(m => m.id === modalityId);
     const champObj = championships.find(c => c.id === championshipId);
+    const targetStage = stages.find(s => s.id === stageId);
+    const targetStageNum = targetStage?.stageNum;
     const modName = modObj?.name || '';
 
-    // Get all scores for this championship & modality
+    // Get all scores for this championship & modality (filtered by stage if stageId is provided)
     const matchingScores = stageScores.filter(s =>
       s.championshipId === championshipId &&
-      ((s as any).modalityId === modalityId || (modName && s.modality?.toLowerCase() === modName.toLowerCase()))
+      ((s as any).modalityId === modalityId || (modName && s.modality?.toLowerCase() === modName.toLowerCase())) &&
+      (targetStageNum ? s.stageNum === targetStageNum : true)
     );
 
     // Group scores by athlete/registration
@@ -262,6 +266,27 @@ export function ClubCertificatesViewer({
         athleteMap[key].scoreX += (reg.scoreX || 0);
         athleteMap[key].scoreP10 += (reg.scoreP10 || 0);
         athleteMap[key].scoreP9 += (reg.scoreP9 || 0);
+      }
+    }
+
+    // Also include any approved registrations for this stage that have totalPoints recorded on reg
+    for (const r of registrations) {
+      if (r.championshipId === championshipId && r.modalityId === modalityId && (stageId ? r.stageId === stageId : true) && r.paymentStatus === 'approved') {
+        const u = users.find(usr => usr.id === r.userId);
+        const key = u?.id || r.userId || (u?.fullName ? u.fullName.toLowerCase() : 'unknown');
+        if (!athleteMap[key] && (r.totalPoints || 0) > 0) {
+          athleteMap[key] = {
+            userId: u?.id || r.userId || '',
+            registrationId: r.id,
+            shooterName: u?.fullName || '',
+            totalScore: r.totalPoints || 0,
+            hitFactor: r.idscTotalSeconds || 0,
+            stageCount: 1,
+            scoreX: r.scoreX || 0,
+            scoreP10: r.scoreP10 || 0,
+            scoreP9: r.scoreP9 || 0
+          };
+        }
       }
     }
 
@@ -548,7 +573,8 @@ export function ClubCertificatesViewer({
               athlete?.fullName || '',
               reg.championshipId,
               reg.modalityId,
-              reg.id
+              reg.id,
+              reg.stageId
             );
 
             const certData: CertificatePrintModalData = {

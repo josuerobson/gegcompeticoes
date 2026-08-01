@@ -3157,15 +3157,25 @@ app.get('/api/public/validar/certificado/:certId', async (req, res) => {
     const silverMin = Number(reg.pontuacao_minima_atleta_prata) || 0;
     const bronzeMin = Number(reg.pontuacao_minima_atleta_bronze) || 0;
 
-    // Determine ranking position among all unique athletes in this modality & championship
+    // Get stage_num if registration is for a specific stage
+    let stageNumFilter: number | null = null;
+    if (reg.stage_id) {
+      const stgRes = await pool.query('SELECT stage_num FROM stages WHERE id = $1', [reg.stage_id]);
+      if (stgRes.rows.length > 0) {
+        stageNumFilter = stgRes.rows[0].stage_num;
+      }
+    }
+
+    // Determine ranking position among all unique athletes in this stage/modality & championship
     const rankRes = await pool.query(
       `SELECT COALESCE(ss.user_id, r.user_id) as athlete_id, COALESCE(SUM(ss.score), 0) as total_pts
        FROM stage_scores ss
        LEFT JOIN registrations r ON r.id = ss.registration_id
        WHERE ss.championship_id = $1 AND (ss.modality_id = $2 OR ss.modality ILIKE $3)
+         AND ($4::int IS NULL OR ss.stage_num = $4::int)
        GROUP BY COALESCE(ss.user_id, r.user_id)
        ORDER BY total_pts DESC`,
-      [reg.championship_id, reg.modality_id, reg.modality_name || '']
+      [reg.championship_id, reg.modality_id, reg.modality_name || '', stageNumFilter]
     );
 
     if (rankRes.rows.length > 0) {
