@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix: eleva z-index do submodal de cadastro de arma para z-[70] sobrepondo modais de inscricao` |
-| Data/hora | 2026-08-01T15:46:00-03:00 |
+| Mensagem | `chore: remove os menus Campeonatos e Multi-campeonatos do Painel de Servicos no perfil do atleta` |
+| Data/hora | 2026-08-01T16:07:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |

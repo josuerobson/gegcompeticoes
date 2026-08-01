@@ -1405,8 +1405,6 @@ export default function MemberProfile({
   const menuItems = [
     { id: 'my_profile', label: 'Meu Cadastro', icon: UserCog, public: false },
     { id: 'posts', label: 'Fotos Publicadas', icon: Grid, count: userPosts.length, public: true },
-    { id: 'championships', label: 'Campeonatos', icon: Trophy, public: true },
-    { id: 'multi_championships', label: 'Multi-Campeonatos', icon: Activity, public: true },
     { id: 'my_registrations', label: 'Minhas Inscrições', icon: CheckCircle2, count: approvedRegs.length, public: false },
     { id: 'results', label: 'Resultados', icon: Trophy, count: userScores.length, public: true },
     { id: 'certificates', label: 'Certificados', icon: Award, count: approvedRegs.length, public: false },
