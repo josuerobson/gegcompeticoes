@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: implementa recurso de multicampeonatos com inscricao unificada` |
-| Data/hora | 2026-08-01T12:35:00-03:00 |
+| Mensagem | `fix: move rotas de multicampeonato para depois da definicao dos middlewares de auth em server.ts` |
+| Data/hora | 2026-08-01T12:39:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |

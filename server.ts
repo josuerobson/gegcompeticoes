@@ -277,6 +277,160 @@ function mapMultiChampionship(m: any): MultiChampionship {
   };
 }
 
+
+
+function mapStageScore(s: any): StageScore {
+  return {
+    id: s.id,
+    championshipId: s.championship_id,
+    registrationId: s.registration_id,
+    userId: s.user_id,
+    shooterName: s.shooter_name,
+    modality: s.modality,
+    stageNum: s.stage_num,
+    score: Number(s.score),
+    timeSeconds: s.time_seconds !== null && s.time_seconds !== undefined ? Number(s.time_seconds) : undefined,
+    hitFactor: s.hit_factor !== null && s.hit_factor !== undefined ? Number(s.hit_factor) : undefined,
+    createdAt: s.created_at,
+  };
+}
+
+function mapPost(p: any): Post {
+  let parsedImageUrls: string[] | undefined = undefined;
+  if (p.image_url) {
+    if (typeof p.image_url === 'string' && p.image_url.trim().startsWith('[') && p.image_url.trim().endsWith(']')) {
+      try {
+        parsedImageUrls = JSON.parse(p.image_url.trim());
+      } catch (e) {
+        parsedImageUrls = [p.image_url];
+      }
+    } else {
+      parsedImageUrls = [p.image_url];
+    }
+  }
+
+  let parsedSharedPost: SharedPostInfo | undefined = undefined;
+  if (p.shared_post) {
+    try {
+      parsedSharedPost = typeof p.shared_post === 'string' ? JSON.parse(p.shared_post) : p.shared_post;
+    } catch (e) {
+      console.error('Error parsing shared_post:', e);
+    }
+  }
+
+  return {
+    id: p.id,
+    userId: p.user_id,
+    username: p.username,
+    userAvatar: p.user_avatar,
+    content: p.content,
+    imageUrl: parsedImageUrls && parsedImageUrls.length > 0 ? parsedImageUrls[0] : (p.image_url || undefined),
+    imageUrls: parsedImageUrls,
+    targetScore: p.target_score || undefined,
+    likes: p.likes || [],
+    comments: (p.comments || []).map((c: any) => ({
+      id: c.id,
+      userId: c.userId || c.user_id,
+      username: c.username,
+      userAvatar: c.userAvatar || c.user_avatar,
+      content: c.content,
+      createdAt: c.createdAt || c.created_at
+    })),
+    createdAt: p.created_at,
+    sharedPost: parsedSharedPost,
+    sharesCount: p.shares_count ? Number(p.shares_count) : 0,
+    viewsCount: p.views_count ? Number(p.views_count) : 0,
+  };
+}
+
+function mapTraining(t: any): TrainingSession {
+  return {
+    id: t.id,
+    userId: t.user_id,
+    clubId: t.club_id || undefined,
+    dateTime: t.date_time,
+    weaponId: t.weapon_id || undefined,
+    weaponName: t.weapon_name,
+    weaponCaliber: t.weapon_caliber || undefined,
+    weaponOwnerType: (t.weapon_owner_type as 'propria' | 'clube') || 'propria',
+    totalShots: Number(t.total_shots ?? 0),
+    ownAmmoShots: Number(t.own_ammo_shots ?? 0),
+    clubAmmoShots: Number(t.club_ammo_shots ?? 0),
+    modality: t.modality || undefined,
+    score: Number(t.score ?? 0),
+    notes: t.notes || undefined,
+    createdAt: t.created_at,
+  };
+}
+
+// Middlewares
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Serve uploaded images and static assets from public uploads directory
+const uploadsDir = path.join(__dirname, 'public', 'uploads', 'posts');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
+
+// Helper to process post image strings - returns base64 directly so images are stored in PostgreSQL DB persistently
+function saveBase64ImageToDisk(base64Data: string, prefix: string): string {
+  if (!base64Data || typeof base64Data !== 'string') {
+    return base64Data;
+  }
+  // Store base64 image string directly in database TEXT column to guarantee persistence on Docker / EasyPanel redeploys
+  return base64Data;
+}
+
+// Auth middleware - reads client user context from header for stateless simple authentication
+app.use(async (req, res, next) => {
+  const userId = req.headers['x-user-id'] as string;
+  if (userId) {
+    try {
+      const userRes = await pool.query(
+        `SELECT u.*,
+          COALESCE((SELECT json_agg(follower_id) FROM follows WHERE following_id = u.id), '[]'::json) as followers,
+          COALESCE((SELECT json_agg(following_id) FROM follows WHERE follower_id = u.id), '[]'::json) as following
+        FROM users u WHERE u.id = $1`,
+        [userId]
+      );
+      if (userRes.rows.length > 0) {
+        (req as any).user = mapUser(userRes.rows[0]);
+      }
+    } catch (err) {
+      console.error('Auth middleware database error:', err);
+    }
+  }
+  next();
+});
+
+// Helper for authorized routes
+const requireAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (!(req as any).user) {
+    return res.status(401).json({ error: 'Acesso não autorizado. Por favor entre com sua conta.' });
+  }
+  next();
+};
+
+const ADMIN_ROLES = ['admin', 'master_admin', 'club_admin'];
+
+const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (!(req as any).user || !ADMIN_ROLES.includes((req as any).user.role)) {
+    return res.status(403).json({ error: 'Acesso restrito para administradores do G&G.' });
+  }
+  next();
+};
+
+// Gerenciamento das listas de armas (Classe/Modelo/Calibre/Fabricante/Arma é/
+// Status de permissão) é exclusivo do Administrador Master.
+const requireMasterAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (!(req as any).user || (req as any).user.role !== 'master_admin') {
+    return res.status(403).json({ error: 'Acesso restrito ao Administrador Master.' });
+  }
+  next();
+};
+
 // ─── Multi-campeonatos CRUD (5 endpoints) ──────────────────────────────────
 
 // GET /api/multi-championships — lista todos (público)
@@ -438,158 +592,6 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
     res.status(500).json({ error: 'Erro ao realizar inscrição no multicampeonato.' });
   }
 });
-
-function mapStageScore(s: any): StageScore {
-  return {
-    id: s.id,
-    championshipId: s.championship_id,
-    registrationId: s.registration_id,
-    userId: s.user_id,
-    shooterName: s.shooter_name,
-    modality: s.modality,
-    stageNum: s.stage_num,
-    score: Number(s.score),
-    timeSeconds: s.time_seconds !== null && s.time_seconds !== undefined ? Number(s.time_seconds) : undefined,
-    hitFactor: s.hit_factor !== null && s.hit_factor !== undefined ? Number(s.hit_factor) : undefined,
-    createdAt: s.created_at,
-  };
-}
-
-function mapPost(p: any): Post {
-  let parsedImageUrls: string[] | undefined = undefined;
-  if (p.image_url) {
-    if (typeof p.image_url === 'string' && p.image_url.trim().startsWith('[') && p.image_url.trim().endsWith(']')) {
-      try {
-        parsedImageUrls = JSON.parse(p.image_url.trim());
-      } catch (e) {
-        parsedImageUrls = [p.image_url];
-      }
-    } else {
-      parsedImageUrls = [p.image_url];
-    }
-  }
-
-  let parsedSharedPost: SharedPostInfo | undefined = undefined;
-  if (p.shared_post) {
-    try {
-      parsedSharedPost = typeof p.shared_post === 'string' ? JSON.parse(p.shared_post) : p.shared_post;
-    } catch (e) {
-      console.error('Error parsing shared_post:', e);
-    }
-  }
-
-  return {
-    id: p.id,
-    userId: p.user_id,
-    username: p.username,
-    userAvatar: p.user_avatar,
-    content: p.content,
-    imageUrl: parsedImageUrls && parsedImageUrls.length > 0 ? parsedImageUrls[0] : (p.image_url || undefined),
-    imageUrls: parsedImageUrls,
-    targetScore: p.target_score || undefined,
-    likes: p.likes || [],
-    comments: (p.comments || []).map((c: any) => ({
-      id: c.id,
-      userId: c.userId || c.user_id,
-      username: c.username,
-      userAvatar: c.userAvatar || c.user_avatar,
-      content: c.content,
-      createdAt: c.createdAt || c.created_at
-    })),
-    createdAt: p.created_at,
-    sharedPost: parsedSharedPost,
-    sharesCount: p.shares_count ? Number(p.shares_count) : 0,
-    viewsCount: p.views_count ? Number(p.views_count) : 0,
-  };
-}
-
-function mapTraining(t: any): TrainingSession {
-  return {
-    id: t.id,
-    userId: t.user_id,
-    clubId: t.club_id || undefined,
-    dateTime: t.date_time,
-    weaponId: t.weapon_id || undefined,
-    weaponName: t.weapon_name,
-    weaponCaliber: t.weapon_caliber || undefined,
-    weaponOwnerType: (t.weapon_owner_type as 'propria' | 'clube') || 'propria',
-    totalShots: Number(t.total_shots ?? 0),
-    ownAmmoShots: Number(t.own_ammo_shots ?? 0),
-    clubAmmoShots: Number(t.club_ammo_shots ?? 0),
-    modality: t.modality || undefined,
-    score: Number(t.score ?? 0),
-    notes: t.notes || undefined,
-    createdAt: t.created_at,
-  };
-}
-
-// Middlewares
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
-// Serve uploaded images and static assets from public uploads directory
-const uploadsDir = path.join(__dirname, 'public', 'uploads', 'posts');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
-
-// Helper to process post image strings - returns base64 directly so images are stored in PostgreSQL DB persistently
-function saveBase64ImageToDisk(base64Data: string, prefix: string): string {
-  if (!base64Data || typeof base64Data !== 'string') {
-    return base64Data;
-  }
-  // Store base64 image string directly in database TEXT column to guarantee persistence on Docker / EasyPanel redeploys
-  return base64Data;
-}
-
-// Auth middleware - reads client user context from header for stateless simple authentication
-app.use(async (req, res, next) => {
-  const userId = req.headers['x-user-id'] as string;
-  if (userId) {
-    try {
-      const userRes = await pool.query(
-        `SELECT u.*,
-          COALESCE((SELECT json_agg(follower_id) FROM follows WHERE following_id = u.id), '[]'::json) as followers,
-          COALESCE((SELECT json_agg(following_id) FROM follows WHERE follower_id = u.id), '[]'::json) as following
-        FROM users u WHERE u.id = $1`,
-        [userId]
-      );
-      if (userRes.rows.length > 0) {
-        (req as any).user = mapUser(userRes.rows[0]);
-      }
-    } catch (err) {
-      console.error('Auth middleware database error:', err);
-    }
-  }
-  next();
-});
-
-// Helper for authorized routes
-const requireAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (!(req as any).user) {
-    return res.status(401).json({ error: 'Acesso não autorizado. Por favor entre com sua conta.' });
-  }
-  next();
-};
-
-const ADMIN_ROLES = ['admin', 'master_admin', 'club_admin'];
-
-const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (!(req as any).user || !ADMIN_ROLES.includes((req as any).user.role)) {
-    return res.status(403).json({ error: 'Acesso restrito para administradores do G&G.' });
-  }
-  next();
-};
-
-// Gerenciamento das listas de armas (Classe/Modelo/Calibre/Fabricante/Arma é/
-// Status de permissão) é exclusivo do Administrador Master.
-const requireMasterAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (!(req as any).user || (req as any).user.role !== 'master_admin') {
-    return res.status(403).json({ error: 'Acesso restrito ao Administrador Master.' });
-  }
-  next();
-};
 
 // ==========================================
 // API ROUTES
