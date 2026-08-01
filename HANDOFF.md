@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `chore: remove os menus Campeonatos e Multi-campeonatos do Painel de Servicos no perfil do atleta` |
-| Data/hora | 2026-08-01T16:07:00-03:00 |
+| Mensagem | `feat: direciona QR Code do certificado para auditoria publica de certificados e calcula pontuacao e ranking` |
+| Data/hora | 2026-08-01T16:48:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -114,6 +114,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Redimensionamento Proporcional do QR Code (`ClubTemplatesManager.tsx`, `MemberProfile.tsx`)**: Adicionada a propriedade `qrSize` aos elementos de layout e criado um painel de controle interativo na barra lateral do editor (*Certificados e Carteirinhas*) com barra deslizante (slider) e caixa numérica (40px a 200px) para ajustar a dimensão do QR Code mantendo a proporção 1:1. O tamanho configurado é refletido instantaneamente na tela do editor, na carteirinha do perfil e nas impressões/PDF.
 - **Substituição do Gerador pela Biblioteca Oficial `qrcode` (`qrCodeGenerator.ts`, `package.json`)**: Instalada a biblioteca padrão da indústria `qrcode` e refatorado `qrCodeGenerator.ts` para utilizar o motor oficial de codificação Reed-Solomon e matrizes ISO 18004. Isso garante 100% de compatibilidade e leitura instantânea em qualquer câmera de smartphone (iPhone, Android, Google Lens).
 - **Inicialização Síncrona e Renderização Prioritária da Auditoria (`App.tsx`, `server.ts`)**: Corrigido a condição de corrida no React inicializando `validationUserId` de forma síncrona diretamente na declaração do estado `useState` a partir de `window.location.pathname`. A checagem `if (validationUserId)` foi posicionada ANTES do bloco `if (booting)`, permitindo a renderização instantânea do `<CardValidationView />` no 1º frame do navegador. Além disso, o endpoint `GET /api/public/validar/carteirinha/:userId` foi atualizado para efetuar busca flexível aceitando IDs dinâmicos de timestamps, IDs normais, username ou CPF.
+- **Validação de Autenticidade do Certificado via QR Code (`server.ts`, `CertificateValidationView.tsx`, `ClubCertificatesViewer.tsx`, `ClubTemplatesManager.tsx`, `ChampionshipsView.tsx`)**: Ajustado o gerador e editor de certificados para apontar o QR Code para a rota pública de auditoria de certificados (`/validar/certificado/GG-CERT-${registrationId}`). No backend (`server.ts`), o endpoint `GET /api/public/validar/certificado/:certId` busca a inscrição original, calcula os pontos totais acumulados, determina a colocação no ranking (1º, 2º, 3º...) e atribui a medalha (OURO, PRATA, BRONZE, HOMOLOGADO), exibindo instantaneamente o comprovante em `CertificateValidationView.tsx`.
 
 ## Infra / deploy
 

@@ -534,7 +534,7 @@ export function ClubCertificatesViewer({
               bestHitFactor: perf.bestHitFactor,
               posicao: perf.posicaoStr,
               medalha: perf.medalhaStr,
-              hash: `GG-CERT-${reg.id.slice(0, 10).toUpperCase()}`,
+              hash: `GG-CERT-${reg.id.replace(/^REG_/i, '').toUpperCase()}`,
               clubId: reg.clubId || athlete?.clubId || selectedClubId
             };
 
@@ -666,7 +666,7 @@ export function ClubCertificatesViewer({
                         {isQr ? (
                           <div className="flex flex-col items-center justify-center p-1 bg-white border border-slate-300 rounded shadow-xs">
                             <QRCodeView
-                              value={`${window.location.origin}/validar/carteirinha/${activeCert?.hash || 'validacao'}`}
+                              value={`${window.location.origin}/validar/certificado/${activeCert?.hash || 'validacao'}`}
                               size={55}
                             />
                           </div>

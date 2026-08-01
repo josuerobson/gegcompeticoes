@@ -5,6 +5,7 @@ import ChampionshipsView from './components/ChampionshipsView';
 import AdminPanel from './components/AdminPanel';
 import MemberProfile from './components/MemberProfile';
 import CardValidationView from './components/CardValidationView';
+import CertificateValidationView from './components/CertificateValidationView';
 import { Target, Trophy, ShieldCheck, User as UserIcon, Home, Zap, Loader2, Sparkles, CheckCircle2, Sun, Moon, ChevronDown, LogOut } from 'lucide-react';
 import { motion } from 'motion/react';
 import shootingDarkBg from '@/assets/shooting_dark_bg.png';
@@ -193,6 +194,16 @@ export default function App() {
       const cleanPath = window.location.pathname.replace(/\/$/, '') || '/';
       if (cleanPath.startsWith('/validar/carteirinha/')) {
         return cleanPath.split('/validar/carteirinha/')[1] || null;
+      }
+    }
+    return null;
+  });
+
+  const [validationCertId, setValidationCertId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const cleanPath = window.location.pathname.replace(/\/$/, '') || '/';
+      if (cleanPath.startsWith('/validar/certificado/')) {
+        return cleanPath.split('/validar/certificado/')[1] || null;
       }
     }
     return null;
@@ -399,10 +410,19 @@ export default function App() {
       const valId = cleanPath.split('/validar/carteirinha/')[1];
       if (valId) {
         setValidationUserId(valId);
+        setValidationCertId(null);
+        return;
+      }
+    } else if (cleanPath.startsWith('/validar/certificado/')) {
+      const valCert = cleanPath.split('/validar/certificado/')[1];
+      if (valCert) {
+        setValidationCertId(valCert);
+        setValidationUserId(null);
         return;
       }
     } else {
       setValidationUserId(null);
+      setValidationCertId(null);
     }
 
     if (!currentUser) {
@@ -478,6 +498,11 @@ export default function App() {
         const valId = cleanPath.split('/validar/carteirinha/')[1];
         if (valId) {
           setValidationUserId(valId);
+        }
+      } else if (cleanPath.startsWith('/validar/certificado/')) {
+        const valCert = cleanPath.split('/validar/certificado/')[1];
+        if (valCert) {
+          setValidationCertId(valCert);
         }
       } else {
         const userId = localStorage.getItem('gg_user_id');
@@ -1325,6 +1350,18 @@ export default function App() {
         userId={validationUserId}
         onGoHome={() => {
           setValidationUserId(null);
+          window.history.pushState(null, '', currentUser ? '/campeonatos' : '/');
+        }}
+      />
+    );
+  }
+
+  if (validationCertId) {
+    return (
+      <CertificateValidationView
+        certId={validationCertId}
+        onGoHome={() => {
+          setValidationCertId(null);
           window.history.pushState(null, '', currentUser ? '/campeonatos' : '/');
         }}
       />

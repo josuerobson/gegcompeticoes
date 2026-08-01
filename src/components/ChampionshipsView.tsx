@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Championship, User, Registration, StageScore, RankingItem, Modality, Stage, Weapon, WeaponLookupOption, MultiChampionship } from '../types';
 import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, Award, Printer, Copy, CreditCard, ChevronRight, Download, Medal, PlusCircle, X, Search, Layers, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { QRCodeView } from './QRCodeView';
 
 interface ChampionshipsProps {
   championships: Championship[];
@@ -480,13 +481,24 @@ export default function ChampionshipsView({
               </div>
             </div>
 
-            {/* Bottom metadata */}
-            <div className="flex flex-col sm:flex-row justify-between items-center mt-12 text-[10px] text-slate-400 font-mono pt-4 border-t border-slate-100">
-              <span>Brasília - DF, {new Date(activeCertificate.registration.registeredAt).toLocaleDateString()}</span>
-              <span>Chave Autenticidade: {activeCertificate.registration.txId || 'GEN-GG-AUT'}</span>
-              <span className="flex items-center gap-1">
-                <Shield className="w-3 h-3 text-amber-500" />
-                Clube G&G Homologado
+            {/* Bottom metadata & QR Code validation */}
+            <div className="flex flex-col sm:flex-row justify-between items-center mt-10 text-[10px] text-slate-400 font-mono pt-4 border-t border-slate-200/60 gap-3">
+              <div className="space-y-0.5 text-center sm:text-left">
+                <p>Emissão: {new Date(activeCertificate.registration.registeredAt).toLocaleDateString('pt-BR')}</p>
+                <p className="font-bold text-slate-700">Chave Autenticidade: GG-CERT-{activeCertificate.registration.id.replace(/^REG_/i, '').toUpperCase()}</p>
+              </div>
+
+              <div className="flex flex-col items-center justify-center p-1.5 bg-white border border-slate-300 rounded-lg shadow-2xs">
+                <QRCodeView
+                  value={`${window.location.origin}/validar/certificado/GG-CERT-${activeCertificate.registration.id.replace(/^REG_/i, '').toUpperCase()}`}
+                  size={60}
+                />
+                <span className="text-[7px] font-mono text-slate-500 font-bold mt-0.5 uppercase">VALIDE O CERTIFICADO</span>
+              </div>
+
+              <span className="flex items-center gap-1 font-bold text-amber-600">
+                <Shield className="w-4 h-4 text-amber-500" />
+                Homologação G&G Competições
               </span>
             </div>
 

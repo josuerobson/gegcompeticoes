@@ -1124,7 +1124,11 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
                   {isQrToken ? (
                     <div className="flex flex-col items-center justify-center p-1 bg-white border border-slate-300 rounded shadow-xs">
                       <QRCodeView
-                        value={`${window.location.origin}/validar/carteirinha/user_123456789`}
+                        value={
+                          activeTab === 'certificate'
+                            ? `${window.location.origin}/validar/certificado/GG-CERT-1460A01398B11399C21011`
+                            : `${window.location.origin}/validar/carteirinha/user_123456789`
+                        }
                         size={el.qrSize || 65}
                       />
                       <span className="text-[7px] font-mono text-slate-500 font-bold mt-0.5">[QR CODE OFICIAL]</span>

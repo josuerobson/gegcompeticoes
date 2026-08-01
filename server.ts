@@ -3081,6 +3081,141 @@ app.get('/api/public/validar/carteirinha/:userId', async (req, res) => {
   }
 });
 
+// Public Certificate Validation Route (QR Code verification - No auth required)
+app.get('/api/public/validar/certificado/:certId', async (req, res) => {
+  const { certId } = req.params;
+
+  try {
+    // Clean certId: remove GG-CERT- prefix if present
+    const cleanId = certId.replace(/^GG-CERT-/i, '').trim();
+
+    let regRes = await pool.query(
+      `SELECT r.*,
+              c.title as championship_title, c.start_date, c.end_date,
+              m.name as modality_name, m.evaluation_type,
+              u.full_name as athlete_name, u.cpf as athlete_cpf, u.cr_number as athlete_cr, u.avatar_url as athlete_avatar,
+              cl.name as club_name, cl.city as club_city, cl.state as club_state, cl.logo_url as club_logo
+       FROM registrations r
+       LEFT JOIN championships c ON c.id = r.championship_id
+       LEFT JOIN modalities m ON m.id = r.modality_id
+       LEFT JOIN users u ON u.id = r.user_id
+       LEFT JOIN clubs cl ON cl.id = COALESCE(r.club_id, u.club_id)
+       WHERE r.id = $1 OR r.id ILIKE $2 OR upper(r.id) LIKE upper($2)
+       LIMIT 1`,
+      [cleanId, `%${cleanId}%`]
+    );
+
+    if (regRes.rows.length === 0) {
+      const subTerm = cleanId.replace(/^REG_/i, '');
+      regRes = await pool.query(
+        `SELECT r.*,
+                c.title as championship_title, c.start_date, c.end_date,
+                m.name as modality_name, m.evaluation_type,
+                u.full_name as athlete_name, u.cpf as athlete_cpf, u.cr_number as athlete_cr, u.avatar_url as athlete_avatar,
+                cl.name as club_name, cl.city as club_city, cl.state as club_state, cl.logo_url as club_logo
+         FROM registrations r
+         LEFT JOIN championships c ON c.id = r.championship_id
+         LEFT JOIN modalities m ON m.id = r.modality_id
+         LEFT JOIN users u ON u.id = r.user_id
+         LEFT JOIN clubs cl ON cl.id = COALESCE(r.club_id, u.club_id)
+         WHERE r.id ILIKE $1
+         LIMIT 1`,
+        [`%${subTerm}%`]
+      );
+    }
+
+    if (regRes.rows.length === 0) {
+      return res.status(404).json({
+        valid: false,
+        statusMessage: 'CERTIFICADO NÃO ENCONTRADO OU INVÁLIDO',
+        error: 'Nenhum certificado registrado com este código de autenticidade no sistema G&G Competições.'
+      });
+    }
+
+    const reg = regRes.rows[0];
+
+    // Compute athlete scores for position & medal
+    let totalScore = Number(reg.valor_pago) || 0;
+    let positionStr = '1º';
+    let medalStr = 'HOMOLOGADO';
+
+    const scoreRes = await pool.query(
+      `SELECT COALESCE(SUM(score), 0) as total_score, COUNT(*) as stage_count
+       FROM stage_scores
+       WHERE registration_id = $1 OR (championship_id = $2 AND user_id = $3 AND (modality_id = $4 OR modality ILIKE $5))`,
+      [reg.id, reg.championship_id, reg.user_id, reg.modality_id, reg.modality_name || '']
+    );
+
+    if (scoreRes.rows.length > 0 && Number(scoreRes.rows[0].total_score) > 0) {
+      totalScore = Number(scoreRes.rows[0].total_score);
+    }
+
+    // Determine ranking position among all participants in this modality & championship
+    const rankRes = await pool.query(
+      `SELECT registration_id, user_id, COALESCE(SUM(score), 0) as total_pts
+       FROM stage_scores
+       WHERE championship_id = $1 AND (modality_id = $2 OR modality ILIKE $3)
+       GROUP BY registration_id, user_id
+       ORDER BY total_pts DESC`,
+      [reg.championship_id, reg.modality_id, reg.modality_name || '']
+    );
+
+    if (rankRes.rows.length > 0) {
+      const rankIdx = rankRes.rows.findIndex(
+        (r: any) => r.registration_id === reg.id || r.user_id === reg.user_id
+      );
+      if (rankIdx >= 0) {
+        positionStr = `${rankIdx + 1}º`;
+        if (rankIdx === 0) medalStr = 'OURO';
+        else if (rankIdx === 1) medalStr = 'PRATA';
+        else if (rankIdx === 2) medalStr = 'BRONZE';
+      }
+    }
+
+    // Mask CPF for LGPD privacy (e.g. 123.***.***-00)
+    let cpfMasked = '***.***.***-**';
+    if (reg.athlete_cpf) {
+      const clean = String(reg.athlete_cpf).replace(/\D/g, '');
+      if (clean.length === 11) {
+        cpfMasked = `${clean.slice(0, 3)}.***.***-${clean.slice(9)}`;
+      } else {
+        cpfMasked = `${reg.athlete_cpf.slice(0, 3)}...${reg.athlete_cpf.slice(-2)}`;
+      }
+    }
+
+    const hash = `GG-CERT-${reg.id.replace(/^REG_/i, '').toUpperCase()}`;
+
+    res.json({
+      valid: true,
+      statusMessage: 'CERTIFICADO AUTÊNTICO E HOMOLOGADO',
+      certificate: {
+        code: certId,
+        registrationId: reg.id,
+        athleteName: reg.athlete_name || 'Atleta G&G',
+        cpfMasked,
+        crNumber: reg.cr_number || reg.athlete_cr || 'Sem CR',
+        avatarUrl: reg.athlete_avatar,
+        championshipTitle: reg.championship_title || 'Campeonato G&G',
+        modalityName: reg.modality_name || 'Modalidade Desportiva',
+        totalScore,
+        position: positionStr,
+        medal: medalStr,
+        clubName: reg.club_name || 'Clube de Tiro Aranãs',
+        clubCity: reg.club_city || 'Capelinha',
+        clubState: reg.club_state || 'MG',
+        clubLogoUrl: reg.club_logo,
+        registeredAt: reg.registered_at,
+        approvedAt: reg.approved_at
+      },
+      validationHash: hash,
+      validatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Certificate Validation API error:', err);
+    res.status(500).json({ error: 'Erro ao validar certificado.' });
+  }
+});
+
 
 // ==========================================
 // 10. REAL TRAINING SESSIONS (Diário de Treinamentos / Habitualidade)
