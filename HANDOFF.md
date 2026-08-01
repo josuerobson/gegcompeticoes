@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: adiciona pesquisa de armas com no minimo 3 caracteres e cadastro de nova arma na inscricao de multicampeonato` |
-| Data/hora | 2026-08-01T13:32:00-03:00 |
+| Mensagem | `fix: eleva z-index do submodal de cadastro de arma para z-[70] sobrepondo modais de inscricao` |
+| Data/hora | 2026-08-01T15:46:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |

@@ -1249,7 +1249,7 @@ export default function ChampionshipsView({
       {/* Sub-modal: Cadastrar Nova Arma na Inscrição */}
       <AnimatePresence>
         {showAddWeapon && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
