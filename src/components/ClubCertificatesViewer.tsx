@@ -239,25 +239,30 @@ export function ClubCertificatesViewer({
       const reg = registrations.find(r => r.id === s.registrationId || (r.userId === s.userId && r.championshipId === championshipId && r.modalityId === modalityId));
       const u = users.find(usr => usr.id === (reg?.userId || s.userId) || (usr.fullName && s.shooterName && usr.fullName.toLowerCase() === s.shooterName.toLowerCase()));
       
-      const key = reg?.id || u?.id || s.userId || s.shooterName || 'unknown';
+      const key = u?.id || s.userId || reg?.userId || (s.shooterName ? s.shooterName.toLowerCase() : 'unknown');
 
       if (!athleteMap[key]) {
         athleteMap[key] = {
-          userId: u?.id || s.userId || '',
+          userId: u?.id || s.userId || reg?.userId || '',
           registrationId: reg?.id || s.registrationId || '',
           shooterName: u?.fullName || s.shooterName || '',
           totalScore: 0,
           hitFactor: 0,
           stageCount: 0,
-          scoreX: reg?.scoreX || 0,
-          scoreP10: reg?.scoreP10 || 0,
-          scoreP9: reg?.scoreP9 || 0
+          scoreX: 0,
+          scoreP10: 0,
+          scoreP9: 0
         };
       }
 
       athleteMap[key].totalScore += (s.score || 0);
       athleteMap[key].hitFactor = Math.max(athleteMap[key].hitFactor, s.hitFactor || 0);
       athleteMap[key].stageCount += 1;
+      if (reg) {
+        athleteMap[key].scoreX += (reg.scoreX || 0);
+        athleteMap[key].scoreP10 += (reg.scoreP10 || 0);
+        athleteMap[key].scoreP9 += (reg.scoreP9 || 0);
+      }
     }
 
     // Sort ranking list using exact tie-breakers as CompetitionResultsViewer
@@ -277,10 +282,10 @@ export function ClubCertificatesViewer({
       }
     });
 
-    // Find target athlete position
+    // Find target athlete position by userId
     const rankIndex = sortedList.findIndex(item =>
-      (registrationId && item.registrationId === registrationId) ||
       (userId && item.userId === userId) ||
+      (registrationId && item.registrationId === registrationId) ||
       (userName && item.shooterName.toLowerCase() === userName.toLowerCase())
     );
 

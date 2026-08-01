@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: direciona QR Code do certificado para auditoria publica de certificados e calcula pontuacao e ranking` |
-| Data/hora | 2026-08-01T16:48:00-03:00 |
+| Mensagem | `fix: corrige agrupamento de atletas por userId nos certificados garantindo colocacao correta no ranking` |
+| Data/hora | 2026-08-01T17:16:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -115,6 +115,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Substituição do Gerador pela Biblioteca Oficial `qrcode` (`qrCodeGenerator.ts`, `package.json`)**: Instalada a biblioteca padrão da indústria `qrcode` e refatorado `qrCodeGenerator.ts` para utilizar o motor oficial de codificação Reed-Solomon e matrizes ISO 18004. Isso garante 100% de compatibilidade e leitura instantânea em qualquer câmera de smartphone (iPhone, Android, Google Lens).
 - **Inicialização Síncrona e Renderização Prioritária da Auditoria (`App.tsx`, `server.ts`)**: Corrigido a condição de corrida no React inicializando `validationUserId` de forma síncrona diretamente na declaração do estado `useState` a partir de `window.location.pathname`. A checagem `if (validationUserId)` foi posicionada ANTES do bloco `if (booting)`, permitindo a renderização instantânea do `<CardValidationView />` no 1º frame do navegador. Além disso, o endpoint `GET /api/public/validar/carteirinha/:userId` foi atualizado para efetuar busca flexível aceitando IDs dinâmicos de timestamps, IDs normais, username ou CPF.
 - **Validação de Autenticidade do Certificado via QR Code (`server.ts`, `CertificateValidationView.tsx`, `ClubCertificatesViewer.tsx`, `ClubTemplatesManager.tsx`, `ChampionshipsView.tsx`)**: Ajustado o gerador e editor de certificados para apontar o QR Code para a rota pública de auditoria de certificados (`/validar/certificado/GG-CERT-${registrationId}`). No backend (`server.ts`), o endpoint `GET /api/public/validar/certificado/:certId` busca a inscrição original, calcula os pontos totais acumulados, determina a colocação no ranking (1º, 2º, 3º...) e atribui a medalha (OURO, PRATA, BRONZE, HOMOLOGADO), exibindo instantaneamente o comprovante em `CertificateValidationView.tsx`.
+- **Agrupamento Único de Atletas nos Certificados (`ClubCertificatesViewer.tsx`, `server.ts`)**: Corrigida a lógica de cálculo de colocação que antes agrupava por `registrationId` (criando entradas separadas para cada inscrição individual e inflando o total de competidores). O agrupamento foi alterado para ser feito estritamente por atleta (`userId` / `user_id`), somando os pontos acumulados e aplicando os critérios de desempate idênticos ao `CompetitionResultsViewer.tsx`. Isso garante que atletas que ficaram em 3º lugar na classificação geral apareçam rigorosamente em 3º lugar no certificado.
 
 ## Infra / deploy
 

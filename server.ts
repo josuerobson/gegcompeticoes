@@ -3150,19 +3150,20 @@ app.get('/api/public/validar/certificado/:certId', async (req, res) => {
       totalScore = Number(scoreRes.rows[0].total_score);
     }
 
-    // Determine ranking position among all participants in this modality & championship
+    // Determine ranking position among all unique athletes in this modality & championship
     const rankRes = await pool.query(
-      `SELECT registration_id, user_id, COALESCE(SUM(score), 0) as total_pts
-       FROM stage_scores
-       WHERE championship_id = $1 AND (modality_id = $2 OR modality ILIKE $3)
-       GROUP BY registration_id, user_id
+      `SELECT COALESCE(ss.user_id, r.user_id) as athlete_id, COALESCE(SUM(ss.score), 0) as total_pts
+       FROM stage_scores ss
+       LEFT JOIN registrations r ON r.id = ss.registration_id
+       WHERE ss.championship_id = $1 AND (ss.modality_id = $2 OR ss.modality ILIKE $3)
+       GROUP BY COALESCE(ss.user_id, r.user_id)
        ORDER BY total_pts DESC`,
       [reg.championship_id, reg.modality_id, reg.modality_name || '']
     );
 
     if (rankRes.rows.length > 0) {
       const rankIdx = rankRes.rows.findIndex(
-        (r: any) => r.registration_id === reg.id || r.user_id === reg.user_id
+        (r: any) => r.athlete_id === reg.user_id
       );
       if (rankIdx >= 0) {
         positionStr = `${rankIdx + 1}º`;
