@@ -62,7 +62,7 @@ export default function ChampionshipsView({
   const handleRegisterMultiSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMultiReg || !multiStageId || !multiModalityId || !multiWeaponId) {
-      setMultiError('Selecione a etapa, a modalidade e a arma.');
+      setMultiError('Selecione a arma a ser utilizada pesquisando no mínimo 3 caracteres.');
       return;
     }
 
@@ -102,6 +102,9 @@ export default function ChampionshipsView({
     setMultiStageId('');
     setMultiModalityId('');
     setMultiWeaponId('');
+    setSelectedWeaponId('');
+    setWeaponSearchQuery('');
+    setWeaponSearchResults([]);
     setMultiError('');
     setMultiSuccessMsg('');
     setMultiSubmitting(false);
@@ -210,6 +213,7 @@ export default function ChampionshipsView({
         if (data.weapons && data.weapons.length > 0) {
           const matched = data.weapons.find((w: Weapon) => w.manufacturer === manufacturer && w.model === model) || data.weapons[0];
           setSelectedWeaponId(matched.id);
+          setMultiWeaponId(matched.id);
         }
       }
 
@@ -795,7 +799,10 @@ export default function ChampionshipsView({
                               setSelectedMultiReg(multi);
                               setMultiStageId(stages.length > 0 ? stages[0].id : '');
                               setMultiModalityId(modalities.length > 0 ? modalities[0].id : '');
-                              setMultiWeaponId(weapons.length > 0 ? weapons[0].id : '');
+                              setMultiWeaponId('');
+                              setSelectedWeaponId('');
+                              setWeaponSearchQuery('');
+                              setWeaponSearchResults([]);
                             }}
                             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-3 rounded-xl transition shadow-md shadow-blue-100 flex items-center justify-center gap-2 cursor-pointer"
                           >
@@ -1791,20 +1798,133 @@ export default function ChampionshipsView({
                     </select>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Arma Utilizada</label>
-                    <select
-                      value={multiWeaponId}
-                      onChange={e => setMultiWeaponId(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-700"
-                    >
-                      <option value="">Selecione sua arma...</option>
-                      {weapons.map(w => (
-                        <option key={w.id} value={w.id}>
-                          {w.manufacturer} {w.model} ({w.caliber}) - Sigma: {w.sigmaNumber || 'N/A'}
-                        </option>
-                      ))}
-                    </select>
+                  {/* Seleção de Arma via Pesquisa + Cadastrar Nova Arma */}
+                  <div className="space-y-1 relative">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="text-[10px] text-slate-500 uppercase block font-semibold">
+                        Arma a ser utilizada <span className="text-red-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddWeapon(true)}
+                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" />
+                        + Cadastrar Nova Arma
+                      </button>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Digite fabricante, modelo, calibre ou número Sigma..."
+                        value={weaponSearchQuery}
+                        onChange={(e) => handleSearchWeapon(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-800 font-medium pl-9 shadow-xs"
+                      />
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                      {searchingWeapon && <span className="absolute right-3 top-3.5 text-[10px] text-blue-600 font-bold">Buscando...</span>}
+                    </div>
+
+                    {weaponSearchQuery.length > 0 && weaponSearchQuery.length < 3 && (
+                      <div className="flex justify-between items-center mt-1">
+                        <p className="text-[10.5px] text-amber-600 font-medium">
+                          Digite mais {3 - weaponSearchQuery.length} caractere(s) para pesquisar...
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewWeaponData(prev => ({ ...prev, model: weaponSearchQuery }));
+                            setShowAddWeapon(true);
+                          }}
+                          className="text-[10.5px] font-bold text-blue-600 hover:underline cursor-pointer"
+                        >
+                          + Cadastrar Nova Arma
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Weapon Search Results Dropdown */}
+                    {weaponSearchQuery.length >= 3 && (
+                      <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100">
+                        {weaponSearchResults.length === 0 ? (
+                          <div className="p-4 text-center space-y-2">
+                            <p className="text-slate-500 text-xs">Nenhuma arma encontrada para "{weaponSearchQuery}".</p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewWeaponData(prev => ({ ...prev, model: weaponSearchQuery }));
+                                setShowAddWeapon(true);
+                              }}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 mx-auto cursor-pointer shadow-xs"
+                            >
+                              <PlusCircle className="w-3.5 h-3.5" />
+                              Cadastrar Nova Arma Agora
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            {weaponSearchResults.map(w => (
+                              <button
+                                key={w.id}
+                                type="button"
+                                onClick={() => {
+                                  setMultiWeaponId(w.id);
+                                  setSelectedWeaponId(w.id);
+                                  setWeaponSearchQuery(`${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'}) - Sigma: ${w.sigmaNumber || 'N/A'}`.trim());
+                                  setWeaponSearchResults([]);
+                                }}
+                                className="w-full text-left p-3 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
+                              >
+                                <div>
+                                  <div className="font-bold text-slate-900 text-xs">
+                                    {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[11px]">({w.caliber})</span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                    Sigma: {w.sigmaNumber || 'N/A'} | Série: {w.serialNumber || 'N/A'}
+                                  </div>
+                                </div>
+                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                                  Selecionar
+                                </span>
+                              </button>
+                            ))}
+                            <div className="p-2.5 bg-slate-50 text-center">
+                              <button
+                                type="button"
+                                onClick={() => setShowAddWeapon(true)}
+                                className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center justify-center gap-1 mx-auto cursor-pointer"
+                              >
+                                <PlusCircle className="w-3.5 h-3.5" />
+                                Sua arma não está na lista? Cadastrar Nova Arma
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Selected Weapon Badge Confirmation */}
+                    {multiWeaponId && (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 flex items-center justify-between mt-2 text-xs">
+                        <div className="flex items-center gap-2 truncate pr-2">
+                          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span className="font-bold text-emerald-950 truncate">Arma: {weaponSearchQuery}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMultiWeaponId('');
+                            setSelectedWeaponId('');
+                            setWeaponSearchQuery('');
+                            setWeaponSearchResults([]);
+                          }}
+                          className="text-[10px] text-slate-500 hover:text-red-600 font-bold underline cursor-pointer shrink-0"
+                        >
+                          Trocar
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1">
