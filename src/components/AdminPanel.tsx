@@ -4294,6 +4294,10 @@ export default function AdminPanel({
       case 'banner_home':
         return <HomeBannersManager currentUser={currentUser} />;
 
+      case 'texto_home':
+      case 'banners_paginas':
+        return <HomeTextManager settings={settings} onSaveSetting={onSaveSetting} />;
+
       case 'videos_destaque':
         return (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs text-slate-800">
@@ -4883,7 +4887,7 @@ export default function AdminPanel({
                 {expandedSections.site && (
                   <div className="pl-3 border-l border-slate-100 space-y-0.5 mt-1">
                     <button onClick={() => setPlataformaMenu('banner_home')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'banner_home' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Banner Home</button>
-                    <button onClick={() => setPlataformaMenu('banners_paginas')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'banners_paginas' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Banners Paginas</button>
+                    <button onClick={() => setPlataformaMenu('texto_home')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'texto_home' || plataformaMenu === 'banners_paginas' ? 'text-blue-600 bg-blue-50/50 font-bold' : 'text-slate-650 hover:bg-slate-50'}`}>Texto Home</button>
                     <button onClick={() => setPlataformaMenu('patrocinadores')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'patrocinadores' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Patrocinadores</button>
                     <button onClick={() => setPlataformaMenu('videos_destaque')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'videos_destaque' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Vídeos Destaque</button>
                     <button onClick={() => setPlataformaMenu('imagem_padrao')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'imagem_padrao' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Imagem padrão</button>
@@ -5128,6 +5132,221 @@ export default function AdminPanel({
 
       </div>
 
+    </div>
+  );
+}
+
+export function HomeTextManager({
+  settings = {},
+  onSaveSetting,
+}: {
+  settings?: { [key: string]: string };
+  onSaveSetting?: (key: string, value: string) => Promise<void>;
+}) {
+  const [tag, setTag] = useState(settings.home_hero_tag ?? 'ESTANDE E FEDERAÇÃO DE ALTA PRECISÃO');
+  const [title, setTitle] = useState(settings.home_hero_title ?? 'A Pista de Encontro dos Atletas Federados');
+  const [subtitle, setSubtitle] = useState(
+    settings.home_hero_subtitle ??
+      'Monitore resultados de etapas em tempo real, acompanhe rankings do clube, interaja na rede social de tiro e garanta sua inscrição oficial nos principais campeonatos de tiro prático e de precisão de Brasília.'
+  );
+  const [btn1Text, setBtn1Text] = useState(settings.home_hero_btn1_text ?? 'Começar Agora');
+  const [btn1Link, setBtn1Link] = useState(settings.home_hero_btn1_link ?? '');
+  const [btn2Text, setBtn2Text] = useState(settings.home_hero_btn2_text ?? 'Ver Campeonatos');
+  const [btn2Link, setBtn2Link] = useState(settings.home_hero_btn2_link ?? '#championships');
+
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    if (settings.home_hero_tag !== undefined) setTag(settings.home_hero_tag);
+    if (settings.home_hero_title !== undefined) setTitle(settings.home_hero_title);
+    if (settings.home_hero_subtitle !== undefined) setSubtitle(settings.home_hero_subtitle);
+    if (settings.home_hero_btn1_text !== undefined) setBtn1Text(settings.home_hero_btn1_text);
+    if (settings.home_hero_btn1_link !== undefined) setBtn1Link(settings.home_hero_btn1_link);
+    if (settings.home_hero_btn2_text !== undefined) setBtn2Text(settings.home_hero_btn2_text);
+    if (settings.home_hero_btn2_link !== undefined) setBtn2Link(settings.home_hero_btn2_link);
+  }, [settings]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onSaveSetting) return;
+    setSaving(true);
+    setSuccess(false);
+    try {
+      await onSaveSetting('home_hero_tag', tag);
+      await onSaveSetting('home_hero_title', title);
+      await onSaveSetting('home_hero_subtitle', subtitle);
+      await onSaveSetting('home_hero_btn1_text', btn1Text);
+      await onSaveSetting('home_hero_btn1_link', btn1Link);
+      await onSaveSetting('home_hero_btn2_text', btn2Text);
+      await onSaveSetting('home_hero_btn2_link', btn2Link);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 4000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
+      <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+        <div>
+          <h3 className="font-display font-bold text-slate-900 text-base">Gerenciamento dos Textos da Página Inicial (Home)</h3>
+          <p className="text-xs text-slate-400">Edite a insígnia, título principal, texto descritivo e botões de ação exibidos logo abaixo do banner principal.</p>
+        </div>
+        <FileText className="w-5 h-5 text-blue-600 animate-pulse" />
+      </div>
+
+      {success && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
+          <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+          Textos da Página Inicial atualizados com sucesso no banco de dados!
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Insígnia / Tag Superior */}
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Insígnia / Destaque Superior (Tag)</label>
+          <input
+            type="text"
+            value={tag}
+            onChange={(e) => setTag(e.target.value)}
+            placeholder="Ex: ESTANDE E FEDERAÇÃO DE ALTA PRECISÃO"
+            className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:border-blue-500 text-xs text-slate-800 font-semibold"
+          />
+        </div>
+
+        {/* Título Principal */}
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Título Principal (H2)</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Ex: A Pista de Encontro dos Atletas Federados"
+            className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:border-blue-500 text-xs text-slate-900 font-bold"
+          />
+        </div>
+
+        {/* Texto Descritivo */}
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Texto Descritivo (Subtítulo)</label>
+          <textarea
+            rows={3}
+            value={subtitle}
+            onChange={(e) => setSubtitle(e.target.value)}
+            placeholder="Ex: Monitore resultados de etapas em tempo real..."
+            className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 leading-relaxed resize-y"
+          />
+        </div>
+
+        {/* Configuração de Botões */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+          {/* Botão 1 */}
+          <div className="bg-slate-50/70 border border-slate-200/80 p-4 rounded-xl space-y-3">
+            <h4 className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+              Botão Principal (Ação 1)
+            </h4>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase block">Texto do Botão 1</label>
+              <input
+                type="text"
+                value={btn1Text}
+                onChange={(e) => setBtn1Text(e.target.value)}
+                placeholder="Ex: Começar Agora"
+                className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs font-semibold"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase block">Link / Destino (opcional)</label>
+              <input
+                type="text"
+                value={btn1Link}
+                onChange={(e) => setBtn1Link(e.target.value)}
+                placeholder="Deixe em branco p/ abrir modal de login ou cole URL (ex: https://...)"
+                className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Botão 2 */}
+          <div className="bg-slate-50/70 border border-slate-200/80 p-4 rounded-xl space-y-3">
+            <h4 className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-slate-600"></span>
+              Botão Secundário (Ação 2)
+            </h4>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase block">Texto do Botão 2</label>
+              <input
+                type="text"
+                value={btn2Text}
+                onChange={(e) => setBtn2Text(e.target.value)}
+                placeholder="Ex: Ver Campeonatos"
+                className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs font-semibold"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase block">Link / Destino</label>
+              <input
+                type="text"
+                value={btn2Link}
+                onChange={(e) => setBtn2Link(e.target.value)}
+                placeholder="Ex: #championships ou https://..."
+                className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs font-mono"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Pré-visualização ao Vivo (Live Preview) */}
+        <div className="space-y-2 pt-3 border-t border-slate-100">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Pré-visualização da Seção no Site Público</label>
+          <div className="bg-slate-950 p-8 rounded-2xl border border-slate-800 text-center space-y-4">
+            <div className="inline-flex items-center gap-1.5 bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-full text-[10px] text-blue-400 font-bold tracking-wide uppercase">
+              <Sparkles className="w-3 h-3 animate-pulse" />
+              {tag || 'SEU BADGE AQUI'}
+            </div>
+            <h3 className="font-display font-black text-xl sm:text-2xl text-white tracking-tight">
+              {title || 'Seu Título Aqui'}
+            </h3>
+            <p className="text-slate-400 text-xs max-w-xl mx-auto leading-relaxed">
+              {subtitle || 'Seu texto descritivo aparecerá aqui.'}
+            </p>
+            <div className="flex justify-center gap-3 pt-2">
+              <span className="bg-gradient-to-r from-blue-600 to-sky-500 text-white font-extrabold text-[10px] px-5 py-2.5 rounded-full uppercase tracking-wider shadow">
+                {btn1Text || 'Botão 1'}
+              </span>
+              <span className="bg-slate-900 text-slate-200 border border-slate-800 font-bold text-[10px] px-5 py-2.5 rounded-full uppercase tracking-wider">
+                {btn2Text || 'Botão 2'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-3">
+          <button
+            type="submit"
+            disabled={saving}
+            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg shadow-blue-100 cursor-pointer flex items-center gap-2"
+          >
+            {saving ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                Salvando Alterações...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                Salvar Texto Home
+              </>
+            )}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

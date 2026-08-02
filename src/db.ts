@@ -652,6 +652,19 @@ export async function initDB() {
       await client.query("INSERT INTO settings (key, value) VALUES ('default_image', 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80')");
     }
 
+    const defaultHomeSettings: [string, string][] = [
+      ['home_hero_tag', 'ESTANDE E FEDERAÇÃO DE ALTA PRECISÃO'],
+      ['home_hero_title', 'A Pista de Encontro dos Atletas Federados'],
+      ['home_hero_subtitle', 'Monitore resultados de etapas em tempo real, acompanhe rankings do clube, interaja na rede social de tiro e garanta sua inscrição oficial nos principais campeonatos de tiro prático e de precisão de Brasília.'],
+      ['home_hero_btn1_text', 'Começar Agora'],
+      ['home_hero_btn1_link', ''],
+      ['home_hero_btn2_text', 'Ver Campeonatos'],
+      ['home_hero_btn2_link', '#championships']
+    ];
+    for (const [k, v] of defaultHomeSettings) {
+      await client.query("INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING", [k, v]);
+    }
+
     const homeBannersCountRes = await client.query("SELECT COUNT(*) FROM home_banners");
     if (parseInt(homeBannersCountRes.rows[0].count, 10) === 0) {
       await client.query(`

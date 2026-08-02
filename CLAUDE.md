@@ -35,9 +35,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Legacy system parity.** Several `Painel Diretor` cadastro screens were rebuilt to match field-for-field specs from a legacy PHP system the user is migrating off of (raw HTML forms with generic field names like `info1`, `id4` were used as the source of truth — those internal names are not meaningful, only the field's label/position/options matter). Where this repo's data model needed to diverge from a first guess based on the legacy system, the actual legacy HTML always won. See "Painel Diretor module status" below for what's been aligned this way — don't assume an unconverted screen's fields are correct without checking for a legacy reference first.
 
-## Painel Diretor module status (as of 2026-08-01)
+## Painel Diretor module status (as of 2026-08-02)
 
 Real (backed by actual DB tables/endpoints, tested end-to-end):
+- **Gerenciamento Plataforma > Site > Texto Home** — gerenciamento completo dos textos da seção principal da capa do site (Insígnia/Tag, Título H2 "A Pista de Encontro dos Atletas Federados", Subtítulo/Texto descritivo, Botão Principal e Botão Secundário com links/ações). Salvo na tabela `settings` do banco de dados e refletido dinamicamente na página inicial pública.
+- **Gerenciamento Plataforma > Site > Banner Home** — gerenciador de carrossel de banners principais com tag, título, subtítulo, botões e imagens.
 - **Gerenciamento Plataforma > Site > Certificados e Carteirinhas** — layout pré-configurado de Carteirinhas de Atleta (Clube e G&G) e Certificados de Participação A4 com fundo customizável e QR Code dinâmico vetorizado (`{QR_CODE}`). O QR Code das carteirinhas redireciona para a auditoria de carteirinhas (`/validar/carteirinha/:userId` -> `GET /api/public/validar/carteirinha/:userId`), enquanto o QR Code dos certificados redireciona para a auditoria pública de certificados (`/validar/certificado/:certId` -> `GET /api/public/validar/certificado/:certId`), validando no servidor a inscrição, os pontos acumulados, a colocação no ranking e a medalha.
 - **Gerenciamento Plataforma > Novo Clube** — creates a club + its `club_admin` login.
 - **Gerenciamento Plataforma > Modalidades** — 5 fields only (Modalidade, Quantidade de séries, Tiros por série, Tempo por série em minutos, Tipo de avaliação). No "categoria" field — it doesn't exist in the real legacy form; `modalities.discipline` is a vestigial nullable column, unused going forward.

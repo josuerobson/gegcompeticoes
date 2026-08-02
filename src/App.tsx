@@ -139,7 +139,14 @@ export default function App() {
   const [globalRankings, setGlobalRankings] = useState<RankingItem[]>([]);
   const [selectedRankingModality, setSelectedRankingModality] = useState('');
   const [settings, setSettings] = useState<{ [key: string]: string }>({
-    default_image: 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80'
+    default_image: 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80',
+    home_hero_tag: 'ESTANDE E FEDERAÇÃO DE ALTA PRECISÃO',
+    home_hero_title: 'A Pista de Encontro dos Atletas Federados',
+    home_hero_subtitle: 'Monitore resultados de etapas em tempo real, acompanhe rankings do clube, interaja na rede social de tiro e garanta sua inscrição oficial nos principais campeonatos de tiro prático e de precisão de Brasília.',
+    home_hero_btn1_text: 'Começar Agora',
+    home_hero_btn1_link: '',
+    home_hero_btn2_text: 'Ver Campeonatos',
+    home_hero_btn2_link: '#championships'
   });
 
   // Home Banners Carousel state
@@ -1618,30 +1625,47 @@ export default function App() {
         <section className="max-w-6xl mx-auto px-4 pt-16 pb-20 text-center space-y-8 relative">
           <div className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 px-4 py-1.5 rounded-full text-xs text-blue-400 font-bold tracking-wide uppercase select-none">
             <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-            Estande e Federação de Alta Precisão
+            {settings.home_hero_tag || 'ESTANDE E FEDERAÇÃO DE ALTA PRECISÃO'}
           </div>
 
           <h2 className={`font-display font-black text-4xl sm:text-6xl tracking-tight leading-none max-w-4xl mx-auto text-transparent bg-clip-text ${theme === 'dark' ? 'bg-gradient-to-b from-white to-slate-300' : 'bg-gradient-to-b from-slate-900 to-slate-700'}`}>
-            A Pista de Encontro dos Atletas Federados
+            {settings.home_hero_title || 'A Pista de Encontro dos Atletas Federados'}
           </h2>
 
           <p className={`text-sm sm:text-base max-w-2xl mx-auto leading-relaxed ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-            Monitore resultados de etapas em tempo real, acompanhe rankings do clube, interaja na rede social de tiro e garanta sua inscrição oficial nos principais campeonatos de tiro prático e de precisão de Brasília.
+            {settings.home_hero_subtitle || 'Monitore resultados de etapas em tempo real, acompanhe rankings do clube, interaja na rede social de tiro e garanta sua inscrição oficial nos principais campeonatos de tiro prático e de precisão de Brasília.'}
           </p>
 
           <div className="flex flex-wrap justify-center gap-4 pt-4">
             <button
               type="button"
-              onClick={() => triggerLoginModal('Cadastre-se ou faça login para ter acesso total ao feed de atletas e resultados do clube.')}
+              onClick={() => {
+                const link = settings.home_hero_btn1_link;
+                if (link && link.startsWith('http')) {
+                  window.open(link, '_blank');
+                } else if (link && link.startsWith('#')) {
+                  const el = document.querySelector(link);
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                } else {
+                  triggerLoginModal('Cadastre-se ou faça login para ter acesso total ao feed de atletas e resultados do clube.');
+                }
+              }}
               className="bg-gradient-to-r from-blue-600 to-sky-500 hover:from-blue-700 hover:to-sky-600 text-white font-extrabold text-xs px-8 py-4 rounded-full transition shadow-lg shadow-blue-500/20 uppercase tracking-wider cursor-pointer"
             >
-              Começar Agora
+              {settings.home_hero_btn1_text || 'Começar Agora'}
             </button>
             <a
-              href="#championships"
+              href={settings.home_hero_btn2_link || '#championships'}
+              onClick={(e) => {
+                const link = settings.home_hero_btn2_link || '#championships';
+                if (link && link.startsWith('http')) {
+                  e.preventDefault();
+                  window.open(link, '_blank');
+                }
+              }}
               className={`font-bold text-xs px-8 py-4 rounded-full transition uppercase tracking-wider flex items-center justify-center cursor-pointer ${theme === 'dark' ? 'bg-slate-900 hover:bg-slate-850 text-slate-200 border border-slate-800 hover:border-slate-700' : 'bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 shadow-sm'}`}
             >
-              Ver Campeonatos
+              {settings.home_hero_btn2_text || 'Ver Campeonatos'}
             </a>
           </div>
         </section>

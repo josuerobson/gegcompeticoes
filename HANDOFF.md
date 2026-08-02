@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: adiciona gerenciamento de banners da home no painel diretor e carrossel dinâmico na capa do site` |
-| Data/hora | 2026-08-02T17:25:00-03:00 |
+| Mensagem | `feat: substitui Banners Paginas por Texto Home no painel diretor com edicao dinamica do titulo, subtitulo e botoes da home` |
+| Data/hora | 2026-08-02T21:35:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -123,6 +123,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Declaração de Habitualidade por Período de Datas e Layout do Exército (`MemberProfile.tsx`)**: Atualizada a aba *Declarações* no perfil do atleta com seletores de período (*Data Inicial* e *Data Final*). O documento consolida todos os treinos e participações em campeonatos ocorridos no período selecionado e gera tabelas individuais com o modelo exato exigido pelo Exército (Campos: Nome do evento, Arma utilizada com Classe/Modelo/Número/Fabricante/Calibre/Status, Ordem, Data, Hora, Sigma, Qtd Munições, Tipo de Evento, Origem da Arma/Munição e Rodapé do Evento).
 - **Exibição do Vencimento da Guia de Trânsito no Perfil (`MemberProfile.tsx`)**: Ajustado o campo *Guia de Trânsito* no card *Situação Associativa G&G* no perfil do atleta para formatar e exibir corretamente a data informada no cadastro (`guiaTransitoExpiry`) sem fuso horário nem inconsistência no formato de exibição. Adicionado também o campo de edição no formulário *Meu Cadastro*.
 - **Gerenciador de Banners da Home e Carrossel Público (`AdminPanel.tsx`, `App.tsx`, `server.ts`, `db.ts`)**: Criado o gerenciamento completo de Banners da Home em **Painel Diretor > Gerenciamento Plataforma > Site > Banner Home**, permitindo cadastrar, editar, desativar, reordenar e excluir banners com títulos, subtítulos, badges/tags, descrições, textos de botão, imagens (upload ou URL) e links. Cadastrado o primeiro banner inicial ("Campeonato IPSC Copa de Inverno 2026") idêntico à interface padrão e implementado o carrossel automático com transição temporal, controles laterais (chevrons) e indicadores por ponto na capa do portal.
+- **Gerenciamento de Texto Home no Painel Diretor (`AdminPanel.tsx`, `App.tsx`, `db.ts`)**: Substituído o item de menu "Banners Paginas" por "Texto Home" no caminho **Painel Diretor > Gerenciamento Plataforma > Site > Texto Home**. Criado o componente `HomeTextManager` permitindo ao gestor editar em tempo real a insígnia/tag, o título H2 ("A Pista de Encontro dos Atletas Federados"), o texto descritivo e as legendas e links dos dois botões de ação ("Começar Agora" e "Ver Campeonatos"), contando com pré-visualização ao vivo (*Live Preview*). Os textos são persistidos no PostgreSQL (`settings`) e refletidos dinamicamente na página inicial pública.
 
 ## Infra / deploy
 
