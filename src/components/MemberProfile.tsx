@@ -1448,23 +1448,153 @@ export default function MemberProfile({
     saveAmmo(ammoPurchases.filter(a => a.id !== id));
   };
 
-  // Aggregate achievements/habits
-  const combinedHabitualities = [
-    ...userScores.map(s => ({
-      date: s.createdAt.split('T')[0],
-      caliber: s.modality.includes('380') ? '.380 ACP' : '9mm Luger',
-      shots: 50,
-      activity: `Etapa Oficial - ${s.modality}`,
-      location: 'Stand de Tiro G&G'
-    })),
-    ...trainings.map(t => ({
-      date: t.date,
-      caliber: t.caliber === '.380' ? '.380 ACP' : t.caliber === '9mm' ? '9mm Luger' : t.caliber,
-      shots: t.shots,
-      activity: `Treino - ${t.discipline}`,
-      location: 'Stand de Tiro G&G'
-    }))
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Date range filter for Habitualidade declaration (between habStartDate and habEndDate)
+  const [habStartDate, setHabStartDate] = useState(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 1);
+    return d.toISOString().split('T')[0];
+  });
+  const [habEndDate, setHabEndDate] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
+
+  const combinedHabitualities = useMemo(() => {
+    const start = new Date(habStartDate + 'T00:00:00');
+    const end = new Date(habEndDate + 'T23:59:59');
+
+    const items: Array<{
+      id: string;
+      rawDate: Date;
+      dateFormatted: string;
+      timeFormatted: string;
+      eventType: 'Treinamento' | 'Competição';
+      eventName: string;
+      weaponClass: string;
+      model: string;
+      weaponNumber: string;
+      manufacturer: string;
+      caliber: string;
+      permissionStatus: string;
+      sigma: string;
+      shotsCount: number;
+      weaponOwnerText: string;
+      ammoOwnerText: string;
+    }> = [];
+
+    // 1. Process Training Sessions in the selected date range
+    (trainings || []).forEach(t => {
+      const rawDate = new Date(t.dateTime || (t.date ? `${t.date}T15:00:00` : '') || t.createdAt || '');
+      if (isNaN(rawDate.getTime())) return;
+      if (rawDate < start || rawDate > end) return;
+
+      const w = t.selectedWeapon || weapons.find(wpn => wpn.id === t.weaponId);
+      const dateFormatted = rawDate.toLocaleDateString('pt-BR');
+      const timeFormatted = t.dateTime ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:00';
+
+      const weaponClass = w?.weaponClass || t.weaponClass || 'Pistola';
+      const model = w?.model || t.weaponName || t.weapon || 'Arma Cadastrada';
+      const weaponNumber = w?.weaponNumber || w?.serialNumber || t.weaponNumber || 'N/A';
+      const manufacturer = w?.manufacturer || 'Fabricante';
+      const caliber = t.weaponCaliber || w?.caliber || t.caliber || '9mm';
+      const permissionStatus = w?.permissionStatus || 'Permitido';
+      const sigma = w?.sigmaNumber || w?.serialNumber || '010101010';
+      const shotsCount = Number(t.totalShots) || ((Number(t.ownAmmoShots) || 0) + (Number(t.clubAmmoShots) || 0)) || t.shots || 50;
+
+      items.push({
+        id: `tr_${t.id}`,
+        rawDate,
+        dateFormatted,
+        timeFormatted,
+        eventType: 'Treinamento',
+        eventName: 'TREINAMENTO',
+        weaponClass,
+        model,
+        weaponNumber,
+        manufacturer,
+        caliber,
+        permissionStatus,
+        sigma,
+        shotsCount,
+        weaponOwnerText: t.weaponOwnerType === 'clube' ? 'Clube' : 'Própria',
+        ammoOwnerText: (Number(t.clubAmmoShots) || 0) > 0 ? 'Clube' : 'Própria',
+      });
+    });
+
+    // 2. Process Stage Scores (Competition participations)
+    (userScores || []).forEach(s => {
+      const rawDate = new Date(s.createdAt || '');
+      if (isNaN(rawDate.getTime())) return;
+      if (rawDate < start || rawDate > end) return;
+
+      const champ = championships.find(c => c.id === s.championshipId);
+      const reg = approvedRegs.find(r => r.championshipId === s.championshipId);
+      const w = weapons.find(wpn => wpn.id === reg?.weaponId);
+
+      const dateFormatted = rawDate.toLocaleDateString('pt-BR');
+      const timeFormatted = rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) || '15:54';
+
+      const weaponClass = w?.weaponClass || 'Pistola';
+      const model = w?.model || (reg as any)?.gunModel || s.modality || 'Arma de Competição';
+      const weaponNumber = w?.weaponNumber || w?.serialNumber || 'HMA02013';
+      const manufacturer = w?.manufacturer || 'IMBEL';
+      const caliber = w?.caliber || (reg as any)?.caliber || (s.modality?.includes('380') ? '.380' : '9mm');
+      const permissionStatus = w?.permissionStatus || 'Permitido';
+      const sigma = w?.sigmaNumber || selectedUser.crNumber || '010101010';
+      const shotsCount = (s as any).shotsCount || s.score || 20;
+
+      items.push({
+        id: `cmp_${s.id}`,
+        rawDate,
+        dateFormatted,
+        timeFormatted,
+        eventType: 'Competição',
+        eventName: champ?.title?.toUpperCase() || 'CAMPEONATO DE TIRO ESPORTIVO',
+        weaponClass,
+        model,
+        weaponNumber,
+        manufacturer,
+        caliber,
+        permissionStatus,
+        sigma,
+        shotsCount,
+        weaponOwnerText: 'Própria',
+        ammoOwnerText: 'Própria',
+      });
+    });
+
+    // 3. Process Approved Registrations if userScores is empty
+    if (userScores.length === 0) {
+      (approvedRegs || []).forEach(reg => {
+        const rawDate = new Date(reg.registeredAt || '');
+        if (isNaN(rawDate.getTime())) return;
+        if (rawDate < start || rawDate > end) return;
+
+        const champ = championships.find(c => c.id === reg.championshipId);
+        const w = weapons.find(wpn => wpn.id === reg.weaponId);
+
+        items.push({
+          id: `reg_${reg.id}`,
+          rawDate,
+          dateFormatted: rawDate.toLocaleDateString('pt-BR'),
+          timeFormatted: '15:54',
+          eventType: 'Competição',
+          eventName: champ?.title?.toUpperCase() || 'CAMPEONATO DE TIRO ESPORTIVO',
+          weaponClass: w?.weaponClass || 'Pistola',
+          model: w?.model || (reg as any)?.gunModel || 'Pistola de Competição',
+          weaponNumber: w?.weaponNumber || w?.serialNumber || 'HMA02013',
+          manufacturer: w?.manufacturer || 'IMBEL',
+          caliber: w?.caliber || (reg as any)?.caliber || '.380',
+          permissionStatus: w?.permissionStatus || 'Permitido',
+          sigma: w?.sigmaNumber || selectedUser.crNumber || '010101010',
+          shotsCount: reg.totalPoints || 20,
+          weaponOwnerText: 'Própria',
+          ammoOwnerText: 'Própria',
+        });
+      });
+    }
+
+    return items.sort((a, b) => b.rawDate.getTime() - a.rawDate.getTime());
+  }, [trainings, userScores, approvedRegs, championships, weapons, habStartDate, habEndDate, selectedUser.crNumber]);
 
   // Ammo Quota Calculations
   const ammoLimits: { [key: string]: number } = {
@@ -3580,32 +3710,61 @@ export default function MemberProfile({
                 </div>
 
                 {/* 2. Declaração de Habitualidade */}
-                <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-3">
+                <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="space-y-1 max-w-md">
                       <h5 className="font-bold text-slate-800 text-xs uppercase tracking-wide">Declaração de Habitualidade (Frequência)</h5>
                       <p className="text-[10.5px] text-slate-500 leading-relaxed">
-                        Documento comprobatório de habitualidade esportiva de tiro contendo histórico detalhado dos seus treinamentos e etapas oficiais nos calibres registrados.
+                        Documento comprobatório de habitualidade esportiva contendo histórico de treinamentos e campeonatos no período selecionado.
                       </p>
                     </div>
                     
                     <button
-                      disabled={combinedHabitualities.length < 8}
+                      disabled={combinedHabitualities.length === 0}
                       onClick={() => {
                         setPrintData({
                           fullName: selectedUser.fullName,
                           crNumber: selectedUser.crNumber || 'Emitindo...',
+                          startDate: habStartDate,
+                          endDate: habEndDate,
                           activities: combinedHabitualities,
                           date: new Date().toISOString().split('T')[0],
                           hash: `GG-HAB-${selectedUser.id.slice(0, 8).toUpperCase()}`
                         });
                         setPrintMode('declaration_habitualidade');
                       }}
-                      className={`text-xs font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-1.5 self-start sm:self-center transition cursor-pointer ${combinedHabitualities.length >= 8 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                      className={`text-xs font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-1.5 self-start sm:self-center transition cursor-pointer ${combinedHabitualities.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
                     >
                       <Printer className="w-3.5 h-3.5" />
                       Gerar Habitualidade
                     </button>
+                  </div>
+
+                  {/* Date Range Selection (Filtro por Período de Datas) */}
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
+                    <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
+                      Período de Seleção da Habitualidade (Entre Datas)
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Data Inicial *</label>
+                        <input
+                          type="date"
+                          value={habStartDate}
+                          onChange={(e) => setHabStartDate(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-2 rounded-lg text-xs font-semibold focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Data Final *</label>
+                        <input
+                          type="date"
+                          value={habEndDate}
+                          onChange={(e) => setHabEndDate(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-2 rounded-lg text-xs font-semibold focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   {/* Habitualities status indicator */}
@@ -3618,12 +3777,14 @@ export default function MemberProfile({
                       )}
                       <div>
                         <span className="font-bold text-slate-800">
-                          Frequência Cadastrada: {combinedHabitualities.length} de 8 obrigatórias
+                          {combinedHabitualities.length} registro(s) no período selecionado ({habStartDate.split('-').reverse().join('/')} a {habEndDate.split('-').reverse().join('/')})
                         </span>
                         <p className="text-[10px] text-slate-450 mt-0.5">
                           {combinedHabitualities.length >= 8
-                            ? 'Requisito legal do Exército Brasileiro atendido! Emissão disponível.'
-                            : `Faltam ${8 - combinedHabitualities.length} registros (treinos ou competições) para liberar o documento.`}
+                            ? 'Requisito legal do Exército Brasileiro atendido (8+ frequências)!'
+                            : combinedHabitualities.length > 0
+                            ? `${combinedHabitualities.length} habitualidades registradas no período. É possível gerar a declaração.`
+                            : 'Nenhum treino ou campeonato encontrado neste período de datas.'}
                         </p>
                       </div>
                     </div>
@@ -3636,14 +3797,22 @@ export default function MemberProfile({
                     </div>
                   </div>
 
-                  {/* Small collapsed activities summary */}
+                  {/* Activities summary in selected period */}
                   {combinedHabitualities.length > 0 && (
-                    <div className="text-[9.5px] font-mono text-slate-500 bg-white p-2.5 rounded-lg border border-slate-100 max-h-28 overflow-y-auto space-y-1">
-                      <div className="font-sans font-bold text-[8.5px] text-slate-400 uppercase tracking-wider mb-1">Últimos Registros no Histórico</div>
-                      {combinedHabitualities.map((item, idx) => (
-                        <div key={idx} className="flex justify-between border-b border-slate-50 pb-0.5">
-                          <span>{item.date} - {item.activity}</span>
-                          <span className="font-bold text-slate-700">{item.caliber} ({item.shots} tir.)</span>
+                    <div className="text-[9.5px] font-mono text-slate-500 bg-white p-2.5 rounded-lg border border-slate-100 max-h-36 overflow-y-auto space-y-1">
+                      <div className="font-sans font-bold text-[8.5px] text-slate-400 uppercase tracking-wider mb-1">
+                        Registros Encontrados ({combinedHabitualities.length})
+                      </div>
+                      {combinedHabitualities.map((item) => (
+                        <div key={item.id} className="flex items-center justify-between border-b border-slate-50 pb-1">
+                          <div className="truncate pr-2">
+                            <span className="font-bold text-slate-800 mr-2">{item.dateFormatted}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold font-sans uppercase mr-1.5 ${item.eventType === 'Competição' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                              {item.eventType}
+                            </span>
+                            <span className="text-slate-600 font-sans truncate">{item.eventName} ({item.model})</span>
+                          </div>
+                          <span className="font-bold text-slate-700 shrink-0">{item.caliber} - {item.shotsCount} tir.</span>
                         </div>
                       ))}
                     </div>
@@ -4394,70 +4563,104 @@ export default function MemberProfile({
                 </div>
               )}
 
-              {/* DECLARAÇÃO DE HABITUALIDADE (TABELA) */}
+              {/* DECLARAÇÃO DE HABITUALIDADE (TABELAS CONFORME PADRÃO DO EXÉRCITO) */}
               {printMode === 'declaration_habitualidade' && (
-                <div className="w-full flex-1 flex flex-col justify-between min-h-[250mm] font-serif p-4">
+                <div className="w-full flex-1 flex flex-col justify-between min-h-[250mm] font-sans p-4 text-slate-900">
                   {/* Timbre Header */}
-                  <div className="text-center border-b-2 border-slate-900 pb-4">
+                  <div className="text-center border-b-2 border-slate-900 pb-3">
                     <h2 className="font-display font-extrabold text-xl text-slate-900 tracking-wider">G&G CLUBE DE TIRO E COMPETIÇÕES</h2>
-                    <p className="text-[10px] font-sans text-slate-500 uppercase tracking-widest mt-1">
+                    <p className="text-[10px] font-sans text-slate-600 uppercase tracking-widest mt-0.5">
                       Filiado ao SFPC/11ª RM - Registro de Entidade nº 9410 - CNPJ: 45.981.042/0001-12
                     </p>
                   </div>
 
                   {/* Title */}
-                  <div className="text-center my-6">
+                  <div className="text-center my-4">
                     <h1 className="text-base font-bold uppercase underline tracking-wider text-slate-900">
                       Declaração de Habitualidade e Treinamentos
                     </h1>
                   </div>
 
                   {/* Intro */}
-                  <div className="text-justify text-xs text-slate-800 leading-relaxed mb-6 px-2">
+                  <div className="text-justify text-xs text-slate-800 leading-relaxed mb-4 px-2">
                     <p>
-                      Declaramos, sob as penas da lei e em cumprimento às diretrizes legais estabelecidas pelo Exército Brasileiro para fins de manutenção, revalidação ou aquisição de armamentos desportivos, que o(a) atleta <strong>{printData.fullName}</strong>, titular do CR de atirador desportivo nº <strong>{printData.crNumber}</strong>, realizou treinamentos e/ou participou de etapas oficiais neste estabelecimento desportivo de tiro no decorrer dos últimos 12 meses, conforme os registros oficiais consolidados abaixo descritos:
+                      Declaramos, sob as penas da lei e em cumprimento às diretrizes legais estabelecidas pelo Exército Brasileiro para fins de manutenção, revalidação ou aquisição de armamentos desportivos, que o(a) atleta <strong>{printData.fullName}</strong>, titular do CR nº <strong>{printData.crNumber}</strong>, realizou treinamentos e/ou participou de etapas oficiais de competição neste estabelecimento no período de <strong>{printData.startDate?.split('-').reverse().join('/')}</strong> a <strong>{printData.endDate?.split('-').reverse().join('/')}</strong>, conforme os registros oficiais abaixo detalhados:
                     </p>
                   </div>
 
-                  {/* Consolidated habituality table */}
-                  <div className="flex-1 overflow-x-auto px-2">
-                    <table className="w-full text-left font-sans text-[10px] border-collapse border border-slate-200">
-                      <thead>
-                        <tr className="bg-slate-100 text-slate-800 uppercase font-mono font-bold border-b border-slate-300">
-                          <th className="py-2 px-2 border-r border-slate-200">Nº</th>
-                          <th className="py-2 px-2 border-r border-slate-200">Data</th>
-                          <th className="py-2 px-2 border-r border-slate-200">Atividade / Prova</th>
-                          <th className="py-2 px-2 border-r border-slate-200">Calibre</th>
-                          <th className="py-2 px-2 border-r border-slate-200 text-center">Disparos</th>
-                          <th className="py-2 px-2">Local</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200">
-                        {printData.activities.map((act: any, idx: number) => (
-                          <tr key={idx} className="hover:bg-slate-50">
-                            <td className="py-2 px-2 border-r border-slate-200 font-mono text-center">{idx + 1}</td>
-                            <td className="py-2 px-2 border-r border-slate-200 font-mono">{act.date}</td>
-                            <td className="py-2 px-2 border-r border-slate-200 font-semibold">{act.activity}</td>
-                            <td className="py-2 px-2 border-r border-slate-200 font-mono">{act.caliber}</td>
-                            <td className="py-2 px-2 border-r border-slate-200 font-mono text-center font-bold text-slate-800">{act.shots}</td>
-                            <td className="py-2 px-2 text-slate-600">{act.location}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  {/* Individual Event Tables matching the user's screenshot layout */}
+                  <div className="flex-1 space-y-4 px-1">
+                    {printData.activities.map((item: any, idx: number) => (
+                      <div key={item.id || idx} className="border border-slate-900 text-xs overflow-hidden page-break-inside-avoid shadow-xs">
+                        <table className="w-full border-collapse text-xs text-slate-900">
+                          <tbody>
+                            {/* Row 1: Nome do Evento */}
+                            <tr className="border-b border-slate-900 bg-slate-50">
+                              <td colSpan={6} className="px-3 py-1.5 font-bold uppercase text-left text-[11px]">
+                                Nome do evento: {item.eventName}
+                              </td>
+                            </tr>
+
+                            {/* Row 2: Arma Utilizada */}
+                            <tr className="border-b border-slate-900">
+                              <td colSpan={6} className="px-3 py-1.5 font-medium text-[10.5px]">
+                                Arma utilizada: {item.weaponClass} - {item.model} - N° {item.weaponNumber} - {item.manufacturer} - Calibre : {item.caliber} - {item.permissionStatus}
+                              </td>
+                            </tr>
+
+                            {/* Row 3: Table Header */}
+                            <tr className="bg-slate-100 font-bold text-[10px] text-center border-b border-slate-900 uppercase tracking-wider">
+                              <td className="border-r border-slate-900 py-1.5 px-2 w-14">Ordem</td>
+                              <td className="border-r border-slate-900 py-1.5 px-2 w-28">Data</td>
+                              <td className="border-r border-slate-900 py-1.5 px-2 w-20">Hora</td>
+                              <td className="border-r border-slate-900 py-1.5 px-2 w-32">Sigma</td>
+                              <td className="border-r border-slate-900 py-1.5 px-2 w-28">Qtd Munições</td>
+                              <td className="py-1.5 px-2">Tipo de Evento</td>
+                            </tr>
+
+                            {/* Row 4: Data Row */}
+                            <tr className="text-center font-mono text-[11px] border-b border-slate-900">
+                              <td className="border-r border-slate-900 py-2 px-2 font-bold">{String(idx + 1).padStart(2, '0')}</td>
+                              <td className="border-r border-slate-900 py-2 px-2">{item.dateFormatted}</td>
+                              <td className="border-r border-slate-900 py-2 px-2">{item.timeFormatted}</td>
+                              <td className="border-r border-slate-900 py-2 px-2">{item.sigma}</td>
+                              <td className="border-r border-slate-900 py-2 px-2 font-bold">{item.shotsCount}</td>
+                              <td className="py-2 px-2 font-sans font-semibold text-slate-800">{item.eventType}</td>
+                            </tr>
+
+                            {/* Row 5: Arma & Munições ownership */}
+                            <tr className="border-b border-slate-900 text-[10.5px]">
+                              <td colSpan={3} className="border-r border-slate-900 px-3 py-1.5 font-medium">
+                                Arma: {item.weaponOwnerText}
+                              </td>
+                              <td colSpan={3} className="px-3 py-1.5 font-medium">
+                                Munições: {item.ammoOwnerText}
+                              </td>
+                            </tr>
+
+                            {/* Row 6: Evento Footer */}
+                            <tr>
+                              <td colSpan={6} className="px-3 py-1.5 font-medium uppercase text-[10.5px]">
+                                Evento: {item.eventName}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    ))}
                   </div>
 
-                  {/* Signatures */}
-                  <div className="mt-8 space-y-10">
+                  {/* Signatures & Footer */}
+                  <div className="mt-8 space-y-8">
                     <div className="text-center text-slate-800 text-[11px]">
-                      <p>Atestamos a veracidade e exatidão dos registros listados no estande de tiro.</p>
+                      <p>Atestamos a veracidade e exatidão dos registros de habitualidade acima especificados.</p>
                       <p className="mt-1">Brasília - DF, {new Date(printData.date).toLocaleDateString('pt-BR')}.</p>
                     </div>
 
                     <div className="text-center text-[10px] space-y-1">
-                      <div className="h-0.5 bg-slate-400 w-52 mx-auto"></div>
-                      <span className="font-bold text-slate-900 block mt-1">Oficial de Segurança de Estande</span>
-                      <span className="text-slate-500 block">Controle e Homologação de Frequência G&G</span>
+                      <div className="h-0.5 bg-slate-400 w-56 mx-auto"></div>
+                      <span className="font-bold text-slate-900 block mt-1">Oficial de Segurança de Estande / Controle de Frequência</span>
+                      <span className="text-slate-500 block">Homologação de Frequência G&G Competições</span>
                       <span className="text-slate-400 font-mono text-[8px] block">Registro de Autenticidade: {printData.hash}</span>
                     </div>
                   </div>
