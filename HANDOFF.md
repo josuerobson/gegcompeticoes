@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: substitui Banners Paginas por Texto Home no painel diretor com edicao dinamica do titulo, subtitulo e botoes da home` |
-| Data/hora | 2026-08-02T21:35:00-03:00 |
+| Mensagem | `style: remove sub-menus Patrocinadores, Videos Destaque e Imagem Padrao do menu Site no Painel Diretor` |
+| Data/hora | 2026-08-02T22:40:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -124,6 +124,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Exibição do Vencimento da Guia de Trânsito no Perfil (`MemberProfile.tsx`)**: Ajustado o campo *Guia de Trânsito* no card *Situação Associativa G&G* no perfil do atleta para formatar e exibir corretamente a data informada no cadastro (`guiaTransitoExpiry`) sem fuso horário nem inconsistência no formato de exibição. Adicionado também o campo de edição no formulário *Meu Cadastro*.
 - **Gerenciador de Banners da Home e Carrossel Público (`AdminPanel.tsx`, `App.tsx`, `server.ts`, `db.ts`)**: Criado o gerenciamento completo de Banners da Home em **Painel Diretor > Gerenciamento Plataforma > Site > Banner Home**, permitindo cadastrar, editar, desativar, reordenar e excluir banners com títulos, subtítulos, badges/tags, descrições, textos de botão, imagens (upload ou URL) e links. Cadastrado o primeiro banner inicial ("Campeonato IPSC Copa de Inverno 2026") idêntico à interface padrão e implementado o carrossel automático com transição temporal, controles laterais (chevrons) e indicadores por ponto na capa do portal.
 - **Gerenciamento de Texto Home no Painel Diretor (`AdminPanel.tsx`, `App.tsx`, `db.ts`)**: Substituído o item de menu "Banners Paginas" por "Texto Home" no caminho **Painel Diretor > Gerenciamento Plataforma > Site > Texto Home**. Criado o componente `HomeTextManager` permitindo ao gestor editar em tempo real a insígnia/tag, o título H2 ("A Pista de Encontro dos Atletas Federados"), o texto descritivo e as legendas e links dos dois botões de ação ("Começar Agora" e "Ver Campeonatos"), contando com pré-visualização ao vivo (*Live Preview*). Os textos são persistidos no PostgreSQL (`settings`) e refletidos dinamicamente na página inicial pública.
+- **Simplificação do Menu Site (`AdminPanel.tsx`)**: Removidos os sub-menus legados/mock `"Patrocinadores"`, `"Vídeos Destaque"` e `"Imagem Padrão"` em **Painel Diretor > Gerenciamento Plataforma > Site**, mantendo exclusivamente as opções ativas `"Banner Home"`, `"Texto Home"` e `"Certificados e Carteirinhas"`.
 
 ## Infra / deploy
 

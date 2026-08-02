@@ -57,7 +57,7 @@ Real (backed by actual DB tables/endpoints, tested end-to-end):
 
 Still decorative/mock (local `useState` arrays, no backing table, don't trust the UI at face value):
 - **Administrador Master > Gerenciar Clubes** (`masterClubs`) and **Gestão de Cobranças** (`billingList`) — separate from the real "Novo Clube" list under Gerenciamento Plataforma.
-- Most of **ADM** beyond Cadastro de armas and Cadastrar Resultados (Munições, Filtro Resultados, Relatórios e declarações, Treinamento/competições, Validar treinamentos), all of **IDSC**, and all of **SITE** (banners, patrocinadores, vídeos, imagem padrão) haven't been converted from the original mock scaffold.
+- Most of **ADM** beyond Cadastro de armas and Cadastrar Resultados (Munições, Filtro Resultados, Relatórios e declarações, Treinamento/competições, Validar treinamentos), all of **IDSC**, and remaining mock menus (os sub-menus `Patrocinadores`, `Vídeos Destaque` e `Imagem Padrão` foram removidos do menu Site em 2026-08-02).
 - **Cessão de Arma** was decorative — now moved to Real list above (2026-07-15).
 
 ## Deploy
