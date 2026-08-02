@@ -2209,6 +2209,8 @@ export default function App() {
               stages={stages}
               users={users}
               weapons={weapons}
+              weaponLookupOptions={weaponLookupOptions}
+              onAddWeapon={handleAddWeapon}
               onToggleFollow={handleToggleFollow}
               onPaySignature={handlePaySignature}
               onLogout={handleLogout}

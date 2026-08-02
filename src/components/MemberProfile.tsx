@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { User, Post, Registration, StageScore, Championship, Modality, Club, Stage, Weapon, TrainingSession } from '../types';
+import { User, Post, Registration, StageScore, Championship, Modality, Club, Stage, Weapon, TrainingSession, WeaponLookupOption } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import { QRCodeView } from './QRCodeView';
@@ -27,6 +27,8 @@ interface MemberProfileProps {
   stages?: Stage[];
   users?: User[];
   weapons?: Weapon[];
+  weaponLookupOptions?: WeaponLookupOption[];
+  onAddWeapon?: (weapon: Partial<Weapon>) => Promise<any>;
   onToggleFollow: (userId: string) => Promise<void>;
   onPaySignature: () => Promise<void>;
   onLogout: () => void;
@@ -276,6 +278,8 @@ export default function MemberProfile({
   stages = [],
   users = [],
   weapons = [],
+  weaponLookupOptions = [],
+  onAddWeapon,
   onToggleFollow,
   onPaySignature,
   onLogout,
@@ -1077,6 +1081,108 @@ export default function MemberProfile({
 
   const [savingTraining, setSavingTraining] = useState(false);
   const [trainingError, setTrainingError] = useState('');
+  // Quick weapon registration modal state (Treinamento)
+  const [showAddWeapon, setShowAddWeapon] = useState(false);
+  const [savingWeapon, setSavingWeapon] = useState(false);
+  const [newWeaponData, setNewWeaponData] = useState({
+    manufacturer: '',
+    model: '',
+    caliber: '',
+    serialNumber: '',
+    weaponNumber: '',
+    sigmaNumber: '',
+    weaponClass: '',
+    permissionStatus: '',
+    registrySystem: '',
+  });
+
+  const weaponLookup = (kind: string) => (weaponLookupOptions || []).filter(o => o.kind === kind);
+
+  const handleSaveNewWeapon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const manufacturer = newWeaponData.manufacturer.trim();
+    const model = newWeaponData.model.trim();
+    const caliber = newWeaponData.caliber.trim();
+
+    if (!manufacturer || !model || !caliber) {
+      alert('Preencha os campos obrigatórios: Fabricante, Modelo e Calibre.');
+      return;
+    }
+    setSavingWeapon(true);
+    try {
+      if (onAddWeapon) {
+        await onAddWeapon({
+          ownerId: currentUser?.id,
+          manufacturer,
+          model,
+          caliber,
+          weaponNumber: newWeaponData.weaponNumber.trim() || undefined,
+          sigmaNumber: newWeaponData.sigmaNumber.trim() || undefined,
+          serialNumber: newWeaponData.sigmaNumber.trim() || newWeaponData.weaponNumber.trim() || undefined,
+          weaponClass: newWeaponData.weaponClass || undefined,
+          registrySystem: newWeaponData.registrySystem || undefined,
+          permissionStatus: newWeaponData.permissionStatus || undefined,
+        });
+      } else {
+        const res = await fetch('/api/weapons', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(currentUser ? { 'x-user-id': currentUser.id } : {})
+          },
+          body: JSON.stringify({
+            ownerId: currentUser?.id,
+            manufacturer,
+            model,
+            caliber,
+            weaponNumber: newWeaponData.weaponNumber.trim() || undefined,
+            sigmaNumber: newWeaponData.sigmaNumber.trim() || undefined,
+            serialNumber: newWeaponData.sigmaNumber.trim() || newWeaponData.weaponNumber.trim() || undefined,
+            weaponClass: newWeaponData.weaponClass || undefined,
+            registrySystem: newWeaponData.registrySystem || undefined,
+            permissionStatus: newWeaponData.permissionStatus || undefined,
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || 'Erro ao cadastrar arma.');
+        }
+      }
+
+      const label = `${manufacturer} ${model} (${caliber})`.trim();
+      const newW: Weapon = {
+        id: `wpn_${Date.now()}`,
+        ownerId: currentUser?.id || '',
+        manufacturer,
+        model,
+        caliber,
+        serialNumber: newWeaponData.sigmaNumber.trim() || newWeaponData.weaponNumber.trim() || '',
+        weaponNumber: newWeaponData.weaponNumber.trim() || '',
+        sigmaNumber: newWeaponData.sigmaNumber.trim() || '',
+        weaponClass: newWeaponData.weaponClass,
+        registrySystem: newWeaponData.registrySystem,
+        permissionStatus: newWeaponData.permissionStatus,
+      };
+
+      setTrainingForm(prev => ({
+        ...prev,
+        selectedWeapon: newW,
+        weaponName: `${manufacturer} ${model}`.trim(),
+        weaponCaliber: caliber,
+        weaponOwnerType: 'propria',
+        weaponSearchQuery: label,
+      }));
+
+      setShowAddWeapon(false);
+      setIsWeaponDropdownOpen(false);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao cadastrar nova arma.');
+    } finally {
+      setSavingWeapon(false);
+    }
+  };
+
   const [isWeaponDropdownOpen, setIsWeaponDropdownOpen] = useState(false);
   const [showAddTraining, setShowAddTraining] = useState(false);
 
@@ -2969,9 +3075,32 @@ export default function MemberProfile({
 
                     {/* 2. Seleciona a Arma Utilizada com Busca em Tempo Real (Mínimo 3 Caracteres) */}
                     <div className="relative">
-                      <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
-                        Arma Utilizada <span className="text-red-500">*</span> (Pesquise digitando no mínimo 3 caracteres)
-                      </label>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-[11px] text-slate-600 font-bold uppercase">
+                          Arma Utilizada <span className="text-red-500">*</span> (Pesquise digitando no mínimo 3 caracteres)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewWeaponData({
+                              manufacturer: '',
+                              model: '',
+                              caliber: '',
+                              serialNumber: '',
+                              weaponNumber: '',
+                              sigmaNumber: '',
+                              weaponClass: '',
+                              permissionStatus: '',
+                              registrySystem: '',
+                            });
+                            setShowAddWeapon(true);
+                          }}
+                          className="text-blue-600 hover:text-blue-800 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5" />
+                          Cadastrar Nova Arma
+                        </button>
+                      </div>
                       <div className="relative">
                         <input
                           type="text"
@@ -3136,6 +3265,172 @@ export default function MemberProfile({
                       )}
                     </button>
                   </motion.form>
+                )}
+              </AnimatePresence>
+
+              {/* Sub-modal: Cadastrar Nova Arma no Registro de Treinamento */}
+              <AnimatePresence>
+                {showAddWeapon && (
+                  <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+                    <motion.div
+                      initial={{ scale: 0.95, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.95, opacity: 0 }}
+                      className="bg-white max-w-md w-full rounded-2xl smooth-shadow overflow-hidden text-slate-800 p-6 space-y-4 text-left"
+                    >
+                      <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-2">
+                          <PlusCircle className="w-5 h-5 text-blue-600" />
+                          <h4 className="font-bold text-slate-900 text-sm">Cadastrar Nova Arma</h4>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddWeapon(false)}
+                          className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <form onSubmit={handleSaveNewWeapon} className="space-y-3 text-xs">
+                        {/* Número da arma & Número Sigma */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Número da arma</label>
+                            <input
+                              type="text"
+                              placeholder="Número da arma"
+                              value={newWeaponData.weaponNumber}
+                              onChange={(e) => setNewWeaponData(prev => ({ ...prev, weaponNumber: e.target.value }))}
+                              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Número Sigma</label>
+                            <input
+                              type="text"
+                              placeholder="Número Sigma"
+                              value={newWeaponData.sigmaNumber}
+                              onChange={(e) => setNewWeaponData(prev => ({ ...prev, sigmaNumber: e.target.value }))}
+                              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Classe */}
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Classe</label>
+                          <select
+                            value={newWeaponData.weaponClass}
+                            onChange={(e) => setNewWeaponData(prev => ({ ...prev, weaponClass: e.target.value }))}
+                            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium cursor-pointer"
+                          >
+                            <option value="">Classe...</option>
+                            {weaponLookup('classe').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                            {!weaponLookup('classe').some(o => o.label === 'Pistola') && <option value="Pistola">Pistola</option>}
+                            {!weaponLookup('classe').some(o => o.label === 'Revólver') && <option value="Revólver">Revólver</option>}
+                            {!weaponLookup('classe').some(o => o.label === 'Espingarda') && <option value="Espingarda">Espingarda</option>}
+                            {!weaponLookup('classe').some(o => o.label === 'Fuzil') && <option value="Fuzil">Fuzil</option>}
+                            {!weaponLookup('classe').some(o => o.label === 'Carabina') && <option value="Carabina">Carabina</option>}
+                          </select>
+                        </div>
+
+                        {/* Modelo & Calibre */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Modelo *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="Digite ou selecione..."
+                              list="weapon-model-list-training"
+                              value={newWeaponData.model}
+                              onChange={(e) => setNewWeaponData(prev => ({ ...prev, model: e.target.value }))}
+                              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium"
+                            />
+                            <datalist id="weapon-model-list-training">
+                              {weaponLookup('modelo').map(o => <option key={o.id} value={o.label} />)}
+                            </datalist>
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Calibre *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="Digite ou selecione..."
+                              list="weapon-caliber-list-training"
+                              value={newWeaponData.caliber}
+                              onChange={(e) => setNewWeaponData(prev => ({ ...prev, caliber: e.target.value }))}
+                              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium"
+                            />
+                            <datalist id="weapon-caliber-list-training">
+                              {weaponLookup('calibre').map(o => <option key={o.id} value={o.label} />)}
+                            </datalist>
+                          </div>
+                        </div>
+
+                        {/* Fabricante */}
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Fabricante *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Digite ou selecione fabricante..."
+                            list="weapon-manufacturer-list-training"
+                            value={newWeaponData.manufacturer}
+                            onChange={(e) => setNewWeaponData(prev => ({ ...prev, manufacturer: e.target.value }))}
+                            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium"
+                          />
+                          <datalist id="weapon-manufacturer-list-training">
+                            {weaponLookup('fabricante').map(o => <option key={o.id} value={o.label} />)}
+                          </datalist>
+                        </div>
+
+                        {/* Arma é... & Status de permissão... */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Arma é...</label>
+                            <select
+                              value={newWeaponData.registrySystem}
+                              onChange={(e) => setNewWeaponData(prev => ({ ...prev, registrySystem: e.target.value }))}
+                              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium cursor-pointer"
+                            >
+                              <option value="">Arma é...</option>
+                              {weaponLookup('tipo_arma').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Status de permissão...</label>
+                            <select
+                              value={newWeaponData.permissionStatus}
+                              onChange={(e) => setNewWeaponData(prev => ({ ...prev, permissionStatus: e.target.value }))}
+                              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium cursor-pointer"
+                            >
+                              <option value="">Status de permissão...</option>
+                              {weaponLookup('permissao_arma').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowAddWeapon(false)}
+                            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold transition cursor-pointer"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={savingWeapon}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                          >
+                            {savingWeapon ? 'Cadastrando...' : 'Salvar e Selecionar'}
+                          </button>
+                        </div>
+                      </form>
+                    </motion.div>
+                  </div>
                 )}
               </AnimatePresence>
 
