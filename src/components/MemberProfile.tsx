@@ -417,7 +417,7 @@ export default function MemberProfile({
 
   const [profileForm, setProfileForm] = useState({
     fullName: '', birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
-    fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', nationality: '',
+    fatherName: '', motherName: '', crNumber: '', crValidity: '', guiaTransitoExpiry: '', militaryRegion: '', nationality: '',
     phone: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
   });
   const [clubForm, setClubForm] = useState({
@@ -1811,7 +1811,11 @@ export default function MemberProfile({
               <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                 <span className="text-slate-450 font-sans text-[11px]">Guia de Trânsito</span>
                 <span className="font-bold text-slate-800">
-                  {(selectedUser as any).guiaTransitoExpiry ? new Date((selectedUser as any).guiaTransitoExpiry).toLocaleDateString('pt-BR') : '--/--/----'}
+                  {selectedUser.guiaTransitoExpiry
+                    ? (selectedUser.guiaTransitoExpiry.includes('-')
+                        ? selectedUser.guiaTransitoExpiry.split('T')[0].split('-').reverse().join('/')
+                        : selectedUser.guiaTransitoExpiry)
+                    : '--/--/----'}
                 </span>
               </div>
             </div>
@@ -1989,6 +1993,7 @@ export default function MemberProfile({
                       fullName: profileForm.fullName, birthDate: profileForm.birthDate, sex: profileForm.sex, rg: profileForm.rg,
                       rgIssuer: profileForm.rgIssuer, rgIssueDate: profileForm.rgIssueDate, fatherName: profileForm.fatherName,
                       motherName: profileForm.motherName, crNumber: profileForm.crNumber, crValidity: profileForm.crValidity,
+                      guiaTransitoExpiry: profileForm.guiaTransitoExpiry,
                       militaryRegion: profileForm.militaryRegion, nationality: profileForm.nationality
                     })}
                     saving={savingSection === 'user_data'}
@@ -2012,6 +2017,7 @@ export default function MemberProfile({
                     <ProfileField label="Nome da mãe" value={profileForm.motherName} onChange={v => setProfileForm({ ...profileForm, motherName: v })} />
                     <ProfileField label="CR" placeholder="Ex: CR-102938-DF" value={profileForm.crNumber} onChange={v => setProfileForm({ ...profileForm, crNumber: v })} />
                     <ProfileField label="Validade CR" type="date" value={profileForm.crValidity} onChange={v => setProfileForm({ ...profileForm, crValidity: v })} />
+                    <ProfileField label="Vencimento Guia de Trânsito" type="date" value={profileForm.guiaTransitoExpiry} onChange={v => setProfileForm({ ...profileForm, guiaTransitoExpiry: v })} />
                     <ProfileField label="Região Militar" value={profileForm.militaryRegion} onChange={v => setProfileForm({ ...profileForm, militaryRegion: v })} />
                     <ProfileField label="Nacionalidade" value={profileForm.nationality} onChange={v => setProfileForm({ ...profileForm, nationality: v })} />
                   </ProfileSection>

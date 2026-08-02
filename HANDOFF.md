@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: adiciona selecao de periodo entre datas e tabelas detalhadas conforme padrao do Exercito na declaracao de habitualidade` |
-| Data/hora | 2026-08-02T10:37:00-03:00 |
+| Mensagem | `fix: exibe data de vencimento da guia de transito no card situacao associativa do perfil do atleta` |
+| Data/hora | 2026-08-02T17:06:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -121,6 +121,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Regras de Elegibilidade e Seleção de Melhor Pontuação nos Certificados (`ClubCertificatesViewer.tsx`, `ChampionshipsView.tsx`, `server.ts`)**: Implementada a verificação para disponibilizar certificados apenas para inscrições que possuam **resultado lançado e pontuação > 0**. Havendo múltiplas inscrições de um mesmo atleta no mesmo grupo `Campeonato > Etapa > Modalidade` (ex: reinscrições), o sistema filtra e disponibiliza **apenas a inscrição que obteve a maior pontuação**, descartando tentativas de menor pontuação ou sem notas lançadas.
 - **Cadastro Rápido de Armas no Formulário de Treinamento (`MemberProfile.tsx`, `App.tsx`)**: Adicionado o botão e modal "+ Cadastrar Nova Arma" no formulário de Registro de Treinamento (Painel do Perfil > Treinamentos), utilizando a mesma estrutura de campos (Número da Arma, Número Sigma, Classe, Modelo, Calibre, Fabricante, Origem e Permissão) do formulário de inscrição em campeonatos, selecionando a nova arma automaticamente para o treino após o salvamento.
 - **Declaração de Habitualidade por Período de Datas e Layout do Exército (`MemberProfile.tsx`)**: Atualizada a aba *Declarações* no perfil do atleta com seletores de período (*Data Inicial* e *Data Final*). O documento consolida todos os treinos e participações em campeonatos ocorridos no período selecionado e gera tabelas individuais com o modelo exato exigido pelo Exército (Campos: Nome do evento, Arma utilizada com Classe/Modelo/Número/Fabricante/Calibre/Status, Ordem, Data, Hora, Sigma, Qtd Munições, Tipo de Evento, Origem da Arma/Munição e Rodapé do Evento).
+- **Exibição do Vencimento da Guia de Trânsito no Perfil (`MemberProfile.tsx`)**: Ajustado o campo *Guia de Trânsito* no card *Situação Associativa G&G* no perfil do atleta para formatar e exibir corretamente a data informada no cadastro (`guiaTransitoExpiry`) sem fuso horário nem inconsistência no formato de exibição. Adicionado também o campo de edição no formulário *Meu Cadastro*.
 
 ## Infra / deploy
 
