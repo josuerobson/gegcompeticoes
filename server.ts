@@ -3137,7 +3137,7 @@ app.get('/api/public/validar/certificado/:certId', async (req, res) => {
     const reg = regRes.rows[0];
 
     // Compute athlete scores for position & medal
-    let totalScore = Number(reg.valor_pago) || 0;
+    let totalScore = Number(reg.total_points) || 0;
     let positionStr = '1º';
     let medalStr = 'HOMOLOGADO';
 
@@ -3150,6 +3150,15 @@ app.get('/api/public/validar/certificado/:certId', async (req, res) => {
 
     if (scoreRes.rows.length > 0 && Number(scoreRes.rows[0].total_score) > 0) {
       totalScore = Number(scoreRes.rows[0].total_score);
+    }
+
+    // Rule 1: Apenas inscrições com resultado lançado e pontuação acima de zero têm certificado válido
+    if (totalScore <= 0) {
+      return res.status(400).json({
+        valid: false,
+        statusMessage: 'CERTIFICADO PENDENTE DE RESULTADO',
+        error: 'Este certificado ainda não possui pontuação válida lançada ou o resultado da prova está zerado.'
+      });
     }
 
     // Determine medal classification based on championship minimum cutoffs
@@ -3166,13 +3175,14 @@ app.get('/api/public/validar/certificado/:certId', async (req, res) => {
       }
     }
 
-    // Determine ranking position among all unique athletes in this stage/modality & championship
+    // Determine ranking position among all unique athletes in this stage/modality & championship with positive score
     const rankRes = await pool.query(
       `SELECT COALESCE(ss.user_id, r.user_id) as athlete_id, COALESCE(SUM(ss.score), 0) as total_pts
        FROM stage_scores ss
        LEFT JOIN registrations r ON r.id = ss.registration_id
        WHERE ss.championship_id = $1 AND (ss.modality_id = $2 OR ss.modality ILIKE $3)
          AND ($4::int IS NULL OR ss.stage_num = $4::int)
+         AND ss.score > 0
        GROUP BY COALESCE(ss.user_id, r.user_id)
        ORDER BY total_pts DESC`,
       [reg.championship_id, reg.modality_id, reg.modality_name || '', stageNumFilter]

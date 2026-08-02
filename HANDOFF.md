@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix: filtra pontuacoes pela etapa especifica da inscricao no calculo do certificado (3º lugar na 1ª Etapa)` |
-| Data/hora | 2026-08-01T19:25:00-03:00 |
+| Mensagem | `feat: exige resultado lancado (> 0 pts) e seleciona apenas melhor inscricao por Campeonato > Etapa > Modalidade para certificados` |
+| Data/hora | 2026-08-02T09:10:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -118,6 +118,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Agrupamento Único de Atletas nos Certificados (`ClubCertificatesViewer.tsx`, `server.ts`)**: Corrigida a lógica de cálculo de colocação que antes agrupava por `registrationId` (criando entradas separadas para cada inscrição individual e inflando o total de competidores). O agrupamento foi alterado para ser feito estritamente por atleta (`userId` / `user_id`), somando os pontos acumulados e aplicando os critérios de desempate idênticos ao `CompetitionResultsViewer.tsx`.
 - **Cálculo da Colocação na Categoria de Medalha (`ClubCertificatesViewer.tsx`, `server.ts`)**: Quando o campeonato define cortes de pontuação para medalhas (ex: Ouro ≥ 96 pts, Prata ≥ 83 pts, Bronze ≥ 30 pts), a colocação impressa no certificado e exibida no cartão de auditoria passa a corresponder à posição do atleta **dentro da sua categoria de medalha** (ex: 3º lugar na Categoria Ouro para o atleta com 96.00 pts), alinhando-se rigorosamente com a listagem filtrada por medalhas na tela de resultados.
 - **Filtro da Colocação por Etapa Específica do Certificado (`ClubCertificatesViewer.tsx`, `server.ts`)**: Cada certificado de participação é emitido com base em uma inscrição vinculada a uma **etapa específica** (ex: 1ª Etapa). Ajustada a função `computeAthletePerformance` e a consulta SQL no servidor para receber e filtrar as pontuações filtrando pelo número da etapa daquela inscrição (`stageId` / `stage_num`). Isso garante que a posição exibida no cartão e no PDF seja a colocação daquela etapa individual (ex: 3º lugar na 1ª Etapa) e não um consolidado acumulado de outras etapas do campeonato.
+- **Regras de Elegibilidade e Seleção de Melhor Pontuação nos Certificados (`ClubCertificatesViewer.tsx`, `ChampionshipsView.tsx`, `server.ts`)**: Implementada a verificação para disponibilizar certificados apenas para inscrições que possuam **resultado lançado e pontuação > 0**. Havendo múltiplas inscrições de um mesmo atleta no mesmo grupo `Campeonato > Etapa > Modalidade` (ex: reinscrições), o sistema filtra e disponibiliza **apenas a inscrição que obteve a maior pontuação**, descartando tentativas de menor pontuação ou sem notas lançadas.
 
 ## Infra / deploy
 

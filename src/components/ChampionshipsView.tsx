@@ -315,10 +315,44 @@ export default function ChampionshipsView({
     setShowAddWeapon(false);
   };
 
-  // Find users approved registrations for certificate retrieval
-  const userApprovedRegistrations = registrations.filter(
-    r => r.userId === currentUser?.id && r.paymentStatus === 'approved'
+  // Helper to compute total score for a registration
+  const getRegScore = (r: Registration): number => {
+    if (r.totalPoints != null && r.totalPoints > 0) return Number(r.totalPoints);
+    const modObj = modalities.find(m => m.id === r.modalityId);
+    const modName = modObj?.name || '';
+    const targetStage = stages.find(s => s.id === r.stageId);
+    const stageNum = targetStage?.stageNum;
+
+    const matching = stageScores.filter(s =>
+      s.registrationId === r.id ||
+      (s.userId === r.userId &&
+       s.championshipId === r.championshipId &&
+       ((s as any).modalityId === r.modalityId || (modName && s.modality?.toLowerCase() === modName.toLowerCase())) &&
+       (stageNum ? s.stageNum === stageNum : true))
+    );
+
+    if (matching.length > 0) {
+      return matching.reduce((sum, sc) => sum + (sc.score || 0), 0);
+    }
+    return 0;
+  };
+
+  // Find users approved registrations for certificate retrieval (Rule 1: score > 0)
+  const rawUserRegistrations = registrations.filter(
+    r => r.userId === currentUser?.id && r.paymentStatus === 'approved' && getRegScore(r) > 0
   );
+
+  // Rule 2: Keep only highest score registration per (championship, stage, modality)
+  const userBestGrouped: Record<string, { reg: Registration; score: number }> = {};
+  for (const r of rawUserRegistrations) {
+    const score = getRegScore(r);
+    const key = `${r.championshipId}_${r.stageId || 'all'}_${r.modalityId}`;
+    if (!userBestGrouped[key] || score > userBestGrouped[key].score) {
+      userBestGrouped[key] = { reg: r, score };
+    }
+  }
+
+  const userApprovedRegistrations = Object.values(userBestGrouped).map(item => item.reg);
 
   // Copy pix key simulation
   const handleCopyPix = () => {

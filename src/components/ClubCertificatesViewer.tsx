@@ -376,9 +376,37 @@ export function ClubCertificatesViewer({
     };
   };
 
+  // Helper to compute total score for a registration
+  const getRegistrationScore = (r: Registration): number => {
+    if (r.totalPoints != null && r.totalPoints > 0) {
+      return Number(r.totalPoints);
+    }
+    const modObj = modalities.find(m => m.id === r.modalityId);
+    const modName = modObj?.name || '';
+    const targetStage = stages.find(s => s.id === r.stageId);
+    const stageNum = targetStage?.stageNum;
+
+    const matching = stageScores.filter(s =>
+      s.registrationId === r.id ||
+      (s.userId === r.userId &&
+       s.championshipId === r.championshipId &&
+       ((s as any).modalityId === r.modalityId || (modName && s.modality?.toLowerCase() === modName.toLowerCase())) &&
+       (stageNum ? s.stageNum === stageNum : true))
+    );
+
+    if (matching.length > 0) {
+      return matching.reduce((sum, sc) => sum + (sc.score || 0), 0);
+    }
+    return 0;
+  };
+
   // Filter approved registrations for the selected club (or restricted athlete)
-  const eligibleRegistrations = registrations.filter(r => {
+  const rawEligibleRegistrations = registrations.filter(r => {
     if (r.paymentStatus !== 'approved') return false;
+
+    // Rule 1: Apenas inscrições com resultado lançado e pontuação acima de zero
+    const score = getRegistrationScore(r);
+    if (score <= 0) return false;
 
     if (restrictedToUserId) {
       if (r.userId !== restrictedToUserId) return false;
@@ -409,6 +437,18 @@ export function ClubCertificatesViewer({
 
     return true;
   });
+
+  // Rule 2: Se houver mais de uma inscrição no mesmo Campeonato > Etapa > Modalidade, mantemos apenas a de MAIOR pontuação
+  const groupedBest: Record<string, { reg: Registration; score: number }> = {};
+  for (const r of rawEligibleRegistrations) {
+    const score = getRegistrationScore(r);
+    const key = `${r.userId}_${r.championshipId}_${r.stageId || 'all'}_${r.modalityId}`;
+    if (!groupedBest[key] || score > groupedBest[key].score) {
+      groupedBest[key] = { reg: r, score };
+    }
+  }
+
+  const eligibleRegistrations = Object.values(groupedBest).map(item => item.reg);
 
   const handlePrintCertificate = () => {
     let styleElem = document.getElementById('cert-print-style');
