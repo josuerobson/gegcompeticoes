@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix: exibe data de vencimento da guia de transito no card situacao associativa do perfil do atleta` |
-| Data/hora | 2026-08-02T17:06:00-03:00 |
+| Mensagem | `feat: adiciona gerenciamento de banners da home no painel diretor e carrossel dinâmico na capa do site` |
+| Data/hora | 2026-08-02T17:25:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -122,6 +122,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Cadastro Rápido de Armas no Formulário de Treinamento (`MemberProfile.tsx`, `App.tsx`)**: Adicionado o botão e modal "+ Cadastrar Nova Arma" no formulário de Registro de Treinamento (Painel do Perfil > Treinamentos), utilizando a mesma estrutura de campos (Número da Arma, Número Sigma, Classe, Modelo, Calibre, Fabricante, Origem e Permissão) do formulário de inscrição em campeonatos, selecionando a nova arma automaticamente para o treino após o salvamento.
 - **Declaração de Habitualidade por Período de Datas e Layout do Exército (`MemberProfile.tsx`)**: Atualizada a aba *Declarações* no perfil do atleta com seletores de período (*Data Inicial* e *Data Final*). O documento consolida todos os treinos e participações em campeonatos ocorridos no período selecionado e gera tabelas individuais com o modelo exato exigido pelo Exército (Campos: Nome do evento, Arma utilizada com Classe/Modelo/Número/Fabricante/Calibre/Status, Ordem, Data, Hora, Sigma, Qtd Munições, Tipo de Evento, Origem da Arma/Munição e Rodapé do Evento).
 - **Exibição do Vencimento da Guia de Trânsito no Perfil (`MemberProfile.tsx`)**: Ajustado o campo *Guia de Trânsito* no card *Situação Associativa G&G* no perfil do atleta para formatar e exibir corretamente a data informada no cadastro (`guiaTransitoExpiry`) sem fuso horário nem inconsistência no formato de exibição. Adicionado também o campo de edição no formulário *Meu Cadastro*.
+- **Gerenciador de Banners da Home e Carrossel Público (`AdminPanel.tsx`, `App.tsx`, `server.ts`, `db.ts`)**: Criado o gerenciamento completo de Banners da Home em **Painel Diretor > Gerenciamento Plataforma > Site > Banner Home**, permitindo cadastrar, editar, desativar, reordenar e excluir banners com títulos, subtítulos, badges/tags, descrições, textos de botão, imagens (upload ou URL) e links. Cadastrado o primeiro banner inicial ("Campeonato IPSC Copa de Inverno 2026") idêntico à interface padrão e implementado o carrossel automático com transição temporal, controles laterais (chevrons) e indicadores por ponto na capa do portal.
 
 ## Infra / deploy
 

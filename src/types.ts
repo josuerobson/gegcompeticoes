@@ -233,6 +233,20 @@ export interface Championship {
   abertoOutrosClubes?: 'sim' | 'nao';
 }
 
+export interface HomeBanner {
+  id: string;
+  tag: string;
+  subtitle: string;
+  title: string;
+  description: string;
+  buttonText: string;
+  imageUrl: string;
+  linkUrl?: string;
+  active: boolean;
+  displayOrder: number;
+  createdAt: string;
+}
+
 // Payload shape for creating/editing a championship — the required "quick create"
 // fields plus every optional cadastro-completo field from Championship.
 export type ChampionshipInput = Pick<Championship, 'title' | 'description' | 'startDate' | 'endDate' | 'registrationFee' | 'modalities' | 'stagesCount'> &

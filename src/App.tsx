@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Post, Championship, ChampionshipInput, Registration, StageScore, RankingItem, ShootingResult, Club, Modality, Stage, StageInput, Weapon, WeaponLookupOption, SharedPostInfo, Comment, MultiChampionship } from './types';
+import { User, Post, Championship, ChampionshipInput, Registration, StageScore, RankingItem, ShootingResult, Club, Modality, Stage, StageInput, Weapon, WeaponLookupOption, SharedPostInfo, Comment, MultiChampionship, HomeBanner } from './types';
 import FeedView from './components/FeedView';
 import ChampionshipsView from './components/ChampionshipsView';
 import AdminPanel from './components/AdminPanel';
 import MemberProfile from './components/MemberProfile';
 import CardValidationView from './components/CardValidationView';
 import CertificateValidationView from './components/CertificateValidationView';
-import { Target, Trophy, ShieldCheck, User as UserIcon, Home, Zap, Loader2, Sparkles, CheckCircle2, Sun, Moon, ChevronDown, LogOut } from 'lucide-react';
+import { Target, Trophy, ShieldCheck, User as UserIcon, Home, Zap, Loader2, Sparkles, CheckCircle2, Sun, Moon, ChevronDown, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion } from 'motion/react';
 import shootingDarkBg from '@/assets/shooting_dark_bg.png';
 import shootingBanner from '@/assets/shooting_banner.png';
@@ -141,6 +141,47 @@ export default function App() {
   const [settings, setSettings] = useState<{ [key: string]: string }>({
     default_image: 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80'
   });
+
+  // Home Banners Carousel state
+  const [homeBanners, setHomeBanners] = useState<HomeBanner[]>([]);
+  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const [isBannerHovered, setIsBannerHovered] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/public/home-banners')
+      .then(r => r.json())
+      .then(d => {
+        if (d.banners && Array.isArray(d.banners) && d.banners.length > 0) {
+          setHomeBanners(d.banners);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const activeHomeBanners = React.useMemo(() => {
+    if (homeBanners.length > 0) return homeBanners;
+    return [{
+      id: 'default-1',
+      tag: 'DESTAQUE PRINCIPAL',
+      subtitle: 'INSCRIÇÕES ABERTAS • COPA DE INVERNO G&G',
+      title: 'Campeonato IPSC Copa de Inverno 2026',
+      description: 'Prepare-se para o maior confronto de IPSC Handgun do Centro-Oeste! Pistas dinâmicas que testam velocidade, precisão e potência (DVC).',
+      buttonText: 'GARANTIR MINHA VAGA',
+      imageUrl: shootingBanner,
+      linkUrl: '',
+      active: true,
+      displayOrder: 1,
+      createdAt: new Date().toISOString(),
+    }];
+  }, [homeBanners]);
+
+  useEffect(() => {
+    if (isBannerHovered || activeHomeBanners.length <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentBannerIndex((prev) => (prev + 1) % activeHomeBanners.length);
+    }, 6000);
+    return () => clearInterval(timer);
+  }, [activeHomeBanners.length, isBannerHovered]);
 
   const sortedChampionshipsList = React.useMemo(() => {
     return [...championships].sort((a, b) => {
@@ -1474,44 +1515,103 @@ export default function App() {
           </div>
         </header>
 
-        {/* Banner de Destaque Superior */}
+        {/* Banner de Destaque Superior com Carrossel */}
         <div className="max-w-6xl mx-auto px-4 pt-8">
-          <div 
-            className="w-full h-[300px] sm:h-[400px] rounded-3xl overflow-hidden relative border border-slate-800 smooth-shadow flex flex-col justify-end p-6 sm:p-12 group cursor-pointer"
-            style={{
-              backgroundImage: `linear-gradient(to right, rgba(9, 15, 29, 0.95) 30%, rgba(9, 15, 29, 0.3) 70%, rgba(9, 15, 29, 0.1)), url(${shootingBanner})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              border: '1px solid rgba(255, 255, 255, 0.03)'
-            }}
-            onClick={() => triggerLoginModal('Faça login ou cadastre-se para se inscrever no campeonato em destaque.')}
-          >
-            {/* Tag/Badge */}
-            <div className="absolute top-6 left-6 sm:top-8 sm:left-8 bg-blue-600/10 border border-blue-500/20 text-blue-400 font-extrabold text-[9px] uppercase px-3.5 py-1.5 rounded-full tracking-wider flex items-center gap-1.5 z-20">
-              <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-              Destaque Principal
-            </div>
+          {(() => {
+            const currentBanner = activeHomeBanners[currentBannerIndex % activeHomeBanners.length];
+            const bgImg = currentBanner?.imageUrl || shootingBanner;
+            return (
+              <div 
+                className="w-full h-[320px] sm:h-[420px] rounded-3xl overflow-hidden relative border border-slate-800 smooth-shadow flex flex-col justify-end p-6 sm:p-12 group cursor-pointer transition-all duration-700 select-none"
+                style={{
+                  backgroundImage: `linear-gradient(to right, rgba(9, 15, 29, 0.95) 35%, rgba(9, 15, 29, 0.4) 70%, rgba(9, 15, 29, 0.1)), url(${bgImg})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  border: '1px solid rgba(255, 255, 255, 0.05)'
+                }}
+                onMouseEnter={() => setIsBannerHovered(true)}
+                onMouseLeave={() => setIsBannerHovered(false)}
+                onClick={() => {
+                  if (currentBanner.linkUrl) {
+                    window.open(currentBanner.linkUrl, '_blank');
+                  } else {
+                    triggerLoginModal('Faça login ou cadastre-se para se inscrever no campeonato em destaque.');
+                  }
+                }}
+              >
+                {/* Tag/Badge */}
+                <div className="absolute top-6 left-6 sm:top-8 sm:left-8 bg-blue-600/10 border border-blue-500/20 text-blue-400 font-extrabold text-[9px] uppercase px-3.5 py-1.5 rounded-full tracking-wider flex items-center gap-1.5 z-20">
+                  <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                  {currentBanner.tag || 'DESTAQUE PRINCIPAL'}
+                </div>
 
-            {/* Banner details */}
-            <div className="max-w-lg space-y-3 relative z-10 text-left">
-              <span className="text-[10px] text-amber-500 font-black uppercase tracking-wider block">Inscrições abertas • Copa de Inverno G&G</span>
-              <h3 className="font-display font-black text-2xl sm:text-4xl leading-none tracking-tight text-white group-hover:text-blue-400 transition duration-300">
-                Campeonato IPSC Copa de Inverno 2026
-              </h3>
-              <p className="text-slate-300 text-xs sm:text-sm leading-relaxed hidden sm:block">
-                Prepare-se para o maior confronto de IPSC Handgun do Centro-Oeste! Pistas dinâmicas que testam velocidade, precisão e potência (DVC).
-              </p>
-              <div className="pt-2">
-                <button
-                  type="button"
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[10px] sm:text-xs px-6 py-3 rounded-full transition shadow-lg shadow-blue-500/10 uppercase tracking-wider flex items-center gap-2 cursor-pointer"
-                >
-                  Garantir Minha Vaga
-                  <Zap className="w-3.5 h-3.5" />
-                </button>
+                {/* Banner details */}
+                <div className="max-w-lg space-y-3 relative z-10 text-left">
+                  <span className="text-[10px] text-amber-500 font-black uppercase tracking-wider block">
+                    {currentBanner.subtitle || 'INSCRIÇÕES ABERTAS • G&G COMPETIÇÕES'}
+                  </span>
+                  <h3 className="font-display font-black text-2xl sm:text-4xl leading-none tracking-tight text-white group-hover:text-blue-400 transition duration-300">
+                    {currentBanner.title}
+                  </h3>
+                  <p className="text-slate-300 text-xs sm:text-sm leading-relaxed hidden sm:block">
+                    {currentBanner.description}
+                  </p>
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[10px] sm:text-xs px-6 py-3 rounded-full transition shadow-lg shadow-blue-500/10 uppercase tracking-wider flex items-center gap-2 cursor-pointer"
+                    >
+                      {currentBanner.buttonText || 'GARANTIR MINHA VAGA'}
+                      <Zap className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Carousel Controls (if > 1 banner) */}
+                {activeHomeBanners.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentBannerIndex((prev) => (prev - 1 + activeHomeBanners.length) % activeHomeBanners.length);
+                      }}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 text-white p-3 rounded-full backdrop-blur-sm transition opacity-0 group-hover:opacity-100 z-20 cursor-pointer border border-white/10"
+                      title="Banner Anterior"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentBannerIndex((prev) => (prev + 1) % activeHomeBanners.length);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 text-white p-3 rounded-full backdrop-blur-sm transition opacity-0 group-hover:opacity-100 z-20 cursor-pointer border border-white/10"
+                      title="Próximo Banner"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+
+                    {/* Dot Indicators */}
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20 bg-black/40 backdrop-blur-xs px-3.5 py-1.5 rounded-full border border-white/10">
+                      {activeHomeBanners.map((_, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCurrentBannerIndex(idx);
+                          }}
+                          className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${currentBannerIndex % activeHomeBanners.length === idx ? 'w-6 bg-blue-500' : 'w-2 bg-white/40 hover:bg-white/70'}`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-          </div>
+            );
+          })()}
         </div>
 
         {/* Hero Section */}

@@ -629,11 +629,47 @@ export async function initDB() {
     `);
 
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS home_banners (
+        id           TEXT PRIMARY KEY,
+        tag          TEXT NOT NULL,
+        subtitle     TEXT NOT NULL,
+        title        TEXT NOT NULL,
+        description  TEXT NOT NULL,
+        button_text  TEXT NOT NULL,
+        image_url    TEXT NOT NULL,
+        link_url     TEXT,
+        active       BOOLEAN NOT NULL DEFAULT TRUE,
+        display_order INT NOT NULL DEFAULT 1,
+        created_at   TEXT NOT NULL
+      );
+    `);
+
     await client.query('COMMIT');
 
     const settingsCountRes = await client.query("SELECT COUNT(*) FROM settings WHERE key = 'default_image'");
     if (parseInt(settingsCountRes.rows[0].count, 10) === 0) {
       await client.query("INSERT INTO settings (key, value) VALUES ('default_image', 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80')");
+    }
+
+    const homeBannersCountRes = await client.query("SELECT COUNT(*) FROM home_banners");
+    if (parseInt(homeBannersCountRes.rows[0].count, 10) === 0) {
+      await client.query(`
+        INSERT INTO home_banners (id, tag, subtitle, title, description, button_text, image_url, link_url, active, display_order, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `, [
+        'banner-1',
+        'DESTAQUE PRINCIPAL',
+        'INSCRIÇÕES ABERTAS • COPA DE INVERNO G&G',
+        'Campeonato IPSC Copa de Inverno 2026',
+        'Prepare-se para o maior confronto de IPSC Handgun do Centro-Oeste! Pistas dinâmicas que testam velocidade, precisão e potência (DVC).',
+        'GARANTIR MINHA VAGA',
+        'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=1200&auto=format&fit=crop&q=80',
+        '',
+        true,
+        1,
+        new Date().toISOString()
+      ]);
     }
 
     // Converge every reference table identified by static mockData.ts ids, rather than

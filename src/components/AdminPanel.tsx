@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship } from '../types';
+import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, HomeBanner } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
@@ -4292,23 +4292,7 @@ export default function AdminPanel({
 
       // site, idsc, and other menus placeholders
       case 'banner_home':
-        return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
-            <h3 className="font-display font-bold text-slate-900 text-base">Banners em Destaque da Home</h3>
-            {bannerSuccess && (
-              <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 mb-4 text-xs font-semibold">
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
-                Banner atualizado no portal público!
-              </div>
-            )}
-            <div className="space-y-3">
-              <div className="h-32 border border-dashed border-slate-300 rounded-xl bg-slate-50 flex items-center justify-center text-xs text-slate-400">
-                Selecione ou arraste a imagem do banner principal (1200 x 400px)
-              </div>
-              <button onClick={() => { setBannerSuccess(true); setTimeout(() => setBannerSuccess(false), 2000); }} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition">Salvar Alterações</button>
-            </div>
-          </div>
-        );
+        return <HomeBannersManager currentUser={currentUser} />;
 
       case 'videos_destaque':
         return (
@@ -5144,6 +5128,493 @@ export default function AdminPanel({
 
       </div>
 
+    </div>
+  );
+}
+
+export function HomeBannersManager({ currentUser }: { currentUser: User | null }) {
+  const [banners, setBanners] = useState<HomeBanner[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingBanner, setEditingBanner] = useState<HomeBanner | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const [form, setForm] = useState({
+    tag: 'DESTAQUE PRINCIPAL',
+    subtitle: 'INSCRIÇÕES ABERTAS • COPA DE INVERNO G&G',
+    title: 'Campeonato IPSC Copa de Inverno 2026',
+    description: 'Prepare-se para o maior confronto de IPSC Handgun do Centro-Oeste! Pistas dinâmicas que testam velocidade, precisão e potência (DVC).',
+    buttonText: 'GARANTIR MINHA VAGA',
+    imageUrl: 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=1200&auto=format&fit=crop&q=80',
+    linkUrl: '',
+    active: true,
+    displayOrder: 1,
+  });
+
+  const loadBanners = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/home-banners', {
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      const data = await res.json();
+      if (data.banners) {
+        setBanners(data.banners);
+      }
+    } catch (err) {
+      console.error('Failed to load banners:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBanners();
+  }, []);
+
+  const openCreateModal = () => {
+    setEditingBanner(null);
+    setForm({
+      tag: 'DESTAQUE PRINCIPAL',
+      subtitle: 'INSCRIÇÕES ABERTAS • COPA DE INVERNO G&G',
+      title: '',
+      description: '',
+      buttonText: 'GARANTIR MINHA VAGA',
+      imageUrl: 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=1200&auto=format&fit=crop&q=80',
+      linkUrl: '',
+      active: true,
+      displayOrder: banners.length + 1,
+    });
+    setErrorMsg('');
+    setModalOpen(true);
+  };
+
+  const openEditModal = (b: HomeBanner) => {
+    setEditingBanner(b);
+    setForm({
+      tag: b.tag || 'DESTAQUE PRINCIPAL',
+      subtitle: b.subtitle || 'INSCRIÇÕES ABERTAS • COPA DE INVERNO G&G',
+      title: b.title || '',
+      description: b.description || '',
+      buttonText: b.buttonText || 'GARANTIR MINHA VAGA',
+      imageUrl: b.imageUrl || '',
+      linkUrl: b.linkUrl || '',
+      active: b.active !== false,
+      displayOrder: b.displayOrder || 1,
+    });
+    setErrorMsg('');
+    setModalOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim() || !form.description.trim()) {
+      setErrorMsg('Título e Descrição são obrigatórios.');
+      return;
+    }
+    setSaving(true);
+    setErrorMsg('');
+    try {
+      const url = editingBanner ? `/api/home-banners/${editingBanner.id}` : '/api/home-banners';
+      const method = editingBanner ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser?.id || ''
+        },
+        body: JSON.stringify(form)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar banner.');
+
+      setSuccessMsg(editingBanner ? 'Banner atualizado com sucesso!' : 'Novo banner cadastrado com sucesso!');
+      setTimeout(() => setSuccessMsg(''), 3000);
+      setModalOpen(false);
+      loadBanners();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Erro ao salvar banner.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleActive = async (b: HomeBanner) => {
+    try {
+      const res = await fetch(`/api/home-banners/${b.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser?.id || ''
+        },
+        body: JSON.stringify({ active: !b.active })
+      });
+      if (res.ok) {
+        setSuccessMsg(`Status do banner alterado para ${!b.active ? 'Ativo' : 'Inativo'}.`);
+        setTimeout(() => setSuccessMsg(''), 2500);
+        loadBanners();
+      }
+    } catch (err) {
+      console.error('Failed to toggle banner:', err);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Deseja realmente excluir este banner da página inicial?')) return;
+    try {
+      const res = await fetch(`/api/home-banners/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      if (res.ok) {
+        setSuccessMsg('Banner excluído com sucesso.');
+        setTimeout(() => setSuccessMsg(''), 2500);
+        loadBanners();
+      }
+    } catch (err) {
+      console.error('Failed to delete banner:', err);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-4 border-b border-slate-100">
+        <div>
+          <h3 className="font-display font-bold text-slate-900 text-base flex items-center gap-2">
+            <Globe className="w-5 h-5 text-blue-600" />
+            Gerenciador de Banners da Página Inicial (Home)
+          </h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Cadastre múltiplos banners para criar o carrossel em sequência exibido na capa do site público.
+          </p>
+        </div>
+
+        <button
+          onClick={openCreateModal}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-blue-100 cursor-pointer self-start sm:self-auto"
+        >
+          <PlusCircle className="w-4 h-4" />
+          Cadastrar Novo Banner
+        </button>
+      </div>
+
+      {successMsg && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3.5 rounded-xl flex items-center gap-2 text-xs font-semibold">
+          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+          {successMsg}
+        </div>
+      )}
+
+      {/* Banners List */}
+      {loading ? (
+        <div className="text-center py-12 text-slate-400 text-xs font-mono">
+          Carregando banners do carrossel...
+        </div>
+      ) : banners.length === 0 ? (
+        <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-2xl p-6 bg-slate-50 space-y-3">
+          <Globe className="w-10 h-10 text-slate-300 mx-auto" />
+          <p className="text-xs text-slate-500 font-semibold">Nenhum banner cadastrado para o carrossel da Home.</p>
+          <button
+            onClick={openCreateModal}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition"
+          >
+            Cadastrar Primeiro Banner
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider px-1">
+            <span>Banners Cadastrados ({banners.length})</span>
+            <span className="text-[10px] text-slate-400 font-normal normal-case">Ordem definida pelo campo Ordem de Exibição</span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            {banners.map((b) => (
+              <div
+                key={b.id}
+                className={`border rounded-2xl p-4 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center transition ${b.active ? 'border-slate-200 bg-white hover:border-slate-300' : 'border-slate-200 bg-slate-50 opacity-70'}`}
+              >
+                {/* Banner Thumbnail & Info */}
+                <div className="flex items-start md:items-center gap-4 min-w-0 flex-1">
+                  <div className="w-28 h-20 rounded-xl overflow-hidden bg-slate-900 shrink-0 border border-slate-200 relative group">
+                    <img
+                      src={b.imageUrl || 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80'}
+                      alt={b.title}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80';
+                      }}
+                    />
+                    <span className="absolute top-1 left-1 bg-black/70 text-white text-[9px] font-mono px-1.5 py-0.5 rounded font-bold">
+                      #{b.displayOrder}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="bg-blue-100 text-blue-800 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        {b.tag || 'DESTAQUE'}
+                      </span>
+                      <span className="text-[10px] text-amber-600 font-bold uppercase truncate max-w-xs">
+                        {b.subtitle}
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${b.active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                        {b.active ? 'Ativo na Home' : 'Inativo'}
+                      </span>
+                    </div>
+
+                    <h4 className="font-bold text-slate-900 text-sm truncate">{b.title}</h4>
+                    <p className="text-xs text-slate-500 line-clamp-1 max-w-xl">{b.description}</p>
+                    <div className="text-[10px] font-mono text-slate-400 flex items-center gap-3">
+                      <span>Botão: <strong>{b.buttonText}</strong></span>
+                      {b.linkUrl && <span className="truncate max-w-xs text-blue-600">Link: {b.linkUrl}</span>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-2 self-end md:self-center shrink-0 border-t md:border-t-0 pt-3 md:pt-0 w-full md:w-auto justify-end">
+                  <button
+                    onClick={() => handleToggleActive(b)}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition cursor-pointer ${b.active ? 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200'}`}
+                  >
+                    {b.active ? 'Desativar' : 'Ativar'}
+                  </button>
+
+                  <button
+                    onClick={() => openEditModal(b)}
+                    className="p-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer border border-slate-200"
+                    title="Editar Banner"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() => handleDelete(b.id)}
+                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer border border-slate-200"
+                    title="Excluir Banner"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* CREATE / EDIT MODAL */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden my-8">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h4 className="font-bold text-slate-900 text-sm">
+                {editingBanner ? 'Editar Banner da Home' : 'Cadastrar Novo Banner da Home'}
+              </h4>
+              <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSave} className="p-6 space-y-4 text-xs">
+              {errorMsg && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3 rounded-xl flex items-center gap-2 font-semibold">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  {errorMsg}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Tag / Badge (Topo) *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: DESTAQUE PRINCIPAL"
+                    value={form.tag}
+                    onChange={(e) => setForm({ ...form, tag: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Subtítulo (Laranja) *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: INSCRIÇÕES ABERTAS • COPA DE INVERNO G&G"
+                    value={form.subtitle}
+                    onChange={(e) => setForm({ ...form, subtitle: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Título Principal do Banner *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Campeonato IPSC Copa de Inverno 2026"
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 font-bold text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Descrição Curta *</label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Ex: Prepare-se para o maior confronto de IPSC Handgun do Centro-Oeste! Pistas dinâmicas que testam velocidade, precisão e potência (DVC)."
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 font-normal leading-relaxed"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Texto do Botão de Ação *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: GARANTIR MINHA VAGA"
+                    value={form.buttonText}
+                    onChange={(e) => setForm({ ...form, buttonText: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">URL de Destino / Link (Opcional)</label>
+                  <input
+                    type="url"
+                    placeholder="https://... (deixe em branco para abrir modal de inscrição)"
+                    value={form.linkUrl}
+                    onChange={(e) => setForm({ ...form, linkUrl: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Ordem de Exibição no Carrossel</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.displayOrder}
+                    onChange={(e) => setForm({ ...form, displayOrder: Number(e.target.value) })}
+                    className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 font-bold"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3 pt-4">
+                  <input
+                    type="checkbox"
+                    id="bannerActive"
+                    checked={form.active}
+                    onChange={(e) => setForm({ ...form, active: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                  />
+                  <label htmlFor="bannerActive" className="font-bold text-slate-800 cursor-pointer">
+                    Banner Ativo no Carrossel da Home
+                  </label>
+                </div>
+              </div>
+
+              {/* Image selection / Upload */}
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <label className="text-[10px] font-bold text-slate-500 uppercase block">Imagem de Fundo do Banner (URL ou Upload)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="https://... (URL da imagem)"
+                    value={form.imageUrl}
+                    onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+                    className="flex-1 bg-slate-50 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 font-mono text-[11px]"
+                  />
+                  <label className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-2 rounded-xl transition cursor-pointer flex items-center gap-1 shrink-0 text-xs">
+                    Upload
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setForm({ ...form, imageUrl: reader.result as string });
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+
+                {/* Preset image suggestions */}
+                <div className="space-y-1 pt-1">
+                  <span className="text-[10px] text-slate-400 font-semibold block">Sugestões de Galeria:</span>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {GALLERY_IMAGES.map((img) => (
+                      <button
+                        type="button"
+                        key={img.id}
+                        onClick={() => setForm({ ...form, imageUrl: img.url })}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold border shrink-0 cursor-pointer transition ${form.imageUrl === img.url ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-650 hover:bg-slate-100 border-slate-200'}`}
+                      >
+                        {img.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Live Preview Box */}
+                {form.imageUrl && (
+                  <div className="mt-3 rounded-2xl overflow-hidden h-36 relative border border-slate-800 flex flex-col justify-end p-4 shadow-sm select-none"
+                    style={{
+                      backgroundImage: `linear-gradient(to right, rgba(9, 15, 29, 0.95) 30%, rgba(9, 15, 29, 0.4) 70%, rgba(9, 15, 29, 0.1)), url(${form.imageUrl})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }}
+                  >
+                    <div className="bg-blue-600/20 text-blue-300 text-[8px] font-black uppercase px-2 py-0.5 rounded-full self-start mb-1 border border-blue-400/30">
+                      {form.tag || 'DESTAQUE'}
+                    </div>
+                    <span className="text-[9px] text-amber-500 font-black uppercase block truncate">{form.subtitle}</span>
+                    <h5 className="font-extrabold text-white text-sm leading-tight truncate">{form.title || 'Título do Banner'}</h5>
+                    <p className="text-[10px] text-slate-300 truncate">{form.description}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(false)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold px-6 py-2.5 rounded-xl transition cursor-pointer shadow-md shadow-blue-100 flex items-center gap-1.5"
+                >
+                  {saving ? 'Salvando...' : editingBanner ? 'Atualizar Banner' : 'Cadastrar Banner'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

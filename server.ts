@@ -3363,6 +3363,119 @@ app.delete('/api/trainings/:id', requireAuth, async (req, res) => {
 });
 
 // ==========================================
+// HOME BANNERS API (Gerenciamento de Banners da Home)
+// ==========================================
+
+// Public GET — list active home banners ordered by display_order
+app.get('/api/public/home-banners', async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, tag, subtitle, title, description, button_text AS "buttonText", image_url AS "imageUrl", link_url AS "linkUrl", active, display_order AS "displayOrder", created_at AS "createdAt"
+       FROM home_banners
+       WHERE active = true
+       ORDER BY display_order ASC, created_at DESC`
+    );
+    res.json({ banners: result.rows });
+  } catch (err: any) {
+    console.error('Fetch public home banners error:', err);
+    res.status(500).json({ error: 'Erro ao buscar banners públicos.' });
+  }
+});
+
+// Admin GET — list all home banners
+app.get('/api/home-banners', async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, tag, subtitle, title, description, button_text AS "buttonText", image_url AS "imageUrl", link_url AS "linkUrl", active, display_order AS "displayOrder", created_at AS "createdAt"
+       FROM home_banners
+       ORDER BY display_order ASC, created_at DESC`
+    );
+    res.json({ banners: result.rows });
+  } catch (err: any) {
+    console.error('Fetch home banners error:', err);
+    res.status(500).json({ error: 'Erro ao buscar banners.' });
+  }
+});
+
+// Admin POST — create new home banner
+app.post('/api/home-banners', requireAdmin, async (req, res) => {
+  try {
+    const { tag, subtitle, title, description, buttonText, imageUrl, linkUrl, active, displayOrder } = req.body;
+    if (!title || !description) {
+      return res.status(400).json({ error: 'Título e descrição são obrigatórios.' });
+    }
+    const id = `banner_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const now = new Date().toISOString();
+    const result = await pool.query(
+      `INSERT INTO home_banners (id, tag, subtitle, title, description, button_text, image_url, link_url, active, display_order, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING id, tag, subtitle, title, description, button_text AS "buttonText", image_url AS "imageUrl", link_url AS "linkUrl", active, display_order AS "displayOrder", created_at AS "createdAt"`,
+      [
+        id,
+        tag || 'DESTAQUE PRINCIPAL',
+        subtitle || 'INSCRIÇÕES ABERTAS • G&G COMPETIÇÕES',
+        title,
+        description,
+        buttonText || 'GARANTIR MINHA VAGA',
+        imageUrl || '',
+        linkUrl || '',
+        active !== false,
+        Number(displayOrder) || 1,
+        now
+      ]
+    );
+    res.json({ banner: result.rows[0] });
+  } catch (err: any) {
+    console.error('Create home banner error:', err);
+    res.status(500).json({ error: err.message || 'Erro ao criar banner.' });
+  }
+});
+
+// Admin PUT — update existing home banner
+app.put('/api/home-banners/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tag, subtitle, title, description, buttonText, imageUrl, linkUrl, active, displayOrder } = req.body;
+
+    const result = await pool.query(
+      `UPDATE home_banners
+       SET tag = COALESCE($1, tag),
+           subtitle = COALESCE($2, subtitle),
+           title = COALESCE($3, title),
+           description = COALESCE($4, description),
+           button_text = COALESCE($5, button_text),
+           image_url = COALESCE($6, image_url),
+           link_url = COALESCE($7, link_url),
+           active = COALESCE($8, active),
+           display_order = COALESCE($9, display_order)
+       WHERE id = $10
+       RETURNING id, tag, subtitle, title, description, button_text AS "buttonText", image_url AS "imageUrl", link_url AS "linkUrl", active, display_order AS "displayOrder", created_at AS "createdAt"`,
+      [tag, subtitle, title, description, buttonText, imageUrl, linkUrl, active, displayOrder, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Banner não encontrado.' });
+    }
+    res.json({ banner: result.rows[0] });
+  } catch (err: any) {
+    console.error('Update home banner error:', err);
+    res.status(500).json({ error: err.message || 'Erro ao atualizar banner.' });
+  }
+});
+
+// Admin DELETE — remove home banner
+app.delete('/api/home-banners/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('DELETE FROM home_banners WHERE id = $1', [id]);
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Delete home banner error:', err);
+    res.status(500).json({ error: err.message || 'Erro ao excluir banner.' });
+  }
+});
+
+// ==========================================
 // VITE DEV SERVER AND PRODUCTION ASSET HANDLERS
 // ==========================================
 
