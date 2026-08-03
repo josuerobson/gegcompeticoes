@@ -451,6 +451,86 @@ export async function initDB() {
       console.log(`Seeded ${seedLookups.length} weapon lookup option(s).`);
     }
 
+    // =========================================================================
+    // MÓDULO DE MUNIÇÕES (Entrada NF, Estoque/Recarga, Ponta/Reciclado, Alocar)
+    // =========================================================================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ammo_caliber_stocks (
+        id TEXT PRIMARY KEY,
+        club_id TEXT REFERENCES clubs(id) ON DELETE CASCADE,
+        caliber TEXT NOT NULL,
+        initial_stock INT NOT NULL DEFAULT 0,
+        has_initial_stock_set BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT ammo_caliber_stocks_club_caliber_unique UNIQUE (club_id, caliber)
+      );
+
+      CREATE TABLE IF NOT EXISTS ammo_invoices (
+        id TEXT PRIMARY KEY,
+        club_id TEXT REFERENCES clubs(id) ON DELETE CASCADE,
+        invoice_number TEXT,
+        supplier TEXT,
+        date TEXT NOT NULL,
+        total_amount DOUBLE PRECISION DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS ammo_invoice_items (
+        id TEXT PRIMARY KEY,
+        invoice_id TEXT REFERENCES ammo_invoices(id) ON DELETE CASCADE,
+        product_type TEXT NOT NULL,
+        caliber TEXT NOT NULL,
+        quantity INT NOT NULL DEFAULT 0,
+        unit_price DOUBLE PRECISION DEFAULT 0,
+        total_price DOUBLE PRECISION DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS ammo_productions (
+        id TEXT PRIMARY KEY,
+        club_id TEXT REFERENCES clubs(id) ON DELETE CASCADE,
+        quantity INT NOT NULL DEFAULT 0,
+        date TEXT NOT NULL,
+        caliber TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS ammo_recycled (
+        id TEXT PRIMARY KEY,
+        club_id TEXT REFERENCES clubs(id) ON DELETE CASCADE,
+        quantity INT NOT NULL DEFAULT 0,
+        date TEXT NOT NULL,
+        caliber TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS ammo_athlete_allocations (
+        id TEXT PRIMARY KEY,
+        club_id TEXT REFERENCES clubs(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        date TEXT NOT NULL,
+        notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS ammo_athlete_allocation_items (
+        id TEXT PRIMARY KEY,
+        allocation_id TEXT REFERENCES ammo_athlete_allocations(id) ON DELETE CASCADE,
+        caliber TEXT NOT NULL,
+        quantity INT NOT NULL DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS ammo_athlete_balances (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        club_id TEXT REFERENCES clubs(id) ON DELETE CASCADE,
+        caliber TEXT NOT NULL,
+        balance INT NOT NULL DEFAULT 0,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT ammo_athlete_balances_user_caliber_unique UNIQUE (user_id, caliber)
+      );
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS registrations (
         id TEXT PRIMARY KEY,
@@ -642,6 +722,78 @@ export async function initDB() {
         active       BOOLEAN NOT NULL DEFAULT TRUE,
         display_order INT NOT NULL DEFAULT 1,
         created_at   TEXT NOT NULL
+      );
+    `);
+
+    // ── Ammunition Management Tables ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ammo_stock (
+        id TEXT PRIMARY KEY,
+        club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+        caliber TEXT NOT NULL,
+        initial_quantity INT NOT NULL DEFAULT 0,
+        initial_set BOOLEAN NOT NULL DEFAULT FALSE,
+        current_quantity INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(club_id, caliber)
+      );
+
+      CREATE TABLE IF NOT EXISTS ammo_nfs (
+        id TEXT PRIMARY KEY,
+        club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+        nf_number TEXT NOT NULL,
+        supplier TEXT,
+        date TEXT NOT NULL,
+        total_value NUMERIC(10,2) NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS ammo_nf_items (
+        id TEXT PRIMARY KEY,
+        nf_id TEXT NOT NULL REFERENCES ammo_nfs(id) ON DELETE CASCADE,
+        product_type TEXT NOT NULL,
+        caliber TEXT NOT NULL,
+        quantity INT NOT NULL DEFAULT 0,
+        unit_value NUMERIC(10,2) NOT NULL DEFAULT 0,
+        total_value NUMERIC(10,2) NOT NULL DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS ammo_production_logs (
+        id TEXT PRIMARY KEY,
+        club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+        caliber TEXT NOT NULL,
+        quantity INT NOT NULL DEFAULT 0,
+        date TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS ammo_recycled_logs (
+        id TEXT PRIMARY KEY,
+        club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+        caliber TEXT NOT NULL,
+        quantity INT NOT NULL DEFAULT 0,
+        date TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS ammo_athlete_stock (
+        id TEXT PRIMARY KEY,
+        club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+        athlete_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        caliber TEXT NOT NULL,
+        quantity INT NOT NULL DEFAULT 0,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(club_id, athlete_id, caliber)
+      );
+
+      CREATE TABLE IF NOT EXISTS ammo_allocations (
+        id TEXT PRIMARY KEY,
+        club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+        athlete_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        date TEXT NOT NULL,
+        items JSONB NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
 

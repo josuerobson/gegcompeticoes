@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
-import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship } from './src/types.js';
+import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance } from './src/types.js';
 import { pool, initDB } from './src/db.js';
 import { hashPassword, verifyPassword } from './src/auth.js';
 import { uploadDocument, getDocumentStream, storageEnabled } from './src/storage.js';
@@ -3268,6 +3268,470 @@ app.get('/api/public/validar/certificado/:certId', async (req, res) => {
 
 
 // ==========================================
+// MÓDULO DE MUNIÇÕES API
+// ==========================================
+
+// GET /api/ammo/overview — Visão geral do estoque, NFs, produções, reciclados e alocações
+app.get('/api/ammo/overview', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  let clubId = currentUser.clubId;
+  if (!clubId && currentUser.role === 'master_admin') {
+    const cRes = await pool.query('SELECT id FROM clubs ORDER BY created_at ASC LIMIT 1');
+    clubId = cRes.rows[0]?.id;
+  }
+  if (!clubId) clubId = 'c1';
+
+  try {
+    // 1. All registered calibers
+    const calibersRes = await pool.query(
+      `SELECT label FROM weapon_lookup_options WHERE kind = 'calibre' ORDER BY label ASC`
+    );
+    const calibersList = calibersRes.rows.map(r => r.label);
+
+    // 2. Initial stock entries
+    const initialStocksRes = await pool.query(
+      `SELECT * FROM ammo_caliber_stocks WHERE club_id = $1`,
+      [clubId]
+    );
+    const initialStocksMap: Record<string, { initialStock: number; hasInitialStockSet: boolean }> = {};
+    initialStocksRes.rows.forEach(r => {
+      initialStocksMap[r.caliber] = {
+        initialStock: Number(r.initial_stock) || 0,
+        hasInitialStockSet: Boolean(r.has_initial_stock_set),
+      };
+    });
+
+    // 3. Total NF New Ammo per caliber
+    const nfNewAmmoRes = await pool.query(
+      `SELECT aii.caliber, COALESCE(SUM(aii.quantity), 0)::int as total
+       FROM ammo_invoice_items aii
+       JOIN ammo_invoices ai ON ai.id = aii.invoice_id
+       WHERE ai.club_id = $1 AND aii.product_type = 'municao_nova'
+       GROUP BY aii.caliber`,
+      [clubId]
+    );
+    const nfNewAmmoMap: Record<string, number> = {};
+    nfNewAmmoRes.rows.forEach(r => {
+      nfNewAmmoMap[r.caliber] = Number(r.total) || 0;
+    });
+
+    // 4. Total Productions / Reloading per caliber
+    const productionRes = await pool.query(
+      `SELECT caliber, COALESCE(SUM(quantity), 0)::int as total
+       FROM ammo_productions
+       WHERE club_id = $1
+       GROUP BY caliber`,
+      [clubId]
+    );
+    const productionMap: Record<string, number> = {};
+    productionRes.rows.forEach(r => {
+      productionMap[r.caliber] = Number(r.total) || 0;
+    });
+
+    // 5. Total Allocated to Athletes per caliber
+    const allocatedRes = await pool.query(
+      `SELECT aai.caliber, COALESCE(SUM(aai.quantity), 0)::int as total
+       FROM ammo_athlete_allocation_items aai
+       JOIN ammo_athlete_allocations aa ON aa.id = aai.allocation_id
+       WHERE aa.club_id = $1
+       GROUP BY aai.caliber`,
+      [clubId]
+    );
+    const allocatedMap: Record<string, number> = {};
+    allocatedRes.rows.forEach(r => {
+      allocatedMap[r.caliber] = Number(r.total) || 0;
+    });
+
+    // 6. Total Recycled lead/bullets per caliber
+    const recycledTotalRes = await pool.query(
+      `SELECT caliber, COALESCE(SUM(quantity), 0)::int as total
+       FROM ammo_recycled
+       WHERE club_id = $1
+       GROUP BY caliber`,
+      [clubId]
+    );
+    const recycledMap: Record<string, number> = {};
+    recycledTotalRes.rows.forEach(r => {
+      recycledMap[r.caliber] = Number(r.total) || 0;
+    });
+
+    // Consolidate caliber stocks list
+    const caliberStocks: AmmoCaliberStock[] = calibersList.map((cal, idx) => {
+      const initInfo = initialStocksMap[cal] || { initialStock: 0, hasInitialStockSet: false };
+      const nfNew = nfNewAmmoMap[cal] || 0;
+      const prod = productionMap[cal] || 0;
+      const alloc = allocatedMap[cal] || 0;
+      const current = initInfo.initialStock + nfNew + prod - alloc;
+
+      return {
+        id: `acs_${idx}_${cal.replace(/[^a-zA-Z0-9]/g, '')}`,
+        clubId,
+        caliber: cal,
+        initialStock: initInfo.initialStock,
+        hasInitialStockSet: initInfo.hasInitialStockSet,
+        currentStock: current,
+        totalNfNewAmmo: nfNew,
+        totalProduction: prod,
+        totalAllocated: alloc,
+      };
+    });
+
+    // 7. Recent Invoices
+    const invoicesRes = await pool.query(
+      `SELECT * FROM ammo_invoices WHERE club_id = $1 ORDER BY date DESC, created_at DESC LIMIT 20`,
+      [clubId]
+    );
+    const invoices: AmmoInvoice[] = [];
+    for (const invRow of invoicesRes.rows) {
+      const itemsRes = await pool.query(
+        `SELECT * FROM ammo_invoice_items WHERE invoice_id = $1`,
+        [invRow.id]
+      );
+      invoices.push({
+        id: invRow.id,
+        clubId: invRow.club_id,
+        invoiceNumber: invRow.invoice_number || undefined,
+        supplier: invRow.supplier || undefined,
+        date: invRow.date,
+        totalAmount: Number(invRow.total_amount) || 0,
+        createdAt: invRow.created_at,
+        items: itemsRes.rows.map(item => ({
+          id: item.id,
+          invoiceId: item.invoice_id,
+          productType: item.product_type,
+          caliber: item.caliber,
+          quantity: Number(item.quantity) || 0,
+          unitPrice: Number(item.unit_price) || 0,
+          totalPrice: Number(item.total_price) || 0,
+        }))
+      });
+    }
+
+    // 8. Recent Productions
+    const productionsRes = await pool.query(
+      `SELECT * FROM ammo_productions WHERE club_id = $1 ORDER BY date DESC, created_at DESC LIMIT 30`,
+      [clubId]
+    );
+    const productions: AmmoProduction[] = productionsRes.rows.map(p => ({
+      id: p.id,
+      clubId: p.club_id,
+      quantity: Number(p.quantity) || 0,
+      date: p.date,
+      caliber: p.caliber,
+      createdAt: p.created_at
+    }));
+
+    // 9. Recent Recycled
+    const recycledRes = await pool.query(
+      `SELECT * FROM ammo_recycled WHERE club_id = $1 ORDER BY date DESC, created_at DESC LIMIT 30`,
+      [clubId]
+    );
+    const recycledList: AmmoRecycled[] = recycledRes.rows.map(r => ({
+      id: r.id,
+      clubId: r.club_id,
+      quantity: Number(r.quantity) || 0,
+      date: r.date,
+      caliber: r.caliber,
+      createdAt: r.created_at
+    }));
+
+    // 10. Recent Allocations
+    const allocationsRes = await pool.query(
+      `SELECT aa.*, u.full_name as athlete_name, u.cpf as athlete_cpf
+       FROM ammo_athlete_allocations aa
+       JOIN users u ON u.id = aa.user_id
+       WHERE aa.club_id = $1
+       ORDER BY aa.date DESC, aa.created_at DESC LIMIT 30`,
+      [clubId]
+    );
+    const allocations: AmmoAthleteAllocation[] = [];
+    for (const allocRow of allocationsRes.rows) {
+      const itemsRes = await pool.query(
+        `SELECT * FROM ammo_athlete_allocation_items WHERE allocation_id = $1`,
+        [allocRow.id]
+      );
+      allocations.push({
+        id: allocRow.id,
+        clubId: allocRow.club_id,
+        userId: allocRow.user_id,
+        athleteName: allocRow.athlete_name,
+        athleteCpf: allocRow.athlete_cpf,
+        date: allocRow.date,
+        notes: allocRow.notes || undefined,
+        createdAt: allocRow.created_at,
+        items: itemsRes.rows.map(i => ({
+          id: i.id,
+          allocationId: i.allocation_id,
+          caliber: i.caliber,
+          quantity: Number(i.quantity) || 0
+        }))
+      });
+    }
+
+    res.json({
+      caliberStocks,
+      invoices,
+      productions,
+      recycledList,
+      recycledMap,
+      allocations
+    });
+  } catch (err) {
+    console.error('Fetch ammo overview error:', err);
+    res.status(500).json({ error: 'Erro ao buscar dados de munições.' });
+  }
+});
+
+// POST /api/ammo/initial-stock — Define estoque inicial de um calibre (uma única vez)
+app.post('/api/ammo/initial-stock', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  let clubId = currentUser.clubId;
+  if (!clubId && currentUser.role === 'master_admin') {
+    const cRes = await pool.query('SELECT id FROM clubs ORDER BY created_at ASC LIMIT 1');
+    clubId = cRes.rows[0]?.id;
+  }
+  if (!clubId) clubId = 'c1';
+
+  const { caliber, initialStock } = req.body;
+  if (!caliber || initialStock === undefined || initialStock === null) {
+    return res.status(400).json({ error: 'Calibre e quantidade inicial são obrigatórios.' });
+  }
+
+  const stockQty = Math.max(0, Number(initialStock) || 0);
+
+  try {
+    const checkRes = await pool.query(
+      `SELECT has_initial_stock_set FROM ammo_caliber_stocks WHERE club_id = $1 AND caliber = $2`,
+      [clubId, caliber]
+    );
+
+    if (checkRes.rows.length > 0 && checkRes.rows[0].has_initial_stock_set) {
+      return res.status(400).json({ error: `O estoque inicial do calibre "${caliber}" já foi cadastrado anteriormente e não pode ser alterado por aqui.` });
+    }
+
+    const id = `acs_${clubId}_${caliber.replace(/[^a-zA-Z0-9]/g, '')}`;
+    await pool.query(
+      `INSERT INTO ammo_caliber_stocks (id, club_id, caliber, initial_stock, has_initial_stock_set, updated_at)
+       VALUES ($1, $2, $3, $4, true, NOW())
+       ON CONFLICT (club_id, caliber)
+       DO UPDATE SET initial_stock = EXCLUDED.initial_stock, has_initial_stock_set = true, updated_at = NOW()`,
+      [id, clubId, caliber, stockQty]
+    );
+
+    res.json({ success: true, message: `Estoque inicial de ${stockQty} un do calibre ${caliber} cadastrado com sucesso.` });
+  } catch (err) {
+    console.error('Set initial ammo stock error:', err);
+    res.status(500).json({ error: 'Erro ao cadastrar estoque inicial.' });
+  }
+});
+
+// POST /api/ammo/invoices — Registra entrada de NF de insumos/munição
+app.post('/api/ammo/invoices', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  let clubId = currentUser.clubId;
+  if (!clubId && currentUser.role === 'master_admin') {
+    const cRes = await pool.query('SELECT id FROM clubs ORDER BY created_at ASC LIMIT 1');
+    clubId = cRes.rows[0]?.id;
+  }
+  if (!clubId) clubId = 'c1';
+
+  const { invoiceNumber, supplier, date, items } = req.body;
+  if (!date || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Data e ao menos um produto são obrigatórios.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const invoiceId = `nf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    let totalInvoiceAmount = 0;
+
+    for (const item of items) {
+      const qty = Math.max(0, Number(item.quantity) || 0);
+      const unit = Math.max(0, Number(item.unitPrice) || 0);
+      const total = qty * unit;
+      totalInvoiceAmount += total;
+    }
+
+    await client.query(
+      `INSERT INTO ammo_invoices (id, club_id, invoice_number, supplier, date, total_amount)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [invoiceId, clubId, invoiceNumber || null, supplier || null, date, totalInvoiceAmount]
+    );
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const itemId = `nfi_${invoiceId}_${i}`;
+      const qty = Math.max(0, Number(item.quantity) || 0);
+      const unit = Math.max(0, Number(item.unitPrice) || 0);
+      const total = qty * unit;
+
+      await client.query(
+        `INSERT INTO ammo_invoice_items (id, invoice_id, product_type, caliber, quantity, unit_price, total_price)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [itemId, invoiceId, item.productType, item.caliber, qty, unit, total]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ success: true, invoiceId, totalInvoiceAmount });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Create ammo invoice error:', err);
+    res.status(500).json({ error: 'Erro ao registrar Nota Fiscal.' });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /api/ammo/production — Registra entrada de produção/recarga de munição pelo clube
+app.post('/api/ammo/production', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  let clubId = currentUser.clubId;
+  if (!clubId && currentUser.role === 'master_admin') {
+    const cRes = await pool.query('SELECT id FROM clubs ORDER BY created_at ASC LIMIT 1');
+    clubId = cRes.rows[0]?.id;
+  }
+  if (!clubId) clubId = 'c1';
+
+  const { quantity, date, caliber } = req.body;
+  if (!quantity || !date || !caliber) {
+    return res.status(400).json({ error: 'Quantidade produzida, Data e Calibre são obrigatórios.' });
+  }
+
+  const qty = Math.max(1, Number(quantity) || 0);
+  const id = `aprod_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+  try {
+    await pool.query(
+      `INSERT INTO ammo_productions (id, club_id, quantity, date, caliber)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [id, clubId, qty, date, caliber]
+    );
+
+    res.status(201).json({ success: true, message: `Produção de ${qty} un (${caliber}) registrada com sucesso.` });
+  } catch (err) {
+    console.error('Create ammo production error:', err);
+    res.status(500).json({ error: 'Erro ao registrar produção de munição.' });
+  }
+});
+
+// POST /api/ammo/recycled — Registra ponta/reciclado produzido pelo clube
+app.post('/api/ammo/recycled', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  let clubId = currentUser.clubId;
+  if (!clubId && currentUser.role === 'master_admin') {
+    const cRes = await pool.query('SELECT id FROM clubs ORDER BY created_at ASC LIMIT 1');
+    clubId = cRes.rows[0]?.id;
+  }
+  if (!clubId) clubId = 'c1';
+
+  const { quantity, date, caliber } = req.body;
+  if (!quantity || !date || !caliber) {
+    return res.status(400).json({ error: 'Quantidade produzida, Data e Calibre são obrigatórios.' });
+  }
+
+  const qty = Math.max(1, Number(quantity) || 0);
+  const id = `arec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+  try {
+    await pool.query(
+      `INSERT INTO ammo_recycled (id, club_id, quantity, date, caliber)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [id, clubId, qty, date, caliber]
+    );
+
+    res.status(201).json({ success: true, message: `Produção de projéteis/pontas recicladas (${qty} un - ${caliber}) registrada com sucesso.` });
+  } catch (err) {
+    console.error('Create recycled ammo error:', err);
+    res.status(500).json({ error: 'Erro ao registrar projétil/ponta reciclada.' });
+  }
+});
+
+// POST /api/ammo/allocations — Aloca munições do clube para o atleta
+app.post('/api/ammo/allocations', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  let clubId = currentUser.clubId;
+  if (!clubId && currentUser.role === 'master_admin') {
+    const cRes = await pool.query('SELECT id FROM clubs ORDER BY created_at ASC LIMIT 1');
+    clubId = cRes.rows[0]?.id;
+  }
+  if (!clubId) clubId = 'c1';
+
+  const { userId, date, notes, items } = req.body;
+  if (!userId || !date || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Atleta, Data e ao menos um calibre com quantidade são obrigatórios.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const allocationId = `alloc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+    await client.query(
+      `INSERT INTO ammo_athlete_allocations (id, club_id, user_id, date, notes)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [allocationId, clubId, userId, date, notes || null]
+    );
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const itemId = `alloci_${allocationId}_${i}`;
+      const qty = Math.max(1, Number(item.quantity) || 0);
+      const caliber = item.caliber;
+
+      await client.query(
+        `INSERT INTO ammo_athlete_allocation_items (id, allocation_id, caliber, quantity)
+         VALUES ($1, $2, $3, $4)`,
+        [itemId, allocationId, caliber, qty]
+      );
+
+      // Increment athlete's balance for this caliber
+      const balId = `bal_${userId}_${caliber.replace(/[^a-zA-Z0-9]/g, '')}`;
+      await client.query(
+        `INSERT INTO ammo_athlete_balances (id, user_id, club_id, caliber, balance, updated_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         ON CONFLICT (user_id, caliber)
+         DO UPDATE SET balance = ammo_athlete_balances.balance + EXCLUDED.balance, updated_at = NOW()`,
+        [balId, userId, clubId, caliber, qty]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ success: true, message: 'Munições alocadas para o atleta com sucesso.' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Create ammo allocation error:', err);
+    res.status(500).json({ error: 'Erro ao alocar munições para o atleta.' });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/ammo/athlete-balances/:userId — Saldo de munições do atleta por calibre
+app.get('/api/ammo/athlete-balances/:userId', requireAuth, async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const r = await pool.query(
+      `SELECT * FROM ammo_athlete_balances WHERE user_id = $1 AND balance > 0 ORDER BY caliber ASC`,
+      [userId]
+    );
+    const balances: AmmoAthleteBalance[] = r.rows.map(b => ({
+      id: b.id,
+      userId: b.user_id,
+      clubId: b.club_id,
+      caliber: b.caliber,
+      balance: Number(b.balance) || 0,
+      updatedAt: b.updated_at
+    }));
+    res.json({ balances });
+  } catch (err) {
+    console.error('Fetch athlete ammo balances error:', err);
+    res.status(500).json({ error: 'Erro ao buscar saldo de munições do atleta.' });
+  }
+});
+
+// ==========================================
 // 10. REAL TRAINING SESSIONS (Diário de Treinamentos / Habitualidade)
 // ==========================================
 
@@ -3335,6 +3799,24 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
         notes || null,
       ]
     );
+
+    // Abate automático do saldo do atleta se a munição for do clube
+    if (club > 0) {
+      let cal = weaponCaliber;
+      if (!cal && weaponId) {
+        const wRes = await pool.query('SELECT caliber FROM weapons WHERE id = $1', [weaponId]);
+        cal = wRes.rows[0]?.caliber;
+      }
+      if (cal) {
+        await pool.query(
+          `UPDATE ammo_athlete_balances
+           SET balance = GREATEST(0, balance - $1), updated_at = NOW()
+           WHERE user_id = $2 AND caliber = $3`,
+          [club, currentUser.id, cal]
+        );
+      }
+    }
+
     res.status(201).json({ training: mapTraining(r.rows[0]) });
   } catch (err) {
     console.error('Create training error:', err);

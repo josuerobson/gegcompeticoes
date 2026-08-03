@@ -347,3 +347,85 @@ export interface MultiChampionship {
   status: 'active' | 'inactive';
   createdAt: string;
 }
+
+// ─── Módulo de Munições ────────────────────────────────────────────────────────
+export interface AmmoCaliberStock {
+  id: string;
+  clubId?: string;
+  caliber: string;
+  initialStock: number;
+  hasInitialStockSet: boolean;
+  currentStock: number;
+  totalNfNewAmmo: number;
+  totalProduction: number;
+  totalAllocated: number;
+  updatedAt?: string;
+}
+
+export interface AmmoInvoiceItem {
+  id?: string;
+  invoiceId?: string;
+  productType: 'espoleta' | 'polvora' | 'ponta' | 'municao_nova';
+  caliber: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+}
+
+export interface AmmoInvoice {
+  id: string;
+  clubId?: string;
+  invoiceNumber?: string;
+  supplier?: string;
+  date: string;
+  totalAmount: number;
+  createdAt?: string;
+  items?: AmmoInvoiceItem[];
+}
+
+export interface AmmoProduction {
+  id: string;
+  clubId?: string;
+  quantity: number;
+  date: string;
+  caliber: string;
+  createdAt?: string;
+}
+
+export interface AmmoRecycled {
+  id: string;
+  clubId?: string;
+  quantity: number;
+  date: string;
+  caliber: string;
+  createdAt?: string;
+}
+
+export interface AmmoAthleteAllocationItem {
+  id?: string;
+  allocationId?: string;
+  caliber: string;
+  quantity: number;
+}
+
+export interface AmmoAthleteAllocation {
+  id: string;
+  clubId?: string;
+  userId: string;
+  athleteName?: string;
+  athleteCpf?: string;
+  date: string;
+  notes?: string;
+  createdAt?: string;
+  items?: AmmoAthleteAllocationItem[];
+}
+
+export interface AmmoAthleteBalance {
+  id: string;
+  userId: string;
+  clubId?: string;
+  caliber: string;
+  balance: number;
+  updatedAt?: string;
+}
+

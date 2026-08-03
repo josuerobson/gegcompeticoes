@@ -35,7 +35,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Legacy system parity.** Several `Painel Diretor` cadastro screens were rebuilt to match field-for-field specs from a legacy PHP system the user is migrating off of (raw HTML forms with generic field names like `info1`, `id4` were used as the source of truth — those internal names are not meaningful, only the field's label/position/options matter). Where this repo's data model needed to diverge from a first guess based on the legacy system, the actual legacy HTML always won. See "Painel Diretor module status" below for what's been aligned this way — don't assume an unconverted screen's fields are correct without checking for a legacy reference first.
 
-## Painel Diretor module status (as of 2026-08-02)
+## Painel Diretor module status (as of 2026-08-03)
 
 Real (backed by actual DB tables/endpoints, tested end-to-end):
 - **Gerenciamento Plataforma > Site > Texto Home** — gerenciamento completo dos textos da seção principal da capa do site (Insígnia/Tag, Título H2 "A Pista de Encontro dos Atletas Federados", Subtítulo/Texto descritivo, Botão Principal e Botão Secundário com links/ações). Salvo na tabela `settings` do banco de dados e refletido dinamicamente na página inicial pública.
@@ -47,18 +47,18 @@ Real (backed by actual DB tables/endpoints, tested end-to-end):
 - **Gerenciamento Plataforma > Campeonatos > Multi-campeonatos** — recurso de pacotes de campeonatos com valor único de inscrição. Tabela `multi_championships`, endpoints CRUD (`/api/multi-championships`), e endpoint de inscrição unificada (`POST /api/multi-championships/:id/register`) que gera `registrations` com `multi_championship_id` preenchido e valor rateado. Na área do atleta, a aba "Multicampeonatos" substitui "Líderes e Rankings".
 - **Gerenciamento Plataforma > Etapas** — full CRUD; this didn't exist at all before (no `POST/PUT/DELETE /api/stages`, the UI was decorative buttons with no handlers).
 - **Gerenciamento Plataforma > ADM > Cadastro de armas** — 8 fields (Número da arma, Número Sigma, Classe, Modelo, Calibre, Fabricante, Arma é, Status de permissão), no "Tipo de arma" (not part of the real form). Classe/Modelo/Calibre/Fabricante/Arma é/Status de permissão are dropdowns backed by `weapon_lookup_options` (one shared table, `kind` column distinguishes the six lists), seeded from the legacy system's real option lists. Supports inline editing.
+- **Gerenciamento Plataforma > ADM > Munições** — módulo completo de gestão de munições e insumos (Entrada de NF com acréscimo automático no estoque de munições novas, Estoque/Recarga com cadastro único de estoque inicial por calibre e lançamento de recargas do clube, Ponta/Reciclado com produção e consolidado por calibre, Alocar Munições para atletas com controle de saldo individual e abate automático nos treinos de habitualidade).
 - **Administrador Master > Listas de Armas** — CRUD for the six `weapon_lookup_options` lists above. Restricted to `role === 'master_admin'` (menu item hidden otherwise, and the API routes use `requireMasterAdmin`), because ordinary club admins should not be able to add/rename/remove the shared dropdown options.
 - **Gerenciamento Plataforma > Cadastrar Membros** — creates a member + login, then progressive profile completion (same pattern as the athlete's own "Meu Cadastro").
 - **Menus Clube > Cadastrar Resultados** — full result entry with series grid, target zones (X, 10, 9..0), automatic best series detection, penalties, execution metadata and status actions (Absent/DQ).
 - **Menus Clube > Inscrição Clube** — bulk registration for club members, allowing matching club weapons and real-time weapon search by Sigma/Serial number, using a backend bulk registration API.
 - **ChampionshipsView > Inscrição Individual** — athlete registration now supports real-time Sigma/serial weapon search and auto-detects re-entries to charge the promotional re-entry fee correctly.
 - **Gerenciamento Clube > Cessão de Arma** — real DB-backed form: CPF/name autocomplete (debounced, max 8 results, avoids loading 2500+ athletes), weapon search by sigma/weapon_number (reuses `/api/weapons/search`), start/end dates, stored in `weapon_concessions` table (SERIAL `concession_number`), PDF generation matching Anexo N format (art. 34, Decreto 11.615/2023).
-- **Perfil do Atleta > Treinamentos (Habitualidade Real)** — real DB-backed training sessions stored in `trainings` table. DateTime picker, real-time weapon search (min 3 chars), owner type selector (`propria` | `clube`), own ammo shots, club ammo shots, auto total shots, and deletion API (`GET/POST/DELETE /api/trainings`).
+- **Perfil do Atleta > Treinamentos (Habitualidade Real)** — real DB-backed training sessions stored in `trainings` table. DateTime picker, real-time weapon search (min 3 chars), owner type selector (`propria` | `clube`), own ammo shots, club ammo shots, auto total shots, deletion API (`GET/POST/DELETE /api/trainings`), e exibição em tempo real do saldo de munições alocadas.
 
 Still decorative/mock (local `useState` arrays, no backing table, don't trust the UI at face value):
 - **Administrador Master > Gerenciar Clubes** (`masterClubs`) and **Gestão de Cobranças** (`billingList`) — separate from the real "Novo Clube" list under Gerenciamento Plataforma.
-- Most of **ADM** beyond Cadastro de armas and Cadastrar Resultados (Munições, Filtro Resultados, Relatórios e declarações, Treinamento/competições, Validar treinamentos), all of **IDSC**, and remaining mock menus (os sub-menus `Patrocinadores`, `Vídeos Destaque` e `Imagem Padrão` foram removidos do menu Site em 2026-08-02).
-- **Cessão de Arma** was decorative — now moved to Real list above (2026-07-15).
+- Most of **ADM** beyond Cadastro de armas, Cadastrar Resultados e Munições (Filtro Resultados, Relatórios e declarações, Treinamento/competições, Validar treinamentos), all of **IDSC**, e menus estáticos restantes.
 
 ## Deploy
 

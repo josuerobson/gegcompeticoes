@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { User, Post, Registration, StageScore, Championship, Modality, Club, Stage, Weapon, TrainingSession, WeaponLookupOption } from '../types';
+import { User, Post, Registration, StageScore, Championship, Modality, Club, Stage, Weapon, TrainingSession, WeaponLookupOption, AmmoAthleteBalance } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import { QRCodeView } from './QRCodeView';
@@ -450,6 +450,19 @@ export default function MemberProfile({
     // Select all pending IDs by default
     setSelectedPendingIds(pendingRegistrations.map(r => r.id));
   }, [registrations.length, selectedUser.id, selectedUser.role]);
+  const [athleteAmmoBalances, setAthleteAmmoBalances] = useState<AmmoAthleteBalance[]>([]);
+
+  useEffect(() => {
+    if (selectedUser?.id && profileTab === 'trainings') {
+      fetch(`/api/ammo/athlete-balances/${selectedUser.id}`, {
+        headers: { 'x-user-id': currentUser?.id || '' }
+      })
+        .then(r => r.json())
+        .then(d => setAthleteAmmoBalances(d.balances || []))
+        .catch(e => console.error('Fetch athlete ammo balances error:', e));
+    }
+  }, [selectedUser?.id, profileTab, currentUser?.id]);
+
   const [savedSection, setSavedSection] = useState<string | null>(null);
 
   useEffect(() => {
@@ -3170,6 +3183,24 @@ export default function MemberProfile({
                   </button>
                 )}
               </div>
+
+              {/* Saldo de Munições Alocadas pelo Clube */}
+              {athleteAmmoBalances.length > 0 && (
+                <div className="bg-blue-50/70 border border-blue-200 p-4 rounded-2xl space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Disc className="w-4 h-4 text-blue-600" />
+                    <h5 className="font-bold text-xs text-blue-950 uppercase tracking-wider">Saldo de Munições do Clube Alocadas</h5>
+                  </div>
+                  <p className="text-[11px] text-blue-700">Ao registrar um treino informando o uso de munição do clube, a quantidade de tiros é abatida automaticamente do seu saldo individual.</p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {athleteAmmoBalances.map(b => (
+                      <span key={b.id} className="bg-white text-blue-900 border border-blue-200 px-3 py-1 rounded-xl text-xs font-mono font-bold shadow-2xs">
+                        {b.caliber}: {b.balance} un
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Training Form */}
               <AnimatePresence>

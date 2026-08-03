@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, HomeBanner } from '../types';
+import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
@@ -7,7 +7,7 @@ import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft
+  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -1185,6 +1185,1150 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
               className="bg-red-50 hover:bg-red-100 text-red-700 text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
               <ShieldAlert className="w-4 h-4" />Desclassificar
             </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// MunicoesManagerPanel — Painel do Módulo de Munições (Entrada NF, Estoque, Ponta, Alocar)
+// =============================================================================
+interface MunicoesManagerPanelProps {
+  currentUser: User | null;
+  weaponLookupOptions: WeaponLookupOption[];
+  onAddWeaponLookup: (kind: string, label: string) => Promise<{ error?: string }>;
+  onRefreshData?: () => Promise<void>;
+}
+
+function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLookup, onRefreshData }: MunicoesManagerPanelProps) {
+  const [subTab, setSubTab] = useState<'entrada_nf' | 'estoque_recarga' | 'ponta_reciclado' | 'alocar_municoes'>('entrada_nf');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  // Overview data
+  const [caliberStocks, setCaliberStocks] = useState<AmmoCaliberStock[]>([]);
+  const [invoices, setInvoices] = useState<AmmoInvoice[]>([]);
+  const [productions, setProductions] = useState<AmmoProduction[]>([]);
+  const [recycledList, setRecycledList] = useState<AmmoRecycled[]>([]);
+  const [recycledMap, setRecycledMap] = useState<Record<string, number>>({});
+  const [allocations, setAllocations] = useState<AmmoAthleteAllocation[]>([]);
+
+  // Inline "Cadastrar Novo Calibre" modal
+  const [showNewCaliberModal, setShowNewCaliberModal] = useState(false);
+  const [newCaliberInput, setNewCaliberInput] = useState('');
+  const [savingCaliber, setSavingCaliber] = useState(false);
+  const [caliberCallback, setCaliberCallback] = useState<((cal: string) => void) | null>(null);
+
+  // 1. Entrada NF Form State
+  const [nfNumber, setNfNumber] = useState('');
+  const [nfSupplier, setNfSupplier] = useState('');
+  const [nfDate, setNfDate] = useState(new Date().toISOString().split('T')[0]);
+  const [nfItems, setNfItems] = useState<Array<{ productType: 'espoleta' | 'polvora' | 'ponta' | 'municao_nova'; caliber: string; quantity: string; unitPrice: string }>>([
+    { productType: 'municao_nova', caliber: '', quantity: '100', unitPrice: '0.00' }
+  ]);
+  const [savingNf, setSavingNf] = useState(false);
+
+  // 2. Estoque/Recarga State
+  const [initStockCaliber, setInitStockCaliber] = useState('');
+  const [initStockQty, setInitStockQty] = useState('');
+  const [savingInitStock, setSavingInitStock] = useState(false);
+
+  const [prodCaliber, setProdCaliber] = useState('');
+  const [prodQty, setProdQty] = useState('');
+  const [prodDate, setProdDate] = useState(new Date().toISOString().split('T')[0]);
+  const [savingProd, setSavingProd] = useState(false);
+
+  // 3. Ponta/Reciclado State
+  const [recCaliber, setRecCaliber] = useState('');
+  const [recQty, setRecQty] = useState('');
+  const [recDate, setRecDate] = useState(new Date().toISOString().split('T')[0]);
+  const [savingRec, setSavingRec] = useState(false);
+
+  // 4. Alocar Munições State
+  const [athleteQuery, setAthleteQuery] = useState('');
+  const [searchingAthletes, setSearchingAthletes] = useState(false);
+  const [foundAthletes, setFoundAthletes] = useState<Array<{ id: string; fullName: string; cpf?: string; crNumber?: string }>>([]);
+  const [selectedAthlete, setSelectedAthlete] = useState<{ id: string; fullName: string; cpf?: string; crNumber?: string } | null>(null);
+  const [allocDate, setAllocDate] = useState(new Date().toISOString().split('T')[0]);
+  const [allocNotes, setAllocNotes] = useState('');
+  const [allocItems, setAllocItems] = useState<Array<{ caliber: string; quantity: string }>>([
+    { caliber: '', quantity: '50' }
+  ]);
+  const [savingAlloc, setSavingAlloc] = useState(false);
+
+  // Fetch overview data
+  const loadAmmoOverview = async () => {
+    if (!currentUser) return;
+    setLoading(true);
+    try {
+      const r = await fetch('/api/ammo/overview', {
+        headers: { 'x-user-id': currentUser.id }
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro ao carregar munições');
+      setCaliberStocks(data.caliberStocks || []);
+      setInvoices(data.invoices || []);
+      setProductions(data.productions || []);
+      setRecycledList(data.recycledList || []);
+      setRecycledMap(data.recycledMap || {});
+      setAllocations(data.allocations || []);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAmmoOverview();
+  }, [currentUser]);
+
+  // Available calibers list from weaponLookupOptions
+  const calibers = weaponLookupOptions.filter(o => o.kind === 'calibre').map(o => o.label);
+
+  const handleOpenCaliberModal = (onCreated?: (cal: string) => void) => {
+    setNewCaliberInput('');
+    setCaliberCallback(() => onCreated || null);
+    setShowNewCaliberModal(true);
+  };
+
+  const handleCreateCaliberSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCaliberInput.trim()) return;
+    setSavingCaliber(true);
+    const result = await onAddWeaponLookup('calibre', newCaliberInput.trim());
+    setSavingCaliber(false);
+    if (result.error) {
+      alert(result.error);
+    } else {
+      const created = newCaliberInput.trim();
+      setShowNewCaliberModal(false);
+      if (caliberCallback) {
+        caliberCallback(created);
+      }
+      loadAmmoOverview();
+    }
+  };
+
+  // 1. Submit NF Entry
+  const handleNfSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    if (nfItems.some(i => !i.caliber || !i.quantity || Number(i.quantity) <= 0)) {
+      setError('Preencha o calibre e a quantidade de todos os produtos da NF.');
+      return;
+    }
+    setSavingNf(true);
+    try {
+      const r = await fetch('/api/ammo/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
+        body: JSON.stringify({
+          invoiceNumber: nfNumber,
+          supplier: nfSupplier,
+          date: nfDate,
+          items: nfItems.map(i => ({
+            productType: i.productType,
+            caliber: i.caliber,
+            quantity: Number(i.quantity),
+            unitPrice: Number(i.unitPrice) || 0
+          }))
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro ao registrar Nota Fiscal');
+      setSuccess(`✅ Nota Fiscal registrada com sucesso! Total: R$ ${data.totalInvoiceAmount.toFixed(2)}.`);
+      setNfNumber('');
+      setNfSupplier('');
+      setNfItems([{ productType: 'municao_nova', caliber: '', quantity: '100', unitPrice: '0.00' }]);
+      await loadAmmoOverview();
+      if (onRefreshData) await onRefreshData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSavingNf(false);
+    }
+  };
+
+  // 2a. Submit Initial Stock
+  const handleInitStockSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    if (!initStockCaliber || !initStockQty) {
+      setError('Selecione o calibre e a quantidade inicial.');
+      return;
+    }
+    setSavingInitStock(true);
+    try {
+      const r = await fetch('/api/ammo/initial-stock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
+        body: JSON.stringify({ caliber: initStockCaliber, initialStock: Number(initStockQty) })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro ao definir estoque inicial');
+      setSuccess(data.message);
+      setInitStockCaliber('');
+      setInitStockQty('');
+      await loadAmmoOverview();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSavingInitStock(false);
+    }
+  };
+
+  // 2b. Submit Production/Reloading
+  const handleProductionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    if (!prodCaliber || !prodQty || !prodDate) {
+      setError('Preencha a data, o calibre e a quantidade produzida.');
+      return;
+    }
+    setSavingProd(true);
+    try {
+      const r = await fetch('/api/ammo/production', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
+        body: JSON.stringify({ caliber: prodCaliber, quantity: Number(prodQty), date: prodDate })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro ao registrar produção');
+      setSuccess(data.message);
+      setProdCaliber('');
+      setProdQty('');
+      await loadAmmoOverview();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSavingProd(false);
+    }
+  };
+
+  // 3. Submit Recycled
+  const handleRecycledSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    if (!recCaliber || !recQty || !recDate) {
+      setError('Preencha a data, o calibre e a quantidade de pontas recicladas.');
+      return;
+    }
+    setSavingRec(true);
+    try {
+      const r = await fetch('/api/ammo/recycled', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
+        body: JSON.stringify({ caliber: recCaliber, quantity: Number(recQty), date: recDate })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro ao registrar reciclado');
+      setSuccess(data.message);
+      setRecCaliber('');
+      setRecQty('');
+      await loadAmmoOverview();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSavingRec(false);
+    }
+  };
+
+  // Athlete search for allocation
+  const handleSearchAthlete = async (q: string) => {
+    setAthleteQuery(q);
+    if (!q || q.length < 3) {
+      setFoundAthletes([]);
+      return;
+    }
+    setSearchingAthletes(true);
+    try {
+      const r = await fetch(`/api/members/search?q=${encodeURIComponent(q)}`, {
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      const d = await r.json();
+      setFoundAthletes(d.members || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSearchingAthletes(false);
+    }
+  };
+
+  // 4. Submit Allocation
+  const handleAllocationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    if (!selectedAthlete) {
+      setError('Selecione o atleta que receberá a alocação.');
+      return;
+    }
+    if (allocItems.some(i => !i.caliber || !i.quantity || Number(i.quantity) <= 0)) {
+      setError('Preencha o calibre e a quantidade de todas as linhas de munição.');
+      return;
+    }
+    setSavingAlloc(true);
+    try {
+      const r = await fetch('/api/ammo/allocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
+        body: JSON.stringify({
+          userId: selectedAthlete.id,
+          date: allocDate,
+          notes: allocNotes,
+          items: allocItems.map(i => ({ caliber: i.caliber, quantity: Number(i.quantity) }))
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro ao alocar munições');
+      setSuccess(`✅ ${data.message}`);
+      setSelectedAthlete(null);
+      setAthleteQuery('');
+      setFoundAthletes([]);
+      setAllocNotes('');
+      setAllocItems([{ caliber: '', quantity: '50' }]);
+      await loadAmmoOverview();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSavingAlloc(false);
+    }
+  };
+
+  // Compute invoice total
+  const totalNfAmount = nfItems.reduce((acc, item) => {
+    const q = Number(item.quantity) || 0;
+    const u = Number(item.unitPrice) || 0;
+    return acc + (q * u);
+  }, 0);
+
+  return (
+    <div className="space-y-6 text-slate-800 text-left">
+      {/* Module Title Header */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+        <div>
+          <h3 className="font-display font-bold text-slate-900 text-lg flex items-center gap-2">
+            <Disc className="w-5 h-5 text-blue-600" />
+            Gestão de Munições & Recarga do Clube
+          </h3>
+          <p className="text-xs text-slate-400">Controle de Notas Fiscais de insumos, estoque principal, produção de pontas recicladas e alocação para atletas.</p>
+        </div>
+        <button
+          onClick={loadAmmoOverview}
+          className="text-xs text-blue-600 font-bold bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 self-start sm:self-center"
+        >
+          <RotateCcw className="w-3.5 h-3.5" /> Atualizar Dados
+        </button>
+      </div>
+
+      {/* Subtabs Menu Bar */}
+      <div className="flex bg-slate-100 p-1.5 rounded-2xl overflow-x-auto gap-1 border border-slate-200">
+        <button
+          type="button"
+          onClick={() => { setSubTab('entrada_nf'); setError(''); setSuccess(''); }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition duration-150 whitespace-nowrap cursor-pointer ${subTab === 'entrada_nf' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
+        >
+          📄 Entrada NF
+        </button>
+        <button
+          type="button"
+          onClick={() => { setSubTab('estoque_recarga'); setError(''); setSuccess(''); }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition duration-150 whitespace-nowrap cursor-pointer ${subTab === 'estoque_recarga' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
+        >
+          📦 Estoque / Recarga
+        </button>
+        <button
+          type="button"
+          onClick={() => { setSubTab('ponta_reciclado'); setError(''); setSuccess(''); }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition duration-150 whitespace-nowrap cursor-pointer ${subTab === 'ponta_reciclado' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
+        >
+          ♻️ Ponta / Reciclado
+        </button>
+        <button
+          type="button"
+          onClick={() => { setSubTab('alocar_municoes'); setError(''); setSuccess(''); }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition duration-150 whitespace-nowrap cursor-pointer ${subTab === 'alocar_municoes' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
+        >
+          🎯 Alocar Munições
+        </button>
+      </div>
+
+      {/* Global Alerts */}
+      {success && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl text-xs font-bold flex items-center gap-2">
+          <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+          {success}
+        </div>
+      )}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-xs font-bold flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {/* Modal: Cadastrar Novo Calibre Inline */}
+      {showNewCaliberModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h4 className="font-bold text-slate-900 text-sm">Cadastrar Novo Calibre</h4>
+              <button onClick={() => setShowNewCaliberModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateCaliberSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase block">Nome do Calibre</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: 9mm Luger, 380 Auto, 38 SPL, 12 GA..."
+                  value={newCaliberInput}
+                  onChange={e => setNewCaliberInput(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs outline-none focus:border-blue-500 font-semibold"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowNewCaliberModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCaliber || !newCaliberInput.trim()}
+                  className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl disabled:opacity-60 cursor-pointer"
+                >
+                  {savingCaliber ? 'Salvando...' : 'Salvar Calibre'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* SUBTAB 1: ENTRADA NF */}
+      {subTab === 'entrada_nf' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
+            <div className="pb-3 border-b border-slate-100">
+              <h4 className="font-display font-bold text-slate-900 text-sm">Registro de Entrada de Nota Fiscal (Insumos / Munição Nova)</h4>
+              <p className="text-xs text-slate-400">Adicione os produtos constantes na Nota Fiscal. Se o produto for "Munição nova", a quantidade entra automaticamente no estoque principal do clube.</p>
+            </div>
+
+            <form onSubmit={handleNfSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Número da NF</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: NF-104928"
+                    value={nfNumber}
+                    onChange={e => setNfNumber(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-semibold outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Fornecedor / Razão Social</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: CBC / Taurus / Imbel / Ammunition Co"
+                    value={nfSupplier}
+                    onChange={e => setNfSupplier(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-semibold outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Data da Nota</label>
+                  <input
+                    type="date"
+                    required
+                    value={nfDate}
+                    onChange={e => setNfDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-semibold outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Items List */}
+              <div className="space-y-3 pt-2 border-t border-slate-100">
+                <div className="flex justify-between items-center">
+                  <h5 className="font-bold text-xs text-slate-800 uppercase tracking-wider">Itens / Produtos da Nota Fiscal</h5>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCaliberModal()}
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
+                  >
+                    + Cadastrar Novo Calibre
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {nfItems.map((item, idx) => {
+                    const rowTotal = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
+                    return (
+                      <div key={idx} className="bg-slate-50 border border-slate-200 p-4 rounded-xl grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                        <div className="sm:col-span-3 space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block">Produto</label>
+                          <select
+                            value={item.productType}
+                            onChange={e => {
+                              const newItems = [...nfItems];
+                              newItems[idx].productType = e.target.value as any;
+                              setNfItems(newItems);
+                            }}
+                            className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs font-semibold outline-none"
+                          >
+                            <option value="espoleta">Espoleta</option>
+                            <option value="polvora">Pólvora</option>
+                            <option value="ponta">Ponta ou Projétil</option>
+                            <option value="municao_nova">Munição nova ⭐ (Soma no estoque)</option>
+                          </select>
+                        </div>
+
+                        <div className="sm:col-span-3 space-y-1">
+                          <div className="flex justify-between items-center">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block">Calibre</label>
+                          </div>
+                          <select
+                            value={item.caliber}
+                            onChange={e => {
+                              const newItems = [...nfItems];
+                              newItems[idx].caliber = e.target.value;
+                              setNfItems(newItems);
+                            }}
+                            className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs font-semibold outline-none"
+                          >
+                            <option value="">Selecione o calibre...</option>
+                            {calibers.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+
+                        <div className="sm:col-span-2 space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block">Quantidade</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={e => {
+                              const newItems = [...nfItems];
+                              newItems[idx].quantity = e.target.value;
+                              setNfItems(newItems);
+                            }}
+                            className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs font-mono font-semibold text-center outline-none"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-2 space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block">Valor Unit (R$)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.unitPrice}
+                            onChange={e => {
+                              const newItems = [...nfItems];
+                              newItems[idx].unitPrice = e.target.value;
+                              setNfItems(newItems);
+                            }}
+                            className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs font-mono font-semibold text-center outline-none"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-2 flex items-center justify-between sm:justify-end gap-2">
+                          <div className="text-right">
+                            <span className="text-[9px] text-slate-400 block uppercase font-mono">Total Linha</span>
+                            <span className="text-xs font-bold text-slate-900 font-mono">R$ {rowTotal.toFixed(2)}</span>
+                          </div>
+
+                          {nfItems.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNfItems(nfItems.filter((_, i) => i !== idx));
+                              }}
+                              className="p-2 text-slate-400 hover:text-red-500 transition cursor-pointer"
+                              title="Remover linha"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex justify-between items-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNfItems([...nfItems, { productType: 'municao_nova', caliber: '', quantity: '100', unitPrice: '0.00' }]);
+                    }}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-3 py-2 rounded-xl transition cursor-pointer"
+                  >
+                    + Adicionar Outro Produto
+                  </button>
+
+                  <div className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-mono text-right shadow-sm">
+                    <span className="text-[10px] text-slate-400 uppercase block">Total da Nota Fiscal</span>
+                    <span className="text-base font-bold text-emerald-400">R$ {totalNfAmount.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t border-slate-100">
+                <button
+                  type="submit"
+                  disabled={savingNf}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg shadow-blue-100 cursor-pointer"
+                >
+                  {savingNf ? 'Registrando NF...' : 'Registrar Entrada da Nota Fiscal'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* History of Invoices */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+            <h4 className="font-display font-bold text-slate-900 text-sm">Histórico de Notas Fiscais Registradas ({invoices.length})</h4>
+            {invoices.length === 0 ? (
+              <p className="text-xs text-slate-400">Nenhuma Nota Fiscal cadastrada ainda.</p>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {invoices.map(inv => (
+                  <div key={inv.id} className="py-3 space-y-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <div>
+                        <span className="font-bold text-slate-900">{inv.invoiceNumber ? `NF Nº ${inv.invoiceNumber}` : 'Sem nº de NF'}</span>
+                        <span className="text-slate-500 ml-2">• Fornecedor: {inv.supplier || 'Não informado'}</span>
+                        <span className="text-slate-400 ml-2 font-mono">• {new Date(inv.date).toLocaleDateString('pt-BR')}</span>
+                      </div>
+                      <span className="font-bold font-mono text-emerald-600">R$ {inv.totalAmount.toFixed(2)}</span>
+                    </div>
+
+                    {inv.items && inv.items.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {inv.items.map((it, idx) => (
+                          <span key={idx} className={`text-[10px] px-2 py-1 rounded-lg border font-mono ${it.productType === 'municao_nova' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                            {it.productType === 'espoleta' ? 'Espoleta' : it.productType === 'polvora' ? 'Pólvora' : it.productType === 'ponta' ? 'Ponta' : 'Munição nova'}: {it.quantity} un ({it.caliber})
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* SUBTAB 2: ESTOQUE / RECARGA */}
+      {subTab === 'estoque_recarga' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+            <div className="pb-3 border-b border-slate-100 flex justify-between items-center">
+              <div>
+                <h4 className="font-display font-bold text-slate-900 text-sm">Estoque Principal de Munições do Clube (por Calibre)</h4>
+                <p className="text-xs text-slate-400">Saldo atualizado com base no Estoque Inicial + Entrada NF (Munição Nova) + Recargas do Clube - Munições Alocadas para Atletas.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleOpenCaliberModal()}
+                className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition cursor-pointer"
+              >
+                + Cadastrar Calibre
+              </button>
+            </div>
+
+            <div className="overflow-x-auto text-xs text-slate-700">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-slate-200 font-mono text-[10px] text-slate-400 uppercase">
+                    <th className="py-2.5 px-2">Calibre</th>
+                    <th className="py-2.5 px-2 text-center">Estoque Inicial</th>
+                    <th className="py-2.5 px-2 text-center">Entrada NF (Nova)</th>
+                    <th className="py-2.5 px-2 text-center">Produção / Recarga</th>
+                    <th className="py-2.5 px-2 text-center">Alocado Atletas</th>
+                    <th className="py-2.5 px-2 text-right">Saldo Atual Clube</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {caliberStocks.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-6 text-center text-slate-400 text-xs">Nenhum calibre cadastrado no sistema ainda.</td>
+                    </tr>
+                  ) : (
+                    caliberStocks.map(cs => (
+                      <tr key={cs.id} className="hover:bg-slate-50 transition">
+                        <td className="py-3 px-2 font-bold text-slate-900">{cs.caliber}</td>
+                        <td className="py-3 px-2 text-center font-mono">
+                          {cs.hasInitialStockSet ? (
+                            <span className="font-semibold text-slate-700">{cs.initialStock} un</span>
+                          ) : (
+                            <span className="text-[10px] text-amber-600 bg-amber-50 font-bold px-2 py-0.5 rounded-full">Pendente</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-2 text-center font-mono text-slate-600">+{cs.totalNfNewAmmo} un</td>
+                        <td className="py-3 px-2 text-center font-mono text-slate-600">+{cs.totalProduction} un</td>
+                        <td className="py-3 px-2 text-center font-mono text-slate-600">-{cs.totalAllocated} un</td>
+                        <td className="py-3 px-2 text-right font-mono">
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${cs.currentStock > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
+                            {cs.currentStock} un
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            {/* Form: Estoque Inicial */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+              <h4 className="font-display font-bold text-slate-900 text-sm">1. Definir Estoque Inicial (Uma Única Vez)</h4>
+              <p className="text-xs text-slate-400">Oferece a opção para cadastrar o estoque inicial daquele calibre no clube.</p>
+
+              <form onSubmit={handleInitStockSubmit} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Calibre</label>
+                  <select
+                    value={initStockCaliber}
+                    onChange={e => setInitStockCaliber(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-semibold outline-none focus:border-blue-500"
+                  >
+                    <option value="">Selecione o calibre...</option>
+                    {caliberStocks.map(c => (
+                      <option key={c.caliber} value={c.caliber}>
+                        {c.caliber} {c.hasInitialStockSet ? '(Inicial Já Definito)' : '(Pendente de Inicial)'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Quantidade do Estoque Inicial</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Ex: 5000"
+                    value={initStockQty}
+                    onChange={e => setInitStockQty(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-mono font-semibold outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingInitStock}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs py-3 rounded-xl font-bold transition shadow-sm cursor-pointer"
+                >
+                  {savingInitStock ? 'Salvando...' : 'Cadastrar Estoque Inicial'}
+                </button>
+              </form>
+            </div>
+
+            {/* Form: Produção / Recarga Interna */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+              <h4 className="font-display font-bold text-slate-900 text-sm">2. Entrada de Produção / Recarga de Munições</h4>
+              <p className="text-xs text-slate-400">Registra a quantidade de munição recarregada ou produzida pelo clube para somar ao estoque.</p>
+
+              <form onSubmit={handleProductionSubmit} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Data da Produção</label>
+                  <input
+                    type="date"
+                    required
+                    value={prodDate}
+                    onChange={e => setProdDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-semibold outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Calibre</label>
+                    <button type="button" onClick={() => handleOpenCaliberModal(c => setProdCaliber(c))} className="text-[10px] font-bold text-blue-600 cursor-pointer">+ Novo</button>
+                  </div>
+                  <select
+                    value={prodCaliber}
+                    onChange={e => setProdCaliber(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-semibold outline-none focus:border-blue-500"
+                  >
+                    <option value="">Selecione o calibre...</option>
+                    {calibers.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Quantidade Produzida (unidades)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Ex: 1000"
+                    value={prodQty}
+                    onChange={e => setProdQty(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-mono font-semibold outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingProd}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs py-3 rounded-xl font-bold transition shadow-sm cursor-pointer"
+                >
+                  {savingProd ? 'Registrando...' : 'Registrar Produção de Munição'}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* Productions History */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+            <h4 className="font-display font-bold text-slate-900 text-sm">Histórico de Produção / Recargas Registradas ({productions.length})</h4>
+            {productions.length === 0 ? (
+              <p className="text-xs text-slate-400">Nenhum lote de recarga cadastrado ainda.</p>
+            ) : (
+              <div className="divide-y divide-slate-100 text-xs">
+                {productions.map(p => (
+                  <div key={p.id} className="py-2.5 flex justify-between items-center">
+                    <div>
+                      <span className="font-bold text-slate-900">{p.caliber}</span>
+                      <span className="text-slate-400 ml-2 font-mono">• Data: {new Date(p.date).toLocaleDateString('pt-BR')}</span>
+                    </div>
+                    <span className="font-bold font-mono text-emerald-600">+{p.quantity} un produzidas</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* SUBTAB 3: PONTA / RECICLADO */}
+      {subTab === 'ponta_reciclado' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            {/* Form */}
+            <div className="sm:col-span-1 bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+              <h4 className="font-display font-bold text-slate-900 text-sm">Registrar Produção de Pontas / Projéteis Reciclados</h4>
+              <p className="text-xs text-slate-400">Lance a quantidade de pontas/projéteis reciclados pelo estande.</p>
+
+              <form onSubmit={handleRecycledSubmit} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Data</label>
+                  <input
+                    type="date"
+                    required
+                    value={recDate}
+                    onChange={e => setRecDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-semibold outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Calibre</label>
+                    <button type="button" onClick={() => handleOpenCaliberModal(c => setRecCaliber(c))} className="text-[10px] font-bold text-blue-600 cursor-pointer">+ Novo</button>
+                  </div>
+                  <select
+                    value={recCaliber}
+                    onChange={e => setRecCaliber(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-semibold outline-none focus:border-blue-500"
+                  >
+                    <option value="">Selecione o calibre...</option>
+                    {calibers.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Quantidade Produzida</label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Ex: 500"
+                    value={recQty}
+                    onChange={e => setRecQty(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-mono font-semibold outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingRec}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs py-3 rounded-xl font-bold transition shadow-sm cursor-pointer"
+                >
+                  {savingRec ? 'Salvando...' : 'Salvar Registro de Reciclado'}
+                </button>
+              </form>
+            </div>
+
+            {/* Totals & History */}
+            <div className="sm:col-span-2 space-y-6">
+              {/* Totals per Caliber cards */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3 shadow-xs">
+                <h4 className="font-display font-bold text-slate-900 text-sm">Consolidado Reciclado por Calibre</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {Object.keys(recycledMap).length === 0 ? (
+                    <p className="text-xs text-slate-400 sm:col-span-3">Nenhum registro de ponta reciclada efetuado ainda.</p>
+                  ) : (
+                    Object.entries(recycledMap).map(([cal, total]) => (
+                      <div key={cal} className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <span className="text-[10px] text-slate-400 uppercase font-mono block">{cal}</span>
+                        <span className="text-base font-bold text-slate-900 font-mono">{total} un</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* History table */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+                <h4 className="font-display font-bold text-slate-900 text-sm">Lançamentos Recentes ({recycledList.length})</h4>
+                {recycledList.length === 0 ? (
+                  <p className="text-xs text-slate-400">Nenhum lançamento.</p>
+                ) : (
+                  <div className="divide-y divide-slate-100 text-xs">
+                    {recycledList.map(r => (
+                      <div key={r.id} className="py-2.5 flex justify-between items-center">
+                        <div>
+                          <span className="font-bold text-slate-900">{r.caliber}</span>
+                          <span className="text-slate-400 ml-2 font-mono">• Data: {new Date(r.date).toLocaleDateString('pt-BR')}</span>
+                        </div>
+                        <span className="font-bold font-mono text-blue-600">+{r.quantity} un</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUBTAB 4: ALOCAR MUNIÇÕES */}
+      {subTab === 'alocar_municoes' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
+            <div className="pb-3 border-b border-slate-100">
+              <h4 className="font-display font-bold text-slate-900 text-sm">Alocar Munições do Clube para o Atleta</h4>
+              <p className="text-xs text-slate-400">Ao salvar, a quantidade é deduzida do estoque principal do clube e transferida para o saldo individual do atleta. Quando o atleta registrar treinos do clube, o saldo diminui automaticamente.</p>
+            </div>
+
+            <form onSubmit={handleAllocationSubmit} className="space-y-6">
+              {/* Athlete Selection */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase block">1. Selecionar Atleta Filiado</label>
+
+                {selectedAthlete ? (
+                  <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl flex justify-between items-center">
+                    <div>
+                      <span className="font-bold text-xs text-blue-900 block">{selectedAthlete.fullName}</span>
+                      <span className="text-[10px] text-blue-600 font-mono">CPF: {selectedAthlete.cpf || 'Não informado'} | CR: {selectedAthlete.crNumber || 'Sem CR'}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedAthlete(null); setAthleteQuery(''); }}
+                      className="text-xs text-blue-700 hover:text-red-600 font-bold cursor-pointer"
+                    >
+                      Trocar Atleta
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Digite o nome ou CPF do atleta (mínimo 3 caracteres)..."
+                      value={athleteQuery}
+                      onChange={e => handleSearchAthlete(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-semibold outline-none focus:border-blue-500"
+                    />
+
+                    {searchingAthletes && (
+                      <p className="text-[10px] text-slate-400 mt-1">Buscando atletas...</p>
+                    )}
+
+                    {!searchingAthletes && foundAthletes.length > 0 && (
+                      <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
+                        {foundAthletes.map(a => (
+                          <button
+                            key={a.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedAthlete(a);
+                              setFoundAthletes([]);
+                            }}
+                            className="w-full text-left p-3 hover:bg-blue-50 transition flex justify-between items-center cursor-pointer"
+                          >
+                            <div>
+                              <span className="font-bold text-xs text-slate-800 block">{a.fullName}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">CPF: {a.cpf || 'Não informado'}</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Selecionar</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Data da Alocação</label>
+                  <input
+                    type="date"
+                    required
+                    value={allocDate}
+                    onChange={e => setAllocDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-semibold outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Observações / Motivo (opcional)</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Treino oficial de fim de semana"
+                    value={allocNotes}
+                    onChange={e => setAllocNotes(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-semibold outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Ammo items to allocate */}
+              <div className="space-y-3 pt-2 border-t border-slate-100">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">2. Linhas de Munições a Alocar</label>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCaliberModal()}
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
+                  >
+                    + Cadastrar Novo Calibre
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {allocItems.map((item, idx) => (
+                    <div key={idx} className="bg-slate-50 border border-slate-200 p-3 rounded-xl grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                      <div className="sm:col-span-6 space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Calibre</label>
+                        <select
+                          value={item.caliber}
+                          onChange={e => {
+                            const newItems = [...allocItems];
+                            newItems[idx].caliber = e.target.value;
+                            setAllocItems(newItems);
+                          }}
+                          className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs font-semibold outline-none"
+                        >
+                          <option value="">Selecione o calibre...</option>
+                          {caliberStocks.map(cs => (
+                            <option key={cs.caliber} value={cs.caliber}>
+                              {cs.caliber} (Estoque Clube: {cs.currentStock} un)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="sm:col-span-4 space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Quantidade (unidades)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={e => {
+                            const newItems = [...allocItems];
+                            newItems[idx].quantity = e.target.value;
+                            setAllocItems(newItems);
+                          }}
+                          className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs font-mono font-semibold text-center outline-none"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2 flex justify-end">
+                        {allocItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setAllocItems(allocItems.filter((_, i) => i !== idx))}
+                            className="p-2 text-slate-400 hover:text-red-500 transition cursor-pointer"
+                            title="Remover linha"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setAllocItems([...allocItems, { caliber: '', quantity: '50' }])}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-3 py-2 rounded-xl transition cursor-pointer"
+                >
+                  + Adicionar Outro Calibre
+                </button>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t border-slate-100">
+                <button
+                  type="submit"
+                  disabled={savingAlloc}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg shadow-emerald-100 cursor-pointer"
+                >
+                  {savingAlloc ? 'Salva e Transfere...' : 'Salvar Alocação & Transferir Saldo'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Allocation History */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+            <h4 className="font-display font-bold text-slate-900 text-sm">Histórico de Alocações Realizadas ({allocations.length})</h4>
+            {allocations.length === 0 ? (
+              <p className="text-xs text-slate-400">Nenhuma alocação realizada ainda.</p>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {allocations.map(al => (
+                  <div key={al.id} className="py-3 space-y-1 text-xs">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <span className="font-bold text-slate-900">{al.athleteName}</span>
+                        <span className="text-slate-500 ml-2 font-mono">({al.athleteCpf || 'Sem CPF'})</span>
+                        <span className="text-slate-400 ml-2 font-mono">• Data: {new Date(al.date).toLocaleDateString('pt-BR')}</span>
+                      </div>
+                      {al.notes && <span className="text-[10px] text-slate-400 italic">{al.notes}</span>}
+                    </div>
+
+                    {al.items && al.items.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {al.items.map((it, idx) => (
+                          <span key={idx} className="bg-blue-50 text-blue-700 border border-blue-200 font-mono text-[10px] px-2 py-0.5 rounded-md font-bold">
+                            {it.caliber}: {it.quantity} un
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -4237,30 +5381,12 @@ export default function AdminPanel({
 
       case 'municoes':
         return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
-            <h3 className="font-display font-bold text-slate-900 text-base">Controle de Estoque de Munições</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[
-                { c: '9mm Luger', qty: 4500, max: 10000, color: 'bg-blue-600' },
-                { c: '.380 ACP', qty: 2800, max: 5000, color: 'bg-emerald-600' },
-                { c: '.22 LR', qty: 8500, max: 15000, color: 'bg-amber-600' },
-                { c: '12 GA', qty: 950, max: 2000, color: 'bg-red-500' }
-              ].map((item, idx) => {
-                const percent = (item.qty / item.max) * 100;
-                return (
-                  <div key={idx} className="border border-slate-100 p-3 rounded-xl bg-slate-50/50 space-y-2">
-                    <div className="flex justify-between font-bold text-xs">
-                      <span>Calibre: {item.c}</span>
-                      <span className="font-mono text-slate-500">{item.qty} / {item.max}</span>
-                    </div>
-                    <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full ${item.color}`} style={{ width: `${percent}%` }}></div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <MunicoesManagerPanel
+            currentUser={currentUser}
+            weaponLookupOptions={weaponLookupOptions}
+            onAddWeaponLookup={onAddWeaponLookup}
+            onRefreshData={onRefreshData}
+          />
         );
 
       case 'validar_treinamentos':

@@ -9,14 +9,13 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `style: remove sub-menus Patrocinadores, Videos Destaque e Imagem Padrao do menu Site no Painel Diretor` |
-| Data/hora | 2026-08-02T22:40:00-03:00 |
+| Mensagem | `feat: modulo completo de gestao de municoes e insumos (Entrada NF, Estoque, Recarga, Ponta Reciclada, Alocar Atletas)` |
+| Data/hora | 2026-08-03T22:25:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
 
-> **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se o commit
-> `fdad400` está refletido nos logs. Use o curl abaixo (sem autenticacão, retorna JSON):
+> **Para a próxima IA:** antes de continuar qualquer desenvolvimento, verifique se os logs do EasyPanel refletem o deploy do último commit. Use o curl abaixo (sem autenticacão, retorna JSON):
 >
 > ```bash
 > curl https://logs-do-easypanel-logs.5450wp.easypanel.host/gegcompeticoes/web/all
@@ -114,6 +113,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Redimensionamento Proporcional do QR Code (`ClubTemplatesManager.tsx`, `MemberProfile.tsx`)**: Adicionada a propriedade `qrSize` aos elementos de layout e criado um painel de controle interativo na barra lateral do editor (*Certificados e Carteirinhas*) com barra deslizante (slider) e caixa numérica (40px a 200px) para ajustar a dimensão do QR Code mantendo a proporção 1:1. O tamanho configurado é refletido instantaneamente na tela do editor, na carteirinha do perfil e nas impressões/PDF.
 - **Substituição do Gerador pela Biblioteca Oficial `qrcode` (`qrCodeGenerator.ts`, `package.json`)**: Instalada a biblioteca padrão da indústria `qrcode` e refatorado `qrCodeGenerator.ts` para utilizar o motor oficial de codificação Reed-Solomon e matrizes ISO 18004. Isso garante 100% de compatibilidade e leitura instantânea em qualquer câmera de smartphone (iPhone, Android, Google Lens).
 - **Inicialização Síncrona e Renderização Prioritária da Auditoria (`App.tsx`, `server.ts`)**: Corrigido a condição de corrida no React inicializando `validationUserId` de forma síncrona diretamente na declaração do estado `useState` a partir de `window.location.pathname`. A checagem `if (validationUserId)` foi posicionada ANTES do bloco `if (booting)`, permitindo a renderização instantânea do `<CardValidationView />` no 1º frame do navegador. Além disso, o endpoint `GET /api/public/validar/carteirinha/:userId` foi atualizado para efetuar busca flexível aceitando IDs dinâmicos de timestamps, IDs normais, username ou CPF.
+- **Módulo Completo de Gestão de Munições & Recarga do Clube**: Adicionado o menu "Munições" sob Gerenciamento Plataforma > ADM no Painel Diretor, com 4 submenus dinâmicos (`Entrada NF`, `Estoque / Recarga`, `Ponta / Reciclado`, `Alocar Munições`). Inclui tabelas no banco de dados (`ammo_caliber_stocks`, `ammo_invoices`, `ammo_invoice_items`, `ammo_productions`, `ammo_recycled`, `ammo_athlete_allocations`, `ammo_athlete_allocation_items`, `ammo_athlete_balances`), endpoints da API em `server.ts`, e integração com o registro de treinamentos para abater automaticamente o saldo de munições do clube alocado para o atleta. Na área do perfil do atleta (`MemberProfile.tsx`), o saldo atualizado é exibido na aba de treinamentos.
 - **Validação de Autenticidade do Certificado via QR Code (`server.ts`, `CertificateValidationView.tsx`, `ClubCertificatesViewer.tsx`, `ClubTemplatesManager.tsx`, `ChampionshipsView.tsx`)**: Ajustado o gerador e editor de certificados para apontar o QR Code para a rota pública de auditoria de certificados (`/validar/certificado/GG-CERT-${registrationId}`). No backend (`server.ts`), o endpoint `GET /api/public/validar/certificado/:certId` busca a inscrição original, calcula os pontos totais acumulados, determina a colocação no ranking (1º, 2º, 3º...) e atribui a medalha (OURO, PRATA, BRONZE, HOMOLOGADO), exibindo instantaneamente o comprovante em `CertificateValidationView.tsx`.
 - **Agrupamento Único de Atletas nos Certificados (`ClubCertificatesViewer.tsx`, `server.ts`)**: Corrigida a lógica de cálculo de colocação que antes agrupava por `registrationId` (criando entradas separadas para cada inscrição individual e inflando o total de competidores). O agrupamento foi alterado para ser feito estritamente por atleta (`userId` / `user_id`), somando os pontos acumulados e aplicando os critérios de desempate idênticos ao `CompetitionResultsViewer.tsx`.
 - **Cálculo da Colocação na Categoria de Medalha (`ClubCertificatesViewer.tsx`, `server.ts`)**: Quando o campeonato define cortes de pontuação para medalhas (ex: Ouro ≥ 96 pts, Prata ≥ 83 pts, Bronze ≥ 30 pts), a colocação impressa no certificado e exibida no cartão de auditoria passa a corresponder à posição do atleta **dentro da sua categoria de medalha** (ex: 3º lugar na Categoria Ouro para o atleta com 96.00 pts), alinhando-se rigorosamente com a listagem filtrada por medalhas na tela de resultados.
