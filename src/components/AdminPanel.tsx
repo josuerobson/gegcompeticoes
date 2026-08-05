@@ -926,8 +926,8 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
   const [dataExec, setDataExec] = React.useState('');
   const [horaExec, setHoraExec] = React.useState('');
   const [penalidade, setPenalidade] = React.useState('0');
-  const [ownAmmoShots, setOwnAmmoShots] = React.useState<number | string>(0);
-  const [clubAmmoShots, setClubAmmoShots] = React.useState<number | string>(0);
+  const [ownAmmoShots, setOwnAmmoShots] = React.useState<number | string>('');
+  const [clubAmmoShots, setClubAmmoShots] = React.useState<number | string>('');
   const [seriesData, setSeriesData] = React.useState<Array<Record<string,string>>>([]);
   const [saving, setSaving] = React.useState(false);
   const [success, setSuccess] = React.useState('');
@@ -968,15 +968,8 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
     setDataExec(reg.dataExecucao || '');
     setHoraExec(reg.horaExecucao || '');
 
-    const totalExpected = (reg.seriesCount || 1) * (reg.shotsPerSeries || 0);
-    const hasExistingAmmo = (reg.ownAmmoShots !== undefined && reg.ownAmmoShots > 0) || (reg.clubAmmoShots !== undefined && reg.clubAmmoShots > 0);
-    if (!hasExistingAmmo && totalExpected > 0) {
-      setOwnAmmoShots(totalExpected);
-      setClubAmmoShots(0);
-    } else {
-      setOwnAmmoShots(reg.ownAmmoShots ?? 0);
-      setClubAmmoShots(reg.clubAmmoShots ?? 0);
-    }
+    setOwnAmmoShots(reg.ownAmmoShots ? String(reg.ownAmmoShots) : '');
+    setClubAmmoShots(reg.clubAmmoShots ? String(reg.clubAmmoShots) : '');
   };
 
   const updateCell = (serieIdx: number, zone: string, val: string) => {
@@ -1009,6 +1002,20 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
               throw new Error(`A Série ${i + 1} possui ${sum} tiros informados, mas a modalidade exige exatamente ${expectedShots} tiros.`);
             }
           }
+        }
+
+        // Validação da soma de munição própria + munição do clube contra o total de tiros em todas as séries
+        const totalShotsInSeries = series.reduce((acc, s) => acc + ZONES.reduce((zAcc, z) => zAcc + (Number(s[z]) || 0), 0), 0);
+        const own = ownAmmoShots === '' ? 0 : Number(ownAmmoShots);
+        const club = clubAmmoShots === '' ? 0 : Number(clubAmmoShots);
+        const ammoSum = own + club;
+
+        if (ownAmmoShots === '' && clubAmmoShots === '') {
+          throw new Error('Informe a quantidade de tiros com munição própria e/ou do clube.');
+        }
+
+        if (ammoSum !== totalShotsInSeries) {
+          throw new Error(`A soma dos tiros com munição própria (${own}) e munição do clube (${club}) resulta em ${ammoSum}, mas o total de tiros lançados nas séries é ${totalShotsInSeries}. A soma deve ser exatamente igual a ${totalShotsInSeries}.`);
         }
       }
       const res = await fetch(`/api/championships/${champId}/scores`, {
@@ -1195,16 +1202,18 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-500 uppercase block">Tiros com munição própria</label>
                 <input type="number" min="0" value={ownAmmoShots} onChange={e => setOwnAmmoShots(e.target.value)}
+                  placeholder="Ex: 10"
                   className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono focus:border-blue-500" />
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-500 uppercase block">Tiros com munição do clube</label>
                 <input type="number" min="0" value={clubAmmoShots} onChange={e => setClubAmmoShots(e.target.value)}
+                  placeholder="Ex: 0"
                   className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono focus:border-blue-500" />
               </div>
             </div>
             <p className="text-[10px] text-slate-450 italic">
-              * Os tiros com munição do clube serão automaticamente abatidos do saldo de munições alocado do atleta.
+              * A soma dos tiros (munição própria + clube) deve ser exatamente igual ao total de tiros lançados nas séries. Tiros com munição do clube serão automaticamente abatidos do saldo alocado do atleta.
             </p>
           </div>
 

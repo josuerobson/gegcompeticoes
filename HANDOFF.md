@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: registro da origem da municao e abate automatico do estoque do atleta no cadastro de resultados` |
-| Data/hora | 2026-08-05T08:58:00-03:00 |
+| Mensagem | `fix: campos de origem de municao sem valor pre-preenchido e validacao da soma de tiros com total das series` |
+| Data/hora | 2026-08-05T09:22:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -125,7 +125,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Gerenciador de Banners da Home e Carrossel Público (`AdminPanel.tsx`, `App.tsx`, `server.ts`, `db.ts`)**: Criado o gerenciamento completo de Banners da Home em **Painel Diretor > Gerenciamento Plataforma > Site > Banner Home**, permitindo cadastrar, editar, desativar, reordenar e excluir banners com títulos, subtítulos, badges/tags, descrições, textos de botão, imagens (upload ou URL) e links. Cadastrado o primeiro banner inicial ("Campeonato IPSC Copa de Inverno 2026") idêntico à interface padrão e implementado o carrossel automático com transição temporal, controles laterais (chevrons) e indicadores por ponto na capa do portal.
 - **Gerenciamento de Texto Home no Painel Diretor (`AdminPanel.tsx`, `App.tsx`, `db.ts`)**: Substituído o item de menu "Banners Paginas" por "Texto Home" no caminho **Painel Diretor > Gerenciamento Plataforma > Site > Texto Home**. Criado o componente `HomeTextManager` permitindo ao gestor editar em tempo real a insígnia/tag, o título H2 ("A Pista de Encontro dos Atletas Federados"), o texto descritivo e as legendas e links dos dois botões de ação ("Começar Agora" e "Ver Campeonatos"), contando com pré-visualização ao vivo (*Live Preview*). Os textos são persistidos no PostgreSQL (`settings`) e refletidos dinamicamente na página inicial pública.
 - **Simplificação do Menu Site (`AdminPanel.tsx`)**: Removidos os sub-menus legados/mock `"Patrocinadores"`, `"Vídeos Destaque"` e `"Imagem Padrão"` em **Painel Diretor > Gerenciamento Plataforma > Site**, mantendo exclusivamente as opções ativas `"Banner Home"`, `"Texto Home"` e `"Certificados e Carteirinhas"`.
-- **Registro da Origem da Munição e Abate de Estoque no Cadastro de Resultados (`AdminPanel.tsx`, `server.ts`, `db.ts`)**: Adicionados os campos "Tiros com munição própria" (`own_ammo_shots`) e "Tiros com munição do clube" (`club_ammo_shots`) no final da tela de lançamento de notas e homologação de tempos do Painel Diretor (`AdminPanel.tsx`). Ao salvar o resultado (`salvar`), se `club_ammo_shots > 0`, o sistema consulta o calibre da arma utilizada na inscrição e abate a quantidade de tiros com munição do clube diretamente do saldo alocado do atleta na tabela `ammo_athlete_balances`. Re-edições ajustam o saldo proporcionalmente (deduzem a diferença ou devolvem em caso de redução/marcação como Não Participou).
+- **Registro da Origem da Munição e Abate de Estoque no Cadastro de Resultados (`AdminPanel.tsx`, `server.ts`, `db.ts`)**: Adicionados os campos "Tiros com munição própria" (`own_ammo_shots`) e "Tiros com munição do clube" (`club_ammo_shots`) no final da tela de lançamento de notas e homologação de tempos do Painel Diretor (`AdminPanel.tsx`). Os campos iniciam vazios em novas inserções. Ao salvar o resultado (`salvar`), o sistema valida se a soma dos dois campos é **exatamente igual ao total de tiros lançados nas séries**. Se `club_ammo_shots > 0`, o sistema consulta o calibre da arma utilizada na inscrição e abate a quantidade de tiros com munição do clube diretamente do saldo alocado do atleta na tabela `ammo_athlete_balances`. Re-edições ajustam o saldo proporcionalmente.
 
 ## Infra / deploy
 

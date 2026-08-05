@@ -2593,8 +2593,24 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
       }
 
       const penValue = Number(penalidade) || 0;
-      const ownAmmo = Math.max(0, Number(ownAmmoShots) || 0);
-      const clubAmmo = Math.max(0, Number(clubAmmoShots) || 0);
+      const ownAmmo = ownAmmoShots === undefined || ownAmmoShots === '' ? 0 : Math.max(0, Number(ownAmmoShots) || 0);
+      const clubAmmo = clubAmmoShots === undefined || clubAmmoShots === '' ? 0 : Math.max(0, Number(clubAmmoShots) || 0);
+      const ammoSum = ownAmmo + clubAmmo;
+
+      let totalShotsInSeries = 0;
+      if (Array.isArray(series) && series.length > 0) {
+        const zones = ['x','p10','p9','p8','p7','p6','p5','p4','p3','p2','p1','p0'];
+        for (const s of series) {
+          totalShotsInSeries += zones.reduce((acc, z) => acc + (Number(s[z]) || 0), 0);
+        }
+      }
+
+      if (totalShotsInSeries > 0 && ammoSum !== totalShotsInSeries) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: `A soma de tiros com munição própria (${ownAmmo}) e munição do clube (${clubAmmo}) resulta em ${ammoSum}, mas o total de tiros lançados nas séries é ${totalShotsInSeries}. A soma deve ser exatamente igual a ${totalShotsInSeries}.`
+        });
+      }
 
       // Update registration with full score breakdown and ammo origin
       await client.query(`
