@@ -110,7 +110,9 @@ function FileField({ label, theme, hint, onFileChange }: {
 export default function App() {
   // Theme State
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return (localStorage.getItem('gg_theme') as 'light' | 'dark') || 'dark';
+    const saved = localStorage.getItem('gg_theme_mode');
+    if (saved === 'light' || saved === 'dark') return saved;
+    return 'light';
   });
 
   useEffect(() => {
@@ -120,7 +122,7 @@ export default function App() {
     } else {
       root.classList.remove('dark');
     }
-    localStorage.setItem('gg_theme', theme);
+    localStorage.setItem('gg_theme_mode', theme);
   }, [theme]);
 
   // Global App States
