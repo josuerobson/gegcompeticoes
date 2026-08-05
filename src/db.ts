@@ -614,7 +614,10 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS series_pontos JSONB,
         ADD COLUMN IF NOT EXISTS series_tempos JSONB,
         -- Legacy import compatibility code (corresponds to 'codigo' in inscricao_modalidades)
-        ADD COLUMN IF NOT EXISTS codigo_inscricao INTEGER;
+        ADD COLUMN IF NOT EXISTS codigo_inscricao INTEGER,
+        -- Ammo origin (tiros própria / tiros clube)
+        ADD COLUMN IF NOT EXISTS own_ammo_shots INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS club_ammo_shots INTEGER DEFAULT 0;
     `);
 
     // Relax completion_status CHECK to accept 'absent' (Não Participou) in addition to

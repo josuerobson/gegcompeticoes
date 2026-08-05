@@ -286,6 +286,8 @@ export interface Registration {
   totalMinutos?: string; totalMilesegundos?: number;
   seriesPontos?: any[]; seriesTempos?: any[];
   codigoInscricao?: number;
+  ownAmmoShots?: number;
+  clubAmmoShots?: number;
   multiChampionshipId?: string; // Presente quando a inscrição foi gerada por um multicampeonato
 }
 

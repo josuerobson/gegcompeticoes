@@ -7,7 +7,7 @@ import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw
+  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -904,6 +904,7 @@ type EnrichedRegistration = {
   evaluationType?: string; weaponModel?: string; weaponSerial?: string; weaponSigma?: string;
   totalPoints?: number; dataExecucao?: string; horaExecucao?: string;
   seriesPontos?: any[]; seriesTempos?: any[];
+  ownAmmoShots?: number; clubAmmoShots?: number;
 };
 
 const ZONES = ['x','p10','p9','p8','p7','p6','p5','p4','p3','p2','p1','p0'] as const;
@@ -925,6 +926,8 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
   const [dataExec, setDataExec] = React.useState('');
   const [horaExec, setHoraExec] = React.useState('');
   const [penalidade, setPenalidade] = React.useState('0');
+  const [ownAmmoShots, setOwnAmmoShots] = React.useState<number | string>(0);
+  const [clubAmmoShots, setClubAmmoShots] = React.useState<number | string>(0);
   const [seriesData, setSeriesData] = React.useState<Array<Record<string,string>>>([]);
   const [saving, setSaving] = React.useState(false);
   const [success, setSuccess] = React.useState('');
@@ -964,6 +967,16 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
     }
     setDataExec(reg.dataExecucao || '');
     setHoraExec(reg.horaExecucao || '');
+
+    const totalExpected = (reg.seriesCount || 1) * (reg.shotsPerSeries || 0);
+    const hasExistingAmmo = (reg.ownAmmoShots !== undefined && reg.ownAmmoShots > 0) || (reg.clubAmmoShots !== undefined && reg.clubAmmoShots > 0);
+    if (!hasExistingAmmo && totalExpected > 0) {
+      setOwnAmmoShots(totalExpected);
+      setClubAmmoShots(0);
+    } else {
+      setOwnAmmoShots(reg.ownAmmoShots ?? 0);
+      setClubAmmoShots(reg.clubAmmoShots ?? 0);
+    }
   };
 
   const updateCell = (serieIdx: number, zone: string, val: string) => {
@@ -1005,6 +1018,8 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
           registrationId: selectedReg.id,
           acao, dataExecucao: dataExec, horaExecucao: horaExec,
           series, penalidade: Number(penalidade)||0,
+          ownAmmoShots: Number(ownAmmoShots)||0,
+          clubAmmoShots: Number(clubAmmoShots)||0,
           stageNum: champStages.find(s => s.id === stageId)?.stageNum || 1
         })
       });
@@ -1166,10 +1181,31 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
             })}
           </div>
 
-          <div className="space-y-1 max-w-[120px]">
-            <label className="text-[10px] font-bold text-slate-500 uppercase">Penalidade (pts)</label>
-            <input type="number" min="0" value={penalidade} onChange={e => setPenalidade(e.target.value)}
-              className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono" />
+          <div className="bg-slate-100/70 rounded-xl p-4 border border-slate-200/80 space-y-3">
+            <div className="flex items-center gap-2 text-slate-700 font-bold text-xs">
+              <Package className="w-4 h-4 text-blue-600" />
+              <span>Origem da Munição e Penalidades</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase block">Penalidade (pts)</label>
+                <input type="number" min="0" value={penalidade} onChange={e => setPenalidade(e.target.value)}
+                  className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase block">Tiros com munição própria</label>
+                <input type="number" min="0" value={ownAmmoShots} onChange={e => setOwnAmmoShots(e.target.value)}
+                  className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono focus:border-blue-500" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase block">Tiros com munição do clube</label>
+                <input type="number" min="0" value={clubAmmoShots} onChange={e => setClubAmmoShots(e.target.value)}
+                  className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono focus:border-blue-500" />
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-450 italic">
+              * Os tiros com munição do clube serão automaticamente abatidos do saldo de munições alocado do atleta.
+            </p>
           </div>
 
           <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200">

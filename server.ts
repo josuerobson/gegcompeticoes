@@ -256,6 +256,8 @@ function mapRegistration(r: any): Registration {
     seriesPontos: r.series_pontos || undefined,
     seriesTempos: r.series_tempos || undefined,
     codigoInscricao: r.codigo_inscricao ?? undefined,
+    ownAmmoShots: r.own_ammo_shots != null ? Number(r.own_ammo_shots) : 0,
+    clubAmmoShots: r.club_ammo_shots != null ? Number(r.club_ammo_shots) : 0,
     multiChampionshipId: r.multi_championship_id || undefined,
   };
 }
@@ -2463,6 +2465,7 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
     registrationId, acao,
     dataExecucao, horaExecucao,
     series, penalidade,
+    ownAmmoShots, clubAmmoShots,
     // Legacy single-score fallback (stageNum + score + timeSeconds)
     stageNum, score, timeSeconds
   } = req.body;
@@ -2498,10 +2501,23 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
     try {
       await client.query('BEGIN');
 
+      const prevClubShots = Number(reg.clubAmmoShots) || 0;
+
       // ---- Ação: Não Participou ----
       if (acao === 'nao_participou') {
+        // Se tinha munição de clube anteriormente abatida, devolve para o saldo do atleta
+        if (prevClubShots > 0 && reg.weaponId) {
+          const wRes = await client.query('SELECT caliber FROM weapons WHERE id = $1', [reg.weaponId]);
+          if (wRes.rows.length > 0 && wRes.rows[0].caliber) {
+            await client.query(
+              `UPDATE ammo_athlete_balances SET balance = balance + $1, updated_at = NOW() WHERE user_id = $2 AND caliber = $3`,
+              [prevClubShots, reg.userId, wRes.rows[0].caliber]
+            );
+          }
+        }
+
         await client.query(
-          `UPDATE registrations SET completion_status='absent', data_execucao=$1, hora_execucao=$2 WHERE id=$3`,
+          `UPDATE registrations SET completion_status='absent', own_ammo_shots=0, club_ammo_shots=0, data_execucao=$1, hora_execucao=$2 WHERE id=$3`,
           [dataExecucao || null, horaExecucao || null, registrationId]
         );
         await client.query('COMMIT');
@@ -2577,8 +2593,10 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
       }
 
       const penValue = Number(penalidade) || 0;
+      const ownAmmo = Math.max(0, Number(ownAmmoShots) || 0);
+      const clubAmmo = Math.max(0, Number(clubAmmoShots) || 0);
 
-      // Update registration with full score breakdown
+      // Update registration with full score breakdown and ammo origin
       await client.query(`
         UPDATE registrations SET
           completion_status = 'completed',
@@ -2590,8 +2608,9 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
           penalty = $15,
           data_execucao = $16, hora_execucao = $17,
           series_pontos = $18, series_tempos = $19,
+          own_ammo_shots = $20, club_ammo_shots = $21,
           disqualified = false
-        WHERE id = $20`,
+        WHERE id = $22`,
         [
           totalPontos,
           bestSerie.x||0, bestSerie.p10||0, bestSerie.p9||0, bestSerie.p8||0, bestSerie.p7||0,
@@ -2602,9 +2621,35 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
           dataExecucao || null, horaExecucao || null,
           seriesPontos.length > 0 ? JSON.stringify(seriesPontos) : null,
           seriesTempos.length > 0 ? JSON.stringify(seriesTempos) : null,
+          ownAmmo, clubAmmo,
           registrationId
         ]
       );
+
+      // Abate/ajuste automático do saldo de munições do clube alocado para o atleta
+      const diffClubShots = clubAmmo - prevClubShots;
+      if (diffClubShots !== 0 && reg.weaponId) {
+        const wRes = await client.query('SELECT caliber FROM weapons WHERE id = $1', [reg.weaponId]);
+        const caliber = wRes.rows[0]?.caliber;
+        if (caliber) {
+          if (diffClubShots > 0) {
+            await client.query(
+              `UPDATE ammo_athlete_balances
+               SET balance = GREATEST(0, balance - $1), updated_at = NOW()
+               WHERE user_id = $2 AND caliber = $3`,
+              [diffClubShots, reg.userId, caliber]
+            );
+          } else {
+            const refund = Math.abs(diffClubShots);
+            await client.query(
+              `UPDATE ammo_athlete_balances
+               SET balance = balance + $1, updated_at = NOW()
+               WHERE user_id = $2 AND caliber = $3`,
+              [refund, reg.userId, caliber]
+            );
+          }
+        }
+      }
 
       // Also maintain stage_scores table for rankings compatibility
       const effectiveStageNum = stageNum || 1;
