@@ -1841,9 +1841,9 @@ export default function MemberProfile({
                 </span>
               </div>
 
-              {/* Munições Clube */}
+              {/* Saldo de Munições */}
               <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                <span className="text-slate-450 font-sans text-[11px]">Munições Clube</span>
+                <span className="text-slate-450 font-sans text-[11px]">Saldo de Munições</span>
                 <span className="font-bold text-slate-800">
                   {totalClubAmmo} un
                 </span>
