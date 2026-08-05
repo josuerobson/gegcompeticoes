@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance } from '../types';
+import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
@@ -999,7 +999,7 @@ function TreinamentosCompeticoesAdminPanel({
     return weapons.filter(w =>
       w.ownerId === selectedAthlete.id ||
       w.ownerId === currentUser?.clubId ||
-      w.ownerType === 'clube'
+      (w as any).ownerType === 'clube'
     );
   }, [weapons, selectedAthlete, currentUser]);
 
@@ -1806,7 +1806,8 @@ type EnrichedRegistration = {
   completionStatus: string; disqualified: boolean;
   athleteName?: string; athleteCr?: string; clubName?: string;
   modalityName?: string; seriesCount?: number; shotsPerSeries?: number;
-  evaluationType?: string; weaponModel?: string; weaponSerial?: string; weaponSigma?: string;
+  evaluationType?: string; weaponModel?: string; weaponSerial?: string;
+  weaponNumber?: string; weaponSigma?: string; weaponCaliber?: string;
   totalPoints?: number; dataExecucao?: string; horaExecucao?: string;
   seriesPontos?: any[]; seriesTempos?: any[];
   ownAmmoShots?: number; clubAmmoShots?: number;
@@ -2013,7 +2014,16 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
                 className="w-full text-left px-4 py-3 hover:bg-blue-50 transition flex justify-between items-center gap-2">
                 <div>
                   <span className="font-semibold text-xs text-slate-800">{reg.athleteName}</span>
-                  <span className="text-[10px] text-slate-450 ml-2">Clube: {reg.clubName || 'G&G Competições'} | CR: {reg.athleteCr} | {reg.weaponModel} {reg.weaponSigma ? `(Sigma ${reg.weaponSigma})` : ''}</span>
+                  <div className="text-[10px] text-slate-500 mt-0.5 space-x-1.5 flex flex-wrap items-center">
+                    <span>Clube: {reg.clubName || 'G&G Competições'}</span>
+                    <span>•</span>
+                    <span>CR: {reg.athleteCr || 'N/I'}</span>
+                    <span>•</span>
+                    <span className="font-medium text-slate-700">Nº Arma: {reg.weaponNumber || reg.weaponSerial || (reg.weaponSigma ? `Sigma ${reg.weaponSigma}` : 'N/I')}</span>
+                    <span>•</span>
+                    <span className="font-medium text-slate-700">Calibre: {reg.weaponCaliber || 'N/I'}</span>
+                    {reg.weaponModel && <span className="text-slate-400">({reg.weaponModel})</span>}
+                  </div>
                 </div>
                 {statusBadge(reg)}
               </button>
@@ -2029,8 +2039,19 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
         <div className="space-y-5 bg-slate-50 rounded-2xl p-5 border border-slate-200">
           <div className="flex justify-between items-start">
             <div>
-              <h4 className="font-bold text-slate-800 text-sm">{selectedReg.athleteName}</h4>
-              <p className="text-[10px] text-slate-400">{selectedReg.modalityName} · {selectedReg.seriesCount ?? 1} série(s) × {selectedReg.shotsPerSeries ?? 0} tiros</p>
+              <h4 className="font-bold text-slate-800 text-base">{selectedReg.athleteName}</h4>
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-slate-600 my-1">
+                <span><strong className="text-slate-700 font-semibold">Nº Arma:</strong> {selectedReg.weaponNumber || selectedReg.weaponSerial || (selectedReg.weaponSigma ? `Sigma ${selectedReg.weaponSigma}` : 'Não informado')}</span>
+                <span className="text-slate-300">•</span>
+                <span><strong className="text-slate-700 font-semibold">Calibre:</strong> {selectedReg.weaponCaliber || 'Não informado'}</span>
+                {selectedReg.weaponModel && (
+                  <>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-500">Modelo: {selectedReg.weaponModel}</span>
+                  </>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400">{selectedReg.modalityName} · {selectedReg.seriesCount ?? 1} série(s) × {selectedReg.shotsPerSeries ?? 0} tiros</p>
             </div>
             <button onClick={() => setSelectedReg(null)} className="text-xs text-slate-400 hover:text-red-500 transition font-bold">← Voltar</button>
           </div>

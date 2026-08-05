@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix: adicionar colunas signature_expiry e guia_transito_expiry no banco de dados e atualizar endpoint de membro` |
-| Data/hora | 2026-08-05T13:46:00-03:00 |
+| Mensagem | `feat: exibir numero da arma e calibre da municao em lancar resultados` |
+| Data/hora | 2026-08-05T16:16:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,8 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Número da arma e calibre da munição na tela de Lançar Resultados**: Adicionados no endpoint `GET /api/admin/registrations` (`weapon_number` e `weapon_caliber`) e exibidos em `CadastrarResultadosPanel` (em `AdminPanel.tsx`) logo abaixo do nome do atleta, tanto na listagem de inscritos quanto no cartão de lançamento de pontuação.
 
 - **Modality "regras" (séries/tiros/tempo/avaliação) are fixed on the Modalidade itself and cannot be overridden per-Campeonato.** The Campeonato cadastro only lets you *select* which modalities apply. Rationale given by the user: this preserves the ability to import data from the legacy system without losing that constraint. If a future request asks to make these editable per-championship, confirm it's an intentional reversal, not a misunderstanding.
 - **Campeonato's "% Premiação Atleta" cascades in a specific, non-obvious way**: it splits into 4 buckets (Todas as Etapas / Ouro / Prata / Bronze) that must sum to 100% of it; "Todas as Etapas" has its own 1º–5º position curve, while Ouro/Prata/Bronze **share one** 1º–5º curve reapplied inside each bucket. See `ChampExtraFields` in `AdminPanel.tsx` and the percentage columns in `server.ts`'s `CHAMPIONSHIP_EXTRA_COLUMNS`.

@@ -2339,7 +2339,7 @@ app.get('/api/admin/registrations', requireAdmin, async (req, res) => {
       u.full_name as athlete_name, u.cr_number as athlete_cr,
       c.name as club_name,
       m.name as modality_name, m.series_count, m.shots_per_series, m.evaluation_type,
-      w.model as weapon_model, w.serial_number as weapon_serial, w.sigma_number
+      w.model as weapon_model, w.serial_number as weapon_serial, w.weapon_number as weapon_number, w.sigma_number, w.caliber as weapon_caliber
       FROM registrations r
       LEFT JOIN users u ON u.id = r.user_id
       LEFT JOIN clubs c ON c.id = r.club_id
@@ -2369,7 +2369,9 @@ app.get('/api/admin/registrations', requireAdmin, async (req, res) => {
       evaluationType: r.evaluation_type,
       weaponModel: r.weapon_model,
       weaponSerial: r.weapon_serial,
+      weaponNumber: r.weapon_number,
       weaponSigma: r.sigma_number,
+      weaponCaliber: r.weapon_caliber,
     }));
     res.json({ registrations });
   } catch (err) {
