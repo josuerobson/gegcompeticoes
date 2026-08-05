@@ -452,16 +452,27 @@ export default function MemberProfile({
   }, [registrations.length, selectedUser.id, selectedUser.role]);
   const [athleteAmmoBalances, setAthleteAmmoBalances] = useState<AmmoAthleteBalance[]>([]);
 
-  useEffect(() => {
-    if (selectedUser?.id && profileTab === 'trainings') {
-      fetch(`/api/ammo/athlete-balances/${selectedUser.id}`, {
-        headers: { 'x-user-id': currentUser?.id || '' }
-      })
-        .then(r => r.json())
-        .then(d => setAthleteAmmoBalances(d.balances || []))
-        .catch(e => console.error('Fetch athlete ammo balances error:', e));
+  const fetchAthleteAmmoBalances = useCallback(async () => {
+    if (!selectedUser?.id) return;
+    try {
+      const authHeaders = currentUser ? { 'x-user-id': currentUser.id } : {};
+      const res = await fetch(`/api/ammo/athlete-balances/${selectedUser.id}`, { headers: authHeaders });
+      if (res.ok) {
+        const data = await res.json();
+        setAthleteAmmoBalances(data.balances || []);
+      }
+    } catch (err) {
+      console.error('Error fetching athlete ammo balances:', err);
     }
-  }, [selectedUser?.id, profileTab, currentUser?.id]);
+  }, [selectedUser?.id, currentUser?.id]);
+
+  useEffect(() => {
+    fetchAthleteAmmoBalances();
+  }, [fetchAthleteAmmoBalances]);
+
+  const totalClubAmmo = useMemo(() => {
+    return athleteAmmoBalances.reduce((sum, b) => sum + (Number(b.balance) || 0), 0);
+  }, [athleteAmmoBalances]);
 
   const [savedSection, setSavedSection] = useState<string | null>(null);
 
@@ -1410,6 +1421,7 @@ export default function MemberProfile({
         });
         setIsWeaponDropdownOpen(false);
         fetchTrainings();
+        fetchAthleteAmmoBalances();
       } else {
         const data = await res.json();
         setTrainingError(data.error || 'Erro ao registrar treinamento.');
@@ -1451,6 +1463,7 @@ export default function MemberProfile({
       });
       if (res.ok) {
         setTrainings(prev => prev.filter(t => t.id !== id));
+        fetchAthleteAmmoBalances();
       }
     } catch (err) {
       console.error('Error deleting training:', err);
@@ -1781,10 +1794,6 @@ export default function MemberProfile({
 
           {/* Affiliation status Card (Placed ABOVE the menu on Desktop as requested) */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
-            <div>
-              <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Situação Associativa G&G</h4>
-            </div>
-
             <div className="space-y-2.5 font-mono text-xs">
               {/* CR e Validade na mesma linha */}
               <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
@@ -1829,6 +1838,14 @@ export default function MemberProfile({
                         ? selectedUser.guiaTransitoExpiry.split('T')[0].split('-').reverse().join('/')
                         : selectedUser.guiaTransitoExpiry)
                     : '--/--/----'}
+                </span>
+              </div>
+
+              {/* Munições Clube */}
+              <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                <span className="text-slate-450 font-sans text-[11px]">Munições Clube</span>
+                <span className="font-bold text-slate-800">
+                  {totalClubAmmo} un
                 </span>
               </div>
             </div>
