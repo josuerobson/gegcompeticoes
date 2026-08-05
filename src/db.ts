@@ -103,7 +103,8 @@ export async function initDB() {
         complement TEXT,
         neighborhood TEXT,
         city TEXT,
-        state TEXT
+        state TEXT,
+        guia_transito_expiry TEXT
       );
     `);
 
@@ -134,6 +135,8 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS neighborhood TEXT,
         ADD COLUMN IF NOT EXISTS city TEXT,
         ADD COLUMN IF NOT EXISTS state TEXT,
+        ADD COLUMN IF NOT EXISTS signature_expiry TEXT,
+        ADD COLUMN IF NOT EXISTS guia_transito_expiry TEXT,
         ADD COLUMN IF NOT EXISTS doc_rg_cnh_key TEXT,
         ADD COLUMN IF NOT EXISTS doc_cr_key TEXT,
         ADD COLUMN IF NOT EXISTS doc_declaracao_key TEXT;

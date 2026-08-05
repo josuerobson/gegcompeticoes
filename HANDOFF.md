@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix: alterar rotulo de municoes clube para saldo de municoes no perfil` |
-| Data/hora | 2026-08-05T13:41:00-03:00 |
+| Mensagem | `fix: adicionar colunas signature_expiry e guia_transito_expiry no banco de dados e atualizar endpoint de membro` |
+| Data/hora | 2026-08-05T13:46:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -128,6 +128,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Gerenciamento Plataforma > ADM > Treinamento/Competições (`AdminPanel.tsx`, `server.ts`, `src/types.ts`)**: Implementada a tela completa de cadastro e consulta de treinos de habitualidade no Painel Diretor. O gestor realiza a busca de qualquer atleta federado (por nome, CPF ou CR), visualiza seu saldo individual de munições alocadas por calibre, seleciona a arma (da lista do atleta ou do clube) ou cadastra uma nova arma para ele, e registra a sessão (data/hora, tiros com munição própria, tiros com munição do clube, modalidade, score e observações). O disparo com munição do clube abate o saldo do atleta em tempo real na tabela `ammo_athlete_balances`. Exibe também o histórico consolidado de treinamentos de todos os atletas com filtro e ação de exclusão.
 - **Tema Padrão Claro (Light Mode) (`App.tsx`)**: Alterada a inicialização do estado de tema da aplicação de escuro (`'dark'`) para claro (`'light'`). A chave de persistência no `localStorage` passou a ser `gg_theme_mode`, garantindo que visitantes novos e existentes carreguem por padrão o layout na versão clara.
 - **Card de Situação Associativa no Perfil (`MemberProfile.tsx`)**: Removido o texto de título "Situação Associativa G&G" do card de estatísticas do perfil do atleta. Adicionado o campo "Saldo de Munições" abaixo de "Guia de Trânsito", exibindo a soma total de munições do clube alocadas para o atleta entre todos os calibres.
+- **Correção de Salvar Vencimento Guia de Trânsito e Vencimento Anuidade no Cadastro de Membros (`src/db.ts`, `server.ts`)**: Corrigido o erro 500 (`Internal Server Error`) adicionando as colunas `guia_transito_expiry` e `signature_expiry` à migração `ALTER TABLE users` no banco de dados (`src/db.ts`), e adicionando `hasPaidSignature` em `USER_PROFILE_COLUMNS` no servidor (`server.ts`) para que o salvamento de validades do clube pelo Painel Diretor persista os vencimentos e valide automaticamente a anuidade do atleta.
 
 ## Infra / deploy
 

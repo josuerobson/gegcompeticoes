@@ -1104,19 +1104,25 @@ const USER_PROFILE_COLUMNS: Record<string, string> = {
   state: 'state',
   guiaTransitoExpiry: 'guia_transito_expiry',
   signatureExpiry: 'signature_expiry',
+  hasPaidSignature: 'has_paid_signature',
 };
 
 // Shared by a member editing their own "Meu Cadastro" and a club admin
 // completing a member's profile on their behalf — same column whitelist,
 // same live-recomputed completeness.
 async function applyUserProfileFields(userId: string, body: Record<string, unknown>) {
+  const payload = { ...body };
+  if (typeof payload.signatureExpiry === 'string' && payload.signatureExpiry.trim() !== '') {
+    payload.hasPaidSignature = true;
+  }
+
   const updates: string[] = [];
   const values: unknown[] = [];
 
   for (const [key, column] of Object.entries(USER_PROFILE_COLUMNS)) {
-    if (Object.prototype.hasOwnProperty.call(body, key)) {
+    if (Object.prototype.hasOwnProperty.call(payload, key)) {
       updates.push(`${column} = $${updates.length + 1}`);
-      values.push(body[key] || null);
+      values.push(payload[key] ?? null);
     }
   }
 
