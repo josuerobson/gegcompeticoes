@@ -318,6 +318,8 @@ export interface RankingItem {
 export interface TrainingSession {
   id: string;
   userId: string;
+  athleteName?: string;
+  athleteCr?: string;
   clubId?: string;
   dateTime: string;
   weaponId?: string;

@@ -349,6 +349,8 @@ function mapTraining(t: any): TrainingSession {
   return {
     id: t.id,
     userId: t.user_id,
+    athleteName: t.athlete_name || undefined,
+    athleteCr: t.athlete_cr || undefined,
     clubId: t.club_id || undefined,
     dateTime: t.date_time,
     weaponId: t.weapon_id || undefined,
@@ -3798,12 +3800,21 @@ app.get('/api/ammo/athlete-balances/:userId', requireAuth, async (req, res) => {
 
 app.get('/api/trainings', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
-  const targetUserId = (req.query.userId as string) || currentUser.id;
+  const targetUserId = req.query.userId as string;
+  const fetchAll = req.query.all === 'true' && ['admin', 'master_admin', 'club_admin'].includes(currentUser.role);
   try {
-    const r = await pool.query(
-      `SELECT * FROM trainings WHERE user_id = $1 ORDER BY date_time DESC`,
-      [targetUserId]
-    );
+    let query = `
+      SELECT t.*, u.full_name as athlete_name, u.cr_number as athlete_cr
+      FROM trainings t
+      LEFT JOIN users u ON u.id = t.user_id
+    `;
+    const params: any[] = [];
+    if (!fetchAll) {
+      query += ` WHERE t.user_id = $1 `;
+      params.push(targetUserId || currentUser.id);
+    }
+    query += ` ORDER BY t.date_time DESC`;
+    const r = await pool.query(query, params);
     res.json({ trainings: r.rows.map(mapTraining) });
   } catch (err) {
     console.error('Fetch trainings error:', err);
@@ -3814,6 +3825,8 @@ app.get('/api/trainings', requireAuth, async (req, res) => {
 app.post('/api/trainings', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
   const {
+    userId,
+    targetUserId,
     dateTime,
     weaponId,
     weaponName,
@@ -3830,6 +3843,11 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Data/Hora e Arma são obrigatórias.' });
   }
 
+  const requestedUserId = targetUserId || userId;
+  const finalUserId = (['admin', 'master_admin', 'club_admin'].includes(currentUser.role) && requestedUserId)
+    ? requestedUserId
+    : currentUser.id;
+
   const own = Math.max(0, Number(ownAmmoShots) || 0);
   const club = Math.max(0, Number(clubAmmoShots) || 0);
   const total = own + club;
@@ -3845,7 +3863,7 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
       RETURNING *`,
       [
         id,
-        currentUser.id,
+        finalUserId,
         currentUser.clubId || null,
         dateTime,
         weaponId || null,
@@ -3873,12 +3891,20 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
           `UPDATE ammo_athlete_balances
            SET balance = GREATEST(0, balance - $1), updated_at = NOW()
            WHERE user_id = $2 AND caliber = $3`,
-          [club, currentUser.id, cal]
+          [club, finalUserId, cal]
         );
       }
     }
 
-    res.status(201).json({ training: mapTraining(r.rows[0]) });
+    // Retorna o treinamento com os dados do usuário para atualização do frontend
+    const userRes = await pool.query(`SELECT full_name, cr_number FROM users WHERE id = $1`, [finalUserId]);
+    const createdRow = r.rows[0];
+    if (userRes.rows.length > 0) {
+      createdRow.athlete_name = userRes.rows[0].full_name;
+      createdRow.athlete_cr = userRes.rows[0].cr_number;
+    }
+
+    res.status(201).json({ training: mapTraining(createdRow) });
   } catch (err) {
     console.error('Create training error:', err);
     res.status(500).json({ error: 'Erro ao registrar treinamento.' });

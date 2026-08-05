@@ -7,7 +7,7 @@ import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package
+  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -873,6 +873,911 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser }:
           Nenhum filiado associado a este estande.
         </p>
       )}
+    </div>
+  );
+}
+
+// =============================================================================
+// TreinamentosCompeticoesAdminPanel — Cadastro de treinamento para qualquer atleta
+// =============================================================================
+interface TreinamentosCompeticoesAdminPanelProps {
+  currentUser: User | null;
+  users: User[];
+  weapons: Weapon[];
+  weaponLookupOptions: WeaponLookupOption[];
+  onAddWeapon: (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string }) => Promise<void>;
+  onRefreshData?: () => Promise<void>;
+}
+
+function TreinamentosCompeticoesAdminPanel({
+  currentUser,
+  users,
+  weapons,
+  weaponLookupOptions,
+  onAddWeapon,
+  onRefreshData,
+}: TreinamentosCompeticoesAdminPanelProps) {
+  // Athlete Search State
+  const [athleteSearchQuery, setAthleteSearchQuery] = React.useState('');
+  const [selectedAthlete, setSelectedAthlete] = React.useState<User | null>(null);
+  const [isAthleteDropdownOpen, setIsAthleteDropdownOpen] = React.useState(false);
+  const [athleteAmmoBalances, setAthleteAmmoBalances] = React.useState<AmmoAthleteBalance[]>([]);
+
+  // Training Form State
+  const [trainingForm, setTrainingForm] = React.useState({
+    dateTime: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
+    weaponSearchQuery: '',
+    selectedWeapon: null as Weapon | null,
+    weaponName: '',
+    weaponCaliber: '',
+    weaponOwnerType: 'propria' as 'propria' | 'clube',
+    ownAmmoShots: '',
+    clubAmmoShots: '',
+    modality: 'Treino Livre',
+    score: '',
+    notes: '',
+  });
+
+  const [isWeaponDropdownOpen, setIsWeaponDropdownOpen] = React.useState(false);
+  const [savingTraining, setSavingTraining] = React.useState(false);
+  const [trainingError, setTrainingError] = React.useState('');
+  const [trainingSuccess, setTrainingSuccess] = React.useState('');
+
+  // Add Weapon Modal State
+  const [showAddWeaponModal, setShowAddWeaponModal] = React.useState(false);
+  const [savingNewWeapon, setSavingNewWeapon] = React.useState(false);
+  const [newWeaponData, setNewWeaponData] = React.useState({
+    manufacturer: '',
+    model: '',
+    caliber: '',
+    serialNumber: '',
+    weaponNumber: '',
+    sigmaNumber: '',
+    weaponClass: '',
+    permissionStatus: '',
+    registrySystem: '',
+  });
+
+  // Trainings List State
+  const [trainingsList, setTrainingsList] = React.useState<TrainingSession[]>([]);
+  const [loadingTrainings, setLoadingTrainings] = React.useState(false);
+  const [tableSearchQuery, setTableSearchQuery] = React.useState('');
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
+
+  // Fetch all trainings
+  const loadAllTrainings = React.useCallback(async () => {
+    if (!currentUser) return;
+    setLoadingTrainings(true);
+    try {
+      const res = await fetch('/api/trainings?all=true', {
+        headers: { 'x-user-id': currentUser.id }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTrainingsList(data.trainings || []);
+      }
+    } catch (err) {
+      console.error('Error fetching trainings list:', err);
+    } finally {
+      setLoadingTrainings(false);
+    }
+  }, [currentUser]);
+
+  React.useEffect(() => {
+    loadAllTrainings();
+  }, [loadAllTrainings]);
+
+  // Fetch athlete ammo balances when selectedAthlete changes
+  React.useEffect(() => {
+    if (!selectedAthlete || !currentUser) {
+      setAthleteAmmoBalances([]);
+      return;
+    }
+    fetch(`/api/ammo/athlete-balances/${selectedAthlete.id}`, {
+      headers: { 'x-user-id': currentUser.id }
+    })
+      .then(r => r.ok ? r.json() : { balances: [] })
+      .then(data => setAthleteAmmoBalances(data.balances || []))
+      .catch(() => setAthleteAmmoBalances([]));
+  }, [selectedAthlete, currentUser]);
+
+  // Filtered Athletes
+  const searchFilteredAthletes = React.useMemo(() => {
+    const q = athleteSearchQuery.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return users.filter(u =>
+      (u.fullName || '').toLowerCase().includes(q) ||
+      (u.cpf || '').includes(q) ||
+      (u.crNumber || '').toLowerCase().includes(q) ||
+      (u.username || '').toLowerCase().includes(q)
+    );
+  }, [users, athleteSearchQuery]);
+
+  // Weapons available for the selected athlete (athlete's weapons + club weapons)
+  const availableWeapons = React.useMemo(() => {
+    if (!selectedAthlete) return weapons;
+    return weapons.filter(w =>
+      w.ownerId === selectedAthlete.id ||
+      w.ownerId === currentUser?.clubId ||
+      w.ownerType === 'clube'
+    );
+  }, [weapons, selectedAthlete, currentUser]);
+
+  // Filtered weapons for autocomplete search
+  const searchFilteredWeapons = React.useMemo(() => {
+    const q = trainingForm.weaponSearchQuery.trim().toLowerCase();
+    if (!q) return availableWeapons;
+    return availableWeapons.filter(w =>
+      (w.manufacturer || '').toLowerCase().includes(q) ||
+      (w.model || '').toLowerCase().includes(q) ||
+      (w.caliber || '').toLowerCase().includes(q) ||
+      (w.sigmaNumber || '').toLowerCase().includes(q) ||
+      (w.weaponNumber || '').toLowerCase().includes(q)
+    );
+  }, [availableWeapons, trainingForm.weaponSearchQuery]);
+
+  const weaponLookup = (kind: string) => weaponLookupOptions.filter(o => o.kind === kind);
+
+  // Handle Add Weapon for selected athlete
+  const handleCreateWeaponSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAthlete) return;
+    if (!newWeaponData.manufacturer || !newWeaponData.model || !newWeaponData.caliber) {
+      alert('Fabricante, Modelo e Calibre são obrigatórios.');
+      return;
+    }
+    setSavingNewWeapon(true);
+    try {
+      await onAddWeapon({
+        ownerId: selectedAthlete.id,
+        manufacturer: newWeaponData.manufacturer,
+        model: newWeaponData.model,
+        caliber: newWeaponData.caliber,
+        weaponNumber: newWeaponData.weaponNumber || newWeaponData.serialNumber,
+        sigmaNumber: newWeaponData.sigmaNumber,
+        weaponClass: newWeaponData.weaponClass,
+        permissionStatus: newWeaponData.permissionStatus,
+        registrySystem: newWeaponData.registrySystem,
+      });
+
+      const createdName = `${newWeaponData.manufacturer} ${newWeaponData.model}`.trim();
+      setTrainingForm(prev => ({
+        ...prev,
+        weaponName: createdName,
+        weaponCaliber: newWeaponData.caliber,
+        weaponOwnerType: 'propria',
+        weaponSearchQuery: `${createdName} (${newWeaponData.caliber})`,
+      }));
+      setShowAddWeaponModal(false);
+      if (onRefreshData) await onRefreshData();
+    } catch (err: any) {
+      alert(err.message || 'Erro ao cadastrar arma.');
+    } finally {
+      setSavingNewWeapon(false);
+    }
+  };
+
+  // Handle Training Submit
+  const handleTrainingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTrainingError('');
+    setTrainingSuccess('');
+
+    if (!selectedAthlete) {
+      setTrainingError('Selecione um atleta para registrar o treinamento.');
+      return;
+    }
+    if (!trainingForm.dateTime || !trainingForm.weaponName) {
+      setTrainingError('Data/Hora e Arma são obrigatórias.');
+      return;
+    }
+
+    const own = Math.max(0, Number(trainingForm.ownAmmoShots) || 0);
+    const club = Math.max(0, Number(trainingForm.clubAmmoShots) || 0);
+
+    setSavingTraining(true);
+    try {
+      const res = await fetch('/api/trainings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser?.id || ''
+        },
+        body: JSON.stringify({
+          targetUserId: selectedAthlete.id,
+          dateTime: trainingForm.dateTime,
+          weaponId: trainingForm.selectedWeapon?.id || null,
+          weaponName: trainingForm.weaponName,
+          weaponCaliber: trainingForm.weaponCaliber || trainingForm.selectedWeapon?.caliber || null,
+          weaponOwnerType: trainingForm.weaponOwnerType,
+          ownAmmoShots: own,
+          clubAmmoShots: club,
+          modality: trainingForm.modality || 'Treino Livre',
+          score: Number(trainingForm.score) || 0,
+          notes: trainingForm.notes || null,
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar treinamento.');
+
+      setTrainingSuccess(`Treinamento registrado com sucesso para o atleta ${selectedAthlete.fullName}!`);
+      setTrainingForm(prev => ({
+        ...prev,
+        ownAmmoShots: '',
+        clubAmmoShots: '',
+        score: '',
+        notes: '',
+      }));
+
+      await loadAllTrainings();
+
+      if (currentUser) {
+        const balRes = await fetch(`/api/ammo/athlete-balances/${selectedAthlete.id}`, {
+          headers: { 'x-user-id': currentUser.id }
+        });
+        if (balRes.ok) {
+          const balData = await balRes.json();
+          setAthleteAmmoBalances(balData.balances || []);
+        }
+      }
+
+      if (onRefreshData) await onRefreshData();
+    } catch (err: any) {
+      setTrainingError(err.message);
+    } finally {
+      setSavingTraining(false);
+    }
+  };
+
+  // Handle Delete Training
+  const handleDeleteTraining = async (id: string) => {
+    if (!window.confirm('Deseja realmente excluir este registro de treinamento?')) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/trainings/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Erro ao excluir treinamento.');
+      }
+      setTrainingsList(prev => prev.filter(t => t.id !== id));
+      if (onRefreshData) await onRefreshData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // Filtered trainings for history
+  const filteredTrainingsList = React.useMemo(() => {
+    const q = tableSearchQuery.trim().toLowerCase();
+    if (!q) return trainingsList;
+    return trainingsList.filter(t =>
+      (t.athleteName || '').toLowerCase().includes(q) ||
+      (t.athleteCr || '').toLowerCase().includes(q) ||
+      (t.weaponName || '').toLowerCase().includes(q) ||
+      (t.modality || '').toLowerCase().includes(q) ||
+      (t.notes || '').toLowerCase().includes(q)
+    );
+  }, [trainingsList, tableSearchQuery]);
+
+  return (
+    <div className="space-y-6 text-slate-800">
+      {/* Header Banner */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
+        <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+          <div>
+            <h3 className="font-display font-bold text-slate-900 text-base flex items-center gap-2">
+              <Briefcase className="w-5 h-5 text-blue-600" />
+              Lançamento de Treinamentos / Habitualidade (ADM)
+            </h3>
+            <p className="text-xs text-slate-400">
+              Cadastre treinos de habitualidade para qualquer atleta federado da plataforma com abate automático do saldo de munições do clube.
+            </p>
+          </div>
+          <Activity className="w-5 h-5 text-blue-600 animate-pulse" />
+        </div>
+
+        {/* 1. SELEÇÃO / PESQUISA DE ATLETA */}
+        <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+            1. Pesquisa de Atleta <span className="text-red-500">*</span> (Busque por Nome, CPF ou CR)
+          </label>
+
+          {!selectedAthlete ? (
+            <div className="relative">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={athleteSearchQuery}
+                  onFocus={() => setIsAthleteDropdownOpen(true)}
+                  onChange={(e) => {
+                    setAthleteSearchQuery(e.target.value);
+                    setIsAthleteDropdownOpen(true);
+                  }}
+                  placeholder="Digite o nome, CPF ou CR do atirador..."
+                  className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-xs font-semibold text-slate-800 shadow-xs"
+                />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              </div>
+
+              {athleteSearchQuery.length > 0 && athleteSearchQuery.length < 2 && (
+                <p className="text-[10.5px] text-amber-600 mt-1 font-medium">
+                  Digite mais {2 - athleteSearchQuery.length} caractere(s) para pesquisar atletas...
+                </p>
+              )}
+
+              {isAthleteDropdownOpen && athleteSearchQuery.length >= 2 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-60 overflow-y-auto divide-y divide-slate-100">
+                  {searchFilteredAthletes.length === 0 ? (
+                    <div className="p-3 text-center text-slate-500 text-xs">
+                      Nenhum atleta encontrado para "{athleteSearchQuery}".
+                    </div>
+                  ) : (
+                    searchFilteredAthletes.map((u) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedAthlete(u);
+                          setIsAthleteDropdownOpen(false);
+                          setAthleteSearchQuery('');
+                          setTrainingError('');
+                          setTrainingSuccess('');
+                        }}
+                        className="w-full text-left p-3 hover:bg-blue-50/70 transition flex items-center justify-between cursor-pointer"
+                      >
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={u.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
+                            alt={u.fullName}
+                            className="w-8 h-8 rounded-full object-cover border border-slate-200"
+                          />
+                          <div>
+                            <div className="font-bold text-slate-900 text-xs">{u.fullName}</div>
+                            <div className="text-[10px] text-slate-500 font-mono">
+                              CPF: {u.cpf || 'N/A'} | CR: {u.crNumber || 'N/A'}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                          Selecionar
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Selected Athlete Card */
+            <div className="bg-white p-4 rounded-xl border border-blue-200 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div className="flex items-center gap-3">
+                <img
+                  src={selectedAthlete.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
+                  alt={selectedAthlete.fullName}
+                  className="w-12 h-12 rounded-full object-cover border-2 border-blue-500 shadow-xs"
+                />
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 text-sm">{selectedAthlete.fullName}</span>
+                    <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase">
+                      Atleta Selecionado
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-500 font-mono">
+                    CPF: {selectedAthlete.cpf || 'N/A'} • CR: {selectedAthlete.crNumber || 'Não informado'}
+                  </div>
+                  {/* Ammo balances of selected athlete */}
+                  {athleteAmmoBalances.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <span className="text-[10px] text-slate-400 font-semibold self-center">Saldos de Munição:</span>
+                      {athleteAmmoBalances.map(b => (
+                        <span key={b.id} className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded text-[10px] font-mono font-bold">
+                          {b.caliber}: {b.balance} un
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 italic block pt-0.5">Sem saldo de munições do clube alocado</span>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedAthlete(null);
+                  setAthleteAmmoBalances([]);
+                  setTrainingSuccess('');
+                  setTrainingError('');
+                }}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3.5 py-2 rounded-xl transition cursor-pointer shrink-0"
+              >
+                Trocar Atleta
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 2. FORMULÁRIO DE TREINAMENTO (Exibido quando atleta é selecionado) */}
+        {selectedAthlete && (
+          <form onSubmit={handleTrainingSubmit} className="space-y-4 bg-slate-50/50 p-5 rounded-2xl border border-slate-200 text-xs text-slate-700 shadow-inner">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+              <span className="font-bold text-slate-800 text-xs uppercase flex items-center gap-2">
+                <Target className="w-4 h-4 text-blue-600" />
+                2. Formulário de Treinamento para {selectedAthlete.fullName}
+              </span>
+            </div>
+
+            {trainingError && (
+              <div className="bg-red-50 text-red-700 p-3 rounded-xl border border-red-200 text-xs font-semibold flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 shrink-0 text-red-500" />
+                <span>{trainingError}</span>
+              </div>
+            )}
+
+            {trainingSuccess && (
+              <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl border border-emerald-200 text-xs font-semibold flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span>{trainingSuccess}</span>
+              </div>
+            )}
+
+            {/* Data e Hora */}
+            <div>
+              <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
+                Data e Hora do Treinamento <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="datetime-local"
+                required
+                value={trainingForm.dateTime}
+                onChange={e => setTrainingForm({ ...trainingForm, dateTime: e.target.value })}
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
+              />
+            </div>
+
+            {/* Seleção da Arma com Pesquisa em Tempo Real */}
+            <div className="relative">
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-[11px] text-slate-600 font-bold uppercase">
+                  Arma Utilizada <span className="text-red-500">*</span> (Pesquise digitando marca, modelo ou calibre)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewWeaponData({
+                      manufacturer: '',
+                      model: '',
+                      caliber: '',
+                      serialNumber: '',
+                      weaponNumber: '',
+                      sigmaNumber: '',
+                      weaponClass: '',
+                      permissionStatus: '',
+                      registrySystem: '',
+                    });
+                    setShowAddWeaponModal(true);
+                  }}
+                  className="text-blue-600 hover:text-blue-800 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  Cadastrar Nova Arma para o Atleta
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={trainingForm.weaponSearchQuery}
+                  onFocus={() => setIsWeaponDropdownOpen(true)}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setTrainingForm({
+                      ...trainingForm,
+                      weaponSearchQuery: val,
+                      selectedWeapon: null,
+                      weaponName: val,
+                    });
+                    setIsWeaponDropdownOpen(true);
+                  }}
+                  placeholder="Digite modelo, marca, calibre, sigma ou número da arma..."
+                  className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-4 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
+                />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              </div>
+
+              {/* Weapon Autocomplete Dropdown */}
+              {isWeaponDropdownOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-56 overflow-y-auto divide-y divide-slate-100">
+                  {searchFilteredWeapons.length === 0 ? (
+                    <div className="p-3 text-center text-slate-500 text-xs">
+                      Nenhuma arma cadastrada encontrada para "{trainingForm.weaponSearchQuery}". Você pode continuar digitando o nome da arma livremente.
+                    </div>
+                  ) : (
+                    searchFilteredWeapons.map(w => {
+                      const isAthleteOwn = w.ownerId === selectedAthlete.id;
+                      return (
+                        <button
+                          key={w.id}
+                          type="button"
+                          onClick={() => {
+                            setTrainingForm(prev => ({
+                              ...prev,
+                              selectedWeapon: w,
+                              weaponName: `${w.manufacturer || ''} ${w.model || ''}`.trim() || w.weaponNumber || 'Arma Cadastrada',
+                              weaponCaliber: w.caliber || prev.weaponCaliber,
+                              weaponOwnerType: isAthleteOwn ? 'propria' : 'clube',
+                              weaponSearchQuery: `${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'})`.trim(),
+                            }));
+                            setIsWeaponDropdownOpen(false);
+                          }}
+                          className="w-full text-left p-3 hover:bg-blue-50/70 transition flex items-center justify-between cursor-pointer"
+                        >
+                          <div>
+                            <div className="font-bold text-slate-900 text-xs">
+                              {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[11px]">({w.caliber})</span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                              Sigma: {w.sigmaNumber || 'N/A'} | Num: {w.weaponNumber || 'N/A'}
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isAthleteOwn ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-purple-100 text-purple-800 border border-purple-200'}`}>
+                            {isAthleteOwn ? '🎯 Própria' : '🏛️ Clube'}
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Posse / Origem da Arma */}
+            <div>
+              <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1.5">
+                Origem / Posse da Arma
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setTrainingForm({ ...trainingForm, weaponOwnerType: 'propria' })}
+                  className={`py-2.5 px-4 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                    trainingForm.weaponOwnerType === 'propria'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>🎯</span>
+                  <span>Arma Própria</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTrainingForm({ ...trainingForm, weaponOwnerType: 'clube' })}
+                  className={`py-2.5 px-4 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                    trainingForm.weaponOwnerType === 'clube'
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>🏛️</span>
+                  <span>Arma do Clube</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Munições e Tiros */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="font-bold text-slate-800 text-xs uppercase flex items-center gap-1.5">
+                  <Target className="w-4 h-4 text-emerald-600" />
+                  Contagem de Tiros e Munição Disparada
+                </span>
+                <span className="text-xs font-bold text-slate-900 bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200 font-mono">
+                  Total: {(Number(trainingForm.ownAmmoShots) || 0) + (Number(trainingForm.clubAmmoShots) || 0)} tiros
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
+                    Tiros com Munição Própria
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={trainingForm.ownAmmoShots}
+                    onChange={e => setTrainingForm({ ...trainingForm, ownAmmoShots: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
+                    Tiros com Munição do Clube
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={trainingForm.clubAmmoShots}
+                    onChange={e => setTrainingForm({ ...trainingForm, clubAmmoShots: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              {Number(trainingForm.clubAmmoShots) > 0 && (
+                <p className="text-[10.5px] text-amber-700 font-medium bg-amber-50 p-2 rounded-lg border border-amber-200">
+                  ⚠️ <strong>Atenção:</strong> {trainingForm.clubAmmoShots} tiro(s) com munição do clube serão debitados automaticamente do saldo alocado do atleta.
+                </p>
+              )}
+            </div>
+
+            {/* Modalidade, Pontuação e Observações */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
+                  Modalidade / Atividade
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Treino Livre, IPSC Handgun, Precisão 25m"
+                  value={trainingForm.modality}
+                  onChange={e => setTrainingForm({ ...trainingForm, modality: e.target.value })}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
+                  Pontuação Obtida (Score)
+                </label>
+                <input
+                  type="number"
+                  placeholder="Ex: 150"
+                  value={trainingForm.score}
+                  onChange={e => setTrainingForm({ ...trainingForm, score: e.target.value })}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-mono font-bold"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
+                Observações / Anotações do Estande
+              </label>
+              <textarea
+                rows={2}
+                placeholder="Ex: Treino de precisão com alvos a 25m, condições normais de estande."
+                value={trainingForm.notes}
+                onChange={e => setTrainingForm({ ...trainingForm, notes: e.target.value })}
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium"
+              />
+            </div>
+
+            {/* Botão Salvar Treinamento */}
+            <button
+              type="submit"
+              disabled={savingTraining}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-3 rounded-xl font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-md text-xs uppercase tracking-wider"
+            >
+              {savingTraining ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Salvando Treinamento...
+                </>
+              ) : (
+                'Confirmar e Registrar Treinamento no Banco de Dados'
+              )}
+            </button>
+          </form>
+        )}
+      </div>
+
+      {/* 3. SUB-MODAL: CADASTRO DE NOVA ARMA PARA O ATLETA */}
+      {showAddWeaponModal && (
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white max-w-md w-full rounded-2xl shadow-2xl overflow-hidden text-slate-800 p-6 space-y-4 text-left">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <PlusCircle className="w-5 h-5 text-blue-600" />
+                <h4 className="font-bold text-slate-900 text-sm">
+                  Cadastrar Arma para {selectedAthlete?.fullName}
+                </h4>
+              </div>
+              <button onClick={() => setShowAddWeaponModal(false)} className="text-slate-400 hover:text-slate-600 transition cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateWeaponSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Fabricante *</label>
+                <select
+                  required
+                  value={newWeaponData.manufacturer}
+                  onChange={e => setNewWeaponData({ ...newWeaponData, manufacturer: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 font-semibold"
+                >
+                  <option value="">Selecione...</option>
+                  {weaponLookup('fabricante').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Modelo *</label>
+                  <select
+                    required
+                    value={newWeaponData.model}
+                    onChange={e => setNewWeaponData({ ...newWeaponData, model: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 font-semibold"
+                  >
+                    <option value="">Selecione...</option>
+                    {weaponLookup('modelo').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Calibre *</label>
+                  <select
+                    required
+                    value={newWeaponData.caliber}
+                    onChange={e => setNewWeaponData({ ...newWeaponData, caliber: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 font-semibold"
+                  >
+                    <option value="">Selecione...</option>
+                    {weaponLookup('calibre').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Nº Arma / Série</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: ABC12345"
+                    value={newWeaponData.weaponNumber}
+                    onChange={e => setNewWeaponData({ ...newWeaponData, weaponNumber: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Nº Sigma</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: 123456"
+                    value={newWeaponData.sigmaNumber}
+                    onChange={e => setNewWeaponData({ ...newWeaponData, sigmaNumber: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddWeaponModal(false)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingNewWeapon}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded-xl transition cursor-pointer"
+                >
+                  {savingNewWeapon ? 'Salvando...' : 'Salvar Arma'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 4. HISTÓRICO DE TREINAMENTOS REGISTRADOS */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <h4 className="font-display font-bold text-slate-900 text-base flex items-center gap-2">
+              <FileText className="w-5 h-5 text-blue-600" />
+              Histórico Geral de Treinamentos ({filteredTrainingsList.length})
+            </h4>
+            <p className="text-xs text-slate-400">Visão consolidada de todas as sessões de treinamento registradas no estande.</p>
+          </div>
+
+          <div className="relative w-full sm:w-64">
+            <input
+              type="text"
+              placeholder="Filtrar por atleta, arma, modalidade..."
+              value={tableSearchQuery}
+              onChange={e => setTableSearchQuery(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 pl-8 pr-3 py-2 rounded-xl text-xs outline-none focus:border-blue-500 font-medium"
+            />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+          </div>
+        </div>
+
+        {loadingTrainings ? (
+          <div className="py-12 text-center text-slate-400">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-blue-600" />
+            <p className="text-xs">Carregando treinamentos...</p>
+          </div>
+        ) : filteredTrainingsList.length === 0 ? (
+          <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+            <Target className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+            <p className="text-xs">Nenhum treinamento encontrado com os critérios de busca.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
+                  <th className="py-2.5 px-3">Atleta</th>
+                  <th className="py-2.5 px-3">Data / Hora</th>
+                  <th className="py-2.5 px-3">Arma / Calibre</th>
+                  <th className="py-2.5 px-3 text-center">Posse</th>
+                  <th className="py-2.5 px-3 text-center">Tiros Próprios</th>
+                  <th className="py-2.5 px-3 text-center">Tiros Clube</th>
+                  <th className="py-2.5 px-3 text-center">Total Tiros</th>
+                  <th className="py-2.5 px-3">Modalidade / Score</th>
+                  <th className="py-2.5 px-3 text-right">Ação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {filteredTrainingsList.map(t => {
+                  const formattedDate = t.dateTime ? new Date(t.dateTime).toLocaleString('pt-BR') : '-';
+                  return (
+                    <tr key={t.id} className="hover:bg-slate-50/70 transition">
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-slate-900">{t.athleteName || 'Atleta'}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">CR: {t.athleteCr || 'N/A'}</div>
+                      </td>
+                      <td className="py-3 px-3 font-mono text-[11px] whitespace-nowrap">{formattedDate}</td>
+                      <td className="py-3 px-3">
+                        <div className="font-semibold text-slate-800">{t.weaponName}</div>
+                        {t.weaponCaliber && <div className="text-[10px] text-blue-600 font-mono">{t.weaponCaliber}</div>}
+                      </td>
+                      <td className="py-3 px-3 text-center">
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                          t.weaponOwnerType === 'clube' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {t.weaponOwnerType === 'clube' ? 'Clube' : 'Própria'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-center font-mono font-bold">{t.ownAmmoShots}</td>
+                      <td className="py-3 px-3 text-center font-mono font-bold text-purple-700">{t.clubAmmoShots}</td>
+                      <td className="py-3 px-3 text-center font-mono font-bold text-slate-900 bg-slate-50">{t.totalShots}</td>
+                      <td className="py-3 px-3">
+                        <div className="font-medium">{t.modality || 'Treino Livre'}</div>
+                        <div className="text-[10px] text-emerald-700 font-mono font-bold">{t.score ?? 0} pts</div>
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <button
+                          onClick={() => handleDeleteTraining(t.id)}
+                          disabled={deletingId === t.id}
+                          className="text-red-500 hover:text-red-700 transition p-1.5 rounded hover:bg-red-50 cursor-pointer disabled:opacity-40"
+                          title="Excluir treinamento"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -5430,6 +6335,18 @@ export default function AdminPanel({
             currentUser={currentUser}
             weaponLookupOptions={weaponLookupOptions}
             onAddWeaponLookup={onAddWeaponLookup}
+            onRefreshData={onRefreshData}
+          />
+        );
+
+      case 'treinamentos_competicoes':
+        return (
+          <TreinamentosCompeticoesAdminPanel
+            currentUser={currentUser}
+            users={users}
+            weapons={weapons}
+            weaponLookupOptions={weaponLookupOptions}
+            onAddWeapon={onAddWeapon}
             onRefreshData={onRefreshData}
           />
         );
