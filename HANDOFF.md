@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: alterada aba para Atribuir Municoes ao atleta com exibicao de saldo na busca e acoes de editar/excluir` |
-| Data/hora | 2026-08-06T22:30:00-03:00 |
+| Mensagem | `fix: removido menu Controle de Municoes do Painel de Servicos no perfil do atleta` |
+| Data/hora | 2026-08-06T23:01:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -144,6 +144,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
   - Alterada a nomenclatura da aba de *"Alocar Munições"* para **"Atribuir Munições ao atleta"** e do título do campo para **"Atribuir Munições do clube para o atleta"**.
   - **Exibição do Saldo Atual na Busca**: O endpoint `/api/members/search` e a interface de busca exibem em tempo real o saldo de munições por calibre do atleta tanto no dropdown de resultados da busca quanto no cartão do atleta selecionado.
   - **Edição e Exclusão de Atribuições**: Adicionadas as ações de "Editar" e "Excluir" no histórico de atribuições com recalculação automática do saldo do atleta no backend (`PUT /api/ammo/allocations/:id` e `DELETE /api/ammo/allocations/:id`).
+  - **Remoção do Menu no Perfil do Atleta**: Removido o item de menu *"Controle Munição"* do *Painel de Serviços* / menu da conta no perfil do atleta (`MemberProfile.tsx`).
 
 ## Infra / deploy
 

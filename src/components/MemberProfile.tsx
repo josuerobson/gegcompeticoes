@@ -1710,7 +1710,6 @@ export default function MemberProfile({
     { id: 'gg_card', label: 'Carteirinha G&G', icon: CreditCard, public: false },
     { id: 'trainings', label: 'Treinamentos', icon: PlusCircle, count: trainings.length, public: false },
     { id: 'declarations', label: 'Declarações', icon: FileText, public: false },
-    { id: 'ammo', label: 'Controle Munição', icon: Disc, public: false },
   ];
 
   const filteredMenuItems = menuItems.filter(item => isMe || item.public);
