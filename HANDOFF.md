@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: pesquisa e filtros adicionados a listagem de membros no Painel Diretor` |
-| Data/hora | 2026-08-06T23:13:00-03:00 |
+| Mensagem | `feat: adicionados cadastro de planos de anuidade, vinculo de membros a planos e relatorios de arrecadacao` |
+| Data/hora | 2026-08-06T23:28:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -147,6 +147,10 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
   - **Remoção do Menu no Perfil do Atleta**: Removido o item de menu *"Controle Munição"* do *Painel de Serviços* / menu da conta no perfil do atleta (`MemberProfile.tsx`).
   - **Edição e Exclusão em Todos os Lançamentos do Módulo de Munições**: Adicionados endpoints `PUT` e `DELETE` no backend para todas as subabas do módulo de munições (`/api/ammo/invoices/:id`, `/api/ammo/production/:id`, `/api/ammo/recycled/:id` e `/api/ammo/allocations/:id`) e botões de **Editar** e **Excluir** em todos os históricos do Painel Diretor (`AdminPanel.tsx`).
   - **Pesquisa e Filtros na Listagem de Membros (`AdminPanel.tsx`)**: Adicionada barra de busca em tempo real (pesquisa por nome, CPF, e-mail, CR ou RG) e seletores de filtro por *Status do Cadastro* (Completo / Incompleto) e *Status da Anuidade* (Ativa / Vencida) no menu `Painel diretor > Gerenciamento clube > Cadastrar Membros`.
+  - **Planos de Anuidade & Relatórios Financeiros (`AdminPanel.tsx`, `server.ts`, `src/db.ts`)**:
+    - Criada a tabela `annuity_plans` com suporte a CRUD completo (endpoints `/api/annuity-plans`) no menu `Painel diretor > Gerenciamento Plataforma > Clubes > Relatório financeiro`.
+    - Adicionado o campo `annuityPlanId` (`annuity_plan_id` no Postgres) na edição do membro em `Gerenciamento Clube > Cadastrar Membros` (seção *Validades & Plano de Anuidade*).
+    - Criados os resumos de arrecadação em tempo real nos relatórios financeiros: **Resumo de Arrecadação por Anuidade** (detalhado por plano de anuidade e quantidade de filiados), **Resumo de Arrecadação por Campeonatos** (detalhado por campeonato e quantidade de inscrições confirmadas) e **Consolidado Geral de Faturamento**.
 
 ## Infra / deploy
 

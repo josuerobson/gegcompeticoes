@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession } from '../types';
+import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession, AnnuityPlan } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
@@ -4494,10 +4494,109 @@ export default function AdminPanel({
     fullName: '', birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
     fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', nationality: '',
     phone: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '',
-    guiaTransitoExpiry: '', signatureExpiry: ''
+    guiaTransitoExpiry: '', signatureExpiry: '', annuityPlanId: ''
   });
   const [memberSavingSection, setMemberSavingSection] = useState<string | null>(null);
   const [memberSavedSection, setMemberSavedSection] = useState<string | null>(null);
+
+  // Annuity plans state
+  const [annuityPlans, setAnnuityPlans] = useState<AnnuityPlan[]>([]);
+  const [planName, setPlanName] = useState('');
+  const [planPrice, setPlanPrice] = useState('');
+  const [planDesc, setPlanDesc] = useState('');
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const [savingPlan, setSavingPlan] = useState(false);
+  const [planError, setPlanError] = useState('');
+  const [planSuccess, setPlanSuccess] = useState('');
+
+  const loadAnnuityPlans = async () => {
+    try {
+      const r = await fetch('/api/annuity-plans');
+      const data = await r.json();
+      if (r.ok && data.plans) {
+        setAnnuityPlans(data.plans);
+      }
+    } catch (e) {
+      console.error('Error loading annuity plans:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadAnnuityPlans();
+  }, []);
+
+  const handleSaveAnnuityPlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPlanError('');
+    setPlanSuccess('');
+    if (!planName.trim() || !planPrice || Number(planPrice) < 0) {
+      setPlanError('Informe o nome do plano e um valor válido.');
+      return;
+    }
+    setSavingPlan(true);
+    try {
+      const isEditing = Boolean(editingPlanId);
+      const url = isEditing ? `/api/annuity-plans/${editingPlanId}` : '/api/annuity-plans';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const r = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
+        body: JSON.stringify({
+          name: planName.trim(),
+          price: Number(planPrice),
+          description: planDesc.trim() || null
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro ao salvar plano de anuidade');
+      setPlanSuccess(`✅ ${data.message}`);
+      setEditingPlanId(null);
+      setPlanName('');
+      setPlanPrice('');
+      setPlanDesc('');
+      await loadAnnuityPlans();
+      if (onRefreshData) await onRefreshData();
+    } catch (err: any) {
+      setPlanError(err.message);
+    } finally {
+      setSavingPlan(false);
+    }
+  };
+
+  const startEditingPlan = (p: AnnuityPlan) => {
+    setEditingPlanId(p.id);
+    setPlanName(p.name);
+    setPlanPrice(String(p.price));
+    setPlanDesc(p.description || '');
+    setPlanError(''); setPlanSuccess('');
+  };
+
+  const cancelEditingPlan = () => {
+    setEditingPlanId(null);
+    setPlanName('');
+    setPlanPrice('');
+    setPlanDesc('');
+  };
+
+  const handleDeletePlan = async (id: string, name: string) => {
+    if (!window.confirm(`Deseja realmente excluir o plano de anuidade "${name}"?`)) return;
+    setPlanError(''); setPlanSuccess('');
+    try {
+      const r = await fetch(`/api/annuity-plans/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro ao excluir plano');
+      setPlanSuccess(`✅ ${data.message}`);
+      if (editingPlanId === id) cancelEditingPlan();
+      await loadAnnuityPlans();
+      if (onRefreshData) await onRefreshData();
+    } catch (err: any) {
+      setPlanError(err.message);
+    }
+  };
 
   const baseClubMembers = React.useMemo(() => {
     return users.filter(u => u.clubId === currentUser?.clubId && u.role === 'member');
@@ -4559,7 +4658,8 @@ export default function AdminPanel({
       city: selectedMember.city || '',
       state: selectedMember.state || '',
       guiaTransitoExpiry: selectedMember.guiaTransitoExpiry || '',
-      signatureExpiry: selectedMember.signatureExpiry ? selectedMember.signatureExpiry.split('T')[0] : ''
+      signatureExpiry: selectedMember.signatureExpiry ? selectedMember.signatureExpiry.split('T')[0] : '',
+      annuityPlanId: selectedMember.annuityPlanId || ''
     });
   }, [selectedMember?.id]);
 
@@ -5145,12 +5245,13 @@ export default function AdminPanel({
                     <MemberField label="Nacionalidade" value={memberEditForm.nationality} onChange={v => setMemberEditForm({ ...memberEditForm, nationality: v })} />
                   </MemberSection>
 
-                  {/* Vencimento Guia de Trânsito e Vencimento Anuidade (Exclusivo Painel Diretor > Gerenciamento Clube > Cadastrar Membros) */}
+                  {/* Vencimento Guia de Trânsito, Vencimento Anuidade e Plano de Anuidade (Exclusivo Painel Diretor > Gerenciamento Clube > Cadastrar Membros) */}
                   <MemberSection
-                    title="Validades do Clube (Exclusivo Diretor)"
+                    title="Validades & Plano de Anuidade (Exclusivo Diretor)"
                     onSave={() => saveMemberSection('member_club_validities', {
                       guiaTransitoExpiry: memberEditForm.guiaTransitoExpiry,
-                      signatureExpiry: memberEditForm.signatureExpiry
+                      signatureExpiry: memberEditForm.signatureExpiry,
+                      annuityPlanId: memberEditForm.annuityPlanId || null
                     })}
                     saving={memberSavingSection === 'member_club_validities'}
                     saved={memberSavedSection === 'member_club_validities'}
@@ -5167,6 +5268,20 @@ export default function AdminPanel({
                       value={memberEditForm.signatureExpiry}
                       onChange={v => setMemberEditForm({ ...memberEditForm, signatureExpiry: v })}
                     />
+                    <div className="sm:col-span-2">
+                      <MemberSelect
+                        label="Plano de Anuidade do Atleta"
+                        value={memberEditForm.annuityPlanId || ''}
+                        onChange={v => setMemberEditForm({ ...memberEditForm, annuityPlanId: v })}
+                        options={[
+                          { value: '', label: 'Nenhum plano específico (Anuidade Avulsa / Padrão R$ 360,00)' },
+                          ...annuityPlans.map(p => ({
+                            value: p.id,
+                            label: `${p.name} — R$ ${p.price.toFixed(2)}`
+                          }))
+                        ]}
+                      />
+                    </div>
                   </MemberSection>
 
                   <MemberSection
@@ -5955,51 +6070,341 @@ export default function AdminPanel({
           </div>
         );
 
-      case 'relatorio_financeiro':
+      case 'relatorio_financeiro': {
+        // Calculations for Annuity Plans revenue
+        const memberCountByPlan: Record<string, number> = {};
+        let unassignedMembersCount = 0;
+
+        users.forEach(u => {
+          if (u.role === 'member') {
+            if (u.annuityPlanId && annuityPlans.some(p => p.id === u.annuityPlanId)) {
+              memberCountByPlan[u.annuityPlanId] = (memberCountByPlan[u.annuityPlanId] || 0) + 1;
+            } else {
+              unassignedMembersCount++;
+            }
+          }
+        });
+
+        const DEFAULT_ANNUITY_PRICE = 360; // Valor padrão para membros sem plano vinculado
+        let totalAnnuityRevenue = unassignedMembersCount * DEFAULT_ANNUITY_PRICE;
+        annuityPlans.forEach(plan => {
+          const count = memberCountByPlan[plan.id] || 0;
+          totalAnnuityRevenue += count * plan.price;
+        });
+
+        // Calculations for Championship revenue
+        const champRevenueList = championships.map(champ => {
+          const champRegs = registrations.filter(r => r.championshipId === champ.id);
+          const totalInscricoes = champRegs.length;
+          
+          let totalArrecadado = 0;
+          champRegs.forEach(r => {
+            if (r.valorPago && Number(r.valorPago) > 0) {
+              totalArrecadado += Number(r.valorPago);
+            } else {
+              const regType = (r.registrationType as string) || 'normal';
+              if (regType === 'clube' && champ.valorInscricaoClube) {
+                totalArrecadado += champ.valorInscricaoClube;
+              } else if ((regType === 'reinscrição' || regType === 'reentry') && champ.valorReinscricao) {
+                totalArrecadado += champ.valorReinscricao;
+              } else if (champ.valorInscricaoIndividual) {
+                totalArrecadado += champ.valorInscricaoIndividual;
+              } else if (champ.registrationFee) {
+                totalArrecadado += champ.registrationFee;
+              }
+            }
+          });
+
+          return {
+            id: champ.id,
+            title: champ.title,
+            startDate: champ.startDate,
+            endDate: champ.endDate,
+            totalInscricoes,
+            totalArrecadado
+          };
+        });
+
+        const totalChampionshipRevenue = champRevenueList.reduce((acc, curr) => acc + curr.totalArrecadado, 0);
+        const totalGrandRevenue = totalAnnuityRevenue + totalChampionshipRevenue;
+
         return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-display font-bold text-slate-900 text-base">Consolidado Financeiro Nacional</h3>
-                <p className="text-xs text-slate-400">Comparativo financeiro mensal consolidado por unidade regional.</p>
+          <div className="space-y-6 text-left">
+            {/* Header & High Level Summary Cards */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="font-display font-bold text-slate-900 text-base">Relatório Financeiro & Planos de Anuidade</h3>
+                  <p className="text-xs text-slate-400">Gestão de planos de anuidade do clube e resumos consolidados de arrecadação por anuidade e campeonatos.</p>
+                </div>
+                <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+                  <DollarSign className="w-6 h-6" />
+                </div>
               </div>
-              <DollarSign className="w-5 h-5 text-blue-600" />
+
+              {/* Top Level Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-4 space-y-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Arrecadação com Anuidades</p>
+                  <p className="text-xl font-display font-bold text-emerald-950 font-mono">
+                    R$ {totalAnnuityRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-[10px] text-emerald-700">
+                    Calculado com base em {users.filter(u => u.role === 'member').length} membros cadastrados
+                  </p>
+                </div>
+
+                <div className="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-4 space-y-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700">Arrecadação com Campeonatos</p>
+                  <p className="text-xl font-display font-bold text-blue-950 font-mono">
+                    R$ {totalChampionshipRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-[10px] text-blue-700">
+                    Total em {championships.length} campeonatos ({registrations.length} inscrições)
+                  </p>
+                </div>
+
+                <div className="bg-slate-900 text-white rounded-2xl p-4 space-y-1 shadow-md">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Faturamento Consolidado Geral</p>
+                  <p className="text-xl font-display font-bold text-white font-mono">
+                    R$ {totalGrandRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-[10px] text-slate-400">Total geral de arrecadação do clube</p>
+                </div>
+              </div>
             </div>
 
-            <div className="overflow-x-auto text-xs text-slate-700">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-slate-200 font-mono text-[10px] text-slate-400 uppercase">
-                    <th className="py-3 px-2">Unidade</th>
-                    <th className="py-3 px-2 text-right">Faturamento Anual</th>
-                    <th className="py-3 px-2 text-right">Repasse Franquia (15%)</th>
-                    <th className="py-3 px-2 text-center">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  <tr className="font-mono">
-                    <td className="py-3 px-2 font-sans font-bold text-slate-800">Unidade Sede (Brasília)</td>
-                    <td className="py-3 px-2 text-right">R$ 184.200,00</td>
-                    <td className="py-3 px-2 text-right text-slate-500">-</td>
-                    <td className="py-3 px-2 text-center"><span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-sans font-bold text-[9px]">ISENTO</span></td>
-                  </tr>
-                  <tr className="font-mono">
-                    <td className="py-3 px-2 font-sans font-bold text-slate-800">G&G Sobradinho</td>
-                    <td className="py-3 px-2 text-right">R$ 45.100,00</td>
-                    <td className="py-3 px-2 text-right text-blue-600">R$ 6.765,00</td>
-                    <td className="py-3 px-2 text-center"><span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-sans font-bold text-[9px]">PAGO</span></td>
-                  </tr>
-                  <tr className="font-mono">
-                    <td className="py-3 px-2 font-sans font-bold text-slate-800">G&G Taguatinga</td>
-                    <td className="py-3 px-2 text-right">R$ 32.500,00</td>
-                    <td className="py-3 px-2 text-right text-blue-600">R$ 4.875,00</td>
-                    <td className="py-3 px-2 text-center"><span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-sans font-bold text-[9px]">PAGO</span></td>
-                  </tr>
-                </tbody>
-              </table>
+            {/* Cadastro & Gerenciamento de Planos de Anuidade */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100">
+                <div>
+                  <h4 className="font-display font-bold text-slate-900 text-sm">
+                    {editingPlanId ? 'Editar Plano de Anuidade' : 'Cadastrar Novo Plano de Anuidade'}
+                  </h4>
+                  <p className="text-xs text-slate-400">Cadastre o nome do plano e o valor da anuidade para vínculo dos atletas do clube.</p>
+                </div>
+                {editingPlanId && (
+                  <button
+                    type="button"
+                    onClick={cancelEditingPlan}
+                    className="text-xs font-bold text-slate-500 hover:text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg transition cursor-pointer"
+                  >
+                    Cancelar edição
+                  </button>
+                )}
+              </div>
+
+              {planError && <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl text-xs font-semibold">{planError}</div>}
+              {planSuccess && <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-xl text-xs font-semibold">{planSuccess}</div>}
+
+              <form onSubmit={handleSaveAnnuityPlan} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
+                  <div className="sm:col-span-6">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Nome do Plano *</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Anuidade Sócio Ouro / VIP"
+                      value={planName}
+                      onChange={e => setPlanName(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-800 focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="sm:col-span-3">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Valor da Anuidade (R$) *</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="Ex: 480.00"
+                      value={planPrice}
+                      onChange={e => setPlanPrice(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-800 focus:border-blue-500 font-mono"
+                    />
+                  </div>
+                  <div className="sm:col-span-3 flex items-end">
+                    <button
+                      type="submit"
+                      disabled={savingPlan}
+                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold text-xs p-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+                    >
+                      <PlusCircle className="w-4 h-4" />
+                      {savingPlan ? 'Salvando...' : editingPlanId ? 'Atualizar Plano' : 'Cadastrar Plano'}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Descrição / Detalhes (Opcional)</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Inclui habitualidade ilimitada, acesso à pista VIP e desconto em munições do clube."
+                    value={planDesc}
+                    onChange={e => setPlanDesc(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-800 focus:border-blue-500"
+                  />
+                </div>
+              </form>
+
+              {/* Lista de Planos Cadastrados */}
+              <div className="pt-2">
+                <h5 className="font-bold text-xs text-slate-800 mb-3">Planos de Anuidade Cadastrados ({annuityPlans.length})</h5>
+                {annuityPlans.length === 0 ? (
+                  <div className="py-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    <p className="text-xs text-slate-500">Nenhum plano de anuidade cadastrado ainda. Utilize o formulário acima para cadastrar.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {annuityPlans.map(plan => {
+                      const count = memberCountByPlan[plan.id] || 0;
+                      return (
+                        <div key={plan.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between gap-2 hover:border-slate-300 transition">
+                          <div>
+                            <div className="flex justify-between items-start gap-2">
+                              <h6 className="font-bold text-slate-900 text-xs">{plan.name}</h6>
+                              <span className="font-mono font-bold text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                R$ {plan.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            {plan.description && <p className="text-[11px] text-slate-500 mt-1">{plan.description}</p>}
+                          </div>
+
+                          <div className="flex justify-between items-center pt-2 border-t border-slate-100 text-[10px] text-slate-500">
+                            <span><strong>{count}</strong> {count === 1 ? 'membro filiado' : 'membros filiados'}</span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => startEditingPlan(plan)}
+                                className="p-1 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded transition cursor-pointer"
+                                title="Editar Plano"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeletePlan(plan.id, plan.name)}
+                                className="p-1 text-slate-500 hover:text-rose-600 hover:bg-slate-100 rounded transition cursor-pointer"
+                                title="Excluir Plano"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Resumo de Arrecadação por Anuidade */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div>
+                  <h4 className="font-display font-bold text-slate-900 text-sm">Resumo de Arrecadação por Anuidade</h4>
+                  <p className="text-xs text-slate-400">Detalhamento dos valores arrecadados por plano de anuidade filiado.</p>
+                </div>
+                <Users className="w-4 h-4 text-emerald-600" />
+              </div>
+
+              <div className="overflow-x-auto text-xs text-slate-700">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-slate-200 font-mono text-[10px] text-slate-400 uppercase">
+                      <th className="py-2.5 px-3">Plano de Anuidade</th>
+                      <th className="py-2.5 px-3 text-right">Valor Unitário</th>
+                      <th className="py-2.5 px-3 text-center">Membros Filiados</th>
+                      <th className="py-2.5 px-3 text-right">Subtotal Arrecadado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-mono">
+                    {annuityPlans.map(plan => {
+                      const count = memberCountByPlan[plan.id] || 0;
+                      const subtotal = count * plan.price;
+                      return (
+                        <tr key={plan.id} className="hover:bg-slate-50/80">
+                          <td className="py-3 px-3 font-sans font-bold text-slate-800">{plan.name}</td>
+                          <td className="py-3 px-3 text-right">R$ {plan.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-3 text-center font-bold text-blue-600">{count}</td>
+                          <td className="py-3 px-3 text-right font-bold text-slate-900">
+                            R$ {subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    <tr className="hover:bg-slate-50/80">
+                      <td className="py-3 px-3 font-sans font-medium text-slate-600">Sem plano específico (Anuidade Avulsa / Padrão)</td>
+                      <td className="py-3 px-3 text-right">R$ {DEFAULT_ANNUITY_PRICE.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3 px-3 text-center font-bold text-slate-600">{unassignedMembersCount}</td>
+                      <td className="py-3 px-3 text-right font-bold text-slate-900">
+                        R$ {(unassignedMembersCount * DEFAULT_ANNUITY_PRICE).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-slate-300 font-mono font-bold bg-slate-50">
+                      <td className="py-3 px-3 font-sans text-slate-900">Total Consolidado de Anuidades</td>
+                      <td className="py-3 px-3 text-right text-slate-500">-</td>
+                      <td className="py-3 px-3 text-center text-slate-900">{users.filter(u => u.role === 'member').length} membros</td>
+                      <td className="py-3 px-3 text-right text-emerald-700 text-sm">
+                        R$ {totalAnnuityRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            {/* Resumo de Arrecadação por Campeonatos */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div>
+                  <h4 className="font-display font-bold text-slate-900 text-sm">Resumo de Arrecadação por Campeonatos</h4>
+                  <p className="text-xs text-slate-400">Detalhamento dos valores arrecadados em inscrições e reinscrições de campeonatos.</p>
+                </div>
+                <Trophy className="w-4 h-4 text-blue-600" />
+              </div>
+
+              <div className="overflow-x-auto text-xs text-slate-700">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-slate-200 font-mono text-[10px] text-slate-400 uppercase">
+                      <th className="py-2.5 px-3">Campeonato / Circuito</th>
+                      <th className="py-2.5 px-3 text-center">Inscrições Confirmadas</th>
+                      <th className="py-2.5 px-3 text-right">Arrecadação Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-mono">
+                    {champRevenueList.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="py-4 px-3 text-center text-slate-400 font-sans">Nenhum campeonato cadastrado ainda.</td>
+                      </tr>
+                    ) : (
+                      champRevenueList.map(c => (
+                        <tr key={c.id} className="hover:bg-slate-50/80">
+                          <td className="py-3 px-3 font-sans font-bold text-slate-800">{c.title}</td>
+                          <td className="py-3 px-3 text-center font-bold text-blue-600">{c.totalInscricoes}</td>
+                          <td className="py-3 px-3 text-right font-bold text-slate-900">
+                            R$ {c.totalArrecadado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-slate-300 font-mono font-bold bg-slate-50">
+                      <td className="py-3 px-3 font-sans text-slate-900">Total Consolidado de Campeonatos</td>
+                      <td className="py-3 px-3 text-center text-slate-900">{registrations.length} inscrições</td>
+                      <td className="py-3 px-3 text-right text-blue-700 text-sm">
+                        R$ {totalChampionshipRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           </div>
         );
+      }
 
       case 'novo_campeonato':
         return (

@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
-import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance } from './src/types.js';
+import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan } from './src/types.js';
 import { pool, initDB } from './src/db.js';
 import { hashPassword, verifyPassword } from './src/auth.js';
 import { uploadDocument, getDocumentStream, storageEnabled } from './src/storage.js';
@@ -66,6 +66,18 @@ function mapUser(u: any): User {
     docCrUploaded: Boolean(u.doc_cr_key),
     docDeclaracaoUploaded: Boolean(u.doc_declaracao_key),
     guiaTransitoExpiry: u.guia_transito_expiry || undefined,
+    annuityPlanId: u.annuity_plan_id || undefined,
+  };
+}
+
+function mapAnnuityPlan(p: any): AnnuityPlan {
+  return {
+    id: p.id,
+    clubId: p.club_id || undefined,
+    name: p.name,
+    price: Number(p.price) || 0,
+    description: p.description || undefined,
+    createdAt: p.created_at,
   };
 }
 
@@ -1112,6 +1124,7 @@ const USER_PROFILE_COLUMNS: Record<string, string> = {
   guiaTransitoExpiry: 'guia_transito_expiry',
   signatureExpiry: 'signature_expiry',
   hasPaidSignature: 'has_paid_signature',
+  annuityPlanId: 'annuity_plan_id',
 };
 
 // Shared by a member editing their own "Meu Cadastro" and a club admin
@@ -4103,6 +4116,87 @@ app.get('/api/ammo/athlete-balances/:userId', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Fetch athlete ammo balances error:', err);
     res.status(500).json({ error: 'Erro ao buscar saldo de munições do atleta.' });
+  }
+});
+
+// ==========================================
+// ANNUITY PLANS (Planos de Anuidade)
+// ==========================================
+
+// GET /api/annuity-plans — Lista todos os planos de anuidade
+app.get('/api/annuity-plans', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM annuity_plans ORDER BY price ASC, name ASC');
+    const plans: AnnuityPlan[] = r.rows.map(mapAnnuityPlan);
+    res.json({ plans });
+  } catch (err) {
+    console.error('Fetch annuity plans error:', err);
+    res.status(500).json({ error: 'Erro ao buscar planos de anuidade.' });
+  }
+});
+
+// POST /api/annuity-plans — Cria novo plano de anuidade
+app.post('/api/annuity-plans', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { name, price, description } = req.body;
+  if (!name || price === undefined || price === null || Number(price) < 0) {
+    return res.status(400).json({ error: 'Nome do plano e valor da anuidade são obrigatórios.' });
+  }
+
+  const planId = `plan_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const clubId = currentUser.clubId || 'c1';
+
+  try {
+    await pool.query(
+      `INSERT INTO annuity_plans (id, club_id, name, price, description, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [planId, clubId, name.trim(), Number(price), description || null]
+    );
+    const r = await pool.query('SELECT * FROM annuity_plans WHERE id = $1', [planId]);
+    res.status(201).json({ plan: mapAnnuityPlan(r.rows[0]), message: 'Plano de anuidade criado com sucesso!' });
+  } catch (err) {
+    console.error('Create annuity plan error:', err);
+    res.status(500).json({ error: 'Erro ao cadastrar plano de anuidade.' });
+  }
+});
+
+// PUT /api/annuity-plans/:id — Atualiza plano de anuidade
+app.put('/api/annuity-plans/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { name, price, description } = req.body;
+
+  if (!name || price === undefined || price === null || Number(price) < 0) {
+    return res.status(400).json({ error: 'Nome do plano e valor da anuidade são obrigatórios.' });
+  }
+
+  try {
+    const r = await pool.query(
+      `UPDATE annuity_plans SET name = $1, price = $2, description = $3 WHERE id = $4 RETURNING *`,
+      [name.trim(), Number(price), description || null, id]
+    );
+    if (r.rows.length === 0) {
+      return res.status(404).json({ error: 'Plano de anuidade não encontrado.' });
+    }
+    res.json({ plan: mapAnnuityPlan(r.rows[0]), message: 'Plano de anuidade atualizado com sucesso!' });
+  } catch (err) {
+    console.error('Update annuity plan error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar plano de anuidade.' });
+  }
+});
+
+// DELETE /api/annuity-plans/:id — Exclui plano de anuidade
+app.delete('/api/annuity-plans/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('UPDATE users SET annuity_plan_id = NULL WHERE annuity_plan_id = $1', [id]);
+    const r = await pool.query('DELETE FROM annuity_plans WHERE id = $1', [id]);
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'Plano de anuidade não encontrado.' });
+    }
+    res.json({ success: true, message: 'Plano de anuidade excluído com sucesso.' });
+  } catch (err) {
+    console.error('Delete annuity plan error:', err);
+    res.status(500).json({ error: 'Erro ao excluir plano de anuidade.' });
   }
 });
 

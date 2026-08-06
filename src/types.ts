@@ -38,6 +38,16 @@ export interface User {
   docCrUploaded?: boolean;
   docDeclaracaoUploaded?: boolean;
   guiaTransitoExpiry?: string;
+  annuityPlanId?: string;
+}
+
+export interface AnnuityPlan {
+  id: string;
+  clubId?: string;
+  name: string;
+  price: number;
+  description?: string;
+  createdAt: string;
 }
 
 export interface Club {

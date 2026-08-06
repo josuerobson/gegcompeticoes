@@ -538,6 +538,18 @@ export async function initDB() {
       ALTER TABLE trainings ADD COLUMN IF NOT EXISTS club_ammo_type TEXT DEFAULT 'recarga';
       ALTER TABLE registrations ADD COLUMN IF NOT EXISTS club_ammo_type TEXT DEFAULT 'recarga';
       ALTER TABLE stage_scores ADD COLUMN IF NOT EXISTS club_ammo_type TEXT DEFAULT 'recarga';
+
+      -- Annuity Plans (Planos de Anuidade) table
+      CREATE TABLE IF NOT EXISTS annuity_plans (
+        id TEXT PRIMARY KEY,
+        club_id TEXT REFERENCES clubs(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        price NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+        description TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS annuity_plan_id TEXT REFERENCES annuity_plans(id) ON DELETE SET NULL;
     `);
 
     await client.query(`
