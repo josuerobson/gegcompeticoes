@@ -4485,6 +4485,11 @@ export default function AdminPanel({
   const [creatingMember, setCreatingMember] = useState(false);
   const [createMemberError, setCreateMemberError] = useState('');
 
+  // Member search & filter states
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
+  const [memberStatusFilter, setMemberStatusFilter] = useState<'all' | 'complete' | 'incomplete'>('all');
+  const [memberAnuidadeFilter, setMemberAnuidadeFilter] = useState<'all' | 'active' | 'expired'>('all');
+
   const [memberEditForm, setMemberEditForm] = useState({
     fullName: '', birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
     fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', nationality: '',
@@ -4494,8 +4499,41 @@ export default function AdminPanel({
   const [memberSavingSection, setMemberSavingSection] = useState<string | null>(null);
   const [memberSavedSection, setMemberSavedSection] = useState<string | null>(null);
 
-  const clubMembers = users.filter(u => u.clubId === currentUser?.clubId && u.role === 'member');
-  const selectedMember = clubMembers.find(m => m.id === selectedMemberId) || null;
+  const baseClubMembers = React.useMemo(() => {
+    return users.filter(u => u.clubId === currentUser?.clubId && u.role === 'member');
+  }, [users, currentUser?.clubId]);
+
+  const clubMembers = React.useMemo(() => {
+    return baseClubMembers.filter(m => {
+      // 1. Text Search (name, CPF, email, CR, RG)
+      if (memberSearchQuery.trim()) {
+        const q = memberSearchQuery.toLowerCase().trim();
+        const matchName = m.fullName?.toLowerCase().includes(q);
+        const matchCpf = m.cpf?.toLowerCase().includes(q);
+        const matchEmail = m.email?.toLowerCase().includes(q);
+        const matchCr = m.crNumber?.toLowerCase().includes(q);
+        const matchRg = m.rg?.toLowerCase().includes(q);
+        if (!matchName && !matchCpf && !matchEmail && !matchCr && !matchRg) return false;
+      }
+
+      // 2. Profile completeness filter
+      if (memberStatusFilter === 'complete' && !m.isProfileComplete) return false;
+      if (memberStatusFilter === 'incomplete' && m.isProfileComplete) return false;
+
+      // 3. Anuidade / signatureExpiry filter
+      if (memberAnuidadeFilter !== 'all') {
+        const today = new Date().toISOString().split('T')[0];
+        const expiry = m.signatureExpiry ? m.signatureExpiry.split('T')[0] : '';
+        const isActive = Boolean(expiry && expiry >= today);
+        if (memberAnuidadeFilter === 'active' && !isActive) return false;
+        if (memberAnuidadeFilter === 'expired' && isActive) return false;
+      }
+
+      return true;
+    });
+  }, [baseClubMembers, memberSearchQuery, memberStatusFilter, memberAnuidadeFilter]);
+
+  const selectedMember = baseClubMembers.find(m => m.id === selectedMemberId) || null;
 
   useEffect(() => {
     if (!selectedMember) return;
@@ -5192,27 +5230,141 @@ export default function AdminPanel({
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
-              <h4 className="font-display font-bold text-slate-900 text-sm">Membros do Clube ({clubMembers.length})</h4>
-              {clubMembers.length === 0 ? (
-                <p className="text-xs text-slate-400">Nenhum membro cadastrado ainda.</p>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {clubMembers.map((m) => (
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100">
+                <div>
+                  <h4 className="font-display font-bold text-slate-900 text-sm">
+                    Membros do Clube ({clubMembers.length} {clubMembers.length !== baseClubMembers.length ? `de ${baseClubMembers.length}` : ''})
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    Utilize a busca e os filtros abaixo para localizar membros e editar seus cadastros.
+                  </p>
+                </div>
+
+                {(memberSearchQuery || memberStatusFilter !== 'all' || memberAnuidadeFilter !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMemberSearchQuery('');
+                      setMemberStatusFilter('all');
+                      setMemberAnuidadeFilter('all');
+                    }}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition cursor-pointer self-start sm:self-auto shrink-0"
+                  >
+                    Limpar filtros
+                  </button>
+                )}
+              </div>
+
+              {/* Filter controls */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1">
+                {/* Search input */}
+                <div className="sm:col-span-6 relative">
+                  <input
+                    type="text"
+                    placeholder="Pesquisar por nome, CPF, e-mail, CR ou RG..."
+                    value={memberSearchQuery}
+                    onChange={e => setMemberSearchQuery(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 pl-9 pr-8 rounded-xl text-xs font-semibold text-slate-700 focus:border-blue-500"
+                  />
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                  {memberSearchQuery && (
                     <button
-                      key={m.id}
                       type="button"
-                      onClick={() => setSelectedMemberId(m.id)}
-                      className={`w-full flex items-center justify-between py-3 px-2 text-left rounded-lg transition cursor-pointer ${selectedMemberId === m.id ? 'bg-blue-50' : 'hover:bg-slate-50'}`}
+                      onClick={() => setMemberSearchQuery('')}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
                     >
-                      <div>
-                        <p className="text-xs font-bold text-slate-800">{m.fullName}</p>
-                        <p className="text-[10px] text-slate-400 font-mono">{m.cpf || 'CPF não informado'}</p>
-                      </div>
-                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${m.isProfileComplete ? 'text-emerald-600 bg-emerald-50' : 'text-amber-600 bg-amber-50'}`}>
-                        {m.isProfileComplete ? 'Completo' : 'Incompleto'}
-                      </span>
+                      <X className="w-4 h-4" />
                     </button>
-                  ))}
+                  )}
+                </div>
+
+                {/* Filter by Status Cadastro */}
+                <div className="sm:col-span-3">
+                  <select
+                    value={memberStatusFilter}
+                    onChange={e => setMemberStatusFilter(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-700 focus:border-blue-500"
+                  >
+                    <option value="all">Status Cadastro: Todos</option>
+                    <option value="complete">Cadastro Completo</option>
+                    <option value="incomplete">Cadastro Incompleto</option>
+                  </select>
+                </div>
+
+                {/* Filter by Anuidade */}
+                <div className="sm:col-span-3">
+                  <select
+                    value={memberAnuidadeFilter}
+                    onChange={e => setMemberAnuidadeFilter(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-700 focus:border-blue-500"
+                  >
+                    <option value="all">Anuidade: Todas</option>
+                    <option value="active">Anuidade Ativa</option>
+                    <option value="expired">Anuidade Vencida / Pendente</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Members List */}
+              {clubMembers.length === 0 ? (
+                <div className="py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 space-y-2">
+                  <Users className="w-8 h-8 text-slate-300 mx-auto" />
+                  <p className="text-xs text-slate-500 font-medium">Nenhum membro encontrado com os filtros selecionados.</p>
+                  {(memberSearchQuery || memberStatusFilter !== 'all' || memberAnuidadeFilter !== 'all') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMemberSearchQuery('');
+                        setMemberStatusFilter('all');
+                        setMemberAnuidadeFilter('all');
+                      }}
+                      className="text-xs text-blue-600 font-bold hover:underline cursor-pointer"
+                    >
+                      Redefinir busca e filtros
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 max-h-[450px] overflow-y-auto pr-1">
+                  {clubMembers.map((m) => {
+                    const today = new Date().toISOString().split('T')[0];
+                    const anuidadeExpiry = m.signatureExpiry ? m.signatureExpiry.split('T')[0] : '';
+                    const isAnuidadeActive = Boolean(anuidadeExpiry && anuidadeExpiry >= today);
+
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setSelectedMemberId(m.id)}
+                        className={`w-full flex flex-col sm:flex-row sm:items-center justify-between py-3 px-3 text-left rounded-xl transition cursor-pointer gap-2 ${selectedMemberId === m.id ? 'bg-blue-50 border border-blue-200 shadow-xs' : 'hover:bg-slate-50'}`}
+                      >
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-bold text-slate-900">{m.fullName}</p>
+                            {m.crNumber && (
+                              <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
+                                CR: {m.crNumber}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-500 font-mono">
+                            {m.cpf || 'CPF não informado'} {m.email ? `• ${m.email}` : ''} {m.phone ? `• Tel: ${m.phone}` : ''}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {anuidadeExpiry && (
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full font-mono ${isAnuidadeActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                              Anuidade: {isAnuidadeActive ? 'Ativa' : 'Vencida'}
+                            </span>
+                          )}
+                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${m.isProfileComplete ? 'text-emerald-700 bg-emerald-100' : 'text-amber-700 bg-amber-100'}`}>
+                            {m.isProfileComplete ? 'Completo' : 'Incompleto'}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
