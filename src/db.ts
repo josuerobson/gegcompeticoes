@@ -801,6 +801,18 @@ export async function initDB() {
         items JSONB NOT NULL,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE TABLE IF NOT EXISTS sicoob_charges (
+        id TEXT PRIMARY KEY,
+        txid TEXT NOT NULL UNIQUE,
+        debtor_cpf TEXT,
+        debtor_name TEXT,
+        description TEXT,
+        amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'ATIVA',
+        pix_copia_e_cola TEXT,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
     `);
 
     await client.query('COMMIT');

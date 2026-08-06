@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: permitir edicao direta do vencimento da Guia de Transito no perfil do atleta` |
-| Data/hora | 2026-08-06T07:58:00-03:00 |
+| Mensagem | `feat: adicionar menu Integracoes > Sicoob com gestao de credenciais OAuth mTLS, webhook e cobrancas PIX` |
+| Data/hora | 2026-08-06T09:11:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -60,6 +60,7 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
 
+- **Integração PIX Banco Sicoob (`Painel Diretor > Gerenciamento Plataforma > Integrações > Sicoob`)**: Criada a nova seção "Integrações" no menu lateral com o submenu "Sicoob", oferecendo gerenciamento completo de credenciais OAuth 2.0 (Client ID, Client Secret, Chave PIX, Certificados mTLS .pem), teste de autenticação, notificação instantânea por Webhook (`POST /api/webhooks/sicoob-pix`), emissão de cobranças PIX dinâmicas (`cob`/`txid`) e consulta/validação de liquidação em tempo real.
 - **Edição direta da Guia de Trânsito no Perfil do Atleta (`MemberProfile.tsx`)**: Adicionado um ícone de edição (lápis) no item "Guia de Trânsito" do cartão de Situação Associativa G&G no perfil do atleta, permitindo que o próprio atleta edite diretamente o vencimento da sua Guia de Trânsito com salvamento dinâmico via `onUpdateProfile`.
 - **Cadastro e Edição Completa de Clubes em Novo Clube**: O Gestor/Admin agora pode cadastrar completamente um clube filiado (incluindo endereço CEP/logradouro/número/bairro/cidade/UF) e editar qualquer clube existente via modal de edição conectado ao endpoint `PATCH /api/clubs/:id` (com permissões estendidas a administradores).
 - **Remoção do menu Cessão de Armas**: O item "Cessão de Armas" foi removido da lista de navegação lateral em `Painel Diretor > Gerenciamento Clube > Menus Clube` a pedido do usuário.

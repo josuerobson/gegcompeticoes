@@ -3,6 +3,7 @@ import { Championship, ChampionshipInput, Registration, User, StageScore, Stage,
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
+import { SicoobPixManager } from './SicoobPixManager';
 import { 
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
@@ -3967,7 +3968,8 @@ export default function AdminPanel({
     campeonatos: true,
     adm: false,
     idsc: false,
-    site: false
+    site: false,
+    integracoes: true
   });
 
   const toggleSection = (section: string) => {
@@ -6702,6 +6704,9 @@ export default function AdminPanel({
           />
         );
 
+      case 'integracoes_sicoob':
+        return <SicoobPixManager currentUser={currentUser} />;
+
 
       default:
         return (
@@ -7146,6 +7151,22 @@ export default function AdminPanel({
                     <button onClick={() => setPlataformaMenu('banner_home')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'banner_home' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Banner Home</button>
                     <button onClick={() => setPlataformaMenu('texto_home')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'texto_home' || plataformaMenu === 'banners_paginas' ? 'text-blue-600 bg-blue-50/50 font-bold' : 'text-slate-650 hover:bg-slate-50'}`}>Texto Home</button>
                     <button onClick={() => setPlataformaMenu('certificados_carteirinhas')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'certificados_carteirinhas' ? 'text-blue-600 bg-blue-50/50 font-bold' : 'text-slate-650 hover:bg-slate-50'}`}>Certificados e Carteirinhas</button>
+                  </div>
+                )}
+              </div>
+
+              {/* 6. Section: Integrações */}
+              <div className="space-y-1">
+                <button
+                  onClick={() => toggleSection('integracoes')}
+                  className="w-full flex items-center justify-between px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-450 hover:text-slate-700 cursor-pointer"
+                >
+                  <span>Integrações</span>
+                  {expandedSections.integracoes ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+                {expandedSections.integracoes && (
+                  <div className="pl-3 border-l border-slate-100 space-y-0.5 mt-1">
+                    <button onClick={() => setPlataformaMenu('integracoes_sicoob')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'integracoes_sicoob' ? 'text-blue-600 bg-blue-50/50 font-bold' : 'text-slate-650 hover:bg-slate-50'}`}>Sicoob</button>
                   </div>
                 )}
               </div>
