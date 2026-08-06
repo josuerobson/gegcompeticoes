@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: permitir cadastro completo e edicao de clubes em Novo Clube` |
-| Data/hora | 2026-08-06T07:32:00-03:00 |
+| Mensagem | `feat: permitir edicao direta do vencimento da Guia de Transito no perfil do atleta` |
+| Data/hora | 2026-08-06T07:58:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -60,6 +60,7 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
 
+- **Edição direta da Guia de Trânsito no Perfil do Atleta (`MemberProfile.tsx`)**: Adicionado um ícone de edição (lápis) no item "Guia de Trânsito" do cartão de Situação Associativa G&G no perfil do atleta, permitindo que o próprio atleta edite diretamente o vencimento da sua Guia de Trânsito com salvamento dinâmico via `onUpdateProfile`.
 - **Cadastro e Edição Completa de Clubes em Novo Clube**: O Gestor/Admin agora pode cadastrar completamente um clube filiado (incluindo endereço CEP/logradouro/número/bairro/cidade/UF) e editar qualquer clube existente via modal de edição conectado ao endpoint `PATCH /api/clubs/:id` (com permissões estendidas a administradores).
 - **Remoção do menu Cessão de Armas**: O item "Cessão de Armas" foi removido da lista de navegação lateral em `Painel Diretor > Gerenciamento Clube > Menus Clube` a pedido do usuário.
 - **Número da arma e calibre da munição na tela de Lançar Resultados**: Adicionados no endpoint `GET /api/admin/registrations` (`weapon_number` e `weapon_caliber`) e exibidos em `CadastrarResultadosPanel` (em `AdminPanel.tsx`) logo abaixo do nome do atleta, tanto na listagem de inscritos quanto no cartão de lançamento de pontuação.
