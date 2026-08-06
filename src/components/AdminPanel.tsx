@@ -2300,17 +2300,18 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
   const [recDate, setRecDate] = useState(new Date().toISOString().split('T')[0]);
   const [savingRec, setSavingRec] = useState(false);
 
-  // 4. Alocar Munições State
+  // 4. Atribuir Munições State
   const [athleteQuery, setAthleteQuery] = useState('');
   const [searchingAthletes, setSearchingAthletes] = useState(false);
-  const [foundAthletes, setFoundAthletes] = useState<Array<{ id: string; fullName: string; cpf?: string; crNumber?: string }>>([]);
-  const [selectedAthlete, setSelectedAthlete] = useState<{ id: string; fullName: string; cpf?: string; crNumber?: string } | null>(null);
+  const [foundAthletes, setFoundAthletes] = useState<Array<{ id: string; fullName: string; cpf?: string; crNumber?: string; ammoBalances?: Array<{ caliber: string; balance: number }> }>>([]);
+  const [selectedAthlete, setSelectedAthlete] = useState<{ id: string; fullName: string; cpf?: string; crNumber?: string; ammoBalances?: Array<{ caliber: string; balance: number }> } | null>(null);
   const [allocDate, setAllocDate] = useState(new Date().toISOString().split('T')[0]);
   const [allocNotes, setAllocNotes] = useState('');
   const [allocItems, setAllocItems] = useState<Array<{ caliber: string; quantity: string }>>([
     { caliber: '', quantity: '50' }
   ]);
   const [savingAlloc, setSavingAlloc] = useState(false);
+  const [editingAllocId, setEditingAllocId] = useState<string | null>(null);
 
   // Fetch overview data
   const loadAmmoOverview = async () => {
@@ -2516,13 +2517,13 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
     }
   };
 
-  // 4. Submit Allocation
+  // 4. Submit / Edit Allocation
   const handleAllocationSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
     if (!selectedAthlete) {
-      setError('Selecione o atleta que receberá a alocação.');
+      setError('Selecione o atleta que receberá as munições.');
       return;
     }
     if (allocItems.some(i => !i.caliber || !i.quantity || Number(i.quantity) <= 0)) {
@@ -2531,8 +2532,12 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
     }
     setSavingAlloc(true);
     try {
-      const r = await fetch('/api/ammo/allocations', {
-        method: 'POST',
+      const isEditing = Boolean(editingAllocId);
+      const url = isEditing ? `/api/ammo/allocations/${editingAllocId}` : '/api/ammo/allocations';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const r = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
         body: JSON.stringify({
           userId: selectedAthlete.id,
@@ -2542,8 +2547,9 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
         })
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || 'Erro ao alocar munições');
+      if (!r.ok) throw new Error(data.error || 'Erro ao processar atribuição de munições');
       setSuccess(`✅ ${data.message}`);
+      setEditingAllocId(null);
       setSelectedAthlete(null);
       setAthleteQuery('');
       setFoundAthletes([]);
@@ -2555,6 +2561,52 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
     } finally {
       setSavingAlloc(false);
     }
+  };
+
+  const handleDeleteAllocation = async (allocId: string, athleteName: string) => {
+    if (!window.confirm(`Tem certeza que deseja excluir esta atribuição de munições para ${athleteName}? O saldo do atleta será ajustado.`)) return;
+    setError(''); setSuccess('');
+    try {
+      const r = await fetch(`/api/ammo/allocations/${allocId}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro ao excluir atribuição');
+      setSuccess(`✅ ${data.message}`);
+      if (editingAllocId === allocId) {
+        setEditingAllocId(null);
+        setSelectedAthlete(null);
+        setAthleteQuery('');
+        setAllocItems([{ caliber: '', quantity: '50' }]);
+      }
+      await loadAmmoOverview();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const startEditingAllocation = (al: AmmoAthleteAllocation) => {
+    setEditingAllocId(al.id);
+    setSelectedAthlete({ id: al.userId, fullName: al.athleteName || 'Atleta', cpf: al.athleteCpf });
+    setAllocDate(al.date ? al.date.split('T')[0] : new Date().toISOString().split('T')[0]);
+    setAllocNotes(al.notes || '');
+    if (al.items && al.items.length > 0) {
+      setAllocItems(al.items.map(i => ({ caliber: i.caliber, quantity: String(i.quantity) })));
+    } else {
+      setAllocItems([{ caliber: '', quantity: '50' }]);
+    }
+    setError('');
+    setSuccess('');
+  };
+
+  const cancelEditingAllocation = () => {
+    setEditingAllocId(null);
+    setSelectedAthlete(null);
+    setAthleteQuery('');
+    setFoundAthletes([]);
+    setAllocNotes('');
+    setAllocItems([{ caliber: '', quantity: '50' }]);
   };
 
   // Compute invoice total
@@ -2611,7 +2663,7 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
           onClick={() => { setSubTab('alocar_municoes'); setError(''); setSuccess(''); }}
           className={`px-4 py-2.5 rounded-xl text-xs font-bold transition duration-150 whitespace-nowrap cursor-pointer ${subTab === 'alocar_municoes' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
         >
-          🎯 Alocar Munições
+          🎯 Atribuir Munições ao atleta
         </button>
       </div>
 
@@ -3201,13 +3253,26 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
         </div>
       )}
 
-      {/* SUBTAB 4: ALOCAR MUNIÇÕES */}
+      {/* SUBTAB 4: ATRIBUIR MUNIÇÕES AO ATLETA */}
       {subTab === 'alocar_municoes' && (
         <div className="space-y-6">
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
-            <div className="pb-3 border-b border-slate-100">
-              <h4 className="font-display font-bold text-slate-900 text-sm">Alocar Munições do Clube para o Atleta</h4>
-              <p className="text-xs text-slate-400">Ao salvar, a quantidade é deduzida do estoque principal do clube e transferida para o saldo individual do atleta. Quando o atleta registrar treinos do clube, o saldo diminui automaticamente.</p>
+            <div className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row justify-between sm:items-start gap-2">
+              <div>
+                <h4 className="font-display font-bold text-slate-900 text-sm">
+                  {editingAllocId ? 'Editar Atribuição de Munições do Clube' : 'Atribuir Munições do clube para o atleta'}
+                </h4>
+                <p className="text-xs text-slate-400">Ao salvar, a quantidade é deduzida do estoque principal do clube e transferida para o saldo individual do atleta. Quando o atleta registrar treinos do clube, o saldo diminui automaticamente.</p>
+              </div>
+              {editingAllocId && (
+                <button
+                  type="button"
+                  onClick={cancelEditingAllocation}
+                  className="text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl cursor-pointer shrink-0"
+                >
+                  Cancelar Edição
+                </button>
+              )}
             </div>
 
             <form onSubmit={handleAllocationSubmit} className="space-y-6">
@@ -3216,18 +3281,32 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
                 <label className="text-[10px] font-bold text-slate-500 uppercase block">1. Selecionar Atleta Filiado</label>
 
                 {selectedAthlete ? (
-                  <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl flex justify-between items-center">
+                  <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex justify-between items-center">
                     <div>
                       <span className="font-bold text-xs text-blue-900 block">{selectedAthlete.fullName}</span>
-                      <span className="text-[10px] text-blue-600 font-mono">CPF: {selectedAthlete.cpf || 'Não informado'} | CR: {selectedAthlete.crNumber || 'Sem CR'}</span>
+                      <span className="text-[10px] text-blue-700 font-mono block">CPF: {selectedAthlete.cpf || 'Não informado'} | CR: {selectedAthlete.crNumber || 'Sem CR'}</span>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <span className="text-[10px] font-bold text-blue-800 uppercase">Saldo Atual:</span>
+                        {selectedAthlete.ammoBalances && selectedAthlete.ammoBalances.length > 0 ? (
+                          selectedAthlete.ammoBalances.map((b, idx) => (
+                            <span key={idx} className="text-[10px] font-mono font-bold bg-white text-blue-800 px-2 py-0.5 rounded border border-blue-200">
+                              {b.caliber}: {b.balance} un
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-[10px] text-blue-600 italic font-mono">Sem saldo de munições</span>
+                        )}
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => { setSelectedAthlete(null); setAthleteQuery(''); }}
-                      className="text-xs text-blue-700 hover:text-red-600 font-bold cursor-pointer"
-                    >
-                      Trocar Atleta
-                    </button>
+                    {!editingAllocId && (
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedAthlete(null); setAthleteQuery(''); }}
+                        className="text-xs text-blue-700 hover:text-red-600 font-bold cursor-pointer"
+                      >
+                        Trocar Atleta
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="relative">
@@ -3244,7 +3323,7 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
                     )}
 
                     {!searchingAthletes && foundAthletes.length > 0 && (
-                      <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
+                      <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-56 overflow-y-auto divide-y divide-slate-100">
                         {foundAthletes.map(a => (
                           <button
                             key={a.id}
@@ -3255,11 +3334,23 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
                             }}
                             className="w-full text-left p-3 hover:bg-blue-50 transition flex justify-between items-center cursor-pointer"
                           >
-                            <div>
+                            <div className="space-y-0.5">
                               <span className="font-bold text-xs text-slate-800 block">{a.fullName}</span>
-                              <span className="text-[10px] text-slate-400 font-mono">CPF: {a.cpf || 'Não informado'}</span>
+                              <span className="text-[10px] text-slate-400 font-mono block">CPF: {a.cpf || 'Não informado'}</span>
+                              <div className="flex flex-wrap items-center gap-1">
+                                <span className="text-[9.5px] font-bold text-slate-500 uppercase font-mono">Saldo Atual:</span>
+                                {a.ammoBalances && a.ammoBalances.length > 0 ? (
+                                  a.ammoBalances.map((b, idx) => (
+                                    <span key={idx} className="text-[9.5px] font-mono font-bold bg-slate-100 text-blue-700 px-1.5 py-0.2 rounded">
+                                      {b.caliber}: {b.balance} un
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-[9.5px] text-slate-400 italic">Sem saldo</span>
+                                )}
+                              </div>
                             </div>
-                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Selecionar</span>
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">Selecionar</span>
                           </button>
                         ))}
                       </div>
@@ -3270,7 +3361,7 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Data da Alocação</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Data da Atribuição</label>
                   <input
                     type="date"
                     required
@@ -3294,7 +3385,7 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
               {/* Ammo items to allocate */}
               <div className="space-y-3 pt-2 border-t border-slate-100">
                 <div className="flex justify-between items-center">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">2. Linhas de Munições a Alocar</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">2. Linhas de Munições a Atribuir</label>
                   <button
                     type="button"
                     onClick={() => handleOpenCaliberModal()}
@@ -3373,7 +3464,7 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
                   disabled={savingAlloc}
                   className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg shadow-emerald-100 cursor-pointer"
                 >
-                  {savingAlloc ? 'Salva e Transfere...' : 'Salvar Alocação & Transferir Saldo'}
+                  {savingAlloc ? 'Salvando...' : editingAllocId ? 'Atualizar Atribuição' : 'Salvar Atribuição & Transferir Saldo'}
                 </button>
               </div>
             </form>
@@ -3381,21 +3472,40 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
 
           {/* Allocation History */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
-            <h4 className="font-display font-bold text-slate-900 text-sm">Histórico de Alocações Realizadas ({allocations.length})</h4>
+            <h4 className="font-display font-bold text-slate-900 text-sm">Histórico de Atribuições Realizadas ({allocations.length})</h4>
             {allocations.length === 0 ? (
-              <p className="text-xs text-slate-400">Nenhuma alocação realizada ainda.</p>
+              <p className="text-xs text-slate-400">Nenhuma atribuição realizada ainda.</p>
             ) : (
               <div className="divide-y divide-slate-100">
                 {allocations.map(al => (
-                  <div key={al.id} className="py-3 space-y-1 text-xs">
+                  <div key={al.id} className="py-3 space-y-1.5 text-xs">
                     <div className="flex justify-between items-center">
                       <div>
-                        <span className="font-bold text-slate-900">{al.athleteName}</span>
+                        <span className="font-bold text-slate-900 text-sm">{al.athleteName}</span>
                         <span className="text-slate-500 ml-2 font-mono">({al.athleteCpf || 'Sem CPF'})</span>
                         <span className="text-slate-400 ml-2 font-mono">• Data: {new Date(al.date).toLocaleDateString('pt-BR')}</span>
                       </div>
-                      {al.notes && <span className="text-[10px] text-slate-400 italic">{al.notes}</span>}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startEditingAllocation(al)}
+                          className="text-[11px] text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 font-bold px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1"
+                          title="Editar atribuição"
+                        >
+                          <Pencil className="w-3 h-3" /> Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAllocation(al.id, al.athleteName || 'Atleta')}
+                          className="text-[11px] text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 font-bold px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1"
+                          title="Excluir atribuição"
+                        >
+                          <Trash2 className="w-3 h-3" /> Excluir
+                        </button>
+                      </div>
                     </div>
+
+                    {al.notes && <p className="text-[11px] text-slate-500 italic">Obs: {al.notes}</p>}
 
                     {al.items && al.items.length > 0 && (
                       <div className="flex flex-wrap gap-2 pt-1">

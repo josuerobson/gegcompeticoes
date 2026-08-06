@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: atualizacoes no estoque de municoes, entrada NF, treinamentos e resultados` |
-| Data/hora | 2026-08-06T21:46:00-03:00 |
+| Mensagem | `feat: alterada aba para Atribuir Municoes ao atleta com exibicao de saldo na busca e acoes de editar/excluir` |
+| Data/hora | 2026-08-06T22:30:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -140,6 +140,10 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
   - **Entrada NF de Munições**: Alterado o produto de munição/projetil no registro de Nota Fiscal para `"Ponta / Projétil Nova"` (`ponta_nova`) e adicionado o novo produto `"Ponta / Projétil Reciclada"` (`ponta_reciclada`). Adicionado o seletor de Unidade de Medida (`unitMeasure`) aceitando `Unitário (un)`, `Kilo (kg)` e `Grama (g)`, com persistência no banco (`ammo_invoice_items.unit_measure`) e exibição de badges na listagem de histórico.
   - **Estoque & Recarga**: O painel de estoque divide e contabiliza separadamente o saldo de **Munição Nova (NF)** (vinda de notas fiscais) da **Munição Recarga** (produção interna do clube).
   - **Treinamentos & Lançamento de Resultados**: Adicionada a coluna `club_ammo_type` (`'nova'` | `'recarga'`) em `trainings`, `registrations` e `stage_scores`. Sempre que forem lançados tiros utilizando munição do clube (`clubAmmoShots > 0`), tanto no Painel Diretor (Lançar Resultados e Treinamentos) quanto no Perfil do Atleta (Registro de Treinamento), é exibido um seletor obrigatório para registrar se a munição utilizada do clube foi **Munição Nova (NF)** ou **Munição Recarga**.
+- **Aba "Atribuir Munições ao atleta" (`AdminPanel.tsx`, `server.ts`)**:
+  - Alterada a nomenclatura da aba de *"Alocar Munições"* para **"Atribuir Munições ao atleta"** e do título do campo para **"Atribuir Munições do clube para o atleta"**.
+  - **Exibição do Saldo Atual na Busca**: O endpoint `/api/members/search` e a interface de busca exibem em tempo real o saldo de munições por calibre do atleta tanto no dropdown de resultados da busca quanto no cartão do atleta selecionado.
+  - **Edição e Exclusão de Atribuições**: Adicionadas as ações de "Editar" e "Excluir" no histórico de atribuições com recalculação automática do saldo do atleta no backend (`PUT /api/ammo/allocations/:id` e `DELETE /api/ammo/allocations/:id`).
 
 ## Infra / deploy
 

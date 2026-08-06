@@ -2889,7 +2889,23 @@ app.get('/api/members/search', requireAdmin, async (req, res) => {
       );
       rows = r.rows;
     }
-    res.json({ members: rows.map((u: any) => ({ id: u.id, fullName: u.full_name, cpf: u.cpf, crNumber: u.cr_number })) });
+
+    const membersWithBalances = [];
+    for (const u of rows) {
+      const balRes = await pool.query(
+        `SELECT caliber, balance FROM ammo_athlete_balances WHERE user_id = $1 AND balance > 0 ORDER BY caliber ASC`,
+        [u.id]
+      );
+      membersWithBalances.push({
+        id: u.id,
+        fullName: u.full_name,
+        cpf: u.cpf,
+        crNumber: u.cr_number,
+        ammoBalances: balRes.rows.map((b: any) => ({ caliber: b.caliber, balance: Number(b.balance) || 0 }))
+      });
+    }
+
+    res.json({ members: membersWithBalances });
   } catch (err) {
     console.error('Member search error:', err);
     res.status(500).json({ error: 'Erro ao buscar atletas.' });
@@ -3783,11 +3799,127 @@ app.post('/api/ammo/allocations', requireAdmin, async (req, res) => {
     }
 
     await client.query('COMMIT');
-    res.status(201).json({ success: true, message: 'Munições alocadas para o atleta com sucesso.' });
+    res.status(201).json({ success: true, message: 'Munições atribuídas ao atleta com sucesso.' });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Create ammo allocation error:', err);
-    res.status(500).json({ error: 'Erro ao alocar munições para o atleta.' });
+    res.status(500).json({ error: 'Erro ao atribuir munições ao atleta.' });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT /api/ammo/allocations/:id — Atualiza uma atribuição de munição existente
+app.put('/api/ammo/allocations/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { date, notes, items } = req.body;
+  if (!date || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Data e ao menos um calibre com quantidade são obrigatórios.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const allocRes = await client.query('SELECT * FROM ammo_athlete_allocations WHERE id = $1', [id]);
+    if (allocRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Atribuição não encontrada.' });
+    }
+    const alloc = allocRes.rows[0];
+    const userId = alloc.user_id;
+
+    // Deduct old item quantities from athlete's balance
+    const oldItemsRes = await client.query('SELECT * FROM ammo_athlete_allocation_items WHERE allocation_id = $1', [id]);
+    for (const oldItem of oldItemsRes.rows) {
+      const oldQty = Number(oldItem.quantity) || 0;
+      const oldCaliber = oldItem.caliber;
+      await client.query(
+        `UPDATE ammo_athlete_balances
+         SET balance = GREATEST(0, balance - $1), updated_at = NOW()
+         WHERE user_id = $2 AND caliber = $3`,
+        [oldQty, userId, oldCaliber]
+      );
+    }
+
+    // Update allocation master row
+    await client.query(
+      `UPDATE ammo_athlete_allocations SET date = $1, notes = $2 WHERE id = $3`,
+      [date, notes || null, id]
+    );
+
+    // Delete old items
+    await client.query('DELETE FROM ammo_athlete_allocation_items WHERE allocation_id = $1', [id]);
+
+    // Insert new items and add to athlete balance
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const itemId = `alloci_${id}_${i}_${Date.now()}`;
+      const qty = Math.max(1, Number(item.quantity) || 0);
+      const caliber = item.caliber;
+
+      await client.query(
+        `INSERT INTO ammo_athlete_allocation_items (id, allocation_id, caliber, quantity)
+         VALUES ($1, $2, $3, $4)`,
+        [itemId, id, caliber, qty]
+      );
+
+      const balId = `bal_${userId}_${caliber.replace(/[^a-zA-Z0-9]/g, '')}`;
+      await client.query(
+        `INSERT INTO ammo_athlete_balances (id, user_id, club_id, caliber, balance, updated_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         ON CONFLICT (user_id, caliber)
+         DO UPDATE SET balance = ammo_athlete_balances.balance + EXCLUDED.balance, updated_at = NOW()`,
+        [balId, userId, alloc.club_id, caliber, qty]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Atribuição de munição atualizada com sucesso.' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Update ammo allocation error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar atribuição de munição.' });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /api/ammo/allocations/:id — Exclui uma atribuição de munição e ajusta o saldo do atleta
+app.delete('/api/ammo/allocations/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const allocRes = await client.query('SELECT * FROM ammo_athlete_allocations WHERE id = $1', [id]);
+    if (allocRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Atribuição não encontrada.' });
+    }
+    const alloc = allocRes.rows[0];
+    const userId = alloc.user_id;
+
+    // Deduct allocated quantities from athlete's balance
+    const itemsRes = await client.query('SELECT * FROM ammo_athlete_allocation_items WHERE allocation_id = $1', [id]);
+    for (const item of itemsRes.rows) {
+      const qty = Number(item.quantity) || 0;
+      const caliber = item.caliber;
+      await client.query(
+        `UPDATE ammo_athlete_balances
+         SET balance = GREATEST(0, balance - $1), updated_at = NOW()
+         WHERE user_id = $2 AND caliber = $3`,
+        [qty, userId, caliber]
+      );
+    }
+
+    await client.query('DELETE FROM ammo_athlete_allocation_items WHERE allocation_id = $1', [id]);
+    await client.query('DELETE FROM ammo_athlete_allocations WHERE id = $1', [id]);
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Atribuição de munição excluída com sucesso.' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Delete ammo allocation error:', err);
+    res.status(500).json({ error: 'Erro ao excluir atribuição de munição.' });
   } finally {
     client.release();
   }
