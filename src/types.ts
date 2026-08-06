@@ -288,6 +288,7 @@ export interface Registration {
   codigoInscricao?: number;
   ownAmmoShots?: number;
   clubAmmoShots?: number;
+  clubAmmoType?: 'nova' | 'recarga';
   multiChampionshipId?: string; // Presente quando a inscrição foi gerada por um multicampeonato
 }
 
@@ -302,6 +303,7 @@ export interface StageScore {
   score: number; // point score (e.g. 150.45)
   timeSeconds?: number; // time format for dynamic/IPSC scoring (hit factor = points / time)
   hitFactor?: number;
+  clubAmmoType?: 'nova' | 'recarga';
   createdAt: string;
 }
 
@@ -329,6 +331,7 @@ export interface TrainingSession {
   totalShots: number;
   ownAmmoShots: number;
   clubAmmoShots: number;
+  clubAmmoType?: 'nova' | 'recarga';
   modality?: string;
   score?: number;
   notes?: string;
@@ -369,7 +372,8 @@ export interface AmmoCaliberStock {
 export interface AmmoInvoiceItem {
   id?: string;
   invoiceId?: string;
-  productType: 'espoleta' | 'polvora' | 'ponta' | 'municao_nova';
+  productType: 'espoleta' | 'polvora' | 'ponta' | 'ponta_nova' | 'ponta_reciclada' | 'municao_nova';
+  unitMeasure?: 'un' | 'kg' | 'g';
   caliber: string;
   quantity: number;
   unitPrice: number;

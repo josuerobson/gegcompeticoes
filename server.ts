@@ -258,6 +258,7 @@ function mapRegistration(r: any): Registration {
     codigoInscricao: r.codigo_inscricao ?? undefined,
     ownAmmoShots: r.own_ammo_shots != null ? Number(r.own_ammo_shots) : 0,
     clubAmmoShots: r.club_ammo_shots != null ? Number(r.club_ammo_shots) : 0,
+    clubAmmoType: (r.club_ammo_type as 'nova' | 'recarga') || 'recarga',
     multiChampionshipId: r.multi_championship_id || undefined,
   };
 }
@@ -293,6 +294,7 @@ function mapStageScore(s: any): StageScore {
     score: Number(s.score),
     timeSeconds: s.time_seconds !== null && s.time_seconds !== undefined ? Number(s.time_seconds) : undefined,
     hitFactor: s.hit_factor !== null && s.hit_factor !== undefined ? Number(s.hit_factor) : undefined,
+    clubAmmoType: (s.club_ammo_type as 'nova' | 'recarga') || 'recarga',
     createdAt: s.created_at,
   };
 }
@@ -360,6 +362,7 @@ function mapTraining(t: any): TrainingSession {
     totalShots: Number(t.total_shots ?? 0),
     ownAmmoShots: Number(t.own_ammo_shots ?? 0),
     clubAmmoShots: Number(t.club_ammo_shots ?? 0),
+    clubAmmoType: (t.club_ammo_type as 'nova' | 'recarga') || 'recarga',
     modality: t.modality || undefined,
     score: Number(t.score ?? 0),
     notes: t.notes || undefined,
@@ -2483,7 +2486,7 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
     registrationId, acao,
     dataExecucao, horaExecucao,
     series, penalidade,
-    ownAmmoShots, clubAmmoShots,
+    ownAmmoShots, clubAmmoShots, clubAmmoType,
     // Legacy single-score fallback (stageNum + score + timeSeconds)
     stageNum, score, timeSeconds
   } = req.body;
@@ -2561,7 +2564,7 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
       let totalPontos = 0;
       let seriesPontos: any[] = [];
       let seriesTempos: any[] = [];
-      let idscTotalSeg: number | undefined;
+      let idscTotalSeg: number | undefined = undefined;
 
       if (Array.isArray(series) && series.length > 0) {
         // Validação da quantidade de tiros contra o shots_per_series da modalidade
@@ -2613,6 +2616,7 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
       const penValue = Number(penalidade) || 0;
       const ownAmmo = ownAmmoShots === undefined || ownAmmoShots === '' ? 0 : Math.max(0, Number(ownAmmoShots) || 0);
       const clubAmmo = clubAmmoShots === undefined || clubAmmoShots === '' ? 0 : Math.max(0, Number(clubAmmoShots) || 0);
+      const clubType = clubAmmoType === 'nova' ? 'nova' : 'recarga';
       const ammoSum = ownAmmo + clubAmmo;
 
       let totalShotsInSeries = 0;
@@ -2630,7 +2634,7 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
         });
       }
 
-      // Update registration with full score breakdown and ammo origin
+      // Update registration with full score breakdown, ammo origin and ammo type (nova vs recarga)
       await client.query(`
         UPDATE registrations SET
           completion_status = 'completed',
@@ -2642,9 +2646,9 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
           penalty = $15,
           data_execucao = $16, hora_execucao = $17,
           series_pontos = $18, series_tempos = $19,
-          own_ammo_shots = $20, club_ammo_shots = $21,
+          own_ammo_shots = $20, club_ammo_shots = $21, club_ammo_type = $22,
           disqualified = false
-        WHERE id = $22`,
+        WHERE id = $23`,
         [
           totalPontos,
           bestSerie.x||0, bestSerie.p10||0, bestSerie.p9||0, bestSerie.p8||0, bestSerie.p7||0,
@@ -2655,7 +2659,7 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
           dataExecucao || null, horaExecucao || null,
           seriesPontos.length > 0 ? JSON.stringify(seriesPontos) : null,
           seriesTempos.length > 0 ? JSON.stringify(seriesTempos) : null,
-          ownAmmo, clubAmmo,
+          ownAmmo, clubAmmo, clubType,
           registrationId
         ]
       );
@@ -2695,12 +2699,12 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
         [championshipId, registrationId]
       );
       await client.query(
-        `INSERT INTO stage_scores (id, championship_id, registration_id, user_id, shooter_name, modality, stage_num, score, time_seconds, hit_factor, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        `INSERT INTO stage_scores (id, championship_id, registration_id, user_id, shooter_name, modality, stage_num, score, time_seconds, hit_factor, club_ammo_type, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [
           `score_${Date.now()}`, championshipId, registrationId, reg.userId,
           shooter.fullName, modalityName, Number(effectiveStageNum),
-          totalPontos, idscTotalSeg || null, hitFactor || null, new Date().toISOString()
+          totalPontos, idscTotalSeg || null, hitFactor || null, clubType, new Date().toISOString()
         ]
       );
 
@@ -3478,6 +3482,7 @@ app.get('/api/ammo/overview', requireAdmin, async (req, res) => {
           id: item.id,
           invoiceId: item.invoice_id,
           productType: item.product_type,
+          unitMeasure: item.unit_measure || 'un',
           caliber: item.caliber,
           quantity: Number(item.quantity) || 0,
           unitPrice: Number(item.unit_price) || 0,
@@ -3644,11 +3649,12 @@ app.post('/api/ammo/invoices', requireAdmin, async (req, res) => {
       const qty = Math.max(0, Number(item.quantity) || 0);
       const unit = Math.max(0, Number(item.unitPrice) || 0);
       const total = qty * unit;
+      const unitMeasure = item.unitMeasure || item.unit_measure || 'un';
 
       await client.query(
-        `INSERT INTO ammo_invoice_items (id, invoice_id, product_type, caliber, quantity, unit_price, total_price)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [itemId, invoiceId, item.productType, item.caliber, qty, unit, total]
+        `INSERT INTO ammo_invoice_items (id, invoice_id, product_type, unit_measure, caliber, quantity, unit_price, total_price)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [itemId, invoiceId, item.productType, unitMeasure, item.caliber, qty, unit, total]
       );
     }
 
@@ -3850,6 +3856,7 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
     weaponOwnerType,
     ownAmmoShots,
     clubAmmoShots,
+    clubAmmoType,
     modality,
     score,
     notes,
@@ -3866,6 +3873,7 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
 
   const own = Math.max(0, Number(ownAmmoShots) || 0);
   const club = Math.max(0, Number(clubAmmoShots) || 0);
+  const clubType = clubAmmoType === 'nova' ? 'nova' : 'recarga';
   const total = own + club;
   const ownerType = weaponOwnerType === 'clube' ? 'clube' : 'propria';
   const id = `training_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
@@ -3874,8 +3882,8 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
     const r = await pool.query(
       `INSERT INTO trainings (
         id, user_id, club_id, date_time, weapon_id, weapon_name, weapon_caliber,
-        weapon_owner_type, total_shots, own_ammo_shots, club_ammo_shots, modality, score, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        weapon_owner_type, total_shots, own_ammo_shots, club_ammo_shots, club_ammo_type, modality, score, notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING *`,
       [
         id,
@@ -3889,6 +3897,7 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
         total,
         own,
         club,
+        clubType,
         modality || 'Treino Livre',
         Number(score) || 0,
         notes || null,

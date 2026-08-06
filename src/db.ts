@@ -532,6 +532,12 @@ export async function initDB() {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT ammo_athlete_balances_user_caliber_unique UNIQUE (user_id, caliber)
       );
+
+      -- Additive migrations for unit of measure and club ammo type (nova vs recarga)
+      ALTER TABLE ammo_invoice_items ADD COLUMN IF NOT EXISTS unit_measure TEXT DEFAULT 'un';
+      ALTER TABLE trainings ADD COLUMN IF NOT EXISTS club_ammo_type TEXT DEFAULT 'recarga';
+      ALTER TABLE registrations ADD COLUMN IF NOT EXISTS club_ammo_type TEXT DEFAULT 'recarga';
+      ALTER TABLE stage_scores ADD COLUMN IF NOT EXISTS club_ammo_type TEXT DEFAULT 'recarga';
     `);
 
     await client.query(`

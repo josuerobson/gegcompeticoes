@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: adicionar menu Integracoes > Sicoob com gestao de credenciais OAuth mTLS, webhook e cobrancas PIX` |
-| Data/hora | 2026-08-06T09:11:00-03:00 |
+| Mensagem | `feat: atualizacoes no estoque de municoes, entrada NF, treinamentos e resultados` |
+| Data/hora | 2026-08-06T21:46:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -135,6 +135,11 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **Tema Padrão Claro (Light Mode) (`App.tsx`)**: Alterada a inicialização do estado de tema da aplicação de escuro (`'dark'`) para claro (`'light'`). A chave de persistência no `localStorage` passou a ser `gg_theme_mode`, garantindo que visitantes novos e existentes carreguem por padrão o layout na versão clara.
 - **Card de Situação Associativa no Perfil (`MemberProfile.tsx`)**: Removido o texto de título "Situação Associativa G&G" do card de estatísticas do perfil do atleta. Adicionado o campo "Saldo de Munições" abaixo de "Guia de Trânsito", exibindo a soma total de munições do clube alocadas para o atleta entre todos os calibres.
 - **Correção de Salvar Vencimento Guia de Trânsito e Vencimento Anuidade no Cadastro de Membros (`src/db.ts`, `server.ts`)**: Corrigido o erro 500 (`Internal Server Error`) adicionando as colunas `guia_transito_expiry` e `signature_expiry` à migração `ALTER TABLE users` no banco de dados (`src/db.ts`), e adicionando `hasPaidSignature` em `USER_PROFILE_COLUMNS` no servidor (`server.ts`) para que o salvamento de validades do clube pelo Painel Diretor persista os vencimentos e valide automaticamente a anuidade do atleta.
+- **Apresentação Institucional do Sistema em PDF (`Apresentacao_Sistema_GG_Competicoes.pdf`)**: Criada apresentação comercial e técnica completa em PDF de 12 slides em widescreen (16:9) pronta para apresentação a clientes e diretores de clube. O documento cobre todos os pilares do sistema (Visão Geral, Campeonatos e Etapas, Motor Financeiro de Premiações, Compliance com Exército Brasileiro/Habitualidade/Anexo N, Gestão de Munições e Recarga, Carteirinhas e Certificados com Validação Pública via QR Code, Integração Bancária Sicoob PIX mTLS, Portal do Atleta/Feed Social, Painel Diretor e Arquitetura Tecnológica). Gerada via script automatizado em Python (`generate_pdf_presentation.py`) e template HTML (`apresentacao_gg_competicoes.html`).
+- **Atualização do Controle de Estoque de Munições, Entrada de NF, Treinamentos e Resultados (`src/db.ts`, `server.ts`, `AdminPanel.tsx`, `MemberProfile.tsx`)**:
+  - **Entrada NF de Munições**: Alterado o produto de munição/projetil no registro de Nota Fiscal para `"Ponta / Projétil Nova"` (`ponta_nova`) e adicionado o novo produto `"Ponta / Projétil Reciclada"` (`ponta_reciclada`). Adicionado o seletor de Unidade de Medida (`unitMeasure`) aceitando `Unitário (un)`, `Kilo (kg)` e `Grama (g)`, com persistência no banco (`ammo_invoice_items.unit_measure`) e exibição de badges na listagem de histórico.
+  - **Estoque & Recarga**: O painel de estoque divide e contabiliza separadamente o saldo de **Munição Nova (NF)** (vinda de notas fiscais) da **Munição Recarga** (produção interna do clube).
+  - **Treinamentos & Lançamento de Resultados**: Adicionada a coluna `club_ammo_type` (`'nova'` | `'recarga'`) em `trainings`, `registrations` e `stage_scores`. Sempre que forem lançados tiros utilizando munição do clube (`clubAmmoShots > 0`), tanto no Painel Diretor (Lançar Resultados e Treinamentos) quanto no Perfil do Atleta (Registro de Treinamento), é exibido um seletor obrigatório para registrar se a munição utilizada do clube foi **Munição Nova (NF)** ou **Munição Recarga**.
 
 ## Infra / deploy
 

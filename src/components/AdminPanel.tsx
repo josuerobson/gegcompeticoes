@@ -915,6 +915,7 @@ function TreinamentosCompeticoesAdminPanel({
     weaponOwnerType: 'propria' as 'propria' | 'clube',
     ownAmmoShots: '',
     clubAmmoShots: '',
+    clubAmmoType: 'recarga' as 'nova' | 'recarga',
     modality: 'Treino Livre',
     score: '',
     notes: '',
@@ -1094,6 +1095,7 @@ function TreinamentosCompeticoesAdminPanel({
           weaponOwnerType: trainingForm.weaponOwnerType,
           ownAmmoShots: own,
           clubAmmoShots: club,
+          clubAmmoType: trainingForm.clubAmmoType,
           modality: trainingForm.modality || 'Treino Livre',
           score: Number(trainingForm.score) || 0,
           notes: trainingForm.notes || null,
@@ -1108,6 +1110,7 @@ function TreinamentosCompeticoesAdminPanel({
         ...prev,
         ownAmmoShots: '',
         clubAmmoShots: '',
+        clubAmmoType: 'recarga',
         score: '',
         notes: '',
       }));
@@ -1515,9 +1518,39 @@ function TreinamentosCompeticoesAdminPanel({
               </div>
 
               {Number(trainingForm.clubAmmoShots) > 0 && (
-                <p className="text-[10.5px] text-amber-700 font-medium bg-amber-50 p-2 rounded-lg border border-amber-200">
-                  ⚠️ <strong>Atenção:</strong> {trainingForm.clubAmmoShots} tiro(s) com munição do clube serão debitados automaticamente do saldo alocado do atleta.
-                </p>
+                <div className="space-y-2 bg-amber-50 p-3 rounded-xl border border-amber-200">
+                  <p className="text-[10.5px] text-amber-700 font-medium">
+                    ⚠️ <strong>Atenção:</strong> {trainingForm.clubAmmoShots} tiro(s) com munição do clube serão debitados automaticamente do saldo alocado do atleta.
+                  </p>
+
+                  <div className="pt-2 border-t border-amber-200/60 space-y-1">
+                    <label className="text-[10px] font-bold text-amber-900 uppercase block">Tipo de Munição do Clube Utilizada</label>
+                    <div className="flex gap-4 items-center">
+                      <label className="flex items-center gap-1.5 text-xs text-amber-900 font-semibold cursor-pointer">
+                        <input
+                          type="radio"
+                          name="adminTrainingClubAmmoType"
+                          value="nova"
+                          checked={trainingForm.clubAmmoType === 'nova'}
+                          onChange={() => setTrainingForm({ ...trainingForm, clubAmmoType: 'nova' })}
+                          className="text-blue-600 focus:ring-blue-500"
+                        />
+                        Munição Nova (NF)
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-amber-900 font-semibold cursor-pointer">
+                        <input
+                          type="radio"
+                          name="adminTrainingClubAmmoType"
+                          value="recarga"
+                          checked={trainingForm.clubAmmoType === 'recarga'}
+                          onChange={() => setTrainingForm({ ...trainingForm, clubAmmoType: 'recarga' })}
+                          className="text-blue-600 focus:ring-blue-500"
+                        />
+                        Munição Recarga
+                      </label>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
 
@@ -1812,7 +1845,7 @@ type EnrichedRegistration = {
   weaponNumber?: string; weaponSigma?: string; weaponCaliber?: string;
   totalPoints?: number; dataExecucao?: string; horaExecucao?: string;
   seriesPontos?: any[]; seriesTempos?: any[];
-  ownAmmoShots?: number; clubAmmoShots?: number;
+  ownAmmoShots?: number; clubAmmoShots?: number; clubAmmoType?: 'nova' | 'recarga';
 };
 
 const ZONES = ['x','p10','p9','p8','p7','p6','p5','p4','p3','p2','p1','p0'] as const;
@@ -1836,6 +1869,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
   const [penalidade, setPenalidade] = React.useState('0');
   const [ownAmmoShots, setOwnAmmoShots] = React.useState<number | string>('');
   const [clubAmmoShots, setClubAmmoShots] = React.useState<number | string>('');
+  const [clubAmmoType, setClubAmmoType] = React.useState<'nova' | 'recarga'>('recarga');
   const [seriesData, setSeriesData] = React.useState<Array<Record<string,string>>>([]);
   const [saving, setSaving] = React.useState(false);
   const [success, setSuccess] = React.useState('');
@@ -1878,6 +1912,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
 
     setOwnAmmoShots(reg.ownAmmoShots ? String(reg.ownAmmoShots) : '');
     setClubAmmoShots(reg.clubAmmoShots ? String(reg.clubAmmoShots) : '');
+    setClubAmmoType(reg.clubAmmoType || 'recarga');
   };
 
   const updateCell = (serieIdx: number, zone: string, val: string) => {
@@ -1935,6 +1970,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
           series, penalidade: Number(penalidade)||0,
           ownAmmoShots: Number(ownAmmoShots)||0,
           clubAmmoShots: Number(clubAmmoShots)||0,
+          clubAmmoType,
           stageNum: champStages.find(s => s.id === stageId)?.stageNum || 1
         })
       });
@@ -2000,165 +2036,209 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
           <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade</label>
           <select value={modalityId} onChange={e => { setModalityId(e.target.value); setSelectedReg(null); }}
             className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!stageId}>
-            <option value="">Selecione...</option>
+            <option value="">Todas as modalidades ({registrations.length})</option>
             {modalities.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
         </div>
       </div>
 
-      {loadingRegs && <p className="text-xs text-slate-400 text-center py-4">Carregando inscrições...</p>}
-      {!loadingRegs && registrations.length > 0 && !selectedReg && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-slate-600">{registrations.length} atleta(s) inscrito(s) — clique para lançar resultado:</p>
-          <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
-            {registrations.map(reg => (
-              <button key={reg.id} onClick={() => selectReg(reg)}
-                className="w-full text-left px-4 py-3 hover:bg-blue-50 transition flex justify-between items-center gap-2">
-                <div>
-                  <span className="font-semibold text-xs text-slate-800">{reg.athleteName}</span>
-                  <div className="text-[10px] text-slate-500 mt-0.5 space-x-1.5 flex flex-wrap items-center">
-                    <span>Clube: {reg.clubName || 'G&G Competições'}</span>
-                    <span>•</span>
-                    <span>CR: {reg.athleteCr || 'N/I'}</span>
-                    <span>•</span>
-                    <span className="font-medium text-slate-700">Nº Arma: {reg.weaponNumber || reg.weaponSerial || (reg.weaponSigma ? `Sigma ${reg.weaponSigma}` : 'N/I')}</span>
-                    <span>•</span>
-                    <span className="font-medium text-slate-700">Calibre: {reg.weaponCaliber || 'N/I'}</span>
-                    {reg.weaponModel && <span className="text-slate-400">({reg.weaponModel})</span>}
-                  </div>
-                </div>
-                {statusBadge(reg)}
-              </button>
-            ))}
-          </div>
+      {loadingRegs ? (
+        <div className="py-6 text-center text-slate-400 text-xs font-semibold">Carregando inscrições...</div>
+      ) : registrations.length === 0 ? (
+        <div className="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400 font-semibold">
+          {champId && stageId ? 'Nenhuma inscrição encontrada para a etapa selecionada.' : 'Selecione o Campeonato e a Etapa acima para carregar a lista de atiradores.'}
         </div>
-      )}
-      {!loadingRegs && registrations.length === 0 && champId && stageId && (
-        <p className="text-xs text-slate-400 text-center py-6 border border-dashed border-slate-200 rounded-xl">Nenhum atleta inscrito nesta seleção.</p>
-      )}
-
-      {selectedReg && (
-        <div className="space-y-5 bg-slate-50 rounded-2xl p-5 border border-slate-200">
-          <div className="flex justify-between items-start">
-            <div>
-              <h4 className="font-bold text-slate-800 text-base">{selectedReg.athleteName}</h4>
-              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-slate-600 my-1">
-                <span><strong className="text-slate-700 font-semibold">Nº Arma:</strong> {selectedReg.weaponNumber || selectedReg.weaponSerial || (selectedReg.weaponSigma ? `Sigma ${selectedReg.weaponSigma}` : 'Não informado')}</span>
-                <span className="text-slate-300">•</span>
-                <span><strong className="text-slate-700 font-semibold">Calibre:</strong> {selectedReg.weaponCaliber || 'Não informado'}</span>
-                {selectedReg.weaponModel && (
-                  <>
-                    <span className="text-slate-300">•</span>
-                    <span className="text-slate-500">Modelo: {selectedReg.weaponModel}</span>
-                  </>
-                )}
-              </div>
-              <p className="text-[11px] text-slate-400">{selectedReg.modalityName} · {selectedReg.seriesCount ?? 1} série(s) × {selectedReg.shotsPerSeries ?? 0} tiros</p>
-            </div>
-            <button onClick={() => setSelectedReg(null)} className="text-xs text-slate-400 hover:text-red-500 transition font-bold">← Voltar</button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 uppercase">Data de Execução</label>
-              <input type="date" value={dataExec} onChange={e => setDataExec(e.target.value)}
-                className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 uppercase">Hora de Execução</label>
-              <input type="time" value={horaExec} onChange={e => setHoraExec(e.target.value)}
-                className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700" />
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {seriesData.map((serie, si) => {
-              const currentShots = ZONES.reduce((acc, z) => acc + (Number(serie[z]) || 0), 0);
-              const expectedShots = selectedReg.shotsPerSeries || 0;
-              const hasExceeded = currentShots > expectedShots;
-
-              return (
-                <div key={si} className={`rounded-xl border p-3 ${si === bestIdx ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'} ${hasExceeded ? 'border-red-400 bg-red-50/20' : ''}`}>
-                  <div className="flex justify-between items-center mb-2">
-                    <div className="flex items-center">
-                      <span className="text-[10px] font-bold text-slate-600 uppercase font-mono">Série {si+1}</span>
-                      <span className={`text-[9px] font-bold ml-3 px-1.5 py-0.5 rounded font-mono ${hasExceeded ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
-                        Tiros: {currentShots} / {expectedShots}
-                      </span>
-                    </div>
-                    {si === bestIdx && seriesData.length > 1 && (
-                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">⭐ Melhor Série</span>
-                    )}
-                    <span className="text-xs font-mono font-bold text-slate-700">
-                      Total: {calcSeriePts(Object.fromEntries(Object.entries(serie).map(([k,v]) => [k, Number(v)||0])), xValue)} pts
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-6 sm:grid-cols-12 gap-1">
-                    {ZONES.map(z => (
-                      <div key={z} className="space-y-0.5 text-center">
-                        <label className={`text-[9px] font-bold block ${z === 'x' ? 'text-amber-500' : z === 'p10' ? 'text-blue-500' : 'text-slate-450'}`}>{ZONE_LABELS[z]}</label>
-                        <input
-                          type="number" min="0" max={selectedReg.shotsPerSeries ?? 60}
-                          value={serie[z]}
-                          onChange={e => updateCell(si, z, e.target.value)}
-                          className="w-full text-center bg-white border border-slate-200 rounded-lg p-1 text-xs font-mono focus:border-blue-400 outline-none"
-                        />
+      ) : (
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase block">Selecione o Atleta / Inscrição ({registrations.length})</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1 border border-slate-200 rounded-xl bg-slate-50">
+              {registrations.map(r => {
+                const isSelected = selectedReg?.id === r.id;
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => selectReg(r)}
+                    className={`p-2.5 rounded-xl text-left border transition flex items-center justify-between cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-600 border-blue-600 text-white shadow-xs font-semibold'
+                        : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="truncate pr-2">
+                      <div className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+                        {r.athleteName || 'Atleta'}
                       </div>
-                    ))}
-                  </div>
-                  {hasExceeded && (
-                    <div className="mt-2 text-[10px] font-bold text-red-600 bg-red-50 border border-red-100 rounded-lg p-2 flex items-center gap-1.5 animate-pulse">
-                      <span>⚠️ Ultrapassou o limite de {expectedShots} tiros estabelecido para a modalidade!</span>
+                      <div className={`text-[10px] truncate ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                        {r.modalityName}
+                      </div>
                     </div>
-                  )}
+                    {statusBadge(r)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {selectedReg && (
+            <div className="border border-blue-200 rounded-2xl p-5 bg-blue-50/30 space-y-4 text-slate-800">
+              <div className="flex flex-wrap justify-between items-center border-b border-blue-100 pb-3 gap-2">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm">{selectedReg.athleteName}</h4>
+                  <p className="text-[11px] text-slate-500 font-mono">
+                    Modalidade: {selectedReg.modalityName} | Arma: {selectedReg.weaponModel || 'N/A'} {selectedReg.weaponCaliber ? `(${selectedReg.weaponCaliber})` : ''}
+                  </p>
                 </div>
-              );
-            })}
-          </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2.5 py-1 rounded-full font-mono">
+                    {selectedReg.shotsPerSeries ? `${selectedReg.seriesCount || 1} Série(s) de ${selectedReg.shotsPerSeries} tiros` : 'Pontuação Direta'}
+                  </span>
+                </div>
+              </div>
 
-          <div className="bg-slate-100/70 rounded-xl p-4 border border-slate-200/80 space-y-3">
-            <div className="flex items-center gap-2 text-slate-700 font-bold text-xs">
-              <Package className="w-4 h-4 text-blue-600" />
-              <span>Origem da Munição e Penalidades</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase block">Penalidade (pts)</label>
-                <input type="number" min="0" value={penalidade} onChange={e => setPenalidade(e.target.value)}
-                  className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Data da Prova</label>
+                  <input
+                    type="date"
+                    value={dataExec}
+                    onChange={e => setDataExec(e.target.value)}
+                    className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Hora da Prova</label>
+                  <input
+                    type="time"
+                    value={horaExec}
+                    onChange={e => setHoraExec(e.target.value)}
+                    className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700"
+                  />
+                </div>
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase block">Tiros com munição própria</label>
-                <input type="number" min="0" value={ownAmmoShots} onChange={e => setOwnAmmoShots(e.target.value)}
-                  placeholder="Ex: 10"
-                  className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono focus:border-blue-500" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase block">Tiros com munição do clube</label>
-                <input type="number" min="0" value={clubAmmoShots} onChange={e => setClubAmmoShots(e.target.value)}
-                  placeholder="Ex: 0"
-                  className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono focus:border-blue-500" />
-              </div>
-            </div>
-            <p className="text-[10px] text-slate-450 italic">
-              * A soma dos tiros (munição própria + clube) deve ser exatamente igual ao total de tiros lançados nas séries. Tiros com munição do clube serão automaticamente abatidos do saldo alocado do atleta.
-            </p>
-          </div>
 
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200">
-            <button onClick={() => handleSubmit('salvar')} disabled={saving}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-350 text-white text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
-              <Save className="w-4 h-4" />{saving ? 'Salvando...' : 'Salvar Resultado'}
-            </button>
-            <button onClick={() => handleSubmit('nao_participou')} disabled={saving}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
-              <AlertCircle className="w-4 h-4 text-amber-500" />Não Participou
-            </button>
-            <button onClick={() => handleSubmit('desclassificar')} disabled={saving}
-              className="bg-red-50 hover:bg-red-100 text-red-700 text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
-              <ShieldAlert className="w-4 h-4" />Desclassificar
-            </button>
-          </div>
+              <div className="space-y-4">
+                {seriesData.map((serie, si) => {
+                  const currentShots = ZONES.reduce((acc, z) => acc + (Number(serie[z]) || 0), 0);
+                  const expectedShots = selectedReg.shotsPerSeries || 0;
+                  const hasExceeded = currentShots > expectedShots;
+
+                  return (
+                    <div key={si} className={`rounded-xl border p-3 ${si === bestIdx ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'} ${hasExceeded ? 'border-red-400 bg-red-50/20' : ''}`}>
+                      <div className="flex justify-between items-center mb-2">
+                        <div className="flex items-center">
+                          <span className="text-[10px] font-bold text-slate-600 uppercase font-mono">Série {si+1}</span>
+                          <span className={`text-[9px] font-bold ml-3 px-1.5 py-0.5 rounded font-mono ${hasExceeded ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+                            Tiros: {currentShots} / {expectedShots}
+                          </span>
+                        </div>
+                        {si === bestIdx && seriesData.length > 1 && (
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">⭐ Melhor Série</span>
+                        )}
+                        <span className="text-xs font-mono font-bold text-slate-700">
+                          Total: {calcSeriePts(Object.fromEntries(Object.entries(serie).map(([k,v]) => [k, Number(v)||0])), xValue)} pts
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-6 sm:grid-cols-12 gap-1">
+                        {ZONES.map(z => (
+                          <div key={z} className="space-y-0.5 text-center">
+                            <label className={`text-[9px] font-bold block ${z === 'x' ? 'text-amber-500' : z === 'p10' ? 'text-blue-500' : 'text-slate-450'}`}>{ZONE_LABELS[z]}</label>
+                            <input
+                              type="number" min="0" max={selectedReg.shotsPerSeries ?? 60}
+                              value={serie[z]}
+                              onChange={e => updateCell(si, z, e.target.value)}
+                              className="w-full text-center bg-white border border-slate-200 rounded-lg p-1 text-xs font-mono focus:border-blue-400 outline-none"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      {hasExceeded && (
+                        <div className="mt-2 text-[10px] font-bold text-red-600 bg-red-50 border border-red-100 rounded-lg p-2 flex items-center gap-1.5 animate-pulse">
+                          <span>⚠️ Ultrapassou o limite de {expectedShots} tiros estabelecido para a modalidade!</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="bg-slate-100/70 rounded-xl p-4 border border-slate-200/80 space-y-3">
+                <div className="flex items-center gap-2 text-slate-700 font-bold text-xs">
+                  <Package className="w-4 h-4 text-blue-600" />
+                  <span>Origem da Munição e Penalidades</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Penalidade (pts)</label>
+                    <input type="number" min="0" value={penalidade} onChange={e => setPenalidade(e.target.value)}
+                      className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Tiros com munição própria</label>
+                    <input type="number" min="0" value={ownAmmoShots} onChange={e => setOwnAmmoShots(e.target.value)}
+                      placeholder="Ex: 10"
+                      className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono focus:border-blue-500" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Tiros com munição do clube</label>
+                    <input type="number" min="0" value={clubAmmoShots} onChange={e => setClubAmmoShots(e.target.value)}
+                      placeholder="Ex: 0"
+                      className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono focus:border-blue-500" />
+                  </div>
+                </div>
+
+                {Number(clubAmmoShots) > 0 && (
+                  <div className="pt-2 border-t border-slate-200/60 space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-600 uppercase block">Tipo de Munição do Clube Utilizada</label>
+                    <div className="flex gap-4 items-center">
+                      <label className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold cursor-pointer">
+                        <input
+                          type="radio"
+                          name="scoreClubAmmoType"
+                          value="nova"
+                          checked={clubAmmoType === 'nova'}
+                          onChange={() => setClubAmmoType('nova')}
+                          className="text-blue-600 focus:ring-blue-500"
+                        />
+                        Munição Nova (NF)
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold cursor-pointer">
+                        <input
+                          type="radio"
+                          name="scoreClubAmmoType"
+                          value="recarga"
+                          checked={clubAmmoType === 'recarga'}
+                          onChange={() => setClubAmmoType('recarga')}
+                          className="text-blue-600 focus:ring-blue-500"
+                        />
+                        Munição Recarga
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-[10px] text-slate-450 italic">
+                  * A soma dos tiros (munição própria + clube) deve ser exatamente igual ao total de tiros lançados nas séries. Tiros com munição do clube serão automaticamente abatidos do saldo alocado do atleta.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200">
+                <button onClick={() => handleSubmit('salvar')} disabled={saving}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-350 text-white text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
+                  <Save className="w-4 h-4" />{saving ? 'Salvando...' : 'Salvar Resultado'}
+                </button>
+                <button onClick={() => handleSubmit('nao_participou')} disabled={saving}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
+                  <AlertCircle className="w-4 h-4 text-amber-500" />Não Participou
+                </button>
+                <button onClick={() => handleSubmit('desclassificar')} disabled={saving}
+                  className="bg-red-50 hover:bg-red-100 text-red-700 text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
+                  <ShieldAlert className="w-4 h-4" />Desclassificar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -2199,8 +2279,8 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
   const [nfNumber, setNfNumber] = useState('');
   const [nfSupplier, setNfSupplier] = useState('');
   const [nfDate, setNfDate] = useState(new Date().toISOString().split('T')[0]);
-  const [nfItems, setNfItems] = useState<Array<{ productType: 'espoleta' | 'polvora' | 'ponta' | 'municao_nova'; caliber: string; quantity: string; unitPrice: string }>>([
-    { productType: 'municao_nova', caliber: '', quantity: '100', unitPrice: '0.00' }
+  const [nfItems, setNfItems] = useState<Array<{ productType: 'espoleta' | 'polvora' | 'ponta' | 'ponta_nova' | 'ponta_reciclada' | 'municao_nova'; unitMeasure: 'un' | 'kg' | 'g'; caliber: string; quantity: string; unitPrice: string }>>([
+    { productType: 'municao_nova', unitMeasure: 'un', caliber: '', quantity: '100', unitPrice: '0.00' }
   ]);
   const [savingNf, setSavingNf] = useState(false);
 
@@ -2306,6 +2386,7 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
           date: nfDate,
           items: nfItems.map(i => ({
             productType: i.productType,
+            unitMeasure: i.unitMeasure || 'un',
             caliber: i.caliber,
             quantity: Number(i.quantity),
             unitPrice: Number(i.unitPrice) || 0
@@ -2317,7 +2398,7 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
       setSuccess(`✅ Nota Fiscal registrada com sucesso! Total: R$ ${data.totalInvoiceAmount.toFixed(2)}.`);
       setNfNumber('');
       setNfSupplier('');
-      setNfItems([{ productType: 'municao_nova', caliber: '', quantity: '100', unitPrice: '0.00' }]);
+      setNfItems([{ productType: 'municao_nova', unitMeasure: 'un', caliber: '', quantity: '100', unitPrice: '0.00' }]);
       await loadAmmoOverview();
       if (onRefreshData) await onRefreshData();
     } catch (err: any) {
@@ -2665,8 +2746,26 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
                           >
                             <option value="espoleta">Espoleta</option>
                             <option value="polvora">Pólvora</option>
-                            <option value="ponta">Ponta ou Projétil</option>
+                            <option value="ponta_nova">Ponta / Projétil Nova</option>
+                            <option value="ponta_reciclada">Ponta / Projétil Reciclada</option>
                             <option value="municao_nova">Munição nova ⭐ (Soma no estoque)</option>
+                          </select>
+                        </div>
+
+                        <div className="sm:col-span-2 space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block">Unidade de Medida</label>
+                          <select
+                            value={item.unitMeasure || 'un'}
+                            onChange={e => {
+                              const newItems = [...nfItems];
+                              newItems[idx].unitMeasure = e.target.value as any;
+                              setNfItems(newItems);
+                            }}
+                            className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs font-semibold outline-none"
+                          >
+                            <option value="un">Unitário (un)</option>
+                            <option value="kg">Kilo (kg)</option>
+                            <option value="g">Grama (g)</option>
                           </select>
                         </div>
 
@@ -2689,7 +2788,7 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
                         </div>
 
                         <div className="sm:col-span-2 space-y-1">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase block">Quantidade</label>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block">Quantidade ({item.unitMeasure || 'un'})</label>
                           <input
                             type="number"
                             min="1"
@@ -2719,7 +2818,7 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
                           />
                         </div>
 
-                        <div className="sm:col-span-2 flex items-center justify-between sm:justify-end gap-2">
+                        <div className="sm:col-span-12 flex items-center justify-between sm:justify-end gap-2 pt-1 border-t border-slate-100">
                           <div className="text-right">
                             <span className="text-[9px] text-slate-400 block uppercase font-mono">Total Linha</span>
                             <span className="text-xs font-bold text-slate-900 font-mono">R$ {rowTotal.toFixed(2)}</span>
@@ -2747,7 +2846,7 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
                   <button
                     type="button"
                     onClick={() => {
-                      setNfItems([...nfItems, { productType: 'municao_nova', caliber: '', quantity: '100', unitPrice: '0.00' }]);
+                      setNfItems([...nfItems, { productType: 'municao_nova', unitMeasure: 'un', caliber: '', quantity: '100', unitPrice: '0.00' }]);
                     }}
                     className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-3 py-2 rounded-xl transition cursor-pointer"
                   >
@@ -2793,11 +2892,20 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
 
                     {inv.items && inv.items.length > 0 && (
                       <div className="flex flex-wrap gap-2 pt-1">
-                        {inv.items.map((it, idx) => (
-                          <span key={idx} className={`text-[10px] px-2 py-1 rounded-lg border font-mono ${it.productType === 'municao_nova' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
-                            {it.productType === 'espoleta' ? 'Espoleta' : it.productType === 'polvora' ? 'Pólvora' : it.productType === 'ponta' ? 'Ponta' : 'Munição nova'}: {it.quantity} un ({it.caliber})
-                          </span>
-                        ))}
+                        {inv.items.map((it, idx) => {
+                          const prodLabel = it.productType === 'espoleta' ? 'Espoleta'
+                            : it.productType === 'polvora' ? 'Pólvora'
+                            : it.productType === 'ponta_reciclada' ? 'Ponta/Projétil Reciclada'
+                            : it.productType === 'ponta_nova' || it.productType === 'ponta' ? 'Ponta/Projétil Nova'
+                            : 'Munição nova';
+                          const unitLabel = it.unitMeasure || 'un';
+
+                          return (
+                            <span key={idx} className={`text-[10px] px-2 py-1 rounded-lg border font-mono ${it.productType === 'municao_nova' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                              {prodLabel}: {it.quantity} {unitLabel} ({it.caliber})
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

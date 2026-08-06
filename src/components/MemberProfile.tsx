@@ -1253,6 +1253,7 @@ export default function MemberProfile({
     weaponOwnerType: 'propria' as 'propria' | 'clube',
     ownAmmoShots: '' as number | string,
     clubAmmoShots: '' as number | string,
+    clubAmmoType: 'recarga' as 'nova' | 'recarga',
     modality: 'Treino Livre',
     score: 0,
     notes: ''
@@ -1424,6 +1425,7 @@ export default function MemberProfile({
         weaponOwnerType: trainingForm.weaponOwnerType,
         ownAmmoShots: own,
         clubAmmoShots: club,
+        clubAmmoType: trainingForm.clubAmmoType,
         modality: trainingForm.modality,
         score: Number(trainingForm.score) || 0,
         notes: trainingForm.notes,
@@ -1446,6 +1448,7 @@ export default function MemberProfile({
           weaponOwnerType: 'propria',
           ownAmmoShots: '',
           clubAmmoShots: '',
+          clubAmmoType: 'recarga',
           modality: 'Treino Livre',
           score: 0,
           notes: ''
@@ -3523,6 +3526,36 @@ export default function MemberProfile({
                           />
                         </div>
                       </div>
+
+                      {Number(trainingForm.clubAmmoShots) > 0 && (
+                        <div className="pt-2 border-t border-slate-200/80 space-y-1">
+                          <label className="text-[10px] font-bold text-slate-600 uppercase block">Tipo de Munição do Clube Utilizada</label>
+                          <div className="flex gap-4 items-center">
+                            <label className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold cursor-pointer">
+                              <input
+                                type="radio"
+                                name="athleteClubAmmoType"
+                                value="nova"
+                                checked={trainingForm.clubAmmoType === 'nova'}
+                                onChange={() => setTrainingForm({ ...trainingForm, clubAmmoType: 'nova' })}
+                                className="text-blue-600 focus:ring-blue-500"
+                              />
+                              Munição Nova (NF)
+                            </label>
+                            <label className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold cursor-pointer">
+                              <input
+                                type="radio"
+                                name="athleteClubAmmoType"
+                                value="recarga"
+                                checked={trainingForm.clubAmmoType === 'recarga'}
+                                onChange={() => setTrainingForm({ ...trainingForm, clubAmmoType: 'recarga' })}
+                                className="text-blue-600 focus:ring-blue-500"
+                              />
+                              Munição Recarga
+                            </label>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <button
