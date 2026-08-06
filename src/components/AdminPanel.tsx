@@ -2313,6 +2313,11 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
   const [savingAlloc, setSavingAlloc] = useState(false);
   const [editingAllocId, setEditingAllocId] = useState<string | null>(null);
 
+  // Edit states for all ammo entries
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
+  const [editingProdId, setEditingProdId] = useState<string | null>(null);
+  const [editingRecId, setEditingRecId] = useState<string | null>(null);
+
   // Fetch overview data
   const loadAmmoOverview = async () => {
     if (!currentUser) return;
@@ -2367,7 +2372,7 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
     }
   };
 
-  // 1. Submit NF Entry
+  // 1. Submit NF Entry (Create or Update)
   const handleNfSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -2378,8 +2383,12 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
     }
     setSavingNf(true);
     try {
-      const r = await fetch('/api/ammo/invoices', {
-        method: 'POST',
+      const isEditing = Boolean(editingInvoiceId);
+      const url = isEditing ? `/api/ammo/invoices/${editingInvoiceId}` : '/api/ammo/invoices';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const r = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
         body: JSON.stringify({
           invoiceNumber: nfNumber,
@@ -2395,8 +2404,9 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
         })
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || 'Erro ao registrar Nota Fiscal');
-      setSuccess(`✅ Nota Fiscal registrada com sucesso! Total: R$ ${data.totalInvoiceAmount.toFixed(2)}.`);
+      if (!r.ok) throw new Error(data.error || 'Erro ao salvar Nota Fiscal');
+      setSuccess(isEditing ? `✅ ${data.message}` : `✅ Nota Fiscal registrada com sucesso! Total: R$ ${(data.totalInvoiceAmount || 0).toFixed(2)}.`);
+      setEditingInvoiceId(null);
       setNfNumber('');
       setNfSupplier('');
       setNfItems([{ productType: 'municao_nova', unitMeasure: 'un', caliber: '', quantity: '100', unitPrice: '0.00' }]);
@@ -2406,6 +2416,52 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
       setError(err.message);
     } finally {
       setSavingNf(false);
+    }
+  };
+
+  const startEditingInvoice = (inv: AmmoInvoice) => {
+    setEditingInvoiceId(inv.id);
+    setNfNumber(inv.invoiceNumber || '');
+    setNfSupplier(inv.supplier || '');
+    setNfDate(inv.date ? inv.date.split('T')[0] : new Date().toISOString().split('T')[0]);
+    if (inv.items && inv.items.length > 0) {
+      setNfItems(inv.items.map(i => ({
+        productType: i.productType,
+        unitMeasure: (i.unitMeasure as any) || 'un',
+        caliber: i.caliber,
+        quantity: String(i.quantity),
+        unitPrice: String(i.unitPrice)
+      })));
+    } else {
+      setNfItems([{ productType: 'municao_nova', unitMeasure: 'un', caliber: '', quantity: '100', unitPrice: '0.00' }]);
+    }
+    setError(''); setSuccess('');
+  };
+
+  const cancelEditingInvoice = () => {
+    setEditingInvoiceId(null);
+    setNfNumber('');
+    setNfSupplier('');
+    setNfDate(new Date().toISOString().split('T')[0]);
+    setNfItems([{ productType: 'municao_nova', unitMeasure: 'un', caliber: '', quantity: '100', unitPrice: '0.00' }]);
+  };
+
+  const handleDeleteInvoice = async (id: string, num?: string) => {
+    if (!window.confirm(`Deseja realmente excluir a Nota Fiscal ${num ? `Nº ${num}` : ''}?`)) return;
+    setError(''); setSuccess('');
+    try {
+      const r = await fetch(`/api/ammo/invoices/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro ao excluir Nota Fiscal');
+      setSuccess(`✅ ${data.message}`);
+      if (editingInvoiceId === id) cancelEditingInvoice();
+      await loadAmmoOverview();
+      if (onRefreshData) await onRefreshData();
+    } catch (err: any) {
+      setError(err.message);
     }
   };
 
@@ -2438,7 +2494,7 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
     }
   };
 
-  // 2b. Submit Production/Reloading
+  // 2b. Submit Production/Reloading (Create or Update)
   const handleProductionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -2449,14 +2505,19 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
     }
     setSavingProd(true);
     try {
-      const r = await fetch('/api/ammo/production', {
-        method: 'POST',
+      const isEditing = Boolean(editingProdId);
+      const url = isEditing ? `/api/ammo/production/${editingProdId}` : '/api/ammo/production';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const r = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
         body: JSON.stringify({ caliber: prodCaliber, quantity: Number(prodQty), date: prodDate })
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || 'Erro ao registrar produção');
-      setSuccess(data.message);
+      if (!r.ok) throw new Error(data.error || 'Erro ao salvar produção');
+      setSuccess(`✅ ${data.message}`);
+      setEditingProdId(null);
       setProdCaliber('');
       setProdQty('');
       await loadAmmoOverview();
@@ -2467,7 +2528,39 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
     }
   };
 
-  // 3. Submit Recycled
+  const startEditingProduction = (p: AmmoProduction) => {
+    setEditingProdId(p.id);
+    setProdDate(p.date ? p.date.split('T')[0] : new Date().toISOString().split('T')[0]);
+    setProdCaliber(p.caliber);
+    setProdQty(String(p.quantity));
+    setError(''); setSuccess('');
+  };
+
+  const cancelEditingProduction = () => {
+    setEditingProdId(null);
+    setProdCaliber('');
+    setProdQty('');
+  };
+
+  const handleDeleteProduction = async (id: string, caliber: string) => {
+    if (!window.confirm(`Deseja realmente excluir este registro de produção de recarga (${caliber})?`)) return;
+    setError(''); setSuccess('');
+    try {
+      const r = await fetch(`/api/ammo/production/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro ao excluir produção');
+      setSuccess(`✅ ${data.message}`);
+      if (editingProdId === id) cancelEditingProduction();
+      await loadAmmoOverview();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  // 3. Submit Recycled (Create or Update)
   const handleRecycledSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -2478,14 +2571,19 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
     }
     setSavingRec(true);
     try {
-      const r = await fetch('/api/ammo/recycled', {
-        method: 'POST',
+      const isEditing = Boolean(editingRecId);
+      const url = isEditing ? `/api/ammo/recycled/${editingRecId}` : '/api/ammo/recycled';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const r = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
         body: JSON.stringify({ caliber: recCaliber, quantity: Number(recQty), date: recDate })
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || 'Erro ao registrar reciclado');
-      setSuccess(data.message);
+      if (!r.ok) throw new Error(data.error || 'Erro ao salvar reciclado');
+      setSuccess(`✅ ${data.message}`);
+      setEditingRecId(null);
       setRecCaliber('');
       setRecQty('');
       await loadAmmoOverview();
@@ -2493,6 +2591,38 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
       setError(err.message);
     } finally {
       setSavingRec(false);
+    }
+  };
+
+  const startEditingRecycled = (rRow: AmmoRecycled) => {
+    setEditingRecId(rRow.id);
+    setRecDate(rRow.date ? rRow.date.split('T')[0] : new Date().toISOString().split('T')[0]);
+    setRecCaliber(rRow.caliber);
+    setRecQty(String(rRow.quantity));
+    setError(''); setSuccess('');
+  };
+
+  const cancelEditingRecycled = () => {
+    setEditingRecId(null);
+    setRecCaliber('');
+    setRecQty('');
+  };
+
+  const handleDeleteRecycled = async (id: string, caliber: string) => {
+    if (!window.confirm(`Deseja realmente excluir este lançamento de pontas recicladas (${caliber})?`)) return;
+    setError(''); setSuccess('');
+    try {
+      const r = await fetch(`/api/ammo/recycled/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro ao excluir reciclado');
+      setSuccess(`✅ ${data.message}`);
+      if (editingRecId === id) cancelEditingRecycled();
+      await loadAmmoOverview();
+    } catch (err: any) {
+      setError(err.message);
     }
   };
 
@@ -2728,9 +2858,22 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
       {subTab === 'entrada_nf' && (
         <div className="space-y-6">
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
-            <div className="pb-3 border-b border-slate-100">
-              <h4 className="font-display font-bold text-slate-900 text-sm">Registro de Entrada de Nota Fiscal (Insumos / Munição Nova)</h4>
-              <p className="text-xs text-slate-400">Adicione os produtos constantes na Nota Fiscal. Se o produto for "Munição nova", a quantidade entra automaticamente no estoque principal do clube.</p>
+            <div className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row justify-between sm:items-start gap-2">
+              <div>
+                <h4 className="font-display font-bold text-slate-900 text-sm">
+                  {editingInvoiceId ? 'Editar Registro de Nota Fiscal' : 'Registro de Entrada de Nota Fiscal (Insumos / Munição Nova)'}
+                </h4>
+                <p className="text-xs text-slate-400">Adicione os produtos constantes na Nota Fiscal. Se o produto for "Munição nova", a quantidade entra automaticamente no estoque principal do clube.</p>
+              </div>
+              {editingInvoiceId && (
+                <button
+                  type="button"
+                  onClick={cancelEditingInvoice}
+                  className="text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl cursor-pointer shrink-0"
+                >
+                  Cancelar Edição
+                </button>
+              )}
             </div>
 
             <form onSubmit={handleNfSubmit} className="space-y-6">
@@ -2918,7 +3061,7 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
                   disabled={savingNf}
                   className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg shadow-blue-100 cursor-pointer"
                 >
-                  {savingNf ? 'Registrando NF...' : 'Registrar Entrada da Nota Fiscal'}
+                  {savingNf ? 'Salvando...' : editingInvoiceId ? 'Atualizar Nota Fiscal' : 'Registrar Entrada da Nota Fiscal'}
                 </button>
               </div>
             </form>
@@ -2939,7 +3082,27 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
                         <span className="text-slate-500 ml-2">• Fornecedor: {inv.supplier || 'Não informado'}</span>
                         <span className="text-slate-400 ml-2 font-mono">• {new Date(inv.date).toLocaleDateString('pt-BR')}</span>
                       </div>
-                      <span className="font-bold font-mono text-emerald-600">R$ {inv.totalAmount.toFixed(2)}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="font-bold font-mono text-emerald-600">R$ {inv.totalAmount.toFixed(2)}</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => startEditingInvoice(inv)}
+                            className="text-[11px] text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 font-bold px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1"
+                            title="Editar Nota Fiscal"
+                          >
+                            <Pencil className="w-3 h-3" /> Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteInvoice(inv.id, inv.invoiceNumber)}
+                            className="text-[11px] text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 font-bold px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1"
+                            title="Excluir Nota Fiscal"
+                          >
+                            <Trash2 className="w-3 h-3" /> Excluir
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                     {inv.items && inv.items.length > 0 && (
@@ -3077,7 +3240,20 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
 
             {/* Form: Produção / Recarga Interna */}
             <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
-              <h4 className="font-display font-bold text-slate-900 text-sm">2. Entrada de Produção / Recarga de Munições</h4>
+              <div className="pb-2 border-b border-slate-100 flex justify-between items-center">
+                <h4 className="font-display font-bold text-slate-900 text-sm">
+                  {editingProdId ? 'Editar Produção / Recarga' : '2. Entrada de Produção / Recarga de Munições'}
+                </h4>
+                {editingProdId && (
+                  <button
+                    type="button"
+                    onClick={cancelEditingProduction}
+                    className="text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
               <p className="text-xs text-slate-400">Registra a quantidade de munição recarregada ou produzida pelo clube para somar ao estoque.</p>
 
               <form onSubmit={handleProductionSubmit} className="space-y-4">
@@ -3124,7 +3300,7 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
                   disabled={savingProd}
                   className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs py-3 rounded-xl font-bold transition shadow-sm cursor-pointer"
                 >
-                  {savingProd ? 'Registrando...' : 'Registrar Produção de Munição'}
+                  {savingProd ? 'Salvando...' : editingProdId ? 'Atualizar Produção' : 'Registrar Produção de Munição'}
                 </button>
               </form>
             </div>
@@ -3143,7 +3319,25 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
                       <span className="font-bold text-slate-900">{p.caliber}</span>
                       <span className="text-slate-400 ml-2 font-mono">• Data: {new Date(p.date).toLocaleDateString('pt-BR')}</span>
                     </div>
-                    <span className="font-bold font-mono text-emerald-600">+{p.quantity} un produzidas</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold font-mono text-emerald-600">+{p.quantity} un produzidas</span>
+                      <button
+                        type="button"
+                        onClick={() => startEditingProduction(p)}
+                        className="text-[11px] text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 font-bold px-2 py-0.5 rounded transition cursor-pointer flex items-center gap-1"
+                        title="Editar produção"
+                      >
+                        <Pencil className="w-3 h-3" /> Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteProduction(p.id, p.caliber)}
+                        className="text-[11px] text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 font-bold px-2 py-0.5 rounded transition cursor-pointer flex items-center gap-1"
+                        title="Excluir produção"
+                      >
+                        <Trash2 className="w-3 h-3" /> Excluir
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -3158,7 +3352,20 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {/* Form */}
             <div className="sm:col-span-1 bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
-              <h4 className="font-display font-bold text-slate-900 text-sm">Registrar Produção de Pontas / Projéteis Reciclados</h4>
+              <div className="pb-2 border-b border-slate-100 flex justify-between items-center">
+                <h4 className="font-display font-bold text-slate-900 text-sm">
+                  {editingRecId ? 'Editar Registro de Pontas Recicladas' : 'Registrar Produção de Pontas / Projéteis Reciclados'}
+                </h4>
+                {editingRecId && (
+                  <button
+                    type="button"
+                    onClick={cancelEditingRecycled}
+                    className="text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
               <p className="text-xs text-slate-400">Lance a quantidade de pontas/projéteis reciclados pelo estande.</p>
 
               <form onSubmit={handleRecycledSubmit} className="space-y-4">
@@ -3205,7 +3412,7 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
                   disabled={savingRec}
                   className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs py-3 rounded-xl font-bold transition shadow-sm cursor-pointer"
                 >
-                  {savingRec ? 'Salvando...' : 'Salvar Registro de Reciclado'}
+                  {savingRec ? 'Salvando...' : editingRecId ? 'Atualizar Reciclado' : 'Salvar Registro de Reciclado'}
                 </button>
               </form>
             </div>
@@ -3242,7 +3449,25 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
                           <span className="font-bold text-slate-900">{r.caliber}</span>
                           <span className="text-slate-400 ml-2 font-mono">• Data: {new Date(r.date).toLocaleDateString('pt-BR')}</span>
                         </div>
-                        <span className="font-bold font-mono text-blue-600">+{r.quantity} un</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold font-mono text-blue-600">+{r.quantity} un</span>
+                          <button
+                            type="button"
+                            onClick={() => startEditingRecycled(r)}
+                            className="text-[11px] text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 font-bold px-2 py-0.5 rounded transition cursor-pointer flex items-center gap-1"
+                            title="Editar reciclado"
+                          >
+                            <Pencil className="w-3 h-3" /> Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRecycled(r.id, r.caliber)}
+                            className="text-[11px] text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 font-bold px-2 py-0.5 rounded transition cursor-pointer flex items-center gap-1"
+                            title="Excluir reciclado"
+                          >
+                            <Trash2 className="w-3 h-3" /> Excluir
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>

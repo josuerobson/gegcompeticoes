@@ -3749,6 +3749,164 @@ app.post('/api/ammo/recycled', requireAdmin, async (req, res) => {
   }
 });
 
+// PUT /api/ammo/invoices/:id — Atualiza Nota Fiscal de Insumos/Munições
+app.put('/api/ammo/invoices/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { invoiceNumber, supplier, date, items } = req.body;
+  if (!date || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Data e ao menos um produto são obrigatórios.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const invRes = await client.query('SELECT * FROM ammo_invoices WHERE id = $1', [id]);
+    if (invRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Nota Fiscal não encontrada.' });
+    }
+
+    let totalInvoiceAmount = 0;
+    for (const item of items) {
+      const qty = Math.max(0, Number(item.quantity) || 0);
+      const unit = Math.max(0, Number(item.unitPrice) || 0);
+      totalInvoiceAmount += qty * unit;
+    }
+
+    await client.query(
+      `UPDATE ammo_invoices SET invoice_number = $1, supplier = $2, date = $3, total_amount = $4 WHERE id = $5`,
+      [invoiceNumber || null, supplier || null, date, totalInvoiceAmount, id]
+    );
+
+    await client.query('DELETE FROM ammo_invoice_items WHERE invoice_id = $1', [id]);
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const itemId = `nfi_${id}_${i}_${Date.now()}`;
+      const qty = Math.max(0, Number(item.quantity) || 0);
+      const unit = Math.max(0, Number(item.unitPrice) || 0);
+      const total = qty * unit;
+      const unitMeasure = item.unitMeasure || item.unit_measure || 'un';
+
+      await client.query(
+        `INSERT INTO ammo_invoice_items (id, invoice_id, product_type, unit_measure, caliber, quantity, unit_price, total_price)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [itemId, id, item.productType, unitMeasure, item.caliber, qty, unit, total]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Nota Fiscal atualizada com sucesso.' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Update ammo invoice error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar Nota Fiscal.' });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /api/ammo/invoices/:id — Exclui Nota Fiscal de Insumos/Munições
+app.delete('/api/ammo/invoices/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM ammo_invoice_items WHERE invoice_id = $1', [id]);
+    const r = await client.query('DELETE FROM ammo_invoices WHERE id = $1', [id]);
+    if (r.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Nota Fiscal não encontrada.' });
+    }
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Nota Fiscal excluída com sucesso.' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Delete ammo invoice error:', err);
+    res.status(500).json({ error: 'Erro ao excluir Nota Fiscal.' });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT /api/ammo/production/:id — Atualiza produção/recarga de munição
+app.put('/api/ammo/production/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { quantity, date, caliber } = req.body;
+  if (!quantity || !date || !caliber) {
+    return res.status(400).json({ error: 'Quantidade produzida, Data e Calibre são obrigatórios.' });
+  }
+  const qty = Math.max(1, Number(quantity) || 0);
+
+  try {
+    const r = await pool.query(
+      `UPDATE ammo_productions SET quantity = $1, date = $2, caliber = $3 WHERE id = $4`,
+      [qty, date, caliber, id]
+    );
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'Registro de produção não encontrado.' });
+    }
+    res.json({ success: true, message: 'Registro de produção atualizado com sucesso.' });
+  } catch (err) {
+    console.error('Update ammo production error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar produção de munição.' });
+  }
+});
+
+// DELETE /api/ammo/production/:id — Exclui produção/recarga de munição
+app.delete('/api/ammo/production/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const r = await pool.query(`DELETE FROM ammo_productions WHERE id = $1`, [id]);
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'Registro de produção não encontrado.' });
+    }
+    res.json({ success: true, message: 'Registro de produção excluído com sucesso.' });
+  } catch (err) {
+    console.error('Delete ammo production error:', err);
+    res.status(500).json({ error: 'Erro ao excluir produção de munição.' });
+  }
+});
+
+// PUT /api/ammo/recycled/:id — Atualiza registro de ponta/projétil reciclado
+app.put('/api/ammo/recycled/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { quantity, date, caliber } = req.body;
+  if (!quantity || !date || !caliber) {
+    return res.status(400).json({ error: 'Quantidade produzida, Data e Calibre são obrigatórios.' });
+  }
+  const qty = Math.max(1, Number(quantity) || 0);
+
+  try {
+    const r = await pool.query(
+      `UPDATE ammo_recycled SET quantity = $1, date = $2, caliber = $3 WHERE id = $4`,
+      [qty, date, caliber, id]
+    );
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'Registro de projétil reciclado não encontrado.' });
+    }
+    res.json({ success: true, message: 'Registro de projétil reciclado atualizado com sucesso.' });
+  } catch (err) {
+    console.error('Update recycled ammo error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar projétil/ponta reciclada.' });
+  }
+});
+
+// DELETE /api/ammo/recycled/:id — Exclui registro de ponta/projétil reciclado
+app.delete('/api/ammo/recycled/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const r = await pool.query(`DELETE FROM ammo_recycled WHERE id = $1`, [id]);
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'Registro de projétil reciclado não encontrado.' });
+    }
+    res.json({ success: true, message: 'Registro de projétil reciclado excluído com sucesso.' });
+  } catch (err) {
+    console.error('Delete recycled ammo error:', err);
+    res.status(500).json({ error: 'Erro ao excluir projétil/ponta reciclada.' });
+  }
+});
+
 // POST /api/ammo/allocations — Aloca munições do clube para o atleta
 app.post('/api/ammo/allocations', requireAdmin, async (req, res) => {
   const currentUser = (req as any).user as User;

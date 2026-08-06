@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix: removido menu Controle de Municoes do Painel de Servicos no perfil do atleta` |
-| Data/hora | 2026-08-06T23:01:00-03:00 |
+| Mensagem | `feat: adicionadas opcoes de editar e excluir em todos os lancamentos do modulo de municoes` |
+| Data/hora | 2026-08-06T23:05:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -145,6 +145,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
   - **Exibição do Saldo Atual na Busca**: O endpoint `/api/members/search` e a interface de busca exibem em tempo real o saldo de munições por calibre do atleta tanto no dropdown de resultados da busca quanto no cartão do atleta selecionado.
   - **Edição e Exclusão de Atribuições**: Adicionadas as ações de "Editar" e "Excluir" no histórico de atribuições com recalculação automática do saldo do atleta no backend (`PUT /api/ammo/allocations/:id` e `DELETE /api/ammo/allocations/:id`).
   - **Remoção do Menu no Perfil do Atleta**: Removido o item de menu *"Controle Munição"* do *Painel de Serviços* / menu da conta no perfil do atleta (`MemberProfile.tsx`).
+  - **Edição e Exclusão em Todos os Lançamentos do Módulo de Munições**: Adicionados endpoints `PUT` e `DELETE` no backend para todas as subabas do módulo de munições (`/api/ammo/invoices/:id`, `/api/ammo/production/:id`, `/api/ammo/recycled/:id` e `/api/ammo/allocations/:id`) e botões de **Editar** e **Excluir** em todos os históricos do Painel Diretor (`AdminPanel.tsx`).
 
 ## Infra / deploy
 
