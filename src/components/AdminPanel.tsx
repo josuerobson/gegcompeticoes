@@ -6879,7 +6879,6 @@ export default function AdminPanel({
                 { id: 'inscricao_clube', label: 'Inscrição Clube', icon: FileCheck },
                 { id: 'certificados', label: 'Certificados', icon: Award },
                 { id: 'cadastrar_membros', label: 'Cadastrar Membros', icon: UserPlus },
-                { id: 'cessao_armas', label: 'Cessão de Armas', icon: FileSignature },
                 { id: 'relatorios_declaracoes', label: 'Relatórios e Declarações', icon: FileText }
               ].map((item) => {
                 const Icon = item.icon;
