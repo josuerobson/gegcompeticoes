@@ -848,7 +848,7 @@ app.post('/api/admin/members', requireAdmin, async (req, res) => {
 // the club's profile (endereço, documentos) is completed afterwards through
 // PATCH /api/clubs/:id, same as a club editing its own data.
 app.post('/api/admin/clubs', requireAdmin, async (req, res) => {
-  const { name, cnpj, responsibleName, email, password, phone, crNumber, city, state } = req.body;
+  const { name, cnpj, responsibleName, email, password, phone, crNumber, city, state, cep, address, addressNumber, complement, neighborhood } = req.body;
 
   if (!name || !cnpj || !responsibleName || !email || !password) {
     return res.status(400).json({ error: 'Preencha nome, CNPJ, responsável, e-mail e senha.' });
@@ -868,9 +868,13 @@ app.post('/api/admin/clubs', requireAdmin, async (req, res) => {
     await client.query('BEGIN');
     const clubId = `club_${Date.now()}`;
     await client.query(
-      `INSERT INTO clubs (id, name, cnpj, phone, is_premium, created_at, cr_number, responsible_name, email, city, state)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-      [clubId, name, cnpj, phone || null, false, new Date().toISOString().split('T')[0], crNumber || null, responsibleName, email, city || null, state || null]
+      `INSERT INTO clubs (id, name, cnpj, phone, is_premium, created_at, cr_number, responsible_name, email, city, state, cep, address, address_number, complement, neighborhood)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+      [
+        clubId, name, cnpj, phone || null, false, new Date().toISOString().split('T')[0],
+        crNumber || null, responsibleName, email, city || null, state || null,
+        cep || null, address || null, addressNumber || null, complement || null, neighborhood || null
+      ]
     );
 
     const userId = `user_${Date.now()}`;
@@ -1178,6 +1182,7 @@ app.patch('/api/admin/members/:id/profile', requireAdmin, async (req, res) => {
 
 const CLUB_PROFILE_COLUMNS: Record<string, string> = {
   name: 'name',
+  cnpj: 'cnpj',
   crNumber: 'cr_number',
   responsibleName: 'responsible_name',
   phone: 'phone',
@@ -1195,8 +1200,11 @@ app.patch('/api/clubs/:id', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
   const clubId = req.params.id;
 
-  if (currentUser.role !== 'club_admin' || currentUser.clubId !== clubId) {
-    return res.status(403).json({ error: 'Apenas o administrador do clube pode editar estes dados.' });
+  const isAdmin = currentUser.role === 'admin' || currentUser.role === 'master_admin';
+  const isClubAdminOfThisClub = currentUser.role === 'club_admin' && currentUser.clubId === clubId;
+
+  if (!isAdmin && !isClubAdminOfThisClub) {
+    return res.status(403).json({ error: 'Apenas administradores podem editar este clube.' });
   }
 
   const updates: string[] = [];

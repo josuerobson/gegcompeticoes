@@ -62,7 +62,8 @@ interface AdminPanelProps {
   onUpdateMemberProfile: (memberId: string, fields: Record<string, unknown>) => Promise<boolean>;
   onUploadMemberDocument: (memberId: string, kind: string, file: File) => Promise<boolean>;
   clubs: Club[];
-  onCreateClub: (fields: { name: string; cnpj: string; responsibleName: string; email: string; password: string; phone?: string; crNumber?: string; city?: string; state?: string }) => Promise<{ club?: Club; error?: string }>;
+  onCreateClub: (fields: { name: string; cnpj: string; responsibleName: string; email: string; password: string; phone?: string; crNumber?: string; city?: string; state?: string; cep?: string; address?: string; addressNumber?: string; complement?: string; neighborhood?: string }) => Promise<{ club?: Club; error?: string }>;
+  onUpdateClub?: (clubId: string, fields: Record<string, unknown>) => Promise<boolean>;
   multiChampionships?: MultiChampionship[];
 }
 
@@ -3634,6 +3635,7 @@ export default function AdminPanel({
   onUploadMemberDocument,
   clubs,
   onCreateClub,
+  onUpdateClub,
   multiChampionships = []
 }: AdminPanelProps) {
   const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
@@ -4095,12 +4097,23 @@ export default function AdminPanel({
   // "Novo Clube" (Gerenciamento Plataforma) — quick-create a club plus its
   // club_admin login; the club later completes endereço/documentos itself
   // through the same PATCH /api/clubs/:id used by "Meu Cadastro".
+  // "Novo Clube" (Gerenciamento Plataforma) — create & edit clubs
   const [createClubForm, setCreateClubForm] = useState({
-    name: '', cnpj: '', responsibleName: '', email: '', password: '', phone: '', crNumber: '', city: '', state: ''
+    name: '', cnpj: '', responsibleName: '', email: '', password: '', phone: '', crNumber: '',
+    cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
   });
   const [creatingClub, setCreatingClub] = useState(false);
   const [createClubError, setCreateClubError] = useState('');
   const [createClubSuccess, setCreateClubSuccess] = useState(false);
+
+  const [editingClub, setEditingClub] = useState<Club | null>(null);
+  const [editingClubForm, setEditingClubForm] = useState({
+    name: '', cnpj: '', crNumber: '', responsibleName: '', email: '', phone: '',
+    cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
+  });
+  const [savingEditClub, setSavingEditClub] = useState(false);
+  const [editClubError, setEditClubError] = useState('');
+  const [editClubSuccess, setEditClubSuccess] = useState(false);
 
   const handleCreateClubSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -4109,11 +4122,53 @@ export default function AdminPanel({
     const result = await onCreateClub(createClubForm);
     setCreatingClub(false);
     if (result.club) {
-      setCreateClubForm({ name: '', cnpj: '', responsibleName: '', email: '', password: '', phone: '', crNumber: '', city: '', state: '' });
+      setCreateClubForm({ name: '', cnpj: '', responsibleName: '', email: '', password: '', phone: '', crNumber: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '' });
       setCreateClubSuccess(true);
       setTimeout(() => setCreateClubSuccess(false), 2500);
+      if (onRefreshData) await onRefreshData();
     } else {
       setCreateClubError(result.error || 'Erro ao cadastrar clube.');
+    }
+  };
+
+  const startEditingClub = (club: Club) => {
+    setEditingClub(club);
+    setEditClubError('');
+    setEditClubSuccess(false);
+    setEditingClubForm({
+      name: club.name || '',
+      cnpj: club.cnpj || '',
+      crNumber: club.crNumber || '',
+      responsibleName: club.responsibleName || '',
+      email: club.email || '',
+      phone: club.phone || '',
+      cep: club.cep || '',
+      address: club.address || '',
+      addressNumber: club.addressNumber || '',
+      complement: club.complement || '',
+      neighborhood: club.neighborhood || '',
+      city: club.city || '',
+      state: club.state || ''
+    });
+  };
+
+  const handleSaveEditClub = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingClub || !onUpdateClub) return;
+    setSavingEditClub(true);
+    setEditClubError('');
+    setEditClubSuccess(false);
+    const ok = await onUpdateClub(editingClub.id, editingClubForm);
+    setSavingEditClub(false);
+    if (ok) {
+      setEditClubSuccess(true);
+      setTimeout(() => {
+        setEditClubSuccess(false);
+        setEditingClub(null);
+      }, 1200);
+      if (onRefreshData) await onRefreshData();
+    } else {
+      setEditClubError('Erro ao atualizar cadastro do clube.');
     }
   };
 
@@ -5136,17 +5191,17 @@ export default function AdminPanel({
       case 'novo_clube':
         return (
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-left">
               <div className="flex justify-between items-center pb-3 border-b border-slate-100">
                 <div>
                   <h3 className="font-display font-bold text-slate-900 text-base">Cadastrar Novo Clube Filiado</h3>
-                  <p className="text-xs text-slate-400">Adicionar uma nova unidade ou clube filiado na rede nacional G&G. Cria o clube e o login do administrador local; endereço e documentos são completados depois pelo próprio clube.</p>
+                  <p className="text-xs text-slate-400">Adicionar uma nova unidade ou clube filiado na rede nacional G&G. Cria o clube e o login do administrador local.</p>
                 </div>
                 <Landmark className="w-5 h-5 text-blue-600" />
               </div>
 
               {createClubSuccess && (
-                <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
+                <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
                   <CheckCircle className="w-5 h-5 text-emerald-600" />
                   Unidade filiada integrada ao sistema nacional G&G!
                 </div>
@@ -5155,7 +5210,8 @@ export default function AdminPanel({
                 <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{createClubError}</div>
               )}
 
-              <form onSubmit={handleCreateClubSubmit} className="space-y-4 text-slate-805">
+              <form onSubmit={handleCreateClubSubmit} className="space-y-4 text-slate-800">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">Dados Principais</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
                     <MemberField label="Nome do Estande/Clube" value={createClubForm.name} onChange={v => setCreateClubForm({ ...createClubForm, name: v })} placeholder="Ex: G&G Sobradinho Estande de Precisão" />
@@ -5166,9 +5222,21 @@ export default function AdminPanel({
                   <MemberField label="Senha Inicial (Login do Clube)" type="password" value={createClubForm.password} onChange={v => setCreateClubForm({ ...createClubForm, password: v })} />
                   <MemberField label="Telefone" value={createClubForm.phone} onChange={v => setCreateClubForm({ ...createClubForm, phone: v })} placeholder="Ex: (61) 99123-4567" />
                   <MemberField label="CR do Clube" value={createClubForm.crNumber} onChange={v => setCreateClubForm({ ...createClubForm, crNumber: v })} placeholder="Opcional" />
+                </div>
+
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 pt-2">Endereço da Unidade (Opcional)</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <MemberField label="CEP" value={createClubForm.cep} onChange={v => setCreateClubForm({ ...createClubForm, cep: v })} placeholder="70000-000" />
+                  <div className="sm:col-span-2">
+                    <MemberField label="Endereço / Logradouro" value={createClubForm.address} onChange={v => setCreateClubForm({ ...createClubForm, address: v })} placeholder="Rua, Av, Setor..." />
+                  </div>
+                  <MemberField label="Número" value={createClubForm.addressNumber} onChange={v => setCreateClubForm({ ...createClubForm, addressNumber: v })} placeholder="Ex: 100" />
+                  <MemberField label="Complemento" value={createClubForm.complement} onChange={v => setCreateClubForm({ ...createClubForm, complement: v })} placeholder="Ex: Galpão A" />
+                  <MemberField label="Bairro" value={createClubForm.neighborhood} onChange={v => setCreateClubForm({ ...createClubForm, neighborhood: v })} placeholder="Ex: Centro" />
                   <MemberField label="Cidade" value={createClubForm.city} onChange={v => setCreateClubForm({ ...createClubForm, city: v })} placeholder="Ex: Sobradinho" />
                   <MemberField label="UF" value={createClubForm.state} onChange={v => setCreateClubForm({ ...createClubForm, state: v })} placeholder="Ex: DF" />
                 </div>
+
                 <div className="flex justify-end pt-3 border-t border-slate-100">
                   <button
                     type="submit"
@@ -5181,31 +5249,112 @@ export default function AdminPanel({
               </form>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs text-left">
               <h4 className="font-display font-bold text-slate-900 text-sm">Clubes Cadastrados ({clubs.length})</h4>
               {clubs.length === 0 ? (
                 <p className="text-xs text-slate-400">Nenhum clube filiado cadastrado ainda.</p>
               ) : (
                 <div className="grid grid-cols-1 gap-3">
                   {clubs.map((club) => (
-                    <div key={club.id} className="border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-2 bg-slate-50/50">
+                    <div key={club.id} className="border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-slate-50/50 hover:border-slate-300 transition">
                       <div className="space-y-1">
-                        <h4 className="font-bold text-slate-900 text-sm">{club.name}</h4>
-                        <p className="text-xs text-slate-500">
-                          {club.cnpj || 'CNPJ não informado'} • {club.city ? `${club.city}${club.state ? ' - ' + club.state : ''}` : 'Cidade não informada'}
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-slate-900 text-sm">{club.name}</h4>
+                          {club.crNumber && <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">CR: {club.crNumber}</span>}
+                        </div>
+                        <p className="text-xs text-slate-600">
+                          <strong>CNPJ:</strong> {club.cnpj || 'Não informado'} • <strong>Diretor:</strong> {club.responsibleName || 'Não informado'}
                         </p>
-                        <p className="text-[10px] text-slate-450">
-                          Diretor: {club.responsibleName || 'Não informado'} • {club.phone || 'Telefone não informado'}
+                        <p className="text-[11px] text-slate-500">
+                          {club.address ? `${club.address}${club.addressNumber ? ', ' + club.addressNumber : ''}${club.neighborhood ? ' - ' + club.neighborhood : ''} | ` : ''}
+                          {club.city ? `${club.city}${club.state ? '/' + club.state : ''}` : 'Cidade não informada'} • Tel: {club.phone || 'N/I'} • Email: {club.email || 'N/I'}
                         </p>
                       </div>
-                      <span className="text-[10px] text-slate-400 font-mono whitespace-nowrap">
-                        Cadastrado em {new Date(club.createdAt).toLocaleDateString('pt-BR')}
-                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => startEditingClub(club)}
+                          className="flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer shadow-2xs"
+                        >
+                          <Pencil className="w-3.5 h-3.5 text-blue-600" />
+                          Editar
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
+
+            {/* Modal de Edição do Clube */}
+            {editingClub && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+                <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-2xl overflow-hidden shadow-2xl text-slate-800 flex flex-col max-h-[90vh] text-left">
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                    <div>
+                      <h4 className="font-display font-bold text-slate-900 text-base">Editar Clube: {editingClub.name}</h4>
+                      <p className="text-xs text-slate-400">Atualizar dados cadastrais e de endereço do clube filiado.</p>
+                    </div>
+                    <button onClick={() => setEditingClub(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSaveEditClub} className="p-6 overflow-y-auto space-y-4">
+                    {editClubSuccess && (
+                      <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
+                        <CheckCircle className="w-5 h-5 text-emerald-600" />
+                        Cadastro do clube atualizado com sucesso!
+                      </div>
+                    )}
+                    {editClubError && (
+                      <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{editClubError}</div>
+                    )}
+
+                    <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">Dados Principais</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="sm:col-span-2">
+                        <MemberField label="Nome do Estande/Clube" value={editingClubForm.name} onChange={v => setEditingClubForm({ ...editingClubForm, name: v })} />
+                      </div>
+                      <MemberField label="CNPJ Entidade" value={editingClubForm.cnpj} onChange={v => setEditingClubForm({ ...editingClubForm, cnpj: v })} />
+                      <MemberField label="CR do Clube" value={editingClubForm.crNumber} onChange={v => setEditingClubForm({ ...editingClubForm, crNumber: v })} />
+                      <MemberField label="Diretor Presidente Responsável" value={editingClubForm.responsibleName} onChange={v => setEditingClubForm({ ...editingClubForm, responsibleName: v })} />
+                      <MemberField label="E-mail de Contato" type="email" value={editingClubForm.email} onChange={v => setEditingClubForm({ ...editingClubForm, email: v })} />
+                      <MemberField label="Telefone" value={editingClubForm.phone} onChange={v => setEditingClubForm({ ...editingClubForm, phone: v })} />
+                    </div>
+
+                    <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 pt-2">Endereço Completo</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <MemberField label="CEP" value={editingClubForm.cep} onChange={v => setEditingClubForm({ ...editingClubForm, cep: v })} />
+                      <div className="sm:col-span-2">
+                        <MemberField label="Endereço / Logradouro" value={editingClubForm.address} onChange={v => setEditingClubForm({ ...editingClubForm, address: v })} />
+                      </div>
+                      <MemberField label="Número" value={editingClubForm.addressNumber} onChange={v => setEditingClubForm({ ...editingClubForm, addressNumber: v })} />
+                      <MemberField label="Complemento" value={editingClubForm.complement} onChange={v => setEditingClubForm({ ...editingClubForm, complement: v })} />
+                      <MemberField label="Bairro" value={editingClubForm.neighborhood} onChange={v => setEditingClubForm({ ...editingClubForm, neighborhood: v })} />
+                      <MemberField label="Cidade" value={editingClubForm.city} onChange={v => setEditingClubForm({ ...editingClubForm, city: v })} />
+                      <MemberField label="UF" value={editingClubForm.state} onChange={v => setEditingClubForm({ ...editingClubForm, state: v })} />
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setEditingClub(null)}
+                        className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={savingEditClub}
+                        className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-6 py-2.5 rounded-xl font-bold transition shadow-lg shadow-blue-100 cursor-pointer"
+                      >
+                        {savingEditClub ? 'Salvando...' : 'Salvar Alterações'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         );
 
