@@ -90,6 +90,11 @@ export default function ChampionshipsView({
       if (!res.ok) throw new Error(data.error || 'Erro ao realizar inscrição no multicampeonato.');
 
       setMultiSuccessMsg(`Inscrição unificada realizada com sucesso! ${data.inscricoesGeradas} inscrição(ões) gerada(s).`);
+      setMultiWeaponId('');
+      setSelectedWeaponId('');
+      setWeaponSearchQuery('');
+      setWeaponSearchResults([]);
+      setSearchingWeapon(false);
       if (onRefreshData) await onRefreshData();
     } catch (err: any) {
       setMultiError(err.message);
@@ -106,9 +111,11 @@ export default function ChampionshipsView({
     setSelectedWeaponId('');
     setWeaponSearchQuery('');
     setWeaponSearchResults([]);
+    setSearchingWeapon(false);
     setMultiError('');
     setMultiSuccessMsg('');
     setMultiSubmitting(false);
+    setShowAddWeapon(false);
   };
 
   // Registration and payment popup state
@@ -295,6 +302,10 @@ export default function ChampionshipsView({
     setTimeout(async () => {
       try {
         await onRegister(selectedChampReg.id, selectedModalityId, selectedStageId, selectedWeaponId, finalCr, 'pix');
+        setSelectedWeaponId('');
+        setWeaponSearchQuery('');
+        setWeaponSearchResults([]);
+        setSearchingWeapon(false);
         setPaymentStep('done');
       } catch (err) {
         setRegisterError(err instanceof Error ? err.message : 'Erro ao realizar inscrição.');
@@ -309,8 +320,12 @@ export default function ChampionshipsView({
     setSelectedModalityId('');
     setSelectedStageId('');
     setSelectedWeaponId('');
+    setWeaponSearchQuery('');
+    setWeaponSearchResults([]);
+    setSearchingWeapon(false);
     setPaymentStep('form');
     setPaymentMethod('pix');
+    setPixCopied(false);
     setRegisterError('');
     setShowAddWeapon(false);
   };
@@ -663,6 +678,14 @@ export default function ChampionshipsView({
                                   setSelectedStageId(stage.id);
                                   setSelectedModalityId(viewingChampionship.modalities[0] || '');
                                   setSelectedWeaponId('');
+                                  setWeaponSearchQuery('');
+                                  setWeaponSearchResults([]);
+                                  setSearchingWeapon(false);
+                                  setPaymentStep('form');
+                                  setPaymentMethod('pix');
+                                  setPixCopied(false);
+                                  setRegisterError('');
+                                  setShowAddWeapon(false);
                                 }}
                                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 sm:py-2.5 rounded-xl shadow-xs transition cursor-pointer"
                               >
@@ -849,6 +872,11 @@ export default function ChampionshipsView({
                               setSelectedWeaponId('');
                               setWeaponSearchQuery('');
                               setWeaponSearchResults([]);
+                              setSearchingWeapon(false);
+                              setMultiError('');
+                              setMultiSuccessMsg('');
+                              setMultiSubmitting(false);
+                              setShowAddWeapon(false);
                             }}
                             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-3 rounded-xl transition shadow-md shadow-blue-100 flex items-center justify-center gap-2 cursor-pointer"
                           >
@@ -981,7 +1009,14 @@ export default function ChampionshipsView({
                     <label className="text-[10px] text-slate-500 uppercase block font-semibold">Escolha a Modalidade de Disputa</label>
                     <select
                       value={selectedModalityId}
-                      onChange={(e) => setSelectedModalityId(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedModalityId(e.target.value);
+                        setSelectedWeaponId('');
+                        setWeaponSearchQuery('');
+                        setWeaponSearchResults([]);
+                        setSearchingWeapon(false);
+                        setRegisterError('');
+                      }}
                       className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
                     >
                       {getValidChampModalities(selectedChampReg.modalities).map((mod) => (
@@ -1006,7 +1041,14 @@ export default function ChampionshipsView({
                     <label className="text-[10px] text-slate-500 uppercase block font-semibold">Etapa</label>
                     <select
                       value={selectedStageId}
-                      onChange={(e) => setSelectedStageId(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedStageId(e.target.value);
+                        setSelectedWeaponId('');
+                        setWeaponSearchQuery('');
+                        setWeaponSearchResults([]);
+                        setSearchingWeapon(false);
+                        setRegisterError('');
+                      }}
                       className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
                     >
                       <option value="">Selecione a etapa</option>
@@ -1820,7 +1862,15 @@ export default function ChampionshipsView({
                     <label className="text-[10px] font-bold text-slate-500 uppercase block">Etapa Única das Competições</label>
                     <select
                       value={multiStageId}
-                      onChange={e => setMultiStageId(e.target.value)}
+                      onChange={e => {
+                        setMultiStageId(e.target.value);
+                        setMultiWeaponId('');
+                        setSelectedWeaponId('');
+                        setWeaponSearchQuery('');
+                        setWeaponSearchResults([]);
+                        setSearchingWeapon(false);
+                        setMultiError('');
+                      }}
                       className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-700"
                     >
                       <option value="">Selecione a etapa...</option>
@@ -1834,7 +1884,15 @@ export default function ChampionshipsView({
                     <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade / Divisão</label>
                     <select
                       value={multiModalityId}
-                      onChange={e => setMultiModalityId(e.target.value)}
+                      onChange={e => {
+                        setMultiModalityId(e.target.value);
+                        setMultiWeaponId('');
+                        setSelectedWeaponId('');
+                        setWeaponSearchQuery('');
+                        setWeaponSearchResults([]);
+                        setSearchingWeapon(false);
+                        setMultiError('');
+                      }}
                       className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-700"
                     >
                       <option value="">Selecione a modalidade...</option>

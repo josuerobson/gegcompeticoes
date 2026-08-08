@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: adicionados cadastro de planos de anuidade, vinculo de membros a planos e relatorios de arrecadacao` |
-| Data/hora | 2026-08-06T23:28:00-03:00 |
+| Mensagem | `fix: garantir que o campo de arma a ser utilizada inicie sempre em branco em novas inscricoes e trocas de modalidade` |
+| Data/hora | 2026-08-08T14:27:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -60,6 +60,7 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
 
+- **Campo "Arma a ser utilizada" sempre em branco ao iniciar nova inscrição (`ChampionshipsView.tsx`)**: Ao abrir o modal de inscrição ("Participar"), trocar de modalidade ou etapa, concluir a inscrição ou fechar o modal (tanto em inscrições individuais quanto em multicampeonatos), os estados `weaponSearchQuery`, `selectedWeaponId`, `weaponSearchResults` e `searchingWeapon` são completamente reinicializados em branco (`''` e `[]`). Isso impede que a arma escolhida em uma inscrição anterior permaneça indevidamente pré-preenchida ao se inscrever em outra modalidade.
 - **Integração PIX Banco Sicoob (`Painel Diretor > Gerenciamento Plataforma > Integrações > Sicoob`)**: Criada a nova seção "Integrações" no menu lateral com o submenu "Sicoob", oferecendo gerenciamento completo de credenciais OAuth 2.0 (Client ID, Client Secret, Chave PIX, Certificados mTLS .pem), teste de autenticação, notificação instantânea por Webhook (`POST /api/webhooks/sicoob-pix`), emissão de cobranças PIX dinâmicas (`cob`/`txid`) e consulta/validação de liquidação em tempo real.
 - **Edição direta da Guia de Trânsito no Perfil do Atleta (`MemberProfile.tsx`)**: Adicionado um ícone de edição (lápis) no item "Guia de Trânsito" do cartão de Situação Associativa G&G no perfil do atleta, permitindo que o próprio atleta edite diretamente o vencimento da sua Guia de Trânsito com salvamento dinâmico via `onUpdateProfile`.
 - **Cadastro e Edição Completa de Clubes em Novo Clube**: O Gestor/Admin agora pode cadastrar completamente um clube filiado (incluindo endereço CEP/logradouro/número/bairro/cidade/UF) e editar qualquer clube existente via modal de edição conectado ao endpoint `PATCH /api/clubs/:id` (com permissões estendidas a administradores).
