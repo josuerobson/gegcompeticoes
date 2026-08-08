@@ -305,6 +305,33 @@ export function CompetitionResultsViewer({
 
   const targetStageNums = new Set(targetStages.map(s => s.stageNum));
 
+  // Helper to compare two scores for ranking/tie-breakers
+  const compareScorePerformance = (a: StageScore, b: StageScore): number => {
+    if (currentMod?.evaluationType === 'tempo') {
+      return (a.timeSeconds || 0) - (b.timeSeconds || 0);
+    } else if (currentMod?.evaluationType === 'pontuacao_tempo') {
+      return (b.hitFactor || 0) - (a.hitFactor || 0);
+    } else {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      const regA = registrations.find(r => r.id === a.registrationId);
+      const regB = registrations.find(r => r.id === b.registrationId);
+      if (regA && regB) {
+        if ((regB.scoreX || 0) !== (regA.scoreX || 0)) {
+          return (regB.scoreX || 0) - (regA.scoreX || 0);
+        }
+        if ((regB.scoreP10 || 0) !== (regA.scoreP10 || 0)) {
+          return (regB.scoreP10 || 0) - (regA.scoreP10 || 0);
+        }
+        if ((regB.scoreP9 || 0) !== (regA.scoreP9 || 0)) {
+          return (regB.scoreP9 || 0) - (regA.scoreP9 || 0);
+        }
+      }
+      return 0;
+    }
+  };
+
   // --- Lógica para opção Acumulada "Todas as Etapas" ---
   if (isAllOption) {
     type ConsolidatedScore = {
@@ -326,39 +353,60 @@ export function CompetitionResultsViewer({
       targetStageNums.has(score.stageNum)
     );
 
+    // Group by athlete and stage to pick only the best score per stage for each athlete (reinscrições)
+    const athleteStageBestMap: Record<string, Record<number, StageScore>> = {};
+    for (const score of scoresForMod) {
+      const uId = score.userId || (score.shooterName ? score.shooterName.trim().toLowerCase() : 'unknown');
+      if (!athleteStageBestMap[uId]) {
+        athleteStageBestMap[uId] = {};
+      }
+      const existing = athleteStageBestMap[uId][score.stageNum];
+      if (!existing) {
+        athleteStageBestMap[uId][score.stageNum] = score;
+      } else {
+        if (compareScorePerformance(score, existing) < 0) {
+          athleteStageBestMap[uId][score.stageNum] = score;
+        }
+      }
+    }
+
     const userMap: Record<string, ConsolidatedScore> = {};
 
-    for (const score of scoresForMod) {
-      const uId = score.userId || score.shooterName;
-      if (!userMap[uId]) {
-        const u = users.find(usr => usr.id === score.userId);
-        const cName = clubs.find(c => c.id === u?.clubId)?.name || '-';
-        userMap[uId] = {
-          userId: score.userId,
-          shooterName: score.shooterName,
-          clubName: cName,
-          totalScore: 0,
-          totalTime: 0,
-          hitFactor: 0,
-          scoreX: 0,
-          scoreP10: 0,
-          scoreP9: 0,
-          stageScores: {},
-        };
-      }
+    for (const [uId, stageMap] of Object.entries(athleteStageBestMap)) {
+      const bestStageList = Object.values(stageMap);
+      if (bestStageList.length === 0) continue;
 
-      userMap[uId].stageScores[score.stageNum] = score.score;
-      userMap[uId].totalScore += (score.score || 0);
-      userMap[uId].totalTime += (score.timeSeconds || 0);
-      if (score.hitFactor) {
-        userMap[uId].hitFactor = Math.max(userMap[uId].hitFactor, score.hitFactor);
-      }
+      const firstScore = bestStageList[0];
+      const u = users.find(usr => usr.id === firstScore.userId);
+      const cName = clubs.find(c => c.id === u?.clubId)?.name || '-';
 
-      const reg = registrations.find(r => r.id === score.registrationId);
-      if (reg) {
-        userMap[uId].scoreX += (reg.scoreX || 0);
-        userMap[uId].scoreP10 += (reg.scoreP10 || 0);
-        userMap[uId].scoreP9 += (reg.scoreP9 || 0);
+      userMap[uId] = {
+        userId: firstScore.userId,
+        shooterName: firstScore.shooterName,
+        clubName: cName,
+        totalScore: 0,
+        totalTime: 0,
+        hitFactor: 0,
+        scoreX: 0,
+        scoreP10: 0,
+        scoreP9: 0,
+        stageScores: {},
+      };
+
+      for (const score of bestStageList) {
+        userMap[uId].stageScores[score.stageNum] = score.score;
+        userMap[uId].totalScore += (score.score || 0);
+        userMap[uId].totalTime += (score.timeSeconds || 0);
+        if (score.hitFactor) {
+          userMap[uId].hitFactor = Math.max(userMap[uId].hitFactor, score.hitFactor);
+        }
+
+        const reg = registrations.find(r => r.id === score.registrationId);
+        if (reg) {
+          userMap[uId].scoreX += (reg.scoreX || 0);
+          userMap[uId].scoreP10 += (reg.scoreP10 || 0);
+          userMap[uId].scoreP9 += (reg.scoreP9 || 0);
+        }
       }
     }
 
@@ -489,31 +537,21 @@ export function CompetitionResultsViewer({
     score.modality === currentMod?.name
   );
 
-  const sortedScores = [...filteredScores].sort((a, b) => {
-    if (currentMod?.evaluationType === 'tempo') {
-      return (a.timeSeconds || 0) - (b.timeSeconds || 0);
-    } else if (currentMod?.evaluationType === 'pontuacao_tempo') {
-      return (b.hitFactor || 0) - (a.hitFactor || 0);
+  // Agrupamento por atleta único: Mantém apenas a melhor participação do atleta na etapa (Regra de Reinscrições)
+  const bestScoresByAthlete: Record<string, StageScore> = {};
+  for (const score of filteredScores) {
+    const athleteKey = score.userId || (score.shooterName ? score.shooterName.trim().toLowerCase() : 'unknown');
+    const currentBest = bestScoresByAthlete[athleteKey];
+    if (!currentBest) {
+      bestScoresByAthlete[athleteKey] = score;
     } else {
-      if (b.score !== a.score) {
-        return b.score - a.score;
+      if (compareScorePerformance(score, currentBest) < 0) {
+        bestScoresByAthlete[athleteKey] = score;
       }
-      const regA = registrations.find(r => r.id === a.registrationId);
-      const regB = registrations.find(r => r.id === b.registrationId);
-      if (regA && regB) {
-        if ((regB.scoreX || 0) !== (regA.scoreX || 0)) {
-          return (regB.scoreX || 0) - (regA.scoreX || 0);
-        }
-        if ((regB.scoreP10 || 0) !== (regA.scoreP10 || 0)) {
-          return (regB.scoreP10 || 0) - (regA.scoreP10 || 0);
-        }
-        if ((regB.scoreP9 || 0) !== (regA.scoreP9 || 0)) {
-          return (regB.scoreP9 || 0) - (regA.scoreP9 || 0);
-        }
-      }
-      return 0;
     }
-  });
+  }
+
+  const sortedScores = Object.values(bestScoresByAthlete).sort(compareScorePerformance);
 
   const goldMin = currentChamp?.pontuacaoMinimaAtletaOuro || 0;
   const silverMin = currentChamp?.pontuacaoMinimaAtletaPrata || 0;

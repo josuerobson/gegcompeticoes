@@ -2783,8 +2783,8 @@ app.get('/api/rankings', async (req, res) => {
         };
       }
 
-      // Add stage score
-      shooterMap[key].stageScores[s.stageNum] = s.score;
+      // Add stage score keeping the best score in case of reinscrições
+      shooterMap[key].stageScores[s.stageNum] = Math.max(shooterMap[key].stageScores[s.stageNum] || 0, s.score);
     }
 
     const results = Object.values(shooterMap).map(item => {

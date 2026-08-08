@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix: garantir que o campo de arma a ser utilizada inicie sempre em branco em novas inscricoes e trocas de modalidade` |
-| Data/hora | 2026-08-08T14:27:00-03:00 |
+| Mensagem | `fix: deduplicar atletas nos resultados da competicao exibindo apenas a melhor pontuacao por atleta nas reinscricoes` |
+| Data/hora | 2026-08-08T14:46:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -60,6 +60,7 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
 
+- **Deduplicação de Atletas nas Telas de Resultados e Rankings (Regra de Reinscrição Única) (`CompetitionResultsViewer.tsx`, `ClubCertificatesViewer.tsx`, `server.ts`)**: Quando um atleta participa e lança múltiplos resultados na mesma Etapa e Modalidade (reinscrições para tentar melhorar a pontuação anterior), as telas de resultados, rankings e certificados consolidam e exibem **apenas uma única participação por atleta** — aquela que obteve a melhor performance/pontuação (ou menor tempo/maior hit factor e critérios de desempate X, 10, 9). No resultado consolidado "Todas as Etapas", é somada exclusivamente a melhor pontuação de cada etapa para cada atleta, garantindo que cada atleta ocupe exatamente uma única posição no ranking (1º, 2º, 3º...).
 - **Campo "Arma a ser utilizada" sempre em branco ao iniciar nova inscrição (`ChampionshipsView.tsx`)**: Ao abrir o modal de inscrição ("Participar"), trocar de modalidade ou etapa, concluir a inscrição ou fechar o modal (tanto em inscrições individuais quanto em multicampeonatos), os estados `weaponSearchQuery`, `selectedWeaponId`, `weaponSearchResults` e `searchingWeapon` são completamente reinicializados em branco (`''` e `[]`). Isso impede que a arma escolhida em uma inscrição anterior permaneça indevidamente pré-preenchida ao se inscrever em outra modalidade.
 - **Integração PIX Banco Sicoob (`Painel Diretor > Gerenciamento Plataforma > Integrações > Sicoob`)**: Criada a nova seção "Integrações" no menu lateral com o submenu "Sicoob", oferecendo gerenciamento completo de credenciais OAuth 2.0 (Client ID, Client Secret, Chave PIX, Certificados mTLS .pem), teste de autenticação, notificação instantânea por Webhook (`POST /api/webhooks/sicoob-pix`), emissão de cobranças PIX dinâmicas (`cob`/`txid`) e consulta/validação de liquidação em tempo real.
 - **Edição direta da Guia de Trânsito no Perfil do Atleta (`MemberProfile.tsx`)**: Adicionado um ícone de edição (lápis) no item "Guia de Trânsito" do cartão de Situação Associativa G&G no perfil do atleta, permitindo que o próprio atleta edite diretamente o vencimento da sua Guia de Trânsito com salvamento dinâmico via `onUpdateProfile`.

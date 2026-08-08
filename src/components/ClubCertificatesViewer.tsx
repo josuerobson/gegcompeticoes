@@ -226,7 +226,36 @@ export function ClubCertificatesViewer({
       (targetStageNum ? s.stageNum === targetStageNum : true)
     );
 
-    // Group scores by athlete/registration
+    // Group scores by athlete and stage to pick only the best score per stage for each athlete (reinscrições)
+    const athleteStageScoresMap: Record<string, Record<number, StageScore>> = {};
+    for (const s of matchingScores) {
+      const reg = registrations.find(r => r.id === s.registrationId || (r.userId === s.userId && r.championshipId === championshipId && r.modalityId === modalityId));
+      const u = users.find(usr => usr.id === (reg?.userId || s.userId) || (usr.fullName && s.shooterName && usr.fullName.toLowerCase() === s.shooterName.toLowerCase()));
+      const key = u?.id || s.userId || reg?.userId || (s.shooterName ? s.shooterName.toLowerCase() : 'unknown');
+
+      if (!athleteStageScoresMap[key]) {
+        athleteStageScoresMap[key] = {};
+      }
+      const existing = athleteStageScoresMap[key][s.stageNum];
+      if (!existing) {
+        athleteStageScoresMap[key][s.stageNum] = s;
+      } else {
+        let isBetter = false;
+        if (modObj?.evaluationType === 'tempo') {
+          isBetter = (s.timeSeconds || 0) < (existing.timeSeconds || 0);
+        } else if (modObj?.evaluationType === 'pontuacao_tempo') {
+          isBetter = (s.hitFactor || 0) > (existing.hitFactor || 0);
+        } else {
+          if (s.score !== existing.score) {
+            isBetter = s.score > existing.score;
+          }
+        }
+        if (isBetter) {
+          athleteStageScoresMap[key][s.stageNum] = s;
+        }
+      }
+    }
+
     const athleteMap: Record<string, {
       userId: string;
       registrationId: string;
@@ -239,33 +268,36 @@ export function ClubCertificatesViewer({
       scoreP9: number;
     }> = {};
 
-    for (const s of matchingScores) {
-      const reg = registrations.find(r => r.id === s.registrationId || (r.userId === s.userId && r.championshipId === championshipId && r.modalityId === modalityId));
-      const u = users.find(usr => usr.id === (reg?.userId || s.userId) || (usr.fullName && s.shooterName && usr.fullName.toLowerCase() === s.shooterName.toLowerCase()));
-      
-      const key = u?.id || s.userId || reg?.userId || (s.shooterName ? s.shooterName.toLowerCase() : 'unknown');
+    for (const [key, stagesObj] of Object.entries(athleteStageScoresMap)) {
+      const stageList = Object.values(stagesObj);
+      if (stageList.length === 0) continue;
 
-      if (!athleteMap[key]) {
-        athleteMap[key] = {
-          userId: u?.id || s.userId || reg?.userId || '',
-          registrationId: reg?.id || s.registrationId || '',
-          shooterName: u?.fullName || s.shooterName || '',
-          totalScore: 0,
-          hitFactor: 0,
-          stageCount: 0,
-          scoreX: 0,
-          scoreP10: 0,
-          scoreP9: 0
-        };
-      }
+      const firstS = stageList[0];
+      const reg = registrations.find(r => r.id === firstS.registrationId || (r.userId === firstS.userId && r.championshipId === championshipId && r.modalityId === modalityId));
+      const u = users.find(usr => usr.id === (reg?.userId || firstS.userId) || (usr.fullName && firstS.shooterName && usr.fullName.toLowerCase() === firstS.shooterName.toLowerCase()));
 
-      athleteMap[key].totalScore += (s.score || 0);
-      athleteMap[key].hitFactor = Math.max(athleteMap[key].hitFactor, s.hitFactor || 0);
-      athleteMap[key].stageCount += 1;
-      if (reg) {
-        athleteMap[key].scoreX += (reg.scoreX || 0);
-        athleteMap[key].scoreP10 += (reg.scoreP10 || 0);
-        athleteMap[key].scoreP9 += (reg.scoreP9 || 0);
+      athleteMap[key] = {
+        userId: u?.id || firstS.userId || reg?.userId || '',
+        registrationId: reg?.id || firstS.registrationId || '',
+        shooterName: u?.fullName || firstS.shooterName || '',
+        totalScore: 0,
+        hitFactor: 0,
+        stageCount: 0,
+        scoreX: 0,
+        scoreP10: 0,
+        scoreP9: 0
+      };
+
+      for (const s of stageList) {
+        athleteMap[key].totalScore += (s.score || 0);
+        athleteMap[key].hitFactor = Math.max(athleteMap[key].hitFactor, s.hitFactor || 0);
+        athleteMap[key].stageCount += 1;
+        const regScore = registrations.find(r => r.id === s.registrationId);
+        if (regScore) {
+          athleteMap[key].scoreX += (regScore.scoreX || 0);
+          athleteMap[key].scoreP10 += (regScore.scoreP10 || 0);
+          athleteMap[key].scoreP9 += (regScore.scoreP9 || 0);
+        }
       }
     }
 
