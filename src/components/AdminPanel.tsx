@@ -8345,8 +8345,8 @@ export default function AdminPanel({
                             <td className="py-3 px-2 text-slate-500 font-semibold">{reg.stageTitle}</td>
                             <td className="py-3 px-2 text-slate-655 font-mono">{reg.modalityName}</td>
                             <td className="py-3 px-2 text-center">
-                              <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${reg.registrationType === 'reinscrição' ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-800'}`}>
-                                {reg.registrationType === 'reinscrição' ? 'REINSCRIÇÃO' : 'NORMAL'}
+                              <span className={`px-2 py-0.5 rounded-full text-[8.5px] font-extrabold uppercase ${reg.registrationType === 'reinscrição' ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-blue-50 text-blue-800 border border-blue-200'}`}>
+                                {reg.registrationType === 'reinscrição' ? '✨ REINSCRIÇÃO' : 'PRINCIPAL'}
                               </span>
                             </td>
                             <td className="py-3 px-2 text-center">

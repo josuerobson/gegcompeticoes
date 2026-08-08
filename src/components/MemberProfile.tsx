@@ -2879,14 +2879,27 @@ export default function MemberProfile({
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <div className="divide-y divide-slate-100 border border-amber-200/80 rounded-xl overflow-hidden bg-white shadow-2xs">
+                    <div className="space-y-2">
                       {pendingRegistrations.map((reg) => {
                         const champ = championships.find(c => c.id === reg.championshipId);
                         const stg = stages.find(s => s.id === reg.stageId);
                         const modName = modalityName(reg.modalityId);
                         const regUser = users.find(u => u.id === reg.userId);
                         const isSelected = selectedPendingIds.includes(reg.id);
-                        const feeVal = reg.valorPago != null ? Number(reg.valorPago) : (champ?.valorInscricaoIndividual || 100);
+                        
+                        // Check if this registration is a Reinscrição
+                        const isReinsc = reg.registrationType === 'reinscrição' || (() => {
+                          const sameContext = registrations
+                            .filter(r => r.userId === reg.userId && r.championshipId === reg.championshipId && r.stageId === reg.stageId && r.modalityId === reg.modalityId)
+                            .sort((a, b) => new Date(a.registeredAt).getTime() - new Date(b.registeredAt).getTime());
+                          return sameContext.length > 1 && sameContext[0].id !== reg.id;
+                        })();
+
+                        const feeVal = reg.valorPago != null
+                          ? Number(reg.valorPago)
+                          : (isReinsc
+                              ? (champ?.valorReinscricao ?? champ?.registrationFee ?? 100)
+                              : (champ?.valorInscricaoIndividual ?? champ?.registrationFee ?? 100));
 
                         return (
                           <div
@@ -2898,8 +2911,10 @@ export default function MemberProfile({
                                 setSelectedPendingIds([...selectedPendingIds, reg.id]);
                               }
                             }}
-                            className={`p-4 transition duration-150 flex items-start gap-3 cursor-pointer ${
-                              isSelected ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'hover:bg-slate-50'
+                            className={`p-4 transition duration-150 flex items-start gap-3 cursor-pointer rounded-xl border ${
+                              isReinsc
+                                ? 'border-l-4 border-l-purple-500 bg-purple-50/20 hover:bg-purple-50/40 border-purple-200 shadow-2xs'
+                                : 'border-l-4 border-l-blue-500 bg-white hover:bg-blue-50/20 border-slate-200 shadow-2xs'
                             }`}
                           >
                             <input
@@ -2908,11 +2923,22 @@ export default function MemberProfile({
                               onChange={() => {}}
                               className="mt-1 w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
                             />
-                            <div className="flex-1 min-w-0 space-y-1">
+                            <div className="flex-1 min-w-0 space-y-1.5">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-[9px] px-2 py-0.5 rounded font-bold uppercase bg-amber-100 text-amber-800 border border-amber-200">
                                   PENDENTE
                                 </span>
+                                {isReinsc ? (
+                                  <span className="text-[9px] px-2.5 py-0.5 rounded-full font-extrabold uppercase bg-purple-100 text-purple-900 border border-purple-300 flex items-center gap-1 shadow-2xs">
+                                    <Repeat className="w-3 h-3 text-purple-700" />
+                                    ✨ REINSCRIÇÃO (TARIFA PROMOCIONAL)
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase bg-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1">
+                                    <Target className="w-3 h-3 text-blue-600" />
+                                    INSCRIÇÃO PRINCIPAL
+                                  </span>
+                                )}
                                 <span className="font-bold text-xs text-slate-900">
                                   {champ?.title || 'Campeonato G&G'} &gt; {stg?.title || `Etapa ${stg?.stageNum || 1}`} &gt; {modName}
                                 </span>
@@ -2926,7 +2952,7 @@ export default function MemberProfile({
                                   <span>CR: <strong className="text-slate-800">{reg.crNumber}</strong></span>
                                 )}
                                 <span>Data: {new Date(reg.registeredAt).toLocaleDateString()}</span>
-                                <span>Tipo: <strong className="text-slate-800 uppercase">{reg.registrationType === 'reinscrição' ? 'Reinscrição' : 'Normal'}</strong></span>
+                                <span>Tipo: <strong className={isReinsc ? "text-purple-800 font-black uppercase" : "text-blue-800 font-bold uppercase"}>{isReinsc ? '✨ Reinscrição' : 'Inscrição Principal'}</strong></span>
                               </div>
                             </div>
 
@@ -2988,15 +3014,46 @@ export default function MemberProfile({
                       const stg = stages.find(s => s.id === reg.stageId);
                       const modName = modalityName(reg.modalityId);
                       const regUser = users.find(u => u.id === reg.userId);
-                      const feeVal = reg.valorPago != null ? Number(reg.valorPago) : (champ?.valorInscricaoIndividual || 100);
+                      
+                      // Check if this registration is a Reinscrição
+                      const isReinsc = reg.registrationType === 'reinscrição' || (() => {
+                        const sameContext = registrations
+                          .filter(r => r.userId === reg.userId && r.championshipId === reg.championshipId && r.stageId === reg.stageId && r.modalityId === reg.modalityId)
+                          .sort((a, b) => new Date(a.registeredAt).getTime() - new Date(b.registeredAt).getTime());
+                        return sameContext.length > 1 && sameContext[0].id !== reg.id;
+                      })();
+
+                      const feeVal = reg.valorPago != null
+                        ? Number(reg.valorPago)
+                        : (isReinsc
+                            ? (champ?.valorReinscricao ?? champ?.registrationFee ?? 100)
+                            : (champ?.valorInscricaoIndividual ?? champ?.registrationFee ?? 100));
 
                       return (
-                        <div key={reg.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 hover:bg-slate-50 transition flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                          <div className="space-y-1">
+                        <div
+                          key={reg.id}
+                          className={`border rounded-xl p-4 transition flex flex-col sm:flex-row justify-between sm:items-center gap-4 ${
+                            isReinsc
+                              ? 'border-l-4 border-l-purple-500 bg-purple-50/15 hover:bg-purple-50/30 border-purple-200 shadow-2xs'
+                              : 'border-l-4 border-l-blue-500 bg-slate-50/50 hover:bg-slate-50 border-slate-200 shadow-2xs'
+                          }`}
+                        >
+                          <div className="space-y-1.5">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-[9px] px-2 py-0.5 rounded font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-200">
                                 HOMOLOGADA
                               </span>
+                              {isReinsc ? (
+                                <span className="text-[9px] px-2.5 py-0.5 rounded-full font-extrabold uppercase bg-purple-100 text-purple-900 border border-purple-300 flex items-center gap-1 shadow-2xs">
+                                  <Repeat className="w-3 h-3 text-purple-700" />
+                                  ✨ REINSCRIÇÃO (TARIFA PROMOCIONAL)
+                                </span>
+                              ) : (
+                                <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase bg-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1">
+                                  <Target className="w-3 h-3 text-blue-600" />
+                                  INSCRIÇÃO PRINCIPAL
+                                </span>
+                              )}
                               <span className="font-bold text-xs text-slate-900">
                                 {champ?.title || 'Campeonato G&G'} &gt; {stg?.title || `Etapa ${stg?.stageNum || 1}`} &gt; {modName}
                               </span>
@@ -3011,6 +3068,7 @@ export default function MemberProfile({
                               )}
                               <span>Data Pgto: {reg.dataPagamento || new Date(reg.registeredAt).toLocaleDateString()}</span>
                               <span>Valor Pago: <strong className="text-slate-800">R$ {feeVal.toFixed(2)}</strong></span>
+                              <span>Tipo: <strong className={isReinsc ? "text-purple-800 font-black uppercase" : "text-blue-800 font-bold uppercase"}>{isReinsc ? '✨ Reinscrição' : 'Inscrição Principal'}</strong></span>
                               {reg.txId && <span className="truncate max-w-[200px]">TxID: {reg.txId}</span>}
                             </div>
                           </div>
@@ -3028,8 +3086,8 @@ export default function MemberProfile({
                                 txId: reg.txId,
                                 athleteName: regUser?.fullName || selectedUser.fullName,
                                 athleteUsername: regUser?.username || selectedUser.username,
-                                valorPago: reg.valorPago,
-                                registrationType: reg.registrationType,
+                                valorPago: feeVal,
+                                registrationType: isReinsc ? 'reinscrição' : 'normal',
                                 registeredByUserId: reg.registeredByUserId,
                                 userId: reg.userId
                               });
@@ -4884,7 +4942,12 @@ export default function MemberProfile({
                     <div><strong>Valor Pago:</strong> R$ {Number(receiptData.valorPago).toFixed(2)}</div>
                   )}
                   {receiptData.registrationType && (
-                    <div className="uppercase"><strong>Tipo:</strong> {receiptData.registrationType}</div>
+                    <div className="uppercase">
+                      <strong>Tipo:</strong>{' '}
+                      <span className={receiptData.registrationType === 'reinscrição' ? "text-purple-700 font-extrabold" : "text-blue-700 font-bold"}>
+                        {receiptData.registrationType === 'reinscrição' ? '✨ REINSCRIÇÃO (TARIFA PROMOCIONAL)' : 'INSCRIÇÃO PRINCIPAL'}
+                      </span>
+                    </div>
                   )}
                   {receiptData.registeredByUserId && (
                     <div><strong>Origem:</strong> {receiptData.registeredByUserId === receiptData.userId ? 'ATLETA' : 'CLUBE'}</div>
