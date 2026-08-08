@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: destacar visualmente inscricao principal e reinscricao no perfil do atleta e comprovante` |
-| Data/hora | 2026-08-08T15:15:00-03:00 |
+| Mensagem | `fix: remover rolagem interna limitada e permitir expansao natural da lista de atletas no lancamento de resultados em dispositivos moveis` |
+| Data/hora | 2026-08-08T19:03:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -60,6 +60,7 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
 
+- **Expansão Natural da Lista de Atletas no Lançamento de Resultados (`AdminPanel.tsx`)**: Removida a limitação de altura fixa com barra de rolagem interna minúscula (`max-h-48 overflow-y-auto`) na seleção de atletas de `CadastrarResultadosPanel` ("Lançar Notas e Homologar Tempos"). Agora a lista se expande naturalmente utilizando a barra de rolagem padrão do navegador/aplicativo no celular e desktop, conta com filtro de busca rápida por atleta/arma e exibe badges distintivas de reinscrição e dados da arma.
 - **Destaque Visual para Inscrição Principal e Reinscrição (`MemberProfile.tsx`, `AdminPanel.tsx`)**: No perfil do atleta (Painel de Serviços > Minhas Inscrições), tanto nas inscrições pendentes quanto nas homologadas e no modal de comprovante de inscrição, o sistema agora destaca explicitamente com badges distintivas se a inscrição é uma **INSCRIÇÃO PRINCIPAL** (1ª inscrição do atleta na etapa/modalidade) ou uma **✨ REINSCRIÇÃO (TARIFA PROMOCIONAL)** (tentativa subsequente de melhorar pontuação), aplicando tarifas promocionais e bordas personalizadas (azul para principal e roxo/lilás para reinscrição).
 - **Deduplicação de Atletas nas Telas de Resultados e Rankings (Regra de Reinscrição Única) (`CompetitionResultsViewer.tsx`, `ClubCertificatesViewer.tsx`, `server.ts`)**: Quando um atleta participa e lança múltiplos resultados na mesma Etapa e Modalidade (reinscrições para tentar melhorar a pontuação anterior), as telas de resultados, rankings e certificados consolidam e exibem **apenas uma única participação por atleta** — aquela que obteve a melhor performance/pontuação (ou menor tempo/maior hit factor e critérios de desempate X, 10, 9). No resultado consolidado "Todas as Etapas", é somada exclusivamente a melhor pontuação de cada etapa para cada atleta, garantindo que cada atleta ocupe exatamente uma única posição no ranking (1º, 2º, 3º...).
 - **Campo "Arma a ser utilizada" sempre em branco ao iniciar nova inscrição (`ChampionshipsView.tsx`)**: Ao abrir o modal de inscrição ("Participar"), trocar de modalidade ou etapa, concluir a inscrição ou fechar o modal (tanto em inscrições individuais quanto em multicampeonatos), os estados `weaponSearchQuery`, `selectedWeaponId`, `weaponSearchResults` e `searchingWeapon` são completamente reinicializados em branco (`''` e `[]`). Isso impede que a arma escolhida em uma inscrição anterior permaneça indevidamente pré-preenchida ao se inscrever em outra modalidade.

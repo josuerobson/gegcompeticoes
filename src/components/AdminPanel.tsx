@@ -1875,6 +1875,19 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
   const [success, setSuccess] = React.useState('');
   const [error, setError] = React.useState('');
 
+  const [searchAthlete, setSearchAthlete] = React.useState('');
+
+  const filteredRegs = React.useMemo(() => {
+    if (!searchAthlete.trim()) return registrations;
+    const q = searchAthlete.toLowerCase();
+    return registrations.filter(r => 
+      (r.athleteName && r.athleteName.toLowerCase().includes(q)) ||
+      (r.modalityName && r.modalityName.toLowerCase().includes(q)) ||
+      (r.weaponModel && r.weaponModel.toLowerCase().includes(q)) ||
+      (r.weaponCaliber && r.weaponCaliber.toLowerCase().includes(q))
+    );
+  }, [registrations, searchAthlete]);
+
   const champStages = stages.filter(s => s.championshipId === champId);
 
   React.useEffect(() => {
@@ -2018,7 +2031,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="space-y-1">
           <label className="text-[10px] font-bold text-slate-500 uppercase block">Campeonato</label>
-          <select value={champId} onChange={e => { setChampId(e.target.value); setStageId(''); setModalityId(''); setSelectedReg(null); }}
+          <select value={champId} onChange={e => { setChampId(e.target.value); setStageId(''); setModalityId(''); setSelectedReg(null); setSearchAthlete(''); }}
             className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
             <option value="">Selecione...</option>
             {championships.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
@@ -2026,7 +2039,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
         </div>
         <div className="space-y-1">
           <label className="text-[10px] font-bold text-slate-500 uppercase block">Etapa</label>
-          <select value={stageId} onChange={e => { setStageId(e.target.value); setSelectedReg(null); }}
+          <select value={stageId} onChange={e => { setStageId(e.target.value); setSelectedReg(null); setSearchAthlete(''); }}
             className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!champId}>
             <option value="">Selecione...</option>
             {champStages.map(s => <option key={s.id} value={s.id}>{s.title || `Etapa ${s.stageNum}`}</option>)}
@@ -2034,7 +2047,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
         </div>
         <div className="space-y-1">
           <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade</label>
-          <select value={modalityId} onChange={e => { setModalityId(e.target.value); setSelectedReg(null); }}
+          <select value={modalityId} onChange={e => { setModalityId(e.target.value); setSelectedReg(null); setSearchAthlete(''); }}
             className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!stageId}>
             <option value="">Todas as modalidades ({registrations.length})</option>
             {modalities.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -2050,35 +2063,83 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-500 uppercase block">Selecione o Atleta / Inscrição ({registrations.length})</label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1 border border-slate-200 rounded-xl bg-slate-50">
-              {registrations.map(r => {
-                const isSelected = selectedReg?.id === r.id;
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => selectReg(r)}
-                    className={`p-2.5 rounded-xl text-left border transition flex items-center justify-between cursor-pointer ${
-                      isSelected
-                        ? 'bg-blue-600 border-blue-600 text-white shadow-xs font-semibold'
-                        : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="truncate pr-2">
-                      <div className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-800'}`}>
-                        {r.athleteName || 'Atleta'}
-                      </div>
-                      <div className={`text-[10px] truncate ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
-                        {r.modalityName}
-                      </div>
-                    </div>
-                    {statusBadge(r)}
-                  </button>
-                );
-              })}
+          <div className="space-y-2">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+              <label className="text-[10px] font-bold text-slate-500 uppercase block">
+                Selecione o Atleta / Inscrição ({filteredRegs.length}{filteredRegs.length !== registrations.length ? ` de ${registrations.length}` : ''})
+              </label>
+              {registrations.length > 3 && (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchAthlete}
+                    onChange={e => setSearchAthlete(e.target.value)}
+                    placeholder="Filtrar atleta ou arma..."
+                    className="w-full sm:w-56 bg-slate-50 border border-slate-200 text-xs px-3 py-1.5 rounded-lg outline-none focus:border-blue-500 focus:bg-white text-slate-800"
+                  />
+                  {searchAthlete && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchAthlete('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
+
+            {filteredRegs.length === 0 ? (
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-slate-400">
+                Nenhum atleta encontrado para "{searchAthlete}".
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 p-1.5 border border-slate-200 rounded-xl bg-slate-50/50">
+                {filteredRegs.map(r => {
+                  const isSelected = selectedReg?.id === r.id;
+                  const isReinsc = r.registrationType === 'reinscrição';
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => selectReg(r)}
+                      className={`p-3 rounded-xl text-left border transition flex items-center justify-between cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-600 border-blue-600 text-white shadow-xs font-semibold'
+                          : isReinsc
+                          ? 'bg-purple-50/30 border-purple-200 text-slate-700 hover:border-purple-300 hover:bg-purple-50/60'
+                          : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="truncate pr-2 space-y-0.5">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+                            {r.athleteName || 'Atleta'}
+                          </span>
+                          {isReinsc && (
+                            <span className={`text-[8.5px] px-1.5 py-0.5 rounded font-extrabold uppercase ${isSelected ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-800 border border-purple-200'}`}>
+                              ✨ Reinscr.
+                            </span>
+                          )}
+                        </div>
+                        <div className={`text-[10px] truncate ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
+                          {r.modalityName}
+                        </div>
+                        {(r.weaponModel || r.weaponCaliber) && (
+                          <div className={`text-[9.5px] font-mono truncate ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                            Arma: {r.weaponModel || 'N/A'} {r.weaponCaliber ? `(${r.weaponCaliber})` : ''}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-shrink-0">
+                        {statusBadge(r)}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {selectedReg && (
