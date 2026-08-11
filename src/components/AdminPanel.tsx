@@ -2008,6 +2008,43 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
     finally { setSaving(false); }
   };
 
+  const handleDeleteRegistration = async () => {
+    if (!selectedReg) return;
+    const confirmMsg = `Tem certeza que deseja excluir a inscrição de "${selectedReg.athleteName || 'Atleta'}" (${selectedReg.modalityName || 'Modalidade'})?\n\nEsta ação apagará a inscrição e seus lançamentos de pontuação e não poderá ser desfeita.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch(`/api/registrations/${selectedReg.id}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao excluir inscrição.');
+
+      setSuccess('✅ Inscrição excluída com sucesso.');
+      setSelectedReg(null);
+
+      let refreshUrl = `/api/admin/registrations?championshipId=${champId}&stageId=${stageId}`;
+      if (modalityId) {
+        refreshUrl += `&modalityId=${modalityId}`;
+      }
+      const r2 = await fetch(refreshUrl, { headers: { 'x-user-id': currentUser?.id || '' } });
+      const d2 = await r2.json();
+      setRegistrations(d2.registrations || []);
+
+      if (onRefreshData) {
+        await onRefreshData();
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const statusBadge = (reg: EnrichedRegistration) => {
     if (reg.disqualified) return <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">DQ</span>;
     if (reg.completionStatus === 'completed') return <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{reg.totalPoints ?? 0}pts ✓</span>;
@@ -2296,6 +2333,10 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
                 <button onClick={() => handleSubmit('desclassificar')} disabled={saving}
                   className="bg-red-50 hover:bg-red-100 text-red-700 text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
                   <ShieldAlert className="w-4 h-4" />Desclassificar
+                </button>
+                <button onClick={handleDeleteRegistration} disabled={saving}
+                  className="bg-red-600 hover:bg-red-700 disabled:bg-slate-350 text-white text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
+                  <Trash2 className="w-4 h-4" />Excluir Inscrição
                 </button>
               </div>
             </div>

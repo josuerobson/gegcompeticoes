@@ -1764,6 +1764,59 @@ app.post('/api/registrations/pay-batch', requireAuth, async (req, res) => {
   }
 });
 
+app.delete('/api/registrations/:id', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const registrationId = req.params.id;
+
+  try {
+    const regRes = await pool.query('SELECT * FROM registrations WHERE id = $1', [registrationId]);
+    if (regRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Inscrição não encontrada.' });
+    }
+    const reg = mapRegistration(regRes.rows[0]);
+
+    if (currentUser.role === 'club_admin' && reg.clubId && reg.clubId !== currentUser.clubId) {
+      return res.status(403).json({ error: 'Você não tem permissão para excluir inscrições de outro clube.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Se houver munição do clube abatida, devolver ao saldo do atleta
+      const clubShots = Number(reg.clubAmmoShots) || 0;
+      if (clubShots > 0 && reg.weaponId) {
+        const wRes = await client.query('SELECT caliber FROM weapons WHERE id = $1', [reg.weaponId]);
+        if (wRes.rows.length > 0 && wRes.rows[0].caliber) {
+          await client.query(
+            `UPDATE ammo_athlete_balances
+             SET balance = balance + $1, updated_at = NOW()
+             WHERE user_id = $2 AND caliber = $3`,
+            [clubShots, reg.userId, wRes.rows[0].caliber]
+          );
+        }
+      }
+
+      // Excluir pontuações associadas em stage_scores
+      await client.query('DELETE FROM stage_scores WHERE registration_id = $1', [registrationId]);
+
+      // Excluir a inscrição
+      await client.query('DELETE FROM registrations WHERE id = $1', [registrationId]);
+
+      await client.query('COMMIT');
+      res.json({ success: true, message: 'Inscrição excluída com sucesso.' });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Delete registration error:', err);
+    res.status(500).json({ error: 'Erro ao excluir inscrição.' });
+  }
+});
+
 app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
   const championshipId = req.params.id;
   const { modalityId, stageId, weaponId, crNumber, paymentMethod } = req.body;
