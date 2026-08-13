@@ -62,7 +62,17 @@ export default function ChampionshipsView({
 
   const handleRegisterMultiSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedMultiReg || !multiStageId || !multiModalityId || !multiWeaponId) {
+    if (!selectedMultiReg) return;
+    const hasItems = selectedMultiReg.items && selectedMultiReg.items.length > 0;
+    if (!hasItems && !multiStageId) {
+      setMultiError('Selecione a etapa das competições.');
+      return;
+    }
+    if (!multiModalityId) {
+      setMultiError('Selecione a modalidade/divisão.');
+      return;
+    }
+    if (!multiWeaponId) {
       setMultiError('Selecione a arma a ser utilizada pesquisando no mínimo 3 caracteres.');
       return;
     }
@@ -78,7 +88,7 @@ export default function ChampionshipsView({
           'x-user-id': currentUser?.id || ''
         },
         body: JSON.stringify({
-          stageId: multiStageId,
+          stageId: multiStageId || undefined,
           modalityId: multiModalityId,
           weaponId: multiWeaponId,
           crNumber: currentUser?.crNumber || multiCrInput || 'CR-SIMULADO',
@@ -840,20 +850,43 @@ export default function ChampionshipsView({
 
                           <div className="space-y-2 pt-1">
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                              Campeonatos Incluídos ({includedChamps.length}):
+                              Campeonatos e Etapas Incluídos ({multi.items && multi.items.length > 0 ? multi.items.length : includedChamps.length}):
                             </span>
                             <div className="space-y-1.5">
-                              {includedChamps.map(ic => (
-                                <div key={ic.id} className="bg-white border border-slate-200/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
-                                  <div className="flex items-center gap-2 font-bold text-slate-800">
-                                    <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
-                                    <span>{ic.title}</span>
+                              {multi.items && multi.items.length > 0 ? (
+                                multi.items.map(it => {
+                                  const ic = championships.find(c => c.id === it.championshipId);
+                                  const st = stages.find(s => s.id === it.stageId);
+                                  return (
+                                    <div key={it.championshipId} className="bg-white border border-slate-200/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
+                                      <div className="flex items-center gap-2 font-bold text-slate-800">
+                                        <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
+                                        <div>
+                                          <span>{ic?.title || 'Campeonato'}</span>
+                                          <span className="block text-[11px] font-semibold text-blue-700">
+                                            {st?.title || 'Etapa'} {st?.date ? `(${st.date.split('T')[0]})` : ''}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 shrink-0">
+                                        Incluso
+                                      </span>
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                includedChamps.map(ic => (
+                                  <div key={ic.id} className="bg-white border border-slate-200/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
+                                    <div className="flex items-center gap-2 font-bold text-slate-800">
+                                      <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
+                                      <span>{ic.title}</span>
+                                    </div>
+                                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                                      Incluso
+                                    </span>
                                   </div>
-                                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-                                    Incluído
-                                  </span>
-                                </div>
-                              ))}
+                                ))
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1858,27 +1891,49 @@ export default function ChampionshipsView({
                 </div>
 
                 <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Etapa Única das Competições</label>
-                    <select
-                      value={multiStageId}
-                      onChange={e => {
-                        setMultiStageId(e.target.value);
-                        setMultiWeaponId('');
-                        setSelectedWeaponId('');
-                        setWeaponSearchQuery('');
-                        setWeaponSearchResults([]);
-                        setSearchingWeapon(false);
-                        setMultiError('');
-                      }}
-                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-700"
-                    >
-                      <option value="">Selecione a etapa...</option>
-                      {stages.map(s => (
-                        <option key={s.id} value={s.id}>{s.title || `Etapa ${s.stageNum}`} ({s.date.split('T')[0]})</option>
-                      ))}
-                    </select>
-                  </div>
+                  {selectedMultiReg.items && selectedMultiReg.items.length > 0 ? (
+                    <div className="space-y-1.5 bg-blue-50/50 p-3 rounded-xl border border-blue-100">
+                      <label className="text-[10px] font-bold text-blue-900 uppercase block tracking-wider">
+                        Etapas Vinculadas à Oferta ({selectedMultiReg.items.length})
+                      </label>
+                      <div className="space-y-1">
+                        {selectedMultiReg.items.map(it => {
+                          const c = championships.find(champ => champ.id === it.championshipId);
+                          const s = stages.find(st => st.id === it.stageId);
+                          return (
+                            <div key={it.championshipId} className="flex justify-between items-center text-xs bg-white p-2 rounded-lg border border-blue-150 shadow-2xs">
+                              <span className="font-bold text-slate-800 truncate pr-2">{c?.title || 'Campeonato'}</span>
+                              <span className="text-[11px] font-semibold text-blue-700 shrink-0">
+                                {s?.title || 'Etapa'} {s?.date ? `(${s.date.split('T')[0]})` : ''}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Etapa Única das Competições</label>
+                      <select
+                        value={multiStageId}
+                        onChange={e => {
+                          setMultiStageId(e.target.value);
+                          setMultiWeaponId('');
+                          setSelectedWeaponId('');
+                          setWeaponSearchQuery('');
+                          setWeaponSearchResults([]);
+                          setSearchingWeapon(false);
+                          setMultiError('');
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-700"
+                      >
+                        <option value="">Selecione a etapa...</option>
+                        {stages.map(s => (
+                          <option key={s.id} value={s.id}>{s.title || `Etapa ${s.stageNum}`} ({s.date.split('T')[0]})</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade / Divisão</label>

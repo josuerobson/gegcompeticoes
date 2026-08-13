@@ -350,11 +350,17 @@ export interface TrainingSession {
 
 // ─── Multi-campeonatos ────────────────────────────────────────────────────────
 // Pacote de campeonatos agrupados com inscrição unificada (valor único).
+export interface MultiChampionshipItem {
+  championshipId: string;
+  stageId: string;
+}
+
 export interface MultiChampionship {
   id: string;
   title: string;
   description?: string;
   championshipIds: string[];
+  items?: MultiChampionshipItem[];
   registrationFee: number;
   clubRegistrationFee?: number;
   pixKey?: string;

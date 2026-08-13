@@ -1086,6 +1086,7 @@ export async function initDB() {
         title TEXT NOT NULL,
         description TEXT,
         championship_ids TEXT[] NOT NULL DEFAULT '{}',
+        items JSONB DEFAULT '[]'::jsonb,
         registration_fee NUMERIC(10,2) NOT NULL DEFAULT 0,
         club_registration_fee NUMERIC(10,2),
         pix_key TEXT,
@@ -1096,6 +1097,11 @@ export async function initDB() {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
+    `);
+
+    await client.query(`
+      ALTER TABLE multi_championships
+        ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'::jsonb;
     `);
 
     // Rastreamento: coluna que aponta qual multicampeonato originou a inscrição.

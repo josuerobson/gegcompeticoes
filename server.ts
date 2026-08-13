@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
-import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan } from './src/types.js';
+import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, MultiChampionshipItem, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan } from './src/types.js';
 import { pool, initDB } from './src/db.js';
 import { hashPassword, verifyPassword } from './src/auth.js';
 import { uploadDocument, getDocumentStream, storageEnabled } from './src/storage.js';
@@ -276,11 +276,20 @@ function mapRegistration(r: any): Registration {
 }
 
 function mapMultiChampionship(m: any): MultiChampionship {
+  let parsedItems: MultiChampionshipItem[] = [];
+  if (m.items) {
+    parsedItems = typeof m.items === 'string' ? JSON.parse(m.items) : m.items;
+  }
+  const championshipIds = parsedItems && parsedItems.length > 0
+    ? Array.from(new Set(parsedItems.map((i: any) => i.championshipId)))
+    : (m.championship_ids || []);
+
   return {
     id: m.id,
     title: m.title,
     description: m.description || undefined,
-    championshipIds: m.championship_ids || [],
+    championshipIds,
+    items: parsedItems,
     registrationFee: Number(m.registration_fee),
     clubRegistrationFee: m.club_registration_fee != null ? Number(m.club_registration_fee) : undefined,
     pixKey: m.pix_key || undefined,
@@ -465,16 +474,22 @@ app.get('/api/multi-championships', async (req, res) => {
 
 // POST /api/multi-championships — cria (admin only)
 app.post('/api/multi-championships', requireAdmin, async (req, res) => {
-  const { title, description, championshipIds, registrationFee, clubRegistrationFee, pixKey, pixType, pixName, whatsapp, status } = req.body;
-  if (!title || !Array.isArray(championshipIds) || championshipIds.length === 0 || registrationFee === undefined) {
-    return res.status(400).json({ error: 'Título, campeonatos e valor de inscrição são obrigatórios.' });
+  const { title, description, items, championshipIds: rawChampionshipIds, registrationFee, clubRegistrationFee, pixKey, pixType, pixName, whatsapp, status } = req.body;
+  
+  const validItems: MultiChampionshipItem[] = Array.isArray(items) ? items.filter(it => it && it.championshipId && it.stageId) : [];
+  const championshipIds: string[] = validItems.length > 0
+    ? Array.from(new Set(validItems.map(it => it.championshipId)))
+    : (Array.isArray(rawChampionshipIds) ? rawChampionshipIds : []);
+
+  if (!title || (validItems.length === 0 && championshipIds.length === 0) || registrationFee === undefined) {
+    return res.status(400).json({ error: 'Título, campeonatos/etapas e valor de inscrição são obrigatórios.' });
   }
   try {
     const id = `multi_${Date.now()}`;
     const result = await pool.query(
-      `INSERT INTO multi_championships (id, title, description, championship_ids, registration_fee, club_registration_fee, pix_key, pix_type, pix_name, whatsapp, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-      [id, title, description || null, championshipIds, Number(registrationFee), clubRegistrationFee != null ? Number(clubRegistrationFee) : null, pixKey || null, pixType || null, pixName || null, whatsapp || null, status || 'active']
+      `INSERT INTO multi_championships (id, title, description, championship_ids, items, registration_fee, club_registration_fee, pix_key, pix_type, pix_name, whatsapp, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+      [id, title, description || null, championshipIds, JSON.stringify(validItems), Number(registrationFee), clubRegistrationFee != null ? Number(clubRegistrationFee) : null, pixKey || null, pixType || null, pixName || null, whatsapp || null, status || 'active']
     );
     res.status(201).json({ multiChampionship: mapMultiChampionship(result.rows[0]) });
   } catch (err) {
@@ -486,13 +501,18 @@ app.post('/api/multi-championships', requireAdmin, async (req, res) => {
 // PUT /api/multi-championships/:id — atualiza (admin only)
 app.put('/api/multi-championships/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { title, description, championshipIds, registrationFee, clubRegistrationFee, pixKey, pixType, pixName, whatsapp, status } = req.body;
+  const { title, description, items, championshipIds: rawChampionshipIds, registrationFee, clubRegistrationFee, pixKey, pixType, pixName, whatsapp, status } = req.body;
+  const validItems: MultiChampionshipItem[] = Array.isArray(items) ? items.filter(it => it && it.championshipId && it.stageId) : [];
+  const championshipIds: string[] = validItems.length > 0
+    ? Array.from(new Set(validItems.map(it => it.championshipId)))
+    : (Array.isArray(rawChampionshipIds) ? rawChampionshipIds : []);
+
   try {
     const result = await pool.query(
-      `UPDATE multi_championships SET title=$1, description=$2, championship_ids=$3, registration_fee=$4, club_registration_fee=$5,
-       pix_key=$6, pix_type=$7, pix_name=$8, whatsapp=$9, status=$10, updated_at=NOW()
-       WHERE id=$11 RETURNING *`,
-      [title, description || null, championshipIds, Number(registrationFee), clubRegistrationFee != null ? Number(clubRegistrationFee) : null, pixKey || null, pixType || null, pixName || null, whatsapp || null, status || 'active', id]
+      `UPDATE multi_championships SET title=$1, description=$2, championship_ids=$3, items=$4, registration_fee=$5, club_registration_fee=$6,
+       pix_key=$7, pix_type=$8, pix_name=$9, whatsapp=$10, status=$11, updated_at=NOW()
+       WHERE id=$12 RETURNING *`,
+      [title, description || null, championshipIds, JSON.stringify(validItems), Number(registrationFee), clubRegistrationFee != null ? Number(clubRegistrationFee) : null, pixKey || null, pixType || null, pixName || null, whatsapp || null, status || 'active', id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Multicampeonato não encontrado.' });
     res.json({ multiChampionship: mapMultiChampionship(result.rows[0]) });
@@ -517,11 +537,11 @@ app.delete('/api/multi-championships/:id', requireAdmin, async (req, res) => {
 // POST /api/multi-championships/:id/register — inscreve atleta em todos os campeonatos do pacote
 app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) => {
   const multiId = req.params.id;
-  const { stageId, modalityId, weaponId, crNumber, paymentMethod } = req.body;
+  const { stageId: bodyStageId, modalityId, weaponId, crNumber, paymentMethod } = req.body;
   const currentUser = (req as any).user as User;
 
-  if (!stageId || !modalityId || !weaponId || !crNumber || !paymentMethod) {
-    return res.status(400).json({ error: 'Etapa, modalidade, arma, CR e método de pagamento são obrigatórios.' });
+  if (!modalityId || !weaponId || !crNumber || !paymentMethod) {
+    return res.status(400).json({ error: 'Modalidade, arma, CR e método de pagamento são obrigatórios.' });
   }
   if (!currentUser.isProfileComplete) {
     return res.status(403).json({ error: 'Complete seu cadastro antes de se inscrever.' });
@@ -536,20 +556,32 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
       return res.status(400).json({ error: 'Este multicampeonato não está ativo.' });
     }
 
-    // Validar sexo da etapa
-    const stageRes = await pool.query('SELECT sexo FROM stages WHERE id=$1', [stageId]);
-    if (stageRes.rows.length > 0) {
-      const stageSex = (stageRes.rows[0].sexo || 'misto').toLowerCase();
-      if (stageSex !== 'misto') {
-        const userSex = (currentUser.sex || '').toLowerCase();
-        if (userSex !== stageSex) {
-          return res.status(403).json({ error: `Esta etapa é restrita para atletas do sexo ${stageSex === 'feminino' ? 'Feminino' : 'Masculino'}.` });
+    // Identificar os itens (campeonato + etapa) da oferta
+    const targetItems: Array<{ championshipId: string; stageId: string }> =
+      multi.items && multi.items.length > 0
+        ? multi.items
+        : (multi.championshipIds || []).map(cid => ({ championshipId: cid, stageId: bodyStageId }));
+
+    if (targetItems.length === 0 || targetItems.some(it => !it.stageId)) {
+      return res.status(400).json({ error: 'Etapa não definida para os campeonatos do pacote.' });
+    }
+
+    // Validar restrição de sexo para as etapas do pacote
+    for (const item of targetItems) {
+      const stageRes = await pool.query('SELECT sexo FROM stages WHERE id=$1', [item.stageId]);
+      if (stageRes.rows.length > 0) {
+        const stageSex = (stageRes.rows[0].sexo || 'misto').toLowerCase();
+        if (stageSex !== 'misto') {
+          const userSex = (currentUser.sex || '').toLowerCase();
+          if (userSex !== stageSex) {
+            return res.status(403).json({ error: `Uma das etapas do pacote é restrita para atletas do sexo ${stageSex === 'feminino' ? 'Feminino' : 'Masculino'}.` });
+          }
         }
       }
     }
 
     // Valor rateado por campeonato (para relatórios financeiros individuais)
-    const champCount = multi.championshipIds.length;
+    const champCount = targetItems.length;
     const valorUnitario = champCount > 0
       ? Number((Number(multi.registrationFee) / champCount).toFixed(2))
       : Number(multi.registrationFee);
@@ -561,18 +593,18 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
     try {
       await client.query('BEGIN');
 
-      for (const champId of multi.championshipIds) {
-        const champRow = await client.query('SELECT * FROM championships WHERE id=$1', [champId]);
+      for (const item of targetItems) {
+        const champRow = await client.query('SELECT * FROM championships WHERE id=$1', [item.championshipId]);
         if (champRow.rows.length === 0) continue;
 
         // Verificar inscrição duplicada (não bloqueia, apenas pula)
         const existing = await client.query(
           'SELECT 1 FROM registrations WHERE championship_id=$1 AND user_id=$2 AND stage_id=$3 AND modality_id=$4',
-          [champId, currentUser.id, stageId, modalityId]
+          [item.championshipId, currentUser.id, item.stageId, modalityId]
         );
         if (existing.rows.length > 0) continue;
 
-        const regId = `reg_multi_${Date.now()}_${champId.slice(-6)}_${Math.random().toString(36).substring(2, 5)}`;
+        const regId = `reg_multi_${Date.now()}_${item.championshipId.slice(-6)}_${Math.random().toString(36).substring(2, 5)}`;
         await client.query(
           `INSERT INTO registrations (
             id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
@@ -581,11 +613,11 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
             multi_championship_id
           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'approved','pending',$10,$10,$11,false,0,$12,'normal',$13,$14,$15)`,
           [
-            regId, champId, currentUser.id, currentUser.clubId || null, modalityId, stageId, weaponId, crNumber,
+            regId, item.championshipId, currentUser.id, currentUser.clubId || null, modalityId, item.stageId, weaponId, crNumber,
             paymentMethod, new Date().toISOString(), txId, currentUser.id, valorUnitario, dataPagamento, multiId
           ]
         );
-        createdRegs.push({ id: regId, championshipId: champId } as Registration);
+        createdRegs.push({ id: regId, championshipId: item.championshipId } as Registration);
       }
 
       await client.query(

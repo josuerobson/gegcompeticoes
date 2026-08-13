@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession, AnnuityPlan } from '../types';
+import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, MultiChampionshipItem, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession, AnnuityPlan } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
@@ -3859,18 +3859,24 @@ function MunicoesManagerPanel({ currentUser, weaponLookupOptions, onAddWeaponLoo
 // =============================================================================
 interface MultiChampionshipsManagerProps {
   championships: Championship[];
+  stages: Stage[];
   multiChampionships?: MultiChampionship[];
   currentUser: User | null;
   onRefreshData?: () => Promise<void>;
 }
 
-function MultiChampionshipsManager({ championships, multiChampionships = [], currentUser, onRefreshData }: MultiChampionshipsManagerProps) {
+function MultiChampionshipsManager({ championships, stages, multiChampionships = [], currentUser, onRefreshData }: MultiChampionshipsManagerProps) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedChampIds, setSelectedChampIds] = useState<string[]>([]);
+  const [packageItems, setPackageItems] = useState<MultiChampionshipItem[]>([]);
+  
+  // Seleção temporária de campeonato e etapa no formulário
+  const [tempChampId, setTempChampId] = useState('');
+  const [tempStageId, setTempStageId] = useState('');
+
   const [registrationFee, setRegistrationFee] = useState('');
   const [clubRegistrationFee, setClubRegistrationFee] = useState('');
   const [pixKey, setPixKey] = useState('');
@@ -3883,10 +3889,19 @@ function MultiChampionshipsManager({ championships, multiChampionships = [], cur
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  const getChamp = (id: string) => championships.find(c => c.id === id);
+  const getStage = (id: string) => stages.find(s => s.id === id);
+
+  const availableStagesForTempChamp = tempChampId
+    ? stages.filter(s => s.championshipId === tempChampId)
+    : [];
+
   const resetForm = () => {
     setTitle('');
     setDescription('');
-    setSelectedChampIds([]);
+    setPackageItems([]);
+    setTempChampId('');
+    setTempStageId('');
     setRegistrationFee('');
     setClubRegistrationFee('');
     setPixKey('');
@@ -3903,7 +3918,17 @@ function MultiChampionshipsManager({ championships, multiChampionships = [], cur
     setEditingId(multi.id);
     setTitle(multi.title);
     setDescription(multi.description || '');
-    setSelectedChampIds(multi.championshipIds || []);
+    if (multi.items && multi.items.length > 0) {
+      setPackageItems(multi.items);
+    } else {
+      const fallbackItems: MultiChampionshipItem[] = (multi.championshipIds || []).map(cid => {
+        const firstStage = stages.find(s => s.championshipId === cid);
+        return { championshipId: cid, stageId: firstStage?.id || '' };
+      });
+      setPackageItems(fallbackItems);
+    }
+    setTempChampId('');
+    setTempStageId('');
     setRegistrationFee(String(multi.registrationFee || 0));
     setClubRegistrationFee(multi.clubRegistrationFee ? String(multi.clubRegistrationFee) : '');
     setPixKey(multi.pixKey || '');
@@ -3915,16 +3940,35 @@ function MultiChampionshipsManager({ championships, multiChampionships = [], cur
     setError('');
   };
 
-  const handleToggleChamp = (champId: string) => {
-    setSelectedChampIds(prev =>
-      prev.includes(champId) ? prev.filter(id => id !== champId) : [...prev, champId]
-    );
+  const handleAddPackageItem = () => {
+    if (!tempChampId) {
+      setError('Selecione o campeonato primeiro.');
+      return;
+    }
+    if (!tempStageId) {
+      setError('Marque a única etapa que será vinculada à oferta.');
+      return;
+    }
+
+    setPackageItems(prev => {
+      const filtered = prev.filter(it => it.championshipId !== tempChampId);
+      return [...filtered, { championshipId: tempChampId, stageId: tempStageId }];
+    });
+
+    setTempChampId('');
+    setTempStageId('');
+    setError('');
+  };
+
+  const handleRemovePackageItem = (champId: string) => {
+    setPackageItems(prev => prev.filter(it => it.championshipId !== champId));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) { setError('Título é obrigatório.'); return; }
-    if (selectedChampIds.length === 0) { setError('Selecione pelo menos um campeonato.'); return; }
+    if (!title.trim()) { setError('Nome da oferta é obrigatório.'); return; }
+    if (packageItems.length === 0) { setError('Selecione pelo menos um campeonato e sua etapa correspondente.'); return; }
+    if (packageItems.some(it => !it.stageId)) { setError('Todos os campeonatos incluídos devem ter uma etapa vinculada.'); return; }
     if (!registrationFee || Number(registrationFee) <= 0) { setError('Informe o valor da inscrição.'); return; }
 
     setSaving(true);
@@ -3944,7 +3988,8 @@ function MultiChampionshipsManager({ championships, multiChampionships = [], cur
         body: JSON.stringify({
           title,
           description: description || undefined,
-          championshipIds: selectedChampIds,
+          items: packageItems,
+          championshipIds: packageItems.map(it => it.championshipId),
           registrationFee: Number(registrationFee),
           clubRegistrationFee: clubRegistrationFee ? Number(clubRegistrationFee) : undefined,
           pixKey: pixKey || undefined,
@@ -3956,9 +4001,9 @@ function MultiChampionshipsManager({ championships, multiChampionships = [], cur
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao salvar multicampeonato.');
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar oferta de multicampeonato.');
 
-      setSuccess(editingId ? 'Multicampeonato atualizado!' : 'Multicampeonato criado com sucesso!');
+      setSuccess(editingId ? 'Oferta de multicampeonato atualizada!' : 'Oferta de multicampeonato criada com sucesso!');
       resetForm();
       if (onRefreshData) await onRefreshData();
     } catch (err: any) {
@@ -3988,7 +4033,7 @@ function MultiChampionshipsManager({ championships, multiChampionships = [], cur
         <div className="flex justify-between items-center pb-3 border-b border-slate-100">
           <div>
             <h3 className="font-display font-bold text-slate-900 text-base">Gerenciamento de Multi-campeonatos</h3>
-            <p className="text-xs text-slate-400">Crie pacotes de campeonatos com valor único de inscrição.</p>
+            <p className="text-xs text-slate-400">Crie ofertas e pacotes de campeonatos vinculando etapas específicas com valor único de inscrição.</p>
           </div>
           <button
             onClick={() => { if (showForm) resetForm(); else setShowForm(true); }}
@@ -4005,12 +4050,17 @@ function MultiChampionshipsManager({ championships, multiChampionships = [], cur
         {showForm && (
           <form onSubmit={handleSubmit} className="bg-slate-50/70 p-5 border border-slate-200 rounded-2xl space-y-4">
             <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wider">
-              {editingId ? 'Editar Multi-campeonato' : 'Cadastrar Novo Multi-campeonato'}
+              {editingId ? 'Editar Oferta de Multi-campeonato' : 'Cadastrar Nova Oferta de Multi-campeonato'}
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
-                <ChampField label="Nome do Multi-campeonato" value={title} onChange={setTitle} placeholder="Ex: Grupo 2026 de Campeonatos" />
+                <ChampField
+                  label="Nome da Oferta"
+                  value={title}
+                  onChange={setTitle}
+                  placeholder="Ex: Pacote promocional Primeira etapa"
+                />
               </div>
               <div className="sm:col-span-2">
                 <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Descrição / Instruções (Opcional)</label>
@@ -4022,23 +4072,156 @@ function MultiChampionshipsManager({ championships, multiChampionships = [], cur
                 />
               </div>
 
-              <div className="sm:col-span-2 space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase block">Selecione os Campeonatos Incluídos ({selectedChampIds.length})</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-3 bg-white border border-slate-200 rounded-xl">
-                  {championships.map(c => {
-                    const isChecked = selectedChampIds.includes(c.id);
-                    return (
-                      <label key={c.id} className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${isChecked ? 'bg-blue-50/60 border-blue-200 text-blue-900 font-bold' : 'border-slate-100 hover:bg-slate-50 text-slate-700'}`}>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => handleToggleChamp(c.id)}
-                          className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                        />
-                        <span>{c.title}</span>
-                      </label>
-                    );
-                  })}
+              {/* SELEÇÃO DOS CAMPEONATOS E ETAPAS QUE FARÃO PARTE DO PACOTE */}
+              <div className="sm:col-span-2 space-y-3 p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h5 className="font-bold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <Trophy className="w-4 h-4 text-blue-600" />
+                      Seleção de Campeonatos e Etapas do Pacote
+                    </h5>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Selecione o campeonato, marque a etapa que será vinculada à oferta e inclua no pacote. Repita o processo até incluir todos os desejados.
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 self-start sm:self-auto shrink-0">
+                    {packageItems.length} {packageItems.length === 1 ? 'campeonato no pacote' : 'campeonatos no pacote'}
+                  </span>
+                </div>
+
+                {/* Bloco Interativo: Passo 1 + Passo 2 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-slate-50/80 rounded-xl border border-slate-200/80">
+                  {/* 1) Seleciona o campeonato */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10.5px] font-extrabold text-slate-700 uppercase flex items-center gap-1">
+                      <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-bold">1</span>
+                      Selecione o Campeonato
+                    </label>
+                    <select
+                      value={tempChampId}
+                      onChange={(e) => {
+                        setTempChampId(e.target.value);
+                        setTempStageId('');
+                      }}
+                      className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-700 focus:border-blue-500"
+                    >
+                      <option value="">Selecione um campeonato...</option>
+                      {championships.map((c) => {
+                        const alreadyAdded = packageItems.some(it => it.championshipId === c.id);
+                        return (
+                          <option key={c.id} value={c.id}>
+                            {c.title} {alreadyAdded ? '✓ (já incluso)' : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  {/* 2) Marca a única etapa que será vinculada à oferta */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10.5px] font-extrabold text-slate-700 uppercase flex items-center gap-1">
+                      <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-bold">2</span>
+                      Marque a única etapa vinculada à oferta
+                    </label>
+                    
+                    {!tempChampId ? (
+                      <div className="p-2.5 text-xs text-slate-400 bg-white border border-dashed border-slate-200 rounded-xl text-center">
+                        Selecione um campeonato no passo 1 para ver as etapas.
+                      </div>
+                    ) : availableStagesForTempChamp.length === 0 ? (
+                      <div className="p-2.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl">
+                        Nenhuma etapa cadastrada para este campeonato.
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                        {availableStagesForTempChamp.map((s) => {
+                          const isSelected = tempStageId === s.id;
+                          return (
+                            <label
+                              key={s.id}
+                              onClick={() => setTempStageId(s.id)}
+                              className={`flex items-center justify-between p-2 rounded-lg border text-xs cursor-pointer transition ${
+                                isSelected
+                                  ? 'bg-blue-50 border-blue-300 text-blue-900 font-bold shadow-2xs'
+                                  : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="radio"
+                                  name="tempSelectedStageRadio"
+                                  checked={isSelected}
+                                  onChange={() => setTempStageId(s.id)}
+                                  className="w-3.5 h-3.5 text-blue-600 cursor-pointer"
+                                />
+                                <span>{s.title || `Etapa ${s.stageNum}`}</span>
+                              </div>
+                              <span className="text-[10px] text-slate-500 font-medium">
+                                {s.date ? s.date.split('T')[0] : ''}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Botão para incluir no pacote */}
+                  <div className="md:col-span-2 flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={handleAddPackageItem}
+                      disabled={!tempChampId || !tempStageId}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-bold px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Incluir Campeonato e Etapa no Pacote
+                    </button>
+                  </div>
+                </div>
+
+                {/* Lista de Campeonatos e Etapas no Pacote */}
+                <div className="space-y-2 pt-2 border-t border-slate-150">
+                  <label className="text-[10.5px] font-bold text-slate-600 uppercase block">
+                    Campeonatos e Etapas Incluídos na Oferta ({packageItems.length})
+                  </label>
+                  {packageItems.length === 0 ? (
+                    <div className="p-3 text-center text-xs text-slate-400 bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                      Nenhum campeonato incluído no pacote ainda. Selecione um campeonato e sua etapa acima e clique em &quot;Incluir Campeonato e Etapa no Pacote&quot;.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {packageItems.map((item) => {
+                        const c = getChamp(item.championshipId);
+                        const s = getStage(item.stageId);
+                        return (
+                          <div
+                            key={item.championshipId}
+                            className="flex items-center justify-between p-2.5 bg-slate-50/70 border border-slate-200 rounded-xl shadow-2xs hover:border-slate-300 transition"
+                          >
+                            <div className="min-w-0 pr-2">
+                              <div className="flex items-center gap-1.5 font-bold text-slate-800 text-xs truncate">
+                                <Trophy className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                <span className="truncate">{c?.title || 'Campeonato'}</span>
+                              </div>
+                              <div className="flex items-center gap-1 text-[11px] text-blue-700 font-semibold mt-0.5">
+                                <Calendar className="w-3 h-3 text-blue-500 shrink-0" />
+                                <span>{s?.title || `Etapa`} {s?.date ? `(${s.date.split('T')[0]})` : ''}</span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePackageItem(item.championshipId)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer shrink-0"
+                              title="Remover do pacote"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -4074,7 +4257,7 @@ function MultiChampionshipsManager({ championships, multiChampionships = [], cur
                 disabled={saving}
                 className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold px-6 py-2.5 rounded-xl transition shadow-sm cursor-pointer"
               >
-                {saving ? 'Salvando...' : editingId ? 'Atualizar Multi-campeonato' : 'Criar Multi-campeonato'}
+                {saving ? 'Salvando...' : editingId ? 'Atualizar Oferta' : 'Criar Oferta Multi-campeonato'}
               </button>
             </div>
           </form>
@@ -4085,12 +4268,12 @@ function MultiChampionshipsManager({ championships, multiChampionships = [], cur
           <h4 className="font-bold text-xs text-slate-700 uppercase tracking-wider">Multicampeonatos Cadastrados ({multiChampionships.length})</h4>
           {multiChampionships.length === 0 ? (
             <div className="text-center py-8 text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
-              Nenhum multicampeonato cadastrado ainda. Crie o primeiro clicando no botão acima.
+              Nenhum multicampeonato cadastrado ainda. Crie a primeira oferta clicando no botão acima.
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3">
               {multiChampionships.map(m => {
-                const includedChamps = championships.filter(c => m.championshipIds.includes(c.id));
+                const includedCount = m.items && m.items.length > 0 ? m.items.length : (m.championshipIds?.length || 0);
                 return (
                   <div key={m.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/40 hover:bg-slate-50 transition space-y-3">
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b border-slate-150 pb-2">
@@ -4125,13 +4308,31 @@ function MultiChampionshipsManager({ championships, multiChampionships = [], cur
                     </div>
 
                     <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">Campeonatos Incluídos ({includedChamps.length}):</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">Campeonatos e Etapas Incluídos ({includedCount}):</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {includedChamps.map(ic => (
-                          <span key={ic.id} className="bg-white border border-slate-200 text-slate-700 text-[11px] font-medium px-2.5 py-1 rounded-md shadow-2xs flex items-center gap-1">
-                            <Trophy className="w-3 h-3 text-amber-500" /> {ic.title}
-                          </span>
-                        ))}
+                        {m.items && m.items.length > 0 ? (
+                          m.items.map(it => {
+                            const ic = getChamp(it.championshipId);
+                            const st = getStage(it.stageId);
+                            return (
+                              <span key={it.championshipId} className="bg-white border border-slate-200 text-slate-700 text-[11px] font-medium px-2.5 py-1 rounded-md shadow-2xs flex items-center gap-1.5">
+                                <Trophy className="w-3 h-3 text-amber-500" />
+                                <strong className="font-bold text-slate-900">{ic?.title || 'Campeonato'}</strong>
+                                <span className="text-slate-300">•</span>
+                                <span className="text-blue-700 font-semibold">{st?.title || `Etapa`} {st?.date ? `(${st.date.split('T')[0]})` : ''}</span>
+                              </span>
+                            );
+                          })
+                        ) : (
+                          (m.championshipIds || []).map(cid => {
+                            const ic = getChamp(cid);
+                            return (
+                              <span key={cid} className="bg-white border border-slate-200 text-slate-700 text-[11px] font-medium px-2.5 py-1 rounded-md shadow-2xs flex items-center gap-1">
+                                <Trophy className="w-3 h-3 text-amber-500" /> {ic?.title || cid}
+                              </span>
+                            );
+                          })
+                        )}
                       </div>
                     </div>
                   </div>
@@ -5156,6 +5357,7 @@ export default function AdminPanel({
         return (
           <MultiChampionshipsManager
             championships={championships}
+            stages={stages}
             multiChampionships={multiChampionships}
             currentUser={currentUser}
             onRefreshData={onRefreshData}
@@ -7393,6 +7595,7 @@ export default function AdminPanel({
         return (
           <MultiChampionshipsManager
             championships={championships}
+            stages={stages}
             multiChampionships={multiChampionships}
             currentUser={currentUser}
             onRefreshData={onRefreshData}
