@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: aplica deducao de penalidade na pontuacao final do atleta em todo o sistema` |
-| Data/hora | 2026-08-14T16:36:00-03:00 |
+| Mensagem | `feat: janela popup e tela cheia responsiva para lancamento rapido de resultados sem rolagem` |
+| Data/hora | 2026-08-14T19:18:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -81,6 +81,7 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
 - **"Cadastro de Modalidades" has no category/discipline field.** An earlier iteration added one by inference from a decorative mock form; the user clarified it doesn't exist in the real system and to drop it. The DB column (`modalities.discipline`) was kept (nullable) rather than dropped, per the project's no-destructive-migration rule — it's just unused going forward.
 - **Re-entries (Reinscrições) are automatically detected and charged differently**: Instead of blocking re-registration, the system detects if the user is already registered for the same modality and stage in that championship, charging the `valor_reinscricao` rather than the `valor_inscricao_individual`.
 - **Result entries are made on a per-series basis with automatic best-series calculation and penalty discount**: The user enters points for each shot series across target zones (X, 10, 9, ..., 0) and any stage penalty. The backend stores the full series details in a JSON column and populates the physical columns (`score_x`...`score_p0`, `penalty` and `total_points`) with the final effective score with penalty deducted (`Math.max(0, rawBestScore - penalty)`), which is mirrored in `stage_scores.score` and displayed in `CompetitionResultsViewer.tsx`, `AdminPanel.tsx`, `MemberProfile.tsx` and all rankings.
+- **Janela Modal / Tela Cheia para Lançamento Rápido de Resultados (`AdminPanel.tsx`)**: O formulário de lançamento de notas (`selectedReg`) foi transformado em uma janela modal/popup flutuante (no desktop com backdrop e no mobile em tela cheia). Ao salvar um resultado, a janela fecha automaticamente e o grid de atletas é atualizado na hora, eliminando a necessidade de rolar a página para baixo para lançar e para cima para escolher o próximo atleta.
 - **Cessão de Armas uses CPF/name autocomplete, not a dropdown**: With 2500+ athletes, a full dropdown would be too slow to load. Instead, a debounced search input (min 3 chars) calls `GET /api/members/search?q=` which returns max 8 results. The concession is stored in a new `weapon_concessions` table with a `SERIAL` concession_number. The weapon is also searched via the existing `/api/weapons/search` endpoint (by sigma or weapon_number). The PDF generated matches the "Anexo N" official format (art. 34, Decreto 11.615/2023).
 - **Cadastro de Armas supports inline editing**: Club administrators and master admins can edit existing weapon entries directly from the list view via a new inline form. A backend PUT endpoint updates fields while respecting the same ownership validations as deletion.
 - **Championship List view shows "Inscritos" count instead of "Inscrição" fee**: The user pointed out that the single registration fee value shown in the table was incorrect (as championships have 3 different prices). Thus, the "Inscrição" column was replaced by "Inscritos", which displays the total count of registrations associated with that championship across all modalities and stages.

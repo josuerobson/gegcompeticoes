@@ -1909,6 +1909,16 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
       .finally(() => setLoadingRegs(false));
   }, [champId, stageId, modalityId, isPlataformaScope]);
 
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedReg) {
+        setSelectedReg(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedReg]);
+
   const selectReg = (reg: EnrichedRegistration) => {
     setSelectedReg(reg);
     setError(''); setSuccess('');
@@ -2194,190 +2204,241 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
           </div>
 
           {selectedReg && (
-            <div className="border border-blue-200 rounded-2xl p-5 bg-blue-50/30 space-y-4 text-slate-800">
-              <div className="flex flex-wrap justify-between items-center border-b border-blue-100 pb-3 gap-2">
-                <div>
-                  <h4 className="font-bold text-slate-900 text-sm">{selectedReg.athleteName}</h4>
-                  <p className="text-[11px] text-slate-500 font-mono">
-                    Modalidade: {selectedReg.modalityName} | Arma: {selectedReg.weaponModel || 'N/A'} {selectedReg.weaponCaliber ? `(${selectedReg.weaponCaliber})` : ''}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2.5 py-1 rounded-full font-mono">
-                    {selectedReg.shotsPerSeries ? `${selectedReg.seriesCount || 1} Série(s) de ${selectedReg.shotsPerSeries} tiros` : 'Pontuação Direta'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Data da Prova</label>
-                  <input
-                    type="date"
-                    value={dataExec}
-                    onChange={e => setDataExec(e.target.value)}
-                    className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Hora da Prova</label>
-                  <input
-                    type="time"
-                    value={horaExec}
-                    onChange={e => setHoraExec(e.target.value)}
-                    className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {seriesData.map((serie, si) => {
-                  const currentShots = ZONES.reduce((acc, z) => acc + (Number(serie[z]) || 0), 0);
-                  const expectedShots = selectedReg.shotsPerSeries || 0;
-                  const hasExceeded = currentShots > expectedShots;
-
-                  return (
-                    <div key={si} className={`rounded-xl border p-3 ${si === bestIdx ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white'} ${hasExceeded ? 'border-red-400 bg-red-50/20' : ''}`}>
-                      <div className="flex justify-between items-center mb-2">
-                        <div className="flex items-center">
-                          <span className="text-[10px] font-bold text-slate-600 uppercase font-mono">Série {si+1}</span>
-                          <span className={`text-[9px] font-bold ml-3 px-1.5 py-0.5 rounded font-mono ${hasExceeded ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
-                            Tiros: {currentShots} / {expectedShots}
-                          </span>
-                        </div>
-                        {si === bestIdx && seriesData.length > 1 && (
-                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">⭐ Melhor Série</span>
-                        )}
-                        <span className="text-xs font-mono font-bold text-slate-700">
-                          Total: {calcSeriePts(Object.fromEntries(Object.entries(serie).map(([k,v]) => [k, Number(v)||0])), xValue)} pts
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-6 sm:grid-cols-12 gap-1">
-                        {ZONES.map(z => (
-                          <div key={z} className="space-y-0.5 text-center">
-                            <label className={`text-[9px] font-bold block ${z === 'x' ? 'text-amber-500' : z === 'p10' ? 'text-blue-500' : 'text-slate-450'}`}>{ZONE_LABELS[z]}</label>
-                            <input
-                              type="number" min="0" max={selectedReg.shotsPerSeries ?? 60}
-                              value={serie[z]}
-                              onChange={e => updateCell(si, z, e.target.value)}
-                              className="w-full text-center bg-white border border-slate-200 rounded-lg p-1 text-xs font-mono focus:border-blue-400 outline-none"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                      {hasExceeded && (
-                        <div className="mt-2 text-[10px] font-bold text-red-600 bg-red-50 border border-red-100 rounded-lg p-2 flex items-center gap-1.5 animate-pulse">
-                          <span>⚠️ Ultrapassou o limite de {expectedShots} tiros estabelecido para a modalidade!</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="bg-slate-100/70 rounded-xl p-4 border border-slate-200/80 space-y-3">
-                <div className="flex items-center gap-2 text-slate-700 font-bold text-xs">
-                  <Package className="w-4 h-4 text-blue-600" />
-                  <span>Origem da Munição e Penalidades</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div
+              className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
+              onClick={() => setSelectedReg(null)}
+            >
+              <div
+                className="bg-white w-full h-full sm:h-auto sm:max-h-[92vh] sm:max-w-4xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden border sm:border-slate-200 animate-in zoom-in-95 duration-200 text-slate-800"
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Fixed Modal Header */}
+                <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Penalidade (pts)</label>
-                    <input type="number" min="0" value={penalidade} onChange={e => setPenalidade(e.target.value)}
-                      className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Tiros com munição própria</label>
-                    <input type="number" min="0" value={ownAmmoShots} onChange={e => setOwnAmmoShots(e.target.value)}
-                      placeholder="Ex: 10"
-                      className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono focus:border-blue-500" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Tiros com munição do clube</label>
-                    <input type="number" min="0" value={clubAmmoShots} onChange={e => setClubAmmoShots(e.target.value)}
-                      placeholder="Ex: 0"
-                      className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono focus:border-blue-500" />
-                  </div>
-                </div>
-
-                {Number(clubAmmoShots) > 0 && (
-                  <div className="pt-2 border-t border-slate-200/60 space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-600 uppercase block">Tipo de Munição do Clube Utilizada</label>
-                    <div className="flex gap-4 items-center">
-                      <label className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold cursor-pointer">
-                        <input
-                          type="radio"
-                          name="scoreClubAmmoType"
-                          value="nova"
-                          checked={clubAmmoType === 'nova'}
-                          onChange={() => setClubAmmoType('nova')}
-                          className="text-blue-600 focus:ring-blue-500"
-                        />
-                        Munição Nova (NF)
-                      </label>
-                      <label className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold cursor-pointer">
-                        <input
-                          type="radio"
-                          name="scoreClubAmmoType"
-                          value="recarga"
-                          checked={clubAmmoType === 'recarga'}
-                          onChange={() => setClubAmmoType('recarga')}
-                          className="text-blue-600 focus:ring-blue-500"
-                        />
-                        Munição Recarga
-                      </label>
-                    </div>
-                  </div>
-                )}
-
-                <p className="text-[10px] text-slate-450 italic">
-                  * A soma dos tiros (munição própria + clube) deve ser exatamente igual ao total de tiros lançados nas séries. Tiros com munição do clube serão automaticamente abatidos do saldo alocado do atleta.
-                </p>
-              </div>
-
-              {/* Live Score and Penalty Calculation Summary */}
-              {(() => {
-                const rawBest = Math.max(0, ...serieTotals);
-                const penNum = Math.max(0, Number(penalidade) || 0);
-                const finalPts = Math.max(0, rawBest - penNum);
-
-                return (
-                  <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 text-xs shadow-2xs">
-                    <div className="flex flex-wrap items-center gap-4 text-slate-650 font-mono">
-                      <span>Melhor Série (Bruta): <strong className="text-slate-900 font-bold">{rawBest} pts</strong></span>
-                      {penNum > 0 && (
-                        <span className="text-red-600 font-bold bg-red-50 border border-red-200 px-2 py-0.5 rounded">
-                          Penalidade: -{penNum} pts
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-display font-bold text-white text-base sm:text-lg">
+                        {selectedReg.athleteName}
+                      </h4>
+                      {selectedReg.registrationType === 'reinscrição' && (
+                        <span className="text-[9px] px-2 py-0.5 rounded-full font-extrabold uppercase bg-purple-500/20 text-purple-300 border border-purple-400/30">
+                          ✨ Reinscrição
                         </span>
                       )}
-                    </div>
-                    <div className="flex items-center gap-2 font-mono">
-                      <span className="text-slate-500 font-bold uppercase text-[10px]">Pontuação Final:</span>
-                      <span className="text-base font-black text-emerald-700 bg-emerald-100 border border-emerald-300 px-3 py-0.5 rounded-lg shadow-2xs">
-                        {finalPts} pts
+                      <span className="text-[10px] font-bold text-blue-300 bg-blue-900/60 border border-blue-400/40 px-2.5 py-0.5 rounded-full font-mono">
+                        {selectedReg.shotsPerSeries ? `${selectedReg.seriesCount || 1} Série(s) de ${selectedReg.shotsPerSeries} tiros` : 'Pontuação Direta'}
                       </span>
                     </div>
+                    <p className="text-xs text-slate-300 font-mono">
+                      Modalidade: <strong className="text-white">{selectedReg.modalityName}</strong> | Arma: <strong className="text-white">{selectedReg.weaponModel || 'N/A'} {selectedReg.weaponCaliber ? `(${selectedReg.weaponCaliber})` : ''}</strong>
+                    </p>
                   </div>
-                );
-              })()}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedReg(null)}
+                    className="text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 p-2 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-bold"
+                    title="Fechar janela (ESC)"
+                  >
+                    <X className="w-5 h-5" />
+                    <span className="hidden sm:inline">Fechar</span>
+                  </button>
+                </div>
 
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200">
-                <button onClick={() => handleSubmit('salvar')} disabled={saving}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-350 text-white text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
-                  <Save className="w-4 h-4" />{saving ? 'Salvando...' : 'Salvar Resultado'}
-                </button>
-                <button onClick={() => handleSubmit('nao_participou')} disabled={saving}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
-                  <AlertCircle className="w-4 h-4 text-amber-500" />Não Participou
-                </button>
-                <button onClick={() => handleSubmit('desclassificar')} disabled={saving}
-                  className="bg-red-50 hover:bg-red-100 text-red-700 text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
-                  <ShieldAlert className="w-4 h-4" />Desclassificar
-                </button>
-                <button onClick={handleDeleteRegistration} disabled={saving}
-                  className="bg-red-600 hover:bg-red-700 disabled:bg-slate-350 text-white text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer">
-                  <Trash2 className="w-4 h-4" />Excluir Inscrição
-                </button>
+                {/* Scrollable Modal Body */}
+                <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Data da Prova</label>
+                      <input
+                        type="date"
+                        value={dataExec}
+                        onChange={e => setDataExec(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold focus:bg-white focus:border-blue-500 transition"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Hora da Prova</label>
+                      <input
+                        type="time"
+                        value={horaExec}
+                        onChange={e => setHoraExec(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold focus:bg-white focus:border-blue-500 transition"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {seriesData.map((serie, si) => {
+                      const currentShots = ZONES.reduce((acc, z) => acc + (Number(serie[z]) || 0), 0);
+                      const expectedShots = selectedReg.shotsPerSeries || 0;
+                      const hasExceeded = currentShots > expectedShots;
+
+                      return (
+                        <div key={si} className={`rounded-xl border p-3 ${si === bestIdx ? 'border-emerald-400 bg-emerald-50/60' : 'border-slate-200 bg-white'} ${hasExceeded ? 'border-red-400 bg-red-50/20' : ''}`}>
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="flex items-center">
+                              <span className="text-[10px] font-bold text-slate-700 uppercase font-mono">Série {si+1}</span>
+                              <span className={`text-[9px] font-bold ml-3 px-1.5 py-0.5 rounded font-mono ${hasExceeded ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+                                Tiros: {currentShots} / {expectedShots}
+                              </span>
+                            </div>
+                            {si === bestIdx && seriesData.length > 1 && (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">⭐ Melhor Série</span>
+                            )}
+                            <span className="text-xs font-mono font-bold text-slate-800">
+                              Total: {calcSeriePts(Object.fromEntries(Object.entries(serie).map(([k,v]) => [k, Number(v)||0])), xValue)} pts
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-6 sm:grid-cols-12 gap-1.5">
+                            {ZONES.map(z => (
+                              <div key={z} className="space-y-0.5 text-center">
+                                <label className={`text-[9px] font-bold block ${z === 'x' ? 'text-amber-600' : z === 'p10' ? 'text-blue-600' : 'text-slate-450'}`}>{ZONE_LABELS[z]}</label>
+                                <input
+                                  type="number" min="0" max={selectedReg.shotsPerSeries ?? 60}
+                                  value={serie[z]}
+                                  onChange={e => updateCell(si, z, e.target.value)}
+                                  className="w-full text-center bg-white border border-slate-200 rounded-lg p-1.5 text-xs font-mono font-bold text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          {hasExceeded && (
+                            <div className="mt-2 text-[10px] font-bold text-red-600 bg-red-50 border border-red-100 rounded-lg p-2 flex items-center gap-1.5 animate-pulse">
+                              <span>⚠️ Ultrapassou o limite de {expectedShots} tiros estabelecido para a modalidade!</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-3">
+                    <div className="flex items-center gap-2 text-slate-700 font-bold text-xs">
+                      <Package className="w-4 h-4 text-blue-600" />
+                      <span>Origem da Munição e Penalidades</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Penalidade (pts)</label>
+                        <input type="number" min="0" value={penalidade} onChange={e => setPenalidade(e.target.value)}
+                          className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono font-bold focus:border-blue-500" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Tiros com munição própria</label>
+                        <input type="number" min="0" value={ownAmmoShots} onChange={e => setOwnAmmoShots(e.target.value)}
+                          placeholder="Ex: 10"
+                          className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono focus:border-blue-500" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Tiros com munição do clube</label>
+                        <input type="number" min="0" value={clubAmmoShots} onChange={e => setClubAmmoShots(e.target.value)}
+                          placeholder="Ex: 0"
+                          className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono focus:border-blue-500" />
+                      </div>
+                    </div>
+
+                    {Number(clubAmmoShots) > 0 && (
+                      <div className="pt-2 border-t border-slate-200/60 space-y-1.5">
+                        <label className="text-[10px] font-bold text-slate-600 uppercase block">Tipo de Munição do Clube Utilizada</label>
+                        <div className="flex gap-4 items-center">
+                          <label className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold cursor-pointer">
+                            <input
+                              type="radio"
+                              name="scoreClubAmmoType"
+                              value="nova"
+                              checked={clubAmmoType === 'nova'}
+                              onChange={() => setClubAmmoType('nova')}
+                              className="text-blue-600 focus:ring-blue-500"
+                            />
+                            Munição Nova (NF)
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold cursor-pointer">
+                            <input
+                              type="radio"
+                              name="scoreClubAmmoType"
+                              value="recarga"
+                              checked={clubAmmoType === 'recarga'}
+                              onChange={() => setClubAmmoType('recarga')}
+                              className="text-blue-600 focus:ring-blue-500"
+                            />
+                            Munição Recarga
+                          </label>
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-[10px] text-slate-450 italic">
+                      * A soma dos tiros (munição própria + clube) deve ser exatamente igual ao total de tiros lançados nas séries. Tiros com munição do clube serão automaticamente abatidos do saldo alocado do atleta.
+                    </p>
+                  </div>
+
+                  {/* Live Score and Penalty Calculation Summary */}
+                  {(() => {
+                    const rawBest = Math.max(0, ...serieTotals);
+                    const penNum = Math.max(0, Number(penalidade) || 0);
+                    const finalPts = Math.max(0, rawBest - penNum);
+
+                    return (
+                      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-100/80 border border-slate-200 rounded-xl p-3.5 text-xs shadow-2xs">
+                        <div className="flex flex-wrap items-center gap-4 text-slate-650 font-mono">
+                          <span>Melhor Série (Bruta): <strong className="text-slate-900 font-bold">{rawBest} pts</strong></span>
+                          {penNum > 0 && (
+                            <span className="text-red-600 font-bold bg-red-50 border border-red-200 px-2 py-0.5 rounded">
+                              Penalidade: -{penNum} pts
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 font-mono">
+                          <span className="text-slate-500 font-bold uppercase text-[10px]">Pontuação Final:</span>
+                          <span className="text-base font-black text-emerald-700 bg-emerald-100 border border-emerald-300 px-3 py-0.5 rounded-lg shadow-2xs">
+                            {finalPts} pts
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Fixed Modal Footer */}
+                <div className="bg-slate-50 p-4 sm:px-6 sm:py-3.5 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => handleSubmit('salvar')}
+                      disabled={saving}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-350 text-white text-xs px-5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                    >
+                      <Save className="w-4 h-4" />{saving ? 'Salvando...' : 'Salvar Resultado'}
+                    </button>
+                    <button
+                      onClick={() => handleSubmit('nao_participou')}
+                      disabled={saving}
+                      className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs px-4 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <AlertCircle className="w-4 h-4 text-amber-600" />Não Participou
+                    </button>
+                    <button
+                      onClick={() => handleSubmit('desclassificar')}
+                      disabled={saving}
+                      className="bg-red-50 hover:bg-red-100 text-red-700 text-xs px-4 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer border border-red-200"
+                    >
+                      <ShieldAlert className="w-4 h-4" />Desclassificar
+                    </button>
+                    <button
+                      onClick={handleDeleteRegistration}
+                      disabled={saving}
+                      className="bg-red-600 hover:bg-red-700 disabled:bg-slate-350 text-white text-xs px-4 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                    >
+                      <Trash2 className="w-4 h-4" />Excluir
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedReg(null)}
+                    className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs px-4 py-2.5 rounded-xl font-bold transition cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                </div>
               </div>
             </div>
           )}
