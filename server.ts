@@ -2711,7 +2711,10 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
         if (timeSeconds) idscTotalSeg = Number(timeSeconds);
       }
 
-      const penValue = Number(penalidade) || 0;
+      const penValue = Math.max(0, Number(penalidade) || 0);
+      const rawBestScore = totalPontos;
+      const finalPontos = Math.max(0, rawBestScore - penValue);
+
       const ownAmmo = ownAmmoShots === undefined || ownAmmoShots === '' ? 0 : Math.max(0, Number(ownAmmoShots) || 0);
       const clubAmmo = clubAmmoShots === undefined || clubAmmoShots === '' ? 0 : Math.max(0, Number(clubAmmoShots) || 0);
       const clubType = clubAmmoType === 'nova' ? 'nova' : 'recarga';
@@ -2733,6 +2736,7 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
       }
 
       // Update registration with full score breakdown, ammo origin and ammo type (nova vs recarga)
+      // total_points is the final score with penalty deducted (e.g. 101 - 2 = 99)
       await client.query(`
         UPDATE registrations SET
           completion_status = 'completed',
@@ -2748,7 +2752,7 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
           disqualified = false
         WHERE id = $23`,
         [
-          totalPontos,
+          finalPontos,
           bestSerie.x||0, bestSerie.p10||0, bestSerie.p9||0, bestSerie.p8||0, bestSerie.p7||0,
           bestSerie.p6||0, bestSerie.p5||0, bestSerie.p4||0, bestSerie.p3||0,
           bestSerie.p2||0, bestSerie.p1||0, bestSerie.p0||0,
@@ -2787,10 +2791,10 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
         }
       }
 
-      // Also maintain stage_scores table for rankings compatibility
+      // Also maintain stage_scores table for rankings compatibility (with penalty deducted)
       const effectiveStageNum = stageNum || 1;
       const hitFactor = idscTotalSeg && idscTotalSeg > 0
-        ? Number((totalPontos / idscTotalSeg).toFixed(4)) : undefined;
+        ? Number((finalPontos / idscTotalSeg).toFixed(4)) : undefined;
 
       await client.query(
         `DELETE FROM stage_scores WHERE championship_id=$1 AND registration_id=$2`,
@@ -2802,12 +2806,19 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
         [
           `score_${Date.now()}`, championshipId, registrationId, reg.userId,
           shooter.fullName, modalityName, Number(effectiveStageNum),
-          totalPontos, idscTotalSeg || null, hitFactor || null, clubType, new Date().toISOString()
+          finalPontos, idscTotalSeg || null, hitFactor || null, clubType, new Date().toISOString()
         ]
       );
 
       await client.query('COMMIT');
-      res.status(201).json({ success: true, totalPontos, bestSerie, acao: 'salvar' });
+      res.status(201).json({
+        success: true,
+        totalPontos: finalPontos,
+        rawScore: rawBestScore,
+        penalty: penValue,
+        bestSerie,
+        acao: 'salvar'
+      });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;

@@ -739,7 +739,14 @@ export function CompetitionResultsViewer({
                     {currentMod?.evaluationType !== 'pontuacao' && (
                       <td className="py-3 px-2 text-right font-mono">{score.timeSeconds ? `${score.timeSeconds}s` : '-'}</td>
                     )}
-                    <td className="py-3 px-2 text-right font-bold font-mono text-slate-850">{score.score}</td>
+                    <td className="py-3 px-2 text-right font-bold font-mono text-slate-850">
+                      <span>{score.score}</span>
+                      {reg && (reg.penalty || 0) > 0 && (
+                        <span className="block text-[8.5px] font-normal text-red-500 font-sans" title={`Penalidade de ${reg.penalty} pts deduzida`}>
+                          (-{reg.penalty} pen)
+                        </span>
+                      )}
+                    </td>
                     {currentMod?.evaluationType === 'pontuacao_tempo' && (
                       <td className="py-3 px-2 text-right font-bold font-mono text-emerald-600">{score.hitFactor ? score.hitFactor.toFixed(4) : '-'}</td>
                     )}

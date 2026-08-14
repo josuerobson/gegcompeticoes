@@ -659,6 +659,29 @@ export async function initDB() {
       await client.query('ALTER TABLE registrations ALTER COLUMN modality DROP NOT NULL');
     }
 
+    // Self-healing: ensure any completed registrations with penalty > 0 have penalty properly discounted from total_points & stage_scores
+    try {
+      const penRegs = await client.query(`
+        SELECT id, championship_id, total_points, penalty, score_x, score_p10, score_p9, score_p8, score_p7, score_p6, score_p5, score_p4, score_p3, score_p2, score_p1
+        FROM registrations
+        WHERE penalty > 0 AND completion_status = 'completed' AND total_points IS NOT NULL
+      `);
+      for (const r of penRegs.rows) {
+        const rawScore = (Number(r.score_x) || 0) * 11 + (Number(r.score_p10) || 0) * 10 + (Number(r.score_p9) || 0) * 9
+          + (Number(r.score_p8) || 0) * 8 + (Number(r.score_p7) || 0) * 7 + (Number(r.score_p6) || 0) * 6
+          + (Number(r.score_p5) || 0) * 5 + (Number(r.score_p4) || 0) * 4 + (Number(r.score_p3) || 0) * 3
+          + (Number(r.score_p2) || 0) * 2 + (Number(r.score_p1) || 0) * 1;
+        const pen = Number(r.penalty) || 0;
+        if (Number(r.total_points) === rawScore && pen > 0) {
+          const discounted = Math.max(0, rawScore - pen);
+          await client.query(`UPDATE registrations SET total_points = $1 WHERE id = $2`, [discounted, r.id]);
+          await client.query(`UPDATE stage_scores SET score = $1 WHERE registration_id = $2`, [discounted, r.id]);
+        }
+      }
+    } catch (err) {
+      console.warn('Penalty discount backfill notice:', err);
+    }
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS stage_scores (
         id TEXT PRIMARY KEY,

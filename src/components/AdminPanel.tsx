@@ -1838,7 +1838,7 @@ interface CadastrarResultadosPanelProps {
 
 type EnrichedRegistration = {
   id: string; userId: string; modalityId: string; stageId: string;
-  completionStatus: string; disqualified: boolean;
+  completionStatus: string; disqualified: boolean; penalty?: number;
   athleteName?: string; athleteCr?: string; clubName?: string;
   modalityName?: string; seriesCount?: number; shotsPerSeries?: number;
   evaluationType?: string; weaponModel?: string; weaponSerial?: string;
@@ -1922,6 +1922,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
     }
     setDataExec(reg.dataExecucao || '');
     setHoraExec(reg.horaExecucao || '');
+    setPenalidade(reg.penalty !== undefined && reg.penalty !== null ? String(reg.penalty) : '0');
 
     setOwnAmmoShots(reg.ownAmmoShots ? String(reg.ownAmmoShots) : '');
     setClubAmmoShots(reg.clubAmmoShots ? String(reg.clubAmmoShots) : '');
@@ -1989,7 +1990,11 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar');
-      const msgs = { salvar: `✅ Resultado gravado! Melhor série: ${data.totalPontos ?? 0} pts`, nao_participou: '✅ Atleta marcado como Não Participou.', desclassificar: '✅ Atleta desclassificado.' };
+      const msgs = {
+        salvar: `✅ Resultado gravado! Pontuação Final: ${data.totalPontos ?? 0} pts${(data.penalty && data.penalty > 0) ? ` (Bruto: ${data.rawScore ?? 0} pts - Penalidade: ${data.penalty} pts)` : ''}`,
+        nao_participou: '✅ Atleta marcado como Não Participou.',
+        desclassificar: '✅ Atleta desclassificado.'
+      };
       setSuccess(msgs[acao]);
       setSelectedReg(null);
       
@@ -2047,7 +2052,16 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
 
   const statusBadge = (reg: EnrichedRegistration) => {
     if (reg.disqualified) return <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">DQ</span>;
-    if (reg.completionStatus === 'completed') return <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{reg.totalPoints ?? 0}pts ✓</span>;
+    if (reg.completionStatus === 'completed') {
+      return (
+        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+          <span>{reg.totalPoints ?? 0}pts ✓</span>
+          {(reg.penalty && reg.penalty > 0) ? (
+            <span className="text-[9px] font-normal text-red-500">(-{reg.penalty}p)</span>
+          ) : null}
+        </span>
+      );
+    }
     if (reg.completionStatus === 'absent') return <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">NP</span>;
     return <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Pendente</span>;
   };
@@ -2320,6 +2334,32 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
                   * A soma dos tiros (munição própria + clube) deve ser exatamente igual ao total de tiros lançados nas séries. Tiros com munição do clube serão automaticamente abatidos do saldo alocado do atleta.
                 </p>
               </div>
+
+              {/* Live Score and Penalty Calculation Summary */}
+              {(() => {
+                const rawBest = Math.max(0, ...serieTotals);
+                const penNum = Math.max(0, Number(penalidade) || 0);
+                const finalPts = Math.max(0, rawBest - penNum);
+
+                return (
+                  <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 text-xs shadow-2xs">
+                    <div className="flex flex-wrap items-center gap-4 text-slate-650 font-mono">
+                      <span>Melhor Série (Bruta): <strong className="text-slate-900 font-bold">{rawBest} pts</strong></span>
+                      {penNum > 0 && (
+                        <span className="text-red-600 font-bold bg-red-50 border border-red-200 px-2 py-0.5 rounded">
+                          Penalidade: -{penNum} pts
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 font-mono">
+                      <span className="text-slate-500 font-bold uppercase text-[10px]">Pontuação Final:</span>
+                      <span className="text-base font-black text-emerald-700 bg-emerald-100 border border-emerald-300 px-3 py-0.5 rounded-lg shadow-2xs">
+                        {finalPts} pts
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200">
                 <button onClick={() => handleSubmit('salvar')} disabled={saving}
