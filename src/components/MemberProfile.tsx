@@ -578,6 +578,7 @@ export default function MemberProfile({
   };
 
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
+  const [followListModal, setFollowListModal] = useState<null | 'followers' | 'following'>(null);
   const [payingSign, setPayingSign] = useState(false);
   const [paidSignDone, setPaidSignDone] = useState(false);
   const [selectedExpandPost, setSelectedExpandPost] = useState<Post | null>(null);
@@ -1773,14 +1774,22 @@ export default function MemberProfile({
                 <span className="font-extrabold text-slate-900 block text-sm">{userPosts.length}</span>
                 <span className="text-[10px] text-slate-500 block font-sans">Posts</span>
               </div>
-              <div>
+              <button
+                type="button"
+                className="text-left hover:opacity-70 transition cursor-pointer"
+                onClick={() => setFollowListModal('followers')}
+              >
                 <span className="font-extrabold text-slate-900 block text-sm">{selectedUser.followers?.length || 0}</span>
                 <span className="text-[10px] text-slate-500 block font-sans">Seguidores</span>
-              </div>
-              <div>
+              </button>
+              <button
+                type="button"
+                className="text-left hover:opacity-70 transition cursor-pointer"
+                onClick={() => setFollowListModal('following')}
+              >
                 <span className="font-extrabold text-slate-900 block text-sm">{selectedUser.following?.length || 0}</span>
                 <span className="text-[10px] text-slate-500 block font-sans">Seguindo</span>
-              </div>
+              </button>
             </div>
 
             {/* Bio */}
@@ -5177,6 +5186,80 @@ export default function MemberProfile({
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      {/* Followers / Following modal */}
+      <AnimatePresence>
+        {followListModal && (() => {
+          const isFollowers = followListModal === 'followers';
+          const ids: string[] = isFollowers
+            ? (selectedUser.followers || [])
+            : (selectedUser.following || []);
+          const listUsers = users.filter(u => ids.includes(u.id));
+          return (
+            <div
+              className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+              onClick={() => setFollowListModal(null)}
+            >
+              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.18 }}
+                className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                  <h3 className="font-bold text-sm text-slate-800">
+                    {isFollowers ? 'Seguidores' : 'Seguindo'}
+                    <span className="ml-2 text-slate-400 font-normal">({ids.length})</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setFollowListModal(null)}
+                    className="p-1.5 rounded-full hover:bg-slate-100 transition cursor-pointer"
+                  >
+                    <X className="w-4 h-4 text-slate-500" />
+                  </button>
+                </div>
+
+                {/* List */}
+                <div className="overflow-y-auto max-h-80 divide-y divide-slate-50">
+                  {listUsers.length === 0 ? (
+                    <p className="text-center text-xs text-slate-400 py-10">
+                      {isFollowers ? 'Nenhum seguidor ainda.' : 'Não está seguindo ninguém ainda.'}
+                    </p>
+                  ) : (
+                    listUsers.map(u => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        className="w-full flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition text-left cursor-pointer"
+                        onClick={() => {
+                          setFollowListModal(null);
+                          if (onViewProfile) onViewProfile(u.username);
+                        }}
+                      >
+                        <img
+                          src={u.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80&auto=format&fit=crop'}
+                          alt={u.username}
+                          className="w-9 h-9 rounded-full object-cover border border-slate-200 flex-shrink-0"
+                          onError={e => { e.currentTarget.src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80&auto=format&fit=crop'; }}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-800 truncate">{u.fullName}</p>
+                          <p className="text-[10px] text-slate-400 truncate">@{u.username}</p>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
 
     </div>
