@@ -1288,9 +1288,17 @@ app.get('/api/users', async (req, res) => {
   try {
     const usersRes = await pool.query(
       `SELECT u.*,
-        COALESCE((SELECT json_agg(follower_id) FROM follows WHERE following_id = u.id), '[]'::json) as followers,
-        COALESCE((SELECT json_agg(following_id) FROM follows WHERE follower_id = u.id), '[]'::json) as following
-      FROM users u`
+        COALESCE(f_ers.followers, '[]'::json) AS followers,
+        COALESCE(f_ing.following, '[]'::json) AS following
+      FROM users u
+      LEFT JOIN (
+        SELECT following_id, json_agg(follower_id) AS followers
+        FROM follows GROUP BY following_id
+      ) f_ers ON f_ers.following_id = u.id
+      LEFT JOIN (
+        SELECT follower_id, json_agg(following_id) AS following
+        FROM follows GROUP BY follower_id
+      ) f_ing ON f_ing.follower_id = u.id`
     );
     const users = usersRes.rows.map(mapUser);
     res.json({ users });
@@ -1349,24 +1357,32 @@ app.post('/api/users/:id/follow', requireAuth, async (req, res) => {
 app.get('/api/posts', async (req, res) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 1000;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
     const offset = (page - 1) * limit;
 
     const postsRes = await pool.query(
       `SELECT p.*,
-        COALESCE((SELECT json_agg(user_id) FROM likes WHERE post_id = p.id), '[]'::json) as likes,
-        COALESCE((
-          SELECT json_agg(json_build_object(
-            'id', c.id,
-            'userId', c.user_id,
-            'username', c.username,
-            'userAvatar', c.user_avatar,
-            'content', c.content,
-            'createdAt', c.created_at
-          ) ORDER BY c.created_at ASC)
-          FROM comments c WHERE c.post_id = p.id
-        ), '[]'::json) as comments
+        COALESCE(l.likes, '[]'::json) AS likes,
+        COALESCE(c.comments, '[]'::json) AS comments
       FROM posts p
+      LEFT JOIN (
+        SELECT post_id, json_agg(user_id) AS likes
+        FROM likes GROUP BY post_id
+      ) l ON l.post_id = p.id
+      LEFT JOIN (
+        SELECT post_id,
+          json_agg(
+            json_build_object(
+              'id', cm.id,
+              'userId', cm.user_id,
+              'username', cm.username,
+              'userAvatar', cm.user_avatar,
+              'content', cm.content,
+              'createdAt', cm.created_at
+            ) ORDER BY cm.created_at ASC
+          ) AS comments
+        FROM comments cm GROUP BY cm.post_id
+      ) c ON c.post_id = p.id
       ORDER BY p.created_at DESC
       LIMIT $1 OFFSET $2`,
       [limit, offset]
@@ -1973,6 +1989,7 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
 app.get('/api/clubs', async (req, res) => {
   try {
     const clubsRes = await pool.query('SELECT * FROM clubs');
+    res.set('Cache-Control', 'private, max-age=120');
     res.json({ clubs: clubsRes.rows.map(mapClub) });
   } catch (err) {
     console.error('Fetch clubs database error:', err);
@@ -1983,6 +2000,7 @@ app.get('/api/clubs', async (req, res) => {
 app.get('/api/modalities', async (req, res) => {
   try {
     const modalitiesRes = await pool.query('SELECT * FROM modalities');
+    res.set('Cache-Control', 'private, max-age=300');
     res.json({ modalities: modalitiesRes.rows.map(mapModality) });
   } catch (err) {
     console.error('Fetch modalities database error:', err);
@@ -2296,6 +2314,7 @@ app.get('/api/weapon-lookups', async (req, res) => {
     const result = kind
       ? await pool.query('SELECT * FROM weapon_lookup_options WHERE kind = $1 ORDER BY label ASC', [kind])
       : await pool.query('SELECT * FROM weapon_lookup_options ORDER BY kind ASC, label ASC');
+    res.set('Cache-Control', 'private, max-age=300');
     res.json({ options: result.rows.map(mapWeaponLookupOption) });
   } catch (err) {
     console.error('Fetch weapon lookup options database error:', err);
@@ -2569,7 +2588,16 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
 // 6. Record Championship Stage Scores (Admin Only)
 app.get('/api/scores', async (req, res) => {
   try {
-    const scoresRes = await pool.query('SELECT * FROM stage_scores');
+    // activeOnly=true limits to non-archived championships for the initial sync;
+    // omit or pass false to fetch all (e.g. admin results panels).
+    const activeOnly = req.query.activeOnly === 'true';
+    const scoresRes = activeOnly
+      ? await pool.query(
+          `SELECT ss.* FROM stage_scores ss
+           JOIN championships c ON c.id = ss.championship_id
+           WHERE c.status != 'archived'`
+        )
+      : await pool.query('SELECT * FROM stage_scores');
     const stageScores = scoresRes.rows.map(mapStageScore);
     res.json({ stageScores });
   } catch (err) {

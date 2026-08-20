@@ -282,34 +282,73 @@ export default function App() {
     setShowLoginModal(true);
   };
 
-  // Load backend session and DB contents in parallel
+  // Builds auth headers using the current user id (or what's in localStorage during boot)
+  const buildAuthHeaders = (userIdOverride?: string): HeadersInit => {
+    const h: HeadersInit = { 'Content-Type': 'application/json' };
+    const uid = userIdOverride || currentUser?.id || localStorage.getItem('gg_user_id');
+    if (uid) h['x-user-id'] = uid;
+    return h;
+  };
+
+  // Targeted refresh helpers — each fetches only the resource that changed
+  const refreshUsers = async (headerOverride?: string) => {
+    const r = await fetch('/api/users', { headers: buildAuthHeaders(headerOverride) }).then(r => r.json()).catch(() => ({}));
+    if (r.users) setUsers(r.users);
+  };
+  const refreshClubs = async () => {
+    const r = await fetch('/api/clubs', { headers: buildAuthHeaders() }).then(r => r.json()).catch(() => ({}));
+    if (r.clubs) setClubs(r.clubs);
+  };
+  const refreshRegistrations = async (headerOverride?: string) => {
+    const uid = headerOverride || currentUser?.id || localStorage.getItem('gg_user_id');
+    if (!uid) return;
+    const r = await fetch('/api/registrations', { headers: buildAuthHeaders(headerOverride) }).then(r => r.json()).catch(() => ({}));
+    if (r.registrations) setRegistrations(r.registrations);
+  };
+  const refreshScores = async () => {
+    const r = await fetch('/api/scores', { headers: buildAuthHeaders() }).then(r => r.json()).catch(() => ({}));
+    if (r.stageScores) setStageScores(r.stageScores);
+  };
+  const refreshWeapons = async () => {
+    const r = await fetch('/api/weapons', { headers: buildAuthHeaders() }).then(r => r.json()).catch(() => ({}));
+    if (r.weapons) setWeapons(r.weapons);
+  };
+  const refreshModalities = async () => {
+    const r = await fetch('/api/modalities', { headers: buildAuthHeaders() }).then(r => r.json()).catch(() => ({}));
+    if (r.modalities) setModalities(r.modalities);
+  };
+  const refreshStages = async () => {
+    const r = await fetch('/api/stages', { headers: buildAuthHeaders() }).then(r => r.json()).catch(() => ({}));
+    if (r.stages) setStages(r.stages);
+  };
+  const refreshWeaponLookups = async () => {
+    const r = await fetch('/api/weapon-lookups', { headers: buildAuthHeaders() }).then(r => r.json()).catch(() => ({}));
+    if (r.options) setWeaponLookupOptions(r.options);
+  };
+  const refreshSettings = async () => {
+    const r = await fetch('/api/settings', { headers: buildAuthHeaders() }).then(r => r.json()).catch(() => ({}));
+    if (r.settings) setSettings(r.settings);
+  };
+  const refreshChampionships = async () => {
+    const [champR, stagesR, multiR] = await Promise.all([
+      fetch('/api/championships', { headers: buildAuthHeaders() }).then(r => r.json()).catch(() => ({})),
+      fetch('/api/stages', { headers: buildAuthHeaders() }).then(r => r.json()).catch(() => ({})),
+      fetch('/api/multi-championships').then(r => r.json()).catch(() => ({})),
+    ]);
+    if (champR.championships) setChampionships(champR.championships);
+    if (stagesR.stages) setStages(stagesR.stages);
+    if (multiR.multiChampionships) setMultiChampionships(multiR.multiChampionships);
+  };
+
+  // Load backend session and DB contents — all requests fire in parallel
   const syncWithBackend = async (userIdForHeader?: string) => {
     setIsSyncing(true);
-    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    const authHeaders = buildAuthHeaders(userIdForHeader);
     const targetUserId = userIdForHeader || currentUser?.id || localStorage.getItem('gg_user_id');
-    
-    if (targetUserId) {
-      authHeaders['x-user-id'] = targetUserId;
-    }
 
     try {
-      // 1. Fetch current session first
-      try {
-        const meRes = await fetch('/api/auth/me', { headers: authHeaders });
-        const meData = await meRes.json();
-        if (meData.user) {
-          setCurrentUser(meData.user);
-          localStorage.setItem('gg_user_id', meData.user.id);
-        } else {
-          setCurrentUser(null);
-          localStorage.removeItem('gg_user_id');
-        }
-      } catch (err) {
-        console.error('Error fetching /api/auth/me', err);
-      }
-
-      // 2. Fetch all system data concurrently in a single parallel batch
       const [
+        meResult,
         usersResult,
         postsResult,
         champResult,
@@ -323,11 +362,12 @@ export default function App() {
         settingsResult,
         multiChampResult
       ] = await Promise.allSettled([
+        fetch('/api/auth/me', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/users', { headers: authHeaders }).then(r => r.json()),
-        fetch('/api/posts?limit=1000', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/posts?limit=50', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/championships', { headers: authHeaders }).then(r => r.json()),
         targetUserId ? fetch('/api/registrations', { headers: authHeaders }).then(r => r.json()) : Promise.resolve({ registrations: [] }),
-        fetch('/api/scores', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/scores?activeOnly=true', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/clubs', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/modalities', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/stages', { headers: authHeaders }).then(r => r.json()),
@@ -337,13 +377,23 @@ export default function App() {
         fetch('/api/multi-championships').then(r => r.json())
       ]);
 
+      if (meResult.status === 'fulfilled') {
+        if (meResult.value?.user) {
+          setCurrentUser(meResult.value.user);
+          localStorage.setItem('gg_user_id', meResult.value.user.id);
+        } else if (!userIdForHeader) {
+          setCurrentUser(null);
+          localStorage.removeItem('gg_user_id');
+        }
+      }
+
       if (usersResult.status === 'fulfilled' && usersResult.value?.users) {
         setUsers(usersResult.value.users);
       }
       if (postsResult.status === 'fulfilled' && postsResult.value?.posts) {
         setPosts(postsResult.value.posts);
       }
-      
+
       let fetchedChamps: Championship[] = [];
       if (champResult.status === 'fulfilled' && champResult.value?.championships) {
         fetchedChamps = champResult.value.championships;
@@ -671,7 +721,7 @@ export default function App() {
         headers: { 'x-user-id': currentUser.id },
         body: formData
       });
-      if (res.ok) await syncWithBackend();
+      if (res.ok) await refreshChampionships();
       return res.ok;
     } catch (err) {
       console.error(`Erro ao enviar documento do campeonato (${kind}):`, err);
@@ -722,7 +772,7 @@ export default function App() {
       const data = await res.json();
       if (res.ok && data.user) {
         setCurrentUser(data.user);
-        await syncWithBackend(data.user.id);
+        setUsers(prev => prev.map(u => u.id === data.user.id ? data.user : u));
         return true;
       }
       return false;
@@ -741,7 +791,7 @@ export default function App() {
         body: JSON.stringify(fields)
       });
       if (res.ok) {
-        await syncWithBackend();
+        await refreshClubs();
         return true;
       }
       return false;
@@ -754,7 +804,7 @@ export default function App() {
   const handleUploadDocument = async (kind: string, file: File, target: 'user' | 'club'): Promise<boolean> => {
     if (!currentUser) return false;
     const ok = await uploadDocumentFile(currentUser.id, kind, file, target);
-    if (ok) await syncWithBackend();
+    if (ok) await refreshUsers();
     return ok;
   };
 
@@ -771,7 +821,7 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.user) {
-        await syncWithBackend();
+        await refreshUsers();
         return { user: data.user };
       }
       return { error: data.error || 'Erro ao cadastrar membro.' };
@@ -791,7 +841,7 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.club) {
-        await syncWithBackend();
+        await Promise.all([refreshClubs(), refreshUsers()]);
         return { club: data.club };
       }
       return { error: data.error || 'Erro ao cadastrar clube.' };
@@ -810,7 +860,7 @@ export default function App() {
         body: JSON.stringify(fields)
       });
       if (res.ok) {
-        await syncWithBackend();
+        await refreshUsers();
         return true;
       }
       return false;
@@ -832,7 +882,7 @@ export default function App() {
         headers: { 'x-user-id': currentUser.id },
         body: formData
       });
-      if (res.ok) await syncWithBackend();
+      if (res.ok) await refreshUsers();
       return res.ok;
     } catch (err) {
       console.error(`Erro ao enviar documento do membro (${kind}):`, err);
@@ -956,18 +1006,19 @@ export default function App() {
   };
 
   const handleToggleFollow = async (userId: string) => {
-    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
-    if (currentUser) {
-      authHeaders['x-user-id'] = currentUser.id;
-    }
-
+    if (!currentUser) return;
     try {
       const res = await fetch(`/api/users/${userId}/follow`, {
         method: 'POST',
-        headers: authHeaders
+        headers: buildAuthHeaders()
       });
       if (res.ok) {
-        await syncWithBackend();
+        const data = await res.json();
+        setUsers(prev => prev.map(u => {
+          if (u.id === userId) return { ...u, followers: data.targetFollowers };
+          if (u.id === currentUser.id) return { ...u, following: data.myFollowing };
+          return u;
+        }));
       }
     } catch (err) {
       console.error(err);
@@ -987,7 +1038,7 @@ export default function App() {
         body: JSON.stringify({ modalityId, stageId, weaponId, crNumber, paymentMethod })
       });
       if (res.ok) {
-        await syncWithBackend();
+        await refreshRegistrations();
       } else {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Erro ao realizar inscrição.');
@@ -1010,7 +1061,7 @@ export default function App() {
       body: JSON.stringify(weapon)
     });
     if (res.ok) {
-      await syncWithBackend();
+      await refreshWeapons();
     } else {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || 'Erro ao cadastrar arma.');
@@ -1030,7 +1081,7 @@ export default function App() {
         body: JSON.stringify({ kind, label })
       });
       if (res.ok) {
-        await syncWithBackend();
+        await refreshWeaponLookups();
         return {};
       }
       const data = await res.json().catch(() => ({}));
@@ -1054,7 +1105,7 @@ export default function App() {
         body: JSON.stringify({ label })
       });
       if (res.ok) {
-        await syncWithBackend();
+        await refreshWeaponLookups();
         return {};
       }
       const data = await res.json().catch(() => ({}));
@@ -1077,7 +1128,7 @@ export default function App() {
         headers: authHeaders
       });
       if (res.ok) {
-        await syncWithBackend();
+        await refreshWeaponLookups();
         return {};
       }
       const data = await res.json().catch(() => ({}));
@@ -1099,7 +1150,7 @@ export default function App() {
       headers: authHeaders
     });
     if (res.ok) {
-      await syncWithBackend();
+      await refreshWeapons();
     }
   };
 
@@ -1117,7 +1168,7 @@ export default function App() {
         body: JSON.stringify(updates),
       });
       if (res.ok) {
-        await syncWithBackend();
+        await refreshWeapons();
         return {};
       }
       const data = await res.json().catch(() => ({}));
@@ -1143,7 +1194,7 @@ export default function App() {
       });
       const resData = await res.json().catch(() => ({}));
       if (res.ok && resData.stage) {
-        await syncWithBackend();
+        await refreshStages();
         return { stage: resData.stage };
       }
       return { error: resData.error || 'Erro ao cadastrar etapa.' };
@@ -1167,7 +1218,7 @@ export default function App() {
       });
       const resData = await res.json().catch(() => ({}));
       if (res.ok && resData.stage) {
-        await syncWithBackend();
+        await refreshStages();
         return { stage: resData.stage };
       }
       return { error: resData.error || 'Erro ao atualizar etapa.' };
@@ -1189,7 +1240,7 @@ export default function App() {
         headers: authHeaders
       });
       if (res.ok) {
-        await syncWithBackend();
+        await refreshStages();
         return {};
       }
       const data = await res.json().catch(() => ({}));
@@ -1212,7 +1263,7 @@ export default function App() {
       body: JSON.stringify(modality)
     });
     if (res.ok) {
-      await syncWithBackend();
+      await refreshModalities();
     } else {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || 'Erro ao cadastrar modalidade.');
@@ -1230,7 +1281,7 @@ export default function App() {
       headers: authHeaders
     });
     if (res.ok) {
-      await syncWithBackend();
+      await refreshModalities();
     } else {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || 'Erro ao remover modalidade.');
@@ -1248,7 +1299,7 @@ export default function App() {
       headers: authHeaders
     });
     if (res.ok) {
-      await syncWithBackend();
+      await refreshChampionships();
     } else {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || 'Erro ao remover campeonato.');
@@ -1269,7 +1320,7 @@ export default function App() {
       });
       const resData = await res.json().catch(() => ({}));
       if (res.ok && resData.championship) {
-        await syncWithBackend();
+        await refreshChampionships();
         return { championship: resData.championship };
       }
       return { error: resData.error || 'Erro ao criar campeonato.' };
@@ -1293,7 +1344,7 @@ export default function App() {
       });
       const resData = await res.json().catch(() => ({}));
       if (res.ok && resData.championship) {
-        await syncWithBackend();
+        await refreshChampionships();
         return { championship: resData.championship };
       }
       return { error: resData.error || 'Erro ao atualizar campeonato.' };
@@ -1316,7 +1367,7 @@ export default function App() {
         body: JSON.stringify({ key, value })
       });
       if (res.ok) {
-        await syncWithBackend();
+        setSettings(prev => ({ ...prev, [key]: value }));
       }
     } catch (err) {
       console.error(err);
@@ -1342,7 +1393,7 @@ export default function App() {
         body: JSON.stringify(data)
       });
       if (res.ok) {
-        await syncWithBackend();
+        await refreshScores();
       }
     } catch (err) {
       console.error(err);
@@ -1350,18 +1401,18 @@ export default function App() {
   };
 
   const handlePaySignature = async () => {
-    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
-    if (currentUser) {
-      authHeaders['x-user-id'] = currentUser.id;
-    }
-
+    if (!currentUser) return;
     try {
       const res = await fetch('/api/users/signature', {
         method: 'POST',
-        headers: authHeaders
+        headers: buildAuthHeaders()
       });
       if (res.ok) {
-        await syncWithBackend();
+        const data = await res.json();
+        if (data.user) {
+          setCurrentUser(data.user);
+          setUsers(prev => prev.map(u => u.id === data.user.id ? data.user : u));
+        }
       }
     } catch (err) {
       console.error(err);
