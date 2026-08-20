@@ -633,7 +633,11 @@ export default function FeedView({
           {users.map((u) => {
             const hasSpecialTag = u.role === 'admin';
             return (
-              <div key={u.id} className="flex flex-col items-center flex-shrink-0">
+              <div
+                key={u.id}
+                className="flex flex-col items-center flex-shrink-0 cursor-pointer"
+                onClick={() => onViewProfile(u.username)}
+              >
                 <div className={`w-16 h-16 rounded-full p-[3px] flex items-center justify-center bg-gradient-to-tr ${hasSpecialTag ? 'from-amber-500 to-red-500' : 'from-blue-600 to-sky-400'}`}>
                   <img
                     src={u.avatarUrl}
