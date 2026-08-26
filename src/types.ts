@@ -152,6 +152,8 @@ export interface Stage {
   fatorMultiplicacaoResultados?: number;
   exibirInscritosPaginaInicial?: 'sim' | 'nao';
   incluirNaSomaPaginaInicial?: 'sim' | 'nao';
+  rankingEnabled?: boolean;
+  rankingPositions?: number[]; // e.g. [1,2,3] — which placements show in the feed ranking highlight card
 }
 
 export type StageInput = Pick<Stage, 'championshipId' | 'title' | 'date'> & Partial<Omit<Stage, 'id' | 'championshipId' | 'title' | 'date' | 'stageNum'>>;
@@ -243,6 +245,8 @@ export interface Championship {
   pontuacaoMinimaEquipeBronze?: number;
   ordemExibicao?: number;
   abertoOutrosClubes?: 'sim' | 'nao';
+  rankingEnabled?: boolean;
+  rankingPositions?: number[]; // e.g. [1,2,3] — which placements show in the feed ranking highlight card
 }
 
 export interface HomeBanner {
@@ -327,6 +331,25 @@ export interface RankingItem {
   modality: string;
   totalScore: number;
   stageScores: { [stageNum: number]: number };
+}
+
+// A single "pool" entry for the feed's rotating ranking highlight card — one championship
+// (aggregated across all its stages) or one specific stage, for one modality.
+export interface RankingHighlight {
+  sourceType: 'championship' | 'stage';
+  championshipId: string;
+  championshipTitle: string;
+  stageId?: string;
+  stageTitle?: string;
+  modalityName: string;
+  positions: Array<{
+    rank: number;
+    userId: string;
+    fullName: string;
+    username: string;
+    avatarUrl: string;
+    totalScore: number;
+  }>;
 }
 
 export interface TrainingSession {

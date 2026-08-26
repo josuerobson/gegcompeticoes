@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
-import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, MultiChampionshipItem, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan } from './src/types.js';
+import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, MultiChampionshipItem, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan, RankingHighlight } from './src/types.js';
 import { pool, initDB } from './src/db.js';
 import { hashPassword, verifyPassword } from './src/auth.js';
 import { uploadDocument, getDocumentStream, storageEnabled } from './src/storage.js';
@@ -138,6 +138,8 @@ function mapStage(s: any): Stage {
     fatorMultiplicacaoResultados: num(s.fator_multiplicacao_resultados),
     exibirInscritosPaginaInicial: s.exibir_inscritos_pagina_inicial || undefined,
     incluirNaSomaPaginaInicial: s.incluir_na_soma_pagina_inicial || undefined,
+    rankingEnabled: Boolean(s.ranking_enabled),
+    rankingPositions: parsePositions(s.ranking_positions),
   };
 }
 
@@ -160,6 +162,14 @@ function mapWeapon(w: any): Weapon {
 
 function num(v: any): number | undefined {
   return v === null || v === undefined ? undefined : Number(v);
+}
+
+// ranking_positions is stored as a comma-separated string (e.g. "1,2,3") to fit the
+// generic dynamic extra-columns pattern used by championships/stages — parsed back here.
+function parsePositions(v: any): number[] | undefined {
+  if (!v || typeof v !== 'string') return undefined;
+  const nums = v.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+  return nums.length > 0 ? nums : undefined;
 }
 
 function mapChampionship(c: any): Championship {
@@ -224,6 +234,8 @@ function mapChampionship(c: any): Championship {
     pontuacaoMinimaEquipeBronze: num(c.pontuacao_minima_equipe_bronze),
     ordemExibicao: num(c.ordem_exibicao),
     abertoOutrosClubes: (c.aberto_outros_clubes as 'sim' | 'nao') || undefined,
+    rankingEnabled: Boolean(c.ranking_enabled),
+    rankingPositions: parsePositions(c.ranking_positions),
   };
 }
 
@@ -1648,6 +1660,8 @@ const CHAMPIONSHIP_EXTRA_COLUMNS: Record<string, string> = {
   pontuacaoMinimaEquipeBronze: 'pontuacao_minima_equipe_bronze',
   ordemExibicao: 'ordem_exibicao',
   abertoOutrosClubes: 'aberto_outros_clubes',
+  rankingEnabled: 'ranking_enabled',
+  rankingPositions: 'ranking_positions',
 };
 
 app.post('/api/championships', requireAdmin, async (req, res) => {
@@ -1708,6 +1722,30 @@ app.post('/api/championships/:id/status', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('Update championship status database error:', err);
     res.status(500).json({ error: 'Erro ao atualizar status do campeonato.' });
+  }
+});
+
+// Lightweight toggle for the feed's ranking highlight card — doesn't require resending
+// the whole championship form, just whether it's on and which placements to show.
+app.post('/api/championships/:id/ranking', requireAdmin, async (req, res) => {
+  const { rankingEnabled, rankingPositions } = req.body;
+  const champId = req.params.id;
+
+  try {
+    const positionsText = Array.isArray(rankingPositions) && rankingPositions.length > 0
+      ? rankingPositions.join(',')
+      : null;
+
+    const result = await pool.query(
+      `UPDATE championships SET ranking_enabled = $1, ranking_positions = $2 WHERE id = $3 RETURNING *`,
+      [!!rankingEnabled, positionsText, champId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Campeonato não encontrado.' });
+
+    res.json({ success: true, championship: mapChampionship(result.rows[0]) });
+  } catch (err) {
+    console.error('Update championship ranking database error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar o ranking do campeonato.' });
   }
 });
 
@@ -2075,6 +2113,8 @@ const STAGE_EXTRA_COLUMNS: Record<string, string> = {
   fatorMultiplicacaoResultados: 'fator_multiplicacao_resultados',
   exibirInscritosPaginaInicial: 'exibir_inscritos_pagina_inicial',
   incluirNaSomaPaginaInicial: 'incluir_na_soma_pagina_inicial',
+  rankingEnabled: 'ranking_enabled',
+  rankingPositions: 'ranking_positions',
 };
 
 app.post('/api/stages', requireAdmin, async (req, res) => {
@@ -2110,6 +2150,30 @@ app.post('/api/stages', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('Create stage database error:', err);
     res.status(500).json({ error: 'Erro ao cadastrar etapa.' });
+  }
+});
+
+// Lightweight toggle for the feed's ranking highlight card — see the equivalent
+// championship endpoint above for why this is separate from the full PUT.
+app.post('/api/stages/:id/ranking', requireAdmin, async (req, res) => {
+  const { rankingEnabled, rankingPositions } = req.body;
+  const stageId = req.params.id;
+
+  try {
+    const positionsText = Array.isArray(rankingPositions) && rankingPositions.length > 0
+      ? rankingPositions.join(',')
+      : null;
+
+    const result = await pool.query(
+      `UPDATE stages SET ranking_enabled = $1, ranking_positions = $2 WHERE id = $3 RETURNING *`,
+      [!!rankingEnabled, positionsText, stageId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Etapa não encontrada.' });
+
+    res.json({ success: true, stage: mapStage(result.rows[0]) });
+  } catch (err) {
+    console.error('Update stage ranking database error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar o ranking da etapa.' });
   }
 });
 
@@ -2931,6 +2995,130 @@ app.get('/api/rankings', async (req, res) => {
   } catch (err) {
     console.error('Fetch rankings database error:', err);
     res.status(500).json({ error: 'Erro ao calcular ranking.' });
+  }
+});
+
+// Rotating "ranking em destaque" card on the feed. Builds the full pool of eligible
+// (championship or stage) x modality rankings — one entry per combination that has at
+// least one athlete landing on a configured position — and lets the client pick/rotate
+// through them at random. A championship-level entry aggregates points across ALL of its
+// stages for that modality; a stage-level entry uses only that single stage's results.
+app.get('/api/feed/ranking-highlights', async (req, res) => {
+  try {
+    const highlights: RankingHighlight[] = [];
+
+    // stage_scores.modality stores the modality NAME, while championships.modalities
+    // stores modality IDs — this map translates one to the other.
+    const modalitiesRes = await pool.query('SELECT id, name FROM modalities');
+    const modalityNameById: Record<string, string> = {};
+    modalitiesRes.rows.forEach(m => { modalityNameById[m.id] = m.name; });
+
+    // ---- Championship-level: sum across all stages, one entry per modality ----
+    const champsRes = await pool.query('SELECT * FROM championships WHERE ranking_enabled = true');
+    for (const row of champsRes.rows) {
+      const champ = mapChampionship(row);
+      const positions = champ.rankingPositions;
+      if (!positions || positions.length === 0) continue;
+
+      const modalityIds: string[] = Array.isArray(champ.modalities) ? champ.modalities : [];
+      const modalityNames = Array.from(new Set(modalityIds.map(id => modalityNameById[id]).filter(Boolean)));
+
+      for (const modalityName of modalityNames) {
+        const scoresRes = await pool.query(
+          `SELECT ss.user_id, ss.shooter_name, ss.stage_num, ss.score, u.username, u.avatar_url
+           FROM stage_scores ss
+           JOIN users u ON u.id = ss.user_id
+           WHERE ss.championship_id = $1 AND ss.modality = $2`,
+          [champ.id, modalityName]
+        );
+        if (scoresRes.rows.length === 0) continue;
+
+        // Group by athlete, keep the best score per stage_num (handles re-inscrições), then sum
+        const byUser: Record<string, { userId: string; fullName: string; username: string; avatarUrl: string; stageScores: Record<number, number> }> = {};
+        for (const r of scoresRes.rows) {
+          if (!byUser[r.user_id]) {
+            byUser[r.user_id] = { userId: r.user_id, fullName: r.shooter_name, username: r.username, avatarUrl: r.avatar_url, stageScores: {} };
+          }
+          byUser[r.user_id].stageScores[r.stage_num] = Math.max(byUser[r.user_id].stageScores[r.stage_num] || 0, Number(r.score));
+        }
+
+        const ranked = Object.values(byUser)
+          .map(u => ({ ...u, totalScore: Number(Object.values(u.stageScores).reduce((a, b) => a + b, 0).toFixed(2)) }))
+          .sort((a, b) => b.totalScore - a.totalScore)
+          .map((u, idx) => ({ rank: idx + 1, userId: u.userId, fullName: u.fullName, username: u.username, avatarUrl: u.avatarUrl, totalScore: u.totalScore }))
+          .filter(u => positions.includes(u.rank));
+
+        if (ranked.length > 0) {
+          highlights.push({
+            sourceType: 'championship',
+            championshipId: champ.id,
+            championshipTitle: champ.title,
+            modalityName,
+            positions: ranked
+          });
+        }
+      }
+    }
+
+    // ---- Stage-level: single stage only, one entry per modality present in that stage ----
+    const stagesRes = await pool.query(
+      `SELECT s.*, c.title as championship_title FROM stages s
+       JOIN championships c ON c.id = s.championship_id
+       WHERE s.ranking_enabled = true`
+    );
+    for (const row of stagesRes.rows) {
+      const stage = mapStage(row);
+      const positions = stage.rankingPositions;
+      if (!positions || positions.length === 0) continue;
+
+      const modalitiesInStageRes = await pool.query(
+        `SELECT DISTINCT modality FROM stage_scores WHERE championship_id = $1 AND stage_num = $2`,
+        [stage.championshipId, stage.stageNum]
+      );
+
+      for (const modRow of modalitiesInStageRes.rows) {
+        const modalityName = modRow.modality;
+        const scoresRes = await pool.query(
+          `SELECT ss.user_id, ss.shooter_name, ss.score, u.username, u.avatar_url
+           FROM stage_scores ss
+           JOIN users u ON u.id = ss.user_id
+           WHERE ss.championship_id = $1 AND ss.stage_num = $2 AND ss.modality = $3`,
+          [stage.championshipId, stage.stageNum, modalityName]
+        );
+        if (scoresRes.rows.length === 0) continue;
+
+        // Keep the best score per athlete at this single stage (handles re-inscrições)
+        const byUser: Record<string, { userId: string; fullName: string; username: string; avatarUrl: string; score: number }> = {};
+        for (const r of scoresRes.rows) {
+          const score = Number(r.score);
+          if (!byUser[r.user_id] || score > byUser[r.user_id].score) {
+            byUser[r.user_id] = { userId: r.user_id, fullName: r.shooter_name, username: r.username, avatarUrl: r.avatar_url, score };
+          }
+        }
+
+        const ranked = Object.values(byUser)
+          .sort((a, b) => b.score - a.score)
+          .map((u, idx) => ({ rank: idx + 1, userId: u.userId, fullName: u.fullName, username: u.username, avatarUrl: u.avatarUrl, totalScore: u.score }))
+          .filter(u => positions.includes(u.rank));
+
+        if (ranked.length > 0) {
+          highlights.push({
+            sourceType: 'stage',
+            championshipId: stage.championshipId,
+            championshipTitle: row.championship_title,
+            stageId: stage.id,
+            stageTitle: stage.title,
+            modalityName,
+            positions: ranked
+          });
+        }
+      }
+    }
+
+    res.json({ highlights });
+  } catch (err) {
+    console.error('Fetch ranking highlights database error:', err);
+    res.status(500).json({ error: 'Erro ao montar destaques de ranking.' });
   }
 });
 

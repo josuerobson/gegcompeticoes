@@ -260,7 +260,9 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS pontuacao_minima_equipe_prata DOUBLE PRECISION,
         ADD COLUMN IF NOT EXISTS pontuacao_minima_equipe_bronze DOUBLE PRECISION,
         ADD COLUMN IF NOT EXISTS ordem_exibicao INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS aberto_outros_clubes TEXT DEFAULT 'sim';
+        ADD COLUMN IF NOT EXISTS aberto_outros_clubes TEXT DEFAULT 'sim',
+        ADD COLUMN IF NOT EXISTS ranking_enabled BOOLEAN DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS ranking_positions TEXT;
     `);
 
     await client.query(`
@@ -366,7 +368,9 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS gerar_certificados TEXT DEFAULT 'sim',
         ADD COLUMN IF NOT EXISTS fator_multiplicacao_resultados DOUBLE PRECISION DEFAULT 1.00,
         ADD COLUMN IF NOT EXISTS exibir_inscritos_pagina_inicial TEXT DEFAULT 'sim',
-        ADD COLUMN IF NOT EXISTS incluir_na_soma_pagina_inicial TEXT DEFAULT 'sim';
+        ADD COLUMN IF NOT EXISTS incluir_na_soma_pagina_inicial TEXT DEFAULT 'sim',
+        ADD COLUMN IF NOT EXISTS ranking_enabled BOOLEAN DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS ranking_positions TEXT;
     `);
 
     await client.query(`

@@ -8,7 +8,7 @@ import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus
+  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -4652,6 +4652,41 @@ export default function AdminPanel({
     if (result.error) setStageError(result.error);
   };
 
+  // ---- Feed "Ranking em Destaque" toggle (championships and stages) ----
+  const [rankingPopup, setRankingPopup] = useState<{ type: 'championship' | 'stage'; id: string; title: string } | null>(null);
+  const [rankingPopupSelected, setRankingPopupSelected] = useState<number[]>([1, 2, 3]);
+  const [rankingSaving, setRankingSaving] = useState(false);
+
+  const openRankingPopup = (type: 'championship' | 'stage', id: string, title: string, currentPositions?: number[]) => {
+    setRankingPopupSelected(currentPositions && currentPositions.length > 0 ? currentPositions : [1, 2, 3]);
+    setRankingPopup({ type, id, title });
+  };
+
+  const submitRankingToggle = async (type: 'championship' | 'stage', id: string, rankingEnabled: boolean, rankingPositions: number[]) => {
+    const url = type === 'championship' ? `/api/championships/${id}/ranking` : `/api/stages/${id}/ranking`;
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
+      body: JSON.stringify({ rankingEnabled, rankingPositions })
+    });
+    if (onRefreshData) await onRefreshData();
+  };
+
+  const handleDisableRanking = async (type: 'championship' | 'stage', id: string) => {
+    await submitRankingToggle(type, id, false, []);
+  };
+
+  const handleSaveRankingPopup = async () => {
+    if (!rankingPopup || rankingPopupSelected.length === 0) return;
+    setRankingSaving(true);
+    try {
+      await submitRankingToggle(rankingPopup.type, rankingPopup.id, true, rankingPopupSelected);
+      setRankingPopup(null);
+    } finally {
+      setRankingSaving(false);
+    }
+  };
+
   // Main tabs: 'clube' | 'plataforma' | 'master'
   const [mainTab, setMainTab] = useState<'clube' | 'plataforma' | 'master'>('clube');
 
@@ -7308,6 +7343,7 @@ export default function AdminPanel({
                       <th className="py-3 px-2 text-center">Etapas</th>
                       <th className="py-3 px-2 text-center">Inscritos</th>
                       <th className="py-3 px-2 text-center">Arrecadação</th>
+                      <th className="py-3 px-2 text-center">Ranking</th>
                       <th className="py-3 px-2 text-center">Ação</th>
                     </tr>
                   </thead>
@@ -7360,6 +7396,22 @@ export default function AdminPanel({
                           </td>
                           <td className="py-3 px-2 text-center font-bold font-mono text-emerald-600">
                             R$ {totalArrecadacao.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3 px-2 text-center">
+                            <label className="inline-flex items-center justify-center cursor-pointer" title="Exibir no card de ranking em destaque do feed">
+                              <input
+                                type="checkbox"
+                                checked={!!champ.rankingEnabled}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    openRankingPopup('championship', champ.id, champ.title, champ.rankingPositions);
+                                  } else {
+                                    handleDisableRanking('championship', champ.id);
+                                  }
+                                }}
+                                className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                              />
+                            </label>
                           </td>
                           <td className="py-3 px-2 text-center">
                           <div className="flex justify-center items-center gap-2">
@@ -7551,6 +7603,7 @@ export default function AdminPanel({
                           <th className="py-2 px-2 text-center">Aberto</th>
                           <th className="py-2 px-2 text-center">Certificados</th>
                           <th className="py-2 px-2 text-center">Fator</th>
+                          <th className="py-2 px-2 text-center">Ranking</th>
                           <th className="py-2 px-2 text-right">Ação</th>
                         </tr>
                       </thead>
@@ -7565,6 +7618,22 @@ export default function AdminPanel({
                             <td className="py-2 px-2 text-center">{s.abertoParaResultados === 'sim' ? 'Sim' : 'Não'}</td>
                             <td className="py-2 px-2 text-center">{s.gerarCertificados === 'sim' ? 'Sim' : 'Não'}</td>
                             <td className="py-2 px-2 text-center font-mono">{s.fatorMultiplicacaoResultados ?? 1}</td>
+                            <td className="py-2 px-2 text-center">
+                              <label className="inline-flex items-center justify-center cursor-pointer" title="Exibir no card de ranking em destaque do feed">
+                                <input
+                                  type="checkbox"
+                                  checked={!!s.rankingEnabled}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      openRankingPopup('stage', s.id, `${championships.find(c => c.id === s.championshipId)?.title || ''} - ${s.title}`, s.rankingPositions);
+                                    } else {
+                                      handleDisableRanking('stage', s.id);
+                                    }
+                                  }}
+                                  className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                                />
+                              </label>
+                            </td>
                             <td className="py-2 px-2 text-right whitespace-nowrap">
                               <button onClick={() => startEditingStage(s)} className="text-blue-600 hover:text-blue-800 font-bold text-[10px] mr-3">Editar</button>
                               <button onClick={() => handleDeleteStage(s.id)} className="text-red-500 hover:text-red-700 font-bold text-[10px]">Excluir</button>
@@ -8806,6 +8875,77 @@ export default function AdminPanel({
               >
                 Fechar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rankingPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-sm overflow-hidden shadow-2xl text-slate-800 text-left">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <Medal className="w-4 h-4 text-blue-600" />
+                <h4 className="font-display font-bold text-slate-900 text-sm">Ranking em Destaque</h4>
+              </div>
+              <button
+                onClick={() => setRankingPopup(null)}
+                className="text-slate-400 hover:text-slate-650 transition cursor-pointer p-1 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <p className="text-xs text-slate-500">
+                <span className="font-bold text-slate-700">{rankingPopup.title}</span> — escolha quais colocações
+                aparecem no card de ranking em destaque do feed.
+                {rankingPopup.type === 'championship'
+                  ? ' Vale para cada modalidade somando todas as etapas deste campeonato.'
+                  : ' Vale para cada modalidade apenas nesta etapa.'}
+              </p>
+
+              <div className="grid grid-cols-5 gap-2">
+                {[1, 2, 3, 4, 5].map(pos => {
+                  const checked = rankingPopupSelected.includes(pos);
+                  return (
+                    <button
+                      key={pos}
+                      type="button"
+                      onClick={() => {
+                        setRankingPopupSelected(prev =>
+                          checked ? prev.filter(p => p !== pos) : [...prev, pos].sort((a, b) => a - b)
+                        );
+                      }}
+                      className={`py-2.5 rounded-xl border text-xs font-bold transition ${checked ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      {pos}º
+                    </button>
+                  );
+                })}
+              </div>
+
+              {rankingPopupSelected.length === 0 && (
+                <p className="text-[10px] text-red-500 font-semibold">Selecione ao menos uma colocação.</p>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setRankingPopup(null)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl font-semibold text-xs transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={rankingSaving || rankingPopupSelected.length === 0}
+                  onClick={handleSaveRankingPopup}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white py-2.5 rounded-xl font-semibold text-xs transition"
+                >
+                  {rankingSaving ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Post, User, Comment, ShootingResult, SharedPostInfo } from '../types';
-import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat, Trash2, ZoomIn, ZoomOut, RotateCcw, Eye } from 'lucide-react';
+import { Post, User, Comment, ShootingResult, SharedPostInfo, RankingHighlight } from '../types';
+import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat, Trash2, ZoomIn, ZoomOut, RotateCcw, Eye, Medal } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { shootingImages } from '../data/mockData';
 import likeIcon from '@/assets/like_icon.png';
@@ -334,6 +334,107 @@ export function PostImageCarousel({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// Rotating "ranking em destaque" card: fetches the pool of eligible (championship/stage x
+// modality) rankings, shuffles it into a random order on load, and auto-advances through
+// it every 5 seconds. Shuffling (instead of just picking one random entry) is what makes
+// each page load start the cycle at a different point instead of always repeating the same
+// sequence.
+function RankingHighlightCard() {
+  const [highlights, setHighlights] = useState<RankingHighlight[]>([]);
+  const [order, setOrder] = useState<number[]>([]);
+  const [currentIdx, setCurrentIdx] = useState(0);
+
+  useEffect(() => {
+    fetch('/api/feed/ranking-highlights')
+      .then(res => res.json())
+      .then(data => {
+        const list: RankingHighlight[] = data.highlights || [];
+        setHighlights(list);
+        const shuffled = list.map((_, i) => i);
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        setOrder(shuffled);
+        setCurrentIdx(0);
+      })
+      .catch(() => { setHighlights([]); setOrder([]); });
+  }, []);
+
+  useEffect(() => {
+    if (order.length <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentIdx(prev => (prev + 1) % order.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [order.length]);
+
+  if (order.length === 0) return null;
+
+  const current = highlights[order[currentIdx]];
+  if (!current) return null;
+
+  const medalStyle = (rank: number) => {
+    if (rank === 1) return 'bg-amber-100 text-amber-700 border-amber-300';
+    if (rank === 2) return 'bg-slate-200 text-slate-700 border-slate-300';
+    if (rank === 3) return 'bg-orange-100 text-orange-700 border-orange-300';
+    return 'bg-blue-50 text-blue-700 border-blue-200';
+  };
+
+  return (
+    <div className="bg-gradient-to-br from-blue-950 to-slate-900 text-white rounded-xl shadow-sm border border-blue-900/40 p-4 space-y-3 overflow-hidden relative">
+      <div className="absolute -right-4 -top-4 opacity-10">
+        <Trophy className="w-28 h-28" />
+      </div>
+
+      <div className="flex items-center justify-between relative">
+        <div className="flex items-center gap-1.5">
+          <Medal className="w-4 h-4 text-amber-400" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">Ranking em Destaque</span>
+        </div>
+        {order.length > 1 && (
+          <div className="flex gap-1">
+            {order.map((_, i) => (
+              <span key={i} className={`h-1.5 rounded-full transition-all ${i === currentIdx ? 'w-4 bg-amber-400' : 'w-1.5 bg-white/25'}`} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="text-xs text-slate-300 relative">
+        <span className="font-semibold text-white">{current.championshipTitle}</span>
+        {current.stageTitle && <span> {'>'} {current.stageTitle}</span>}
+        <span> {'>'} <span className="text-sky-300 font-semibold">{current.modalityName}</span></span>
+      </div>
+
+      <div className="space-y-1.5 relative">
+        {current.positions.map(p => (
+          <div key={p.rank} className="flex items-center gap-2.5 bg-white/5 rounded-lg p-2">
+            <div className={`w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-bold shrink-0 ${medalStyle(p.rank)}`}>
+              {p.rank}
+            </div>
+            <img
+              src={p.avatarUrl}
+              alt={p.username}
+              className="w-7 h-7 rounded-full object-cover border border-white/20 shrink-0"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
+              }}
+            />
+            <div className="min-w-0 flex-1">
+              <span className="text-xs font-semibold block truncate">{p.fullName}</span>
+              <span className="text-[10px] text-slate-400">@{p.username}</span>
+            </div>
+            <span className="text-xs font-bold text-amber-300 font-mono shrink-0">{p.totalScore} pts</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -675,6 +776,8 @@ export default function FeedView({
             );
           })}
         </div>
+
+        <RankingHighlightCard />
 
         {/* Quick Post trigger */}
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3">
