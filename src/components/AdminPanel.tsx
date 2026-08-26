@@ -1866,7 +1866,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
   const [selectedReg, setSelectedReg] = React.useState<EnrichedRegistration | null>(null);
   const [dataExec, setDataExec] = React.useState('');
   const [horaExec, setHoraExec] = React.useState('');
-  const [penalidade, setPenalidade] = React.useState('0');
+  const [penalidade, setPenalidade] = React.useState('');
   const [ownAmmoShots, setOwnAmmoShots] = React.useState<number | string>('');
   const [clubAmmoShots, setClubAmmoShots] = React.useState<number | string>('');
   const [clubAmmoType, setClubAmmoType] = React.useState<'nova' | 'recarga'>('recarga');
@@ -1925,14 +1925,14 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
     const n = reg.seriesCount || 1;
     if (reg.seriesPontos && reg.seriesPontos.length > 0) {
       setSeriesData(reg.seriesPontos.map((s: any) =>
-        Object.fromEntries(ZONES.map(z => [z, String(s[z]||0)]))
+        Object.fromEntries(ZONES.map(z => [z, s[z] ? String(s[z]) : '']))
       ));
     } else {
-      setSeriesData(Array.from({length: n}, () => Object.fromEntries(ZONES.map(z => [z,'0']))));
+      setSeriesData(Array.from({length: n}, () => Object.fromEntries(ZONES.map(z => [z,'']))));
     }
     setDataExec(reg.dataExecucao || '');
     setHoraExec(reg.horaExecucao || '');
-    setPenalidade(reg.penalty !== undefined && reg.penalty !== null ? String(reg.penalty) : '0');
+    setPenalidade(reg.penalty ? String(reg.penalty) : '');
 
     setOwnAmmoShots(reg.ownAmmoShots ? String(reg.ownAmmoShots) : '');
     setClubAmmoShots(reg.clubAmmoShots ? String(reg.clubAmmoShots) : '');
