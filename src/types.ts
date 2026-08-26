@@ -88,9 +88,10 @@ export interface ShootingResult {
   shots: number;
   score: number;
   distance: number; // in meters (e.g., 10m, 15m, 25m)
-  gunModel: string;
+  gunModel: string; // weapon type: Revólver, Pistola, Carabina, Espingarda
   caliber: string;
-  discipline: string; // e.g., IPSC, Trap Americano, Fogo Central, Carabina de Pressão
+  discipline: string; // shooting category: Tiro de Precisão, Tiro Rápido, Tiro em Silhueta Metálica, Tiro Defensivo, Tiro Alvo em Movimento, IPSC, Tiro ao Prato
+  sight?: string; // Aberta, Red Dot, Telescópica
 }
 
 export interface SharedPostInfo {
@@ -120,6 +121,7 @@ export interface Post {
   sharedPost?: SharedPostInfo;
   sharesCount?: number;
   viewsCount?: number;
+  isPrivate?: boolean;
 }
 
 export interface Modality {

@@ -365,6 +365,7 @@ function mapPost(p: any): Post {
     sharedPost: parsedSharedPost,
     sharesCount: p.shares_count ? Number(p.shares_count) : 0,
     viewsCount: p.views_count ? Number(p.views_count) : 0,
+    isPrivate: p.is_private || false,
   };
 }
 
@@ -396,11 +397,11 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Serve uploaded images and static assets from public uploads directory
-const uploadsDir = path.join(__dirname, 'public', 'uploads', 'posts');
+const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'posts');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
-app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
+app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
 
 // Helper to process post image strings - returns base64 directly so images are stored in PostgreSQL DB persistently
 function saveBase64ImageToDisk(base64Data: string, prefix: string): string {
@@ -1359,6 +1360,8 @@ app.get('/api/posts', async (req, res) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
     const offset = (page - 1) * limit;
+    // A private post (homologação privada) is only visible to its own author when logged in
+    const currentUserId = (req as any).user?.id || null;
 
     const postsRes = await pool.query(
       `SELECT p.*,
@@ -1383,9 +1386,10 @@ app.get('/api/posts', async (req, res) => {
           ) AS comments
         FROM comments cm GROUP BY cm.post_id
       ) c ON c.post_id = p.id
+      WHERE COALESCE(p.is_private, FALSE) = FALSE OR p.user_id = $3
       ORDER BY p.created_at DESC
       LIMIT $1 OFFSET $2`,
-      [limit, offset]
+      [limit, offset, currentUserId]
     );
     const posts = postsRes.rows.map(mapPost);
     res.json({ posts, page, limit });
@@ -1396,7 +1400,7 @@ app.get('/api/posts', async (req, res) => {
 });
 
 app.post('/api/posts', requireAuth, async (req, res) => {
-  const { content, imageUrl, imageUrls, targetScore, sharedPost } = req.body;
+  const { content, imageUrl, imageUrls, targetScore, sharedPost, isPrivate } = req.body;
   const currentUser = (req as any).user as User;
 
   // Process image URLs array (limit to max 5 images) & save Base64 to disk as lightweight static images
@@ -1430,13 +1434,14 @@ app.post('/api/posts', requireAuth, async (req, res) => {
     comments: [],
     createdAt: new Date().toISOString(),
     sharedPost: sharedPost || undefined,
-    sharesCount: 0
+    sharesCount: 0,
+    isPrivate: !!isPrivate
   };
 
   try {
     await pool.query(
-      `INSERT INTO posts (id, user_id, username, user_avatar, content, image_url, target_score, shared_post, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      `INSERT INTO posts (id, user_id, username, user_avatar, content, image_url, target_score, shared_post, created_at, is_private)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         newPost.id,
         newPost.userId,
@@ -1446,7 +1451,8 @@ app.post('/api/posts', requireAuth, async (req, res) => {
         storedImageUrl,
         newPost.targetScore ? JSON.stringify(newPost.targetScore) : null,
         storedSharedPost,
-        newPost.createdAt
+        newPost.createdAt,
+        newPost.isPrivate
       ]
     );
 

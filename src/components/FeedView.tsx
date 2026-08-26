@@ -6,11 +6,25 @@ import { shootingImages } from '../data/mockData';
 import likeIcon from '@/assets/like_icon.png';
 import { compressUploadImage } from '../utils/imageCompressor';
 
+const SHOOTING_CATEGORIES = [
+  'Tiro de Precisão',
+  'Tiro Rápido',
+  'Tiro em Silhueta Metálica',
+  'Tiro Defensivo',
+  'Tiro Alvo em Movimento',
+  'IPSC',
+  'Tiro ao Prato'
+];
+
+const WEAPON_TYPES = ['Revólver', 'Pistola', 'Carabina', 'Espingarda'];
+
+const SIGHT_TYPES = ['Aberta', 'Red Dot', 'Telescópica'];
+
 interface FeedProps {
   posts: Post[];
   currentUser: User | null;
   users: User[];
-  onAddPost: (content: string, imageUrl?: string, targetScore?: ShootingResult, imageUrls?: string[], sharedPost?: SharedPostInfo) => Promise<void>;
+  onAddPost: (content: string, imageUrl?: string, targetScore?: ShootingResult, imageUrls?: string[], sharedPost?: SharedPostInfo, isPrivate?: boolean) => Promise<void>;
   onLikePost: (postId: string) => Promise<void>;
   onCommentPost: (postId: string, content: string) => Promise<void>;
   onDeletePost?: (postId: string) => Promise<void>;
@@ -350,9 +364,11 @@ export default function FeedView({
   const [targetShots, setTargetShots] = useState(10);
   const [targetScore, setTargetScore] = useState(95);
   const [targetDistance, setTargetDistance] = useState(15);
-  const [gunModel, setGunModel] = useState('Glock 17 Gen 5');
+  const [gunModel, setGunModel] = useState('Pistola');
   const [caliber, setCaliber] = useState('9mm');
-  const [discipline, setDiscipline] = useState('IPSC Handgun');
+  const [discipline, setDiscipline] = useState('Tiro de Precisão');
+  const [sight, setSight] = useState('Aberta');
+  const [isPostPrivate, setIsPostPrivate] = useState(false);
 
   // Multi-image selection state for post creation (max 5)
   const [postImages, setPostImages] = useState<string[]>([]);
@@ -577,9 +593,10 @@ export default function FeedView({
           shots: Number(targetShots),
           score: Number(targetScore),
           distance: Number(targetDistance),
-          gunModel: gunModel || 'Pistola Esportiva',
+          gunModel: gunModel || 'Pistola',
           caliber: caliber || '9mm',
-          discipline: discipline || 'Tiro de Precisão'
+          discipline: discipline || 'Tiro de Precisão',
+          sight: sight || 'Aberta'
         };
       }
 
@@ -589,8 +606,8 @@ export default function FeedView({
         return;
       }
 
-      await onAddPost(postContent, finalImagesList?.[0], scoreObj, finalImagesList);
-      
+      await onAddPost(postContent, finalImagesList?.[0], scoreObj, finalImagesList, undefined, includeTargetScore ? isPostPrivate : false);
+
       // Reset
       setPostContent('');
       setCustomImageUrl('');
@@ -598,6 +615,7 @@ export default function FeedView({
       setCustomImageFile(null);
       setPostImages([]);
       setIncludeTargetScore(false);
+      setIsPostPrivate(false);
       setIsPostingOpen(false);
     } catch (err) {
       console.error(err);
@@ -855,7 +873,7 @@ export default function FeedView({
                           <div className="text-center bg-slate-950/40 p-2 rounded justify-center items-center">
                             <span className="text-[9px] text-slate-400 block uppercase">EQUIPAMENTO</span>
                             <span className="text-xs font-semibold block text-slate-200 truncate">{post.targetScore.gunModel}</span>
-                            <span className="text-[10px] text-slate-400">{post.targetScore.caliber}</span>
+                            <span className="text-[10px] text-slate-400">{post.targetScore.caliber}{post.targetScore.sight ? ` • Mira ${post.targetScore.sight}` : ''}</span>
                           </div>
                           <div className="text-center bg-slate-950/40 p-2 rounded justify-center items-center">
                             <span className="text-[9px] text-slate-400 block uppercase">PONTOS</span>
@@ -1308,28 +1326,32 @@ export default function FeedView({
 
                   {includeTargetScore && (
                     <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t border-slate-200">
-                      <div>
-                        <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Disciplina / Modalidade</label>
-                        <select
-                          value={discipline}
-                          onChange={(e) => setDiscipline(e.target.value)}
-                          className="w-full bg-white p-2 rounded border border-slate-200"
-                        >
-                          <option value="IPSC Handgun">IPSC Handgun</option>
-                          <option value="Trap Americano 12GA">Trap Americano 12GA</option>
-                          <option value="Carabina Mira Aberta 10m">Carabina Mira Aberta 10m</option>
-                          <option value="Pistola de Precisão 25m">Pistola de Precisão 25m</option>
-                        </select>
+                      <div className="col-span-2">
+                        <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-1">Categoria</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {SHOOTING_CATEGORIES.map((cat) => (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => setDiscipline(cat)}
+                              className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition ${discipline === cat ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                            >
+                              {cat}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       <div>
                         <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Armamento Utilizado</label>
-                        <input
-                          type="text"
+                        <select
                           value={gunModel}
                           onChange={(e) => setGunModel(e.target.value)}
-                          placeholder="Ex: Imbel .40, Glock 17"
                           className="w-full bg-white p-2 rounded border border-slate-200"
-                        />
+                        >
+                          {WEAPON_TYPES.map((w) => (
+                            <option key={w} value={w}>{w}</option>
+                          ))}
+                        </select>
                       </div>
                       <div>
                         <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Calibre</label>
@@ -1340,6 +1362,21 @@ export default function FeedView({
                           placeholder="Ex: 9mm, .40, .22, 12GA"
                           className="w-full bg-white p-2 rounded border border-slate-200"
                         />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-1">Mira</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {SIGHT_TYPES.map((s) => (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => setSight(s)}
+                              className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition ${sight === s ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       <div>
                         <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Distância (Metros)</label>
@@ -1376,6 +1413,28 @@ export default function FeedView({
                           onChange={(e) => setTargetScore(Number(e.target.value))}
                           className="w-full bg-white p-2 rounded border border-slate-200 text-center font-bold text-blue-600"
                         />
+                      </div>
+                      <div className="col-span-2 pt-1">
+                        <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-1">Visibilidade da Postagem</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setIsPostPrivate(false)}
+                            className={`p-2 rounded-lg border text-[11px] font-bold transition ${!isPostPrivate ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                          >
+                            Pública
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsPostPrivate(true)}
+                            className={`p-2 rounded-lg border text-[11px] font-bold transition ${isPostPrivate ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                          >
+                            Privada
+                          </button>
+                        </div>
+                        <p className="text-[9px] text-slate-400 mt-1">
+                          {isPostPrivate ? 'Somente você poderá ver esta postagem quando estiver logado.' : 'Visível para todos no feed.'}
+                        </p>
                       </div>
                     </div>
                   )}
