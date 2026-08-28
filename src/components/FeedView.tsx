@@ -414,8 +414,8 @@ function RankingHighlightCard() {
       <div className="space-y-1.5 relative">
         {current.positions.map(p => (
           <div key={p.rank} className="flex items-center gap-2.5 bg-white/5 rounded-lg p-2">
-            <div className={`w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-bold shrink-0 ${medalStyle(p.rank)}`}>
-              {p.rank}
+            <div className={`h-6 px-2 rounded-full border flex items-center justify-center text-[9px] font-bold shrink-0 whitespace-nowrap ${medalStyle(p.rank)}`}>
+              {p.rank}º Lugar
             </div>
             <img
               src={p.avatarUrl}
@@ -469,6 +469,7 @@ export default function FeedView({
   const [caliber, setCaliber] = useState('9mm');
   const [discipline, setDiscipline] = useState('Tiro de Precisão');
   const [sight, setSight] = useState('Aberta');
+  const [executionDate, setExecutionDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [isPostPrivate, setIsPostPrivate] = useState(false);
 
   // Multi-image selection state for post creation (max 5)
@@ -697,7 +698,8 @@ export default function FeedView({
           gunModel: gunModel || 'Pistola',
           caliber: caliber || '9mm',
           discipline: discipline || 'Tiro de Precisão',
-          sight: sight || 'Aberta'
+          sight: sight || 'Aberta',
+          executionDate: executionDate || undefined
         };
       }
 
@@ -717,6 +719,7 @@ export default function FeedView({
       setPostImages([]);
       setIncludeTargetScore(false);
       setIsPostPrivate(false);
+      setExecutionDate(new Date().toISOString().split('T')[0]);
       setIsPostingOpen(false);
     } catch (err) {
       console.error(err);
@@ -958,20 +961,31 @@ export default function FeedView({
                           <Target className="w-24 h-24 text-white" />
                         </div>
 
-                        <div className="flex justify-between items-start">
+                        <div className="flex justify-between items-start gap-2">
                           <div>
-                            <span className="text-[10px] text-blue-400 uppercase tracking-widest font-bold">G&G RESULTADO HOMOLOGADO</span>
+                            <span className="text-[10px] text-blue-400 uppercase tracking-widest font-bold">RESULTADO DE TREINAMENTO</span>
                             <h4 className="text-sm font-semibold tracking-tight text-slate-100 font-display mt-0.5">{post.targetScore.discipline}</h4>
                           </div>
-                          <div className="bg-blue-600/30 text-blue-300 font-sans border border-blue-500/20 px-2 py-0.5 rounded text-[11px] font-bold">
-                            Distância: {post.targetScore.distance}m
+                          <div className="flex flex-col items-end gap-1 shrink-0">
+                            <div className="bg-blue-600/30 text-blue-300 font-sans border border-blue-500/20 px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap">
+                              Distância: {post.targetScore.distance}m
+                            </div>
+                            {post.targetScore.executionDate && (
+                              <div className="bg-slate-800/60 text-slate-300 font-sans border border-slate-700/50 px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap">
+                                {new Date(post.targetScore.executionDate + 'T00:00:00').toLocaleDateString('pt-BR')}
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-3 border-t border-slate-800 pt-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border-t border-slate-800 pt-3">
                           <div className="text-center bg-slate-950/40 p-2 rounded justify-center items-center">
-                            <span className="text-[9px] text-slate-400 block uppercase">ACERTOS</span>
-                            <span className="text-lg font-bold text-emerald-400">{post.targetScore.hits}/{post.targetScore.shots}</span>
+                            <span className="text-[9px] text-slate-400 block uppercase">Tiros</span>
+                            <span className="text-lg font-bold text-slate-200">{post.targetScore.shots}</span>
+                          </div>
+                          <div className="text-center bg-slate-950/40 p-2 rounded justify-center items-center">
+                            <span className="text-[9px] text-slate-400 block uppercase">Acertos</span>
+                            <span className="text-lg font-bold text-emerald-400">{post.targetScore.hits}</span>
                           </div>
                           <div className="text-center bg-slate-950/40 p-2 rounded justify-center items-center">
                             <span className="text-[9px] text-slate-400 block uppercase">EQUIPAMENTO</span>
@@ -1480,6 +1494,15 @@ export default function FeedView({
                             </button>
                           ))}
                         </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Data da Execução</label>
+                        <input
+                          type="date"
+                          value={executionDate}
+                          onChange={(e) => setExecutionDate(e.target.value)}
+                          className="w-full bg-white p-2 rounded border border-slate-200"
+                        />
                       </div>
                       <div>
                         <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Distância (Metros)</label>

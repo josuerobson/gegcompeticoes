@@ -92,6 +92,7 @@ export interface ShootingResult {
   caliber: string;
   discipline: string; // shooting category: Tiro de Precisão, Tiro Rápido, Tiro em Silhueta Metálica, Tiro Defensivo, Tiro Alvo em Movimento, IPSC, Tiro ao Prato
   sight?: string; // Aberta, Red Dot, Telescópica
+  executionDate?: string; // date the training/shooting actually happened (YYYY-MM-DD)
 }
 
 export interface SharedPostInfo {
