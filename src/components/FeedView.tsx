@@ -452,7 +452,7 @@ export default function FeedView({
   onViewProfile
 }: FeedProps) {
   // New post state
-  const composerRef = useRef<HTMLDivElement | null>(null);
+  const [isPostingOpen, setIsPostingOpen] = useState(false);
   const [postContent, setPostContent] = useState('');
   const [selectedImagePreset, setSelectedImagePreset] = useState<string>(shootingImages.paper_target);
   const [customImageUrl, setCustomImageUrl] = useState('');
@@ -720,11 +720,21 @@ export default function FeedView({
       setIncludeTargetScore(false);
       setIsPostPrivate(false);
       setExecutionDate(new Date().toISOString().split('T')[0]);
+      setIsPostingOpen(false);
     } catch (err) {
       console.error(err);
     } finally {
       setIsSubmittingPost(false);
     }
+  };
+
+  // Closing the "Postar Treino" modal without submitting discards the whole draft,
+  // including the homologar toggle/fields — so it never silently leaks into the simple composer.
+  const handleCancelPosting = () => {
+    setIsPostingOpen(false);
+    setIncludeTargetScore(false);
+    setIsPostPrivate(false);
+    setExecutionDate(new Date().toISOString().split('T')[0]);
   };
 
   const handleSendComment = async (postId: string) => {
@@ -742,7 +752,7 @@ export default function FeedView({
         
         {/* Story highlights of Club G&G Leaders */}
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4 overflow-x-auto no-scrollbar">
-          <div className="flex flex-col items-center flex-shrink-0 cursor-pointer" onClick={() => composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+          <div className="flex flex-col items-center flex-shrink-0 cursor-pointer" onClick={() => setIsPostingOpen(true)}>
             <div className="relative w-16 h-16 rounded-full bg-gradient-to-tr from-blue-600 to-sky-400 p-[3px] flex items-center justify-center">
               <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
                 <PlusCircle className="w-8 h-8 text-blue-600" />
@@ -781,24 +791,12 @@ export default function FeedView({
 
         <RankingHighlightCard />
 
-        {/* Fixed Post Composer (always visible, no modal) */}
-        <div ref={composerRef} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <img
-              src={currentUser?.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80"}
-              alt="My Avatar"
-              className="w-8 h-8 rounded-full object-cover border border-slate-200"
-              referrerPolicy="no-referrer"
-              onError={(e) => {
-                e.currentTarget.onerror = null;
-                e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
-              }}
-            />
-            <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
-              <Target className="w-4 h-4 text-blue-600" />
-              Postar Treino
-            </h4>
-          </div>
+        {/* Simple fixed post composer (photo/caption only — training homologation happens via the "Postar Treino" modal below) */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+          <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5 mb-3">
+            <Images className="w-4 h-4 text-blue-600" />
+            Publicar Nova Foto ({postImages.length}/5)
+          </h4>
 
           <form onSubmit={handleSubmitPost} className="space-y-4">
             {/* Content */}
@@ -926,146 +924,6 @@ export default function FeedView({
               )}
             </div>
 
-            {/* Shooting Result checkbox switch */}
-            <div className="bg-slate-50 p-4 rounded-xl space-y-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={includeTargetScore}
-                  onChange={(e) => setIncludeTargetScore(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-                />
-                <span className="text-xs font-bold text-slate-700 uppercase flex items-center gap-1">
-                  <Award className="w-4 h-4 text-amber-500" />
-                  Homologar Cartão de Tiro neste Post?
-                </span>
-              </label>
-
-              {includeTargetScore && (
-                <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t border-slate-200">
-                  <div className="col-span-2">
-                    <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-1">Categoria</label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {SHOOTING_CATEGORIES.map((cat) => (
-                        <button
-                          key={cat}
-                          type="button"
-                          onClick={() => setDiscipline(cat)}
-                          className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition ${discipline === cat ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-                        >
-                          {cat}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Armamento Utilizado</label>
-                    <select
-                      value={gunModel}
-                      onChange={(e) => setGunModel(e.target.value)}
-                      className="w-full bg-white p-2 rounded border border-slate-200"
-                    >
-                      {WEAPON_TYPES.map((w) => (
-                        <option key={w} value={w}>{w}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Calibre</label>
-                    <input
-                      type="text"
-                      value={caliber}
-                      onChange={(e) => setCaliber(e.target.value)}
-                      placeholder="Ex: 9mm, .40, .22, 12GA"
-                      className="w-full bg-white p-2 rounded border border-slate-200"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-1">Mira</label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {SIGHT_TYPES.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => setSight(s)}
-                          className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition ${sight === s ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-                        >
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Data da Execução</label>
-                    <input
-                      type="date"
-                      value={executionDate}
-                      onChange={(e) => setExecutionDate(e.target.value)}
-                      className="w-full bg-white p-2 rounded border border-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Distância (Metros)</label>
-                    <input
-                      type="number"
-                      value={targetDistance}
-                      onChange={(e) => setTargetDistance(Number(e.target.value))}
-                      className="w-full bg-white p-2 rounded border border-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Total de Tiros</label>
-                    <input
-                      type="number"
-                      value={targetShots}
-                      onChange={(e) => setTargetShots(Number(e.target.value))}
-                      className="w-full bg-white p-2 rounded border border-slate-200 text-center"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Acertos</label>
-                    <input
-                      type="number"
-                      value={targetHits}
-                      onChange={(e) => setTargetHits(Number(e.target.value))}
-                      className="w-full bg-white p-2 rounded border border-slate-200 text-center"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Pontuação Final</label>
-                    <input
-                      type="number"
-                      value={targetScore}
-                      onChange={(e) => setTargetScore(Number(e.target.value))}
-                      className="w-full bg-white p-2 rounded border border-slate-200 text-center font-bold text-blue-600"
-                    />
-                  </div>
-                  <div className="col-span-2 pt-1">
-                    <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-1">Visibilidade da Postagem</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsPostPrivate(false)}
-                        className={`p-2 rounded-lg border text-[11px] font-bold transition ${!isPostPrivate ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-                      >
-                        Pública
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsPostPrivate(true)}
-                        className={`p-2 rounded-lg border text-[11px] font-bold transition ${isPostPrivate ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-                      >
-                        Privada
-                      </button>
-                    </div>
-                    <p className="text-[9px] text-slate-400 mt-1">
-                      {isPostPrivate ? 'Somente você poderá ver esta postagem quando estiver logado.' : 'Visível para todos no feed.'}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
             <div className="flex justify-end pt-1">
               <button
                 type="submit"
@@ -1084,6 +942,324 @@ export default function FeedView({
             </div>
           </form>
         </div>
+
+        {/* "Postar Treino" modal — the only place training/homologação posts are created */}
+        <AnimatePresence>
+          {isPostingOpen && (
+            <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-center justify-center p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-white max-w-xl w-full rounded-2xl smooth-shadow overflow-hidden max-h-[90vh] flex flex-col"
+              >
+                <div className="bg-blue-900 text-white p-4 flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Target className="w-5 h-5 text-amber-400" />
+                    <span className="font-display font-semibold text-base">Postar Treino</span>
+                  </div>
+                  <button
+                    onClick={handleCancelPosting}
+                    className="text-white/70 hover:text-white bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <form onSubmit={handleSubmitPost} className="p-5 space-y-4 overflow-y-auto flex-1">
+                  {/* Content */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase block">O que você está pensando? (opcional)</label>
+                    <textarea
+                      rows={3}
+                      placeholder="Escreva uma legenda... ou deixe em branco se for publicar apenas fotos!"
+                      value={postContent}
+                      onChange={(e) => setPostContent(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-sm text-slate-700"
+                    />
+                  </div>
+
+                  {/* Multi-Image Gallery Selector (max 5) */}
+                  <div className="space-y-2.5 border border-slate-200 bg-slate-50/50 p-3.5 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700 uppercase flex items-center gap-1.5">
+                        <Images className="w-4 h-4 text-blue-600" />
+                        Galeria de Fotos ({postImages.length}/5)
+                      </label>
+                      {postImages.length >= 5 ? (
+                        <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                          Limite de 5 fotos atingido
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          Até 5 fotos por publicação
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Selected Images Grid Preview */}
+                    {postImages.length > 0 && (
+                      <div className="grid grid-cols-5 gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
+                        {postImages.map((imgUrl, idx) => (
+                          <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-slate-300 bg-slate-900 group">
+                            <img src={imgUrl} alt={`Foto ${idx+1}`} className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => setPostImages(prev => prev.filter((_, i) => i !== idx))}
+                              className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow-md transition cursor-pointer"
+                              title="Remover foto"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                            <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded font-mono font-bold">
+                              #{idx + 1}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add Images Controls (only if < 5) */}
+                    {postImages.length < 5 && (
+                      <div className="space-y-3 pt-1 border-t border-slate-100">
+                        {/* File upload or URL */}
+                        <div className="flex flex-col sm:flex-row items-center gap-2">
+                          <label className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 shadow-2xs">
+                            <Plus className="w-4 h-4" />
+                            Enviar do PC
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              className="hidden"
+                              onChange={async (e) => {
+                                const files = Array.from(e.target.files || []);
+                                if (files.length === 0) return;
+
+                                const remainingSlots = 5 - postImages.length;
+                                if (remainingSlots <= 0) {
+                                  e.target.value = '';
+                                  return;
+                                }
+
+                                const filesToRead = files.slice(0, remainingSlots);
+
+                                const readPromises = filesToRead.map((file: any) => compressUploadImage(file as File, 1200, 0.75));
+
+                                const results = await Promise.all(readPromises);
+                                const validResults = results.filter(r => r !== '');
+
+                                setPostImages(prev => {
+                                  const combined = [...prev];
+                                  validResults.forEach(r => {
+                                    if (!combined.includes(r) && combined.length < 5) {
+                                      combined.push(r);
+                                    }
+                                  });
+                                  return combined;
+                                });
+
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
+
+                          <div className="flex-1 flex gap-1.5 w-full">
+                            <input
+                              type="url"
+                              placeholder="Ou colar URL da imagem..."
+                              value={customImageUrl}
+                              onChange={(e) => setCustomImageUrl(e.target.value)}
+                              className="flex-1 bg-white border border-slate-200 outline-none px-3 py-1.5 rounded-xl text-xs text-slate-700 focus:border-blue-500"
+                            />
+                            {customImageUrl.trim() !== '' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (customImageUrl.trim() && postImages.length < 5) {
+                                    setPostImages(prev => [...prev, customImageUrl.trim()]);
+                                    setCustomImageUrl('');
+                                  }
+                                }}
+                                className="bg-blue-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-blue-700 transition cursor-pointer shrink-0"
+                              >
+                                Adicionar
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Shooting Result checkbox switch */}
+                  <div className="bg-slate-50 p-4 rounded-xl space-y-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={includeTargetScore}
+                        onChange={(e) => setIncludeTargetScore(e.target.checked)}
+                        className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                      />
+                      <span className="text-xs font-bold text-slate-700 uppercase flex items-center gap-1">
+                        <Award className="w-4 h-4 text-amber-500" />
+                        Homologar Cartão de Tiro neste Post?
+                      </span>
+                    </label>
+
+                    {includeTargetScore && (
+                      <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t border-slate-200">
+                        <div className="col-span-2">
+                          <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-1">Categoria</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {SHOOTING_CATEGORIES.map((cat) => (
+                              <button
+                                key={cat}
+                                type="button"
+                                onClick={() => setDiscipline(cat)}
+                                className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition ${discipline === cat ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                              >
+                                {cat}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Armamento Utilizado</label>
+                          <select
+                            value={gunModel}
+                            onChange={(e) => setGunModel(e.target.value)}
+                            className="w-full bg-white p-2 rounded border border-slate-200"
+                          >
+                            {WEAPON_TYPES.map((w) => (
+                              <option key={w} value={w}>{w}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Calibre</label>
+                          <input
+                            type="text"
+                            value={caliber}
+                            onChange={(e) => setCaliber(e.target.value)}
+                            placeholder="Ex: 9mm, .40, .22, 12GA"
+                            className="w-full bg-white p-2 rounded border border-slate-200"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-1">Mira</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {SIGHT_TYPES.map((s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => setSight(s)}
+                                className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition ${sight === s ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Data da Execução</label>
+                          <input
+                            type="date"
+                            value={executionDate}
+                            onChange={(e) => setExecutionDate(e.target.value)}
+                            className="w-full bg-white p-2 rounded border border-slate-200"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Distância (Metros)</label>
+                          <input
+                            type="number"
+                            value={targetDistance}
+                            onChange={(e) => setTargetDistance(Number(e.target.value))}
+                            className="w-full bg-white p-2 rounded border border-slate-200"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Total de Tiros</label>
+                          <input
+                            type="number"
+                            value={targetShots}
+                            onChange={(e) => setTargetShots(Number(e.target.value))}
+                            className="w-full bg-white p-2 rounded border border-slate-200 text-center"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Acertos</label>
+                          <input
+                            type="number"
+                            value={targetHits}
+                            onChange={(e) => setTargetHits(Number(e.target.value))}
+                            className="w-full bg-white p-2 rounded border border-slate-200 text-center"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Pontuação Final</label>
+                          <input
+                            type="number"
+                            value={targetScore}
+                            onChange={(e) => setTargetScore(Number(e.target.value))}
+                            className="w-full bg-white p-2 rounded border border-slate-200 text-center font-bold text-blue-600"
+                          />
+                        </div>
+                        <div className="col-span-2 pt-1">
+                          <label className="text-[10px] text-slate-500 uppercase block font-semibold mb-1">Visibilidade da Postagem</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setIsPostPrivate(false)}
+                              className={`p-2 rounded-lg border text-[11px] font-bold transition ${!isPostPrivate ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                            >
+                              Pública
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsPostPrivate(true)}
+                              className={`p-2 rounded-lg border text-[11px] font-bold transition ${isPostPrivate ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                            >
+                              Privada
+                            </button>
+                          </div>
+                          <p className="text-[9px] text-slate-400 mt-1">
+                            {isPostPrivate ? 'Somente você poderá ver esta postagem quando estiver logado.' : 'Visível para todos no feed.'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 pt-3">
+                    <button
+                      type="button"
+                      onClick={handleCancelPosting}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-semibold transition"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingPost}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 shadow-md shadow-blue-200 transition"
+                    >
+                      {isSubmittingPost ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          Postando...
+                        </>
+                      ) : (
+                        'Publicar'
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* Feed Posts */}
         <div className="space-y-4">
