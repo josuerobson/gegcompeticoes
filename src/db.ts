@@ -972,11 +972,16 @@ export async function initDB() {
     // a ser estado de runtime (definido pelo master via "Ativar Recurso Completo").
     // Reaplicá-los a cada boot resetava a ativação de qualquer clube seedado
     // (ex.: club_standard) de volta para o valor fixo em mockData.ts.
+    // ON CONFLICT DO NOTHING: name/logo/cnpj/phone só semeiam na primeira vez que
+    // o clube é criado. Assim como is_premium/sub_domain, esses campos deixaram de
+    // ser dado estático assim que clubes reais (importados ou editados pelo
+    // próprio clube) passaram a existir — reaplicar o valor fixo do mockData a
+    // cada boot apagava dado real (ex.: CNPJ/telefone do Aranãs pós-importação).
     for (const c of defaultClubs) {
       await client.query(
         `INSERT INTO clubs (id, name, logo_url, sub_domain, cnpj, phone, is_premium, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, logo_url = EXCLUDED.logo_url, cnpj = EXCLUDED.cnpj, phone = EXCLUDED.phone`,
+         ON CONFLICT (id) DO NOTHING`,
         [c.id, c.name, c.logoUrl || null, c.subDomain || null, c.cnpj || null, c.phone || null, c.isPremium, c.createdAt]
       );
     }
