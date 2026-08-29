@@ -8689,12 +8689,14 @@ export default function AdminPanel({
         >
           Gerenciamento Plataforma
         </button>
-        <button
-          onClick={() => setMainTab('master')}
-          className={`px-4 py-2.5 text-xs font-semibold rounded-lg transition duration-200 cursor-pointer ${mainTab === 'master' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-655 hover:text-slate-900'}`}
-        >
-          Administrador master
-        </button>
+        {currentUser?.role === 'master_admin' && (
+          <button
+            onClick={() => setMainTab('master')}
+            className={`px-4 py-2.5 text-xs font-semibold rounded-lg transition duration-200 cursor-pointer ${mainTab === 'master' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-655 hover:text-slate-900'}`}
+          >
+            Administrador master
+          </button>
+        )}
       </div>
 
       {/* Main Layout Area */}
@@ -8859,7 +8861,7 @@ export default function AdminPanel({
             </div>
           )}
 
-          {mainTab === 'master' && (
+          {mainTab === 'master' && currentUser?.role === 'master_admin' && (
             /* ==================================================== */
             /* MASTER SIDEBAR MENUS                                 */
             /* ==================================================== */
@@ -8892,7 +8894,7 @@ export default function AdminPanel({
         <div className="md:col-span-3 space-y-6">
           {mainTab === 'clube' && renderClubeContent()}
           {mainTab === 'plataforma' && renderPlataformaContent()}
-          {mainTab === 'master' && renderMasterContent()}
+          {mainTab === 'master' && currentUser?.role === 'master_admin' && renderMasterContent()}
         </div>
 
       {/* Modal de Ativação de Tenant (multi-tenancy) — global, acionável tanto
