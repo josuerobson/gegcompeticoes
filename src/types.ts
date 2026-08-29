@@ -39,6 +39,12 @@ export interface User {
   docDeclaracaoUploaded?: boolean;
   guiaTransitoExpiry?: string;
   annuityPlanId?: string;
+  legacyId?: number;
+  cellPhone?: string;
+  affiliationType?: string;
+  bookNumber?: string;
+  isActive?: boolean;
+  isBlocked?: boolean;
 }
 
 export interface AnnuityPlan {
@@ -73,6 +79,10 @@ export interface Club {
   docCnpjUploaded?: boolean;
   docCrUploaded?: boolean;
   docAlvaraUploaded?: boolean;
+  legacyId?: number;
+  cellPhone?: string;
+  crValidity?: string;
+  isBlocked?: boolean;
 }
 
 export interface Comment {

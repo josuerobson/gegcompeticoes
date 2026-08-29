@@ -67,6 +67,12 @@ function mapUser(u: any): User {
     docDeclaracaoUploaded: Boolean(u.doc_declaracao_key),
     guiaTransitoExpiry: u.guia_transito_expiry || undefined,
     annuityPlanId: u.annuity_plan_id || undefined,
+    legacyId: u.legacy_id ?? undefined,
+    cellPhone: u.cell_phone || undefined,
+    affiliationType: u.affiliation_type || undefined,
+    bookNumber: u.book_number || undefined,
+    isActive: u.is_active ?? undefined,
+    isBlocked: u.is_blocked ?? undefined,
   };
 }
 
@@ -105,6 +111,10 @@ function mapClub(c: any): Club {
     docCnpjUploaded: Boolean(c.doc_cnpj_key),
     docCrUploaded: Boolean(c.doc_cr_key),
     docAlvaraUploaded: Boolean(c.doc_alvara_key),
+    legacyId: c.legacy_id ?? undefined,
+    cellPhone: c.cell_phone || undefined,
+    crValidity: c.cr_validity || undefined,
+    isBlocked: c.is_blocked ?? undefined,
   };
 }
 
@@ -1015,6 +1025,152 @@ app.post('/api/admin/clubs', requireAdmin, async (req, res) => {
     await client.query('ROLLBACK');
     console.error('Admin create club database error:', e);
     res.status(500).json({ error: 'Erro ao cadastrar clube.' });
+  } finally {
+    client.release();
+  }
+});
+
+// Importação única do sistema legado (multicadastro) — clubes filiados e
+// membros do Clube de Tiro Aranãs. Dedup, placeholder de e-mail vazio e
+// resolução de vínculo quebrado já vêm resolvidos no payload (feito no script
+// de extração); este endpoint só valida e grava. Idempotente via legacy_id
+// (ON CONFLICT DO UPDATE), então pode ser rodado de novo com segurança.
+app.post('/api/admin/import/legacy', requireMasterAdmin, async (req, res) => {
+  const { clubs, members } = req.body as {
+    clubs: Array<{
+      legacyId: number; isAranas?: boolean; name: string; cnpj: string; responsibleName?: string;
+      crNumber?: string; crValidity?: string; phone?: string; cellPhone?: string; email: string;
+      cep?: string; address?: string; addressNumber?: string; complement?: string; neighborhood?: string;
+      city?: string; state?: string; isBlocked?: boolean; password: string;
+    }>;
+    members: Array<{
+      legacyId: number; fullName: string; cpf: string; birthDate?: string; isBlocked?: boolean;
+      rg?: string; rgIssuer?: string; rgIssueDate?: string; fatherName?: string; motherName?: string;
+      sex?: string; crNumber?: string; crValidity?: string; militaryRegion?: string; nationality?: string;
+      phone?: string; cellPhone?: string; email: string; cep?: string; address?: string; addressNumber?: string;
+      complement?: string; neighborhood?: string; city?: string; state?: string; password: string;
+      affiliationType?: string; bookNumber?: string; isActive?: boolean; memberSince?: string;
+      clubLegacyId?: number | null;
+    }>;
+  };
+
+  if (!Array.isArray(clubs) || !Array.isArray(members)) {
+    return res.status(400).json({ error: 'Payload deve conter arrays "clubs" e "members".' });
+  }
+
+  const client = await pool.connect();
+  const legacyClubIdToNewId: Record<number, string> = {};
+  const errors: string[] = [];
+  let clubsImported = 0;
+  let membersImported = 0;
+
+  try {
+    await client.query('BEGIN');
+
+    for (const c of clubs) {
+      await client.query('SAVEPOINT sp_import_item');
+      try {
+        if (c.isAranas) {
+          await client.query(
+            `UPDATE clubs SET cnpj = $1, responsible_name = $2, cr_number = $3, cr_validity = $4,
+               phone = $5, cell_phone = $6, email = $7, cep = $8, address = $9, address_number = $10,
+               complement = $11, neighborhood = $12, city = $13, state = $14, is_blocked = $15, legacy_id = $16
+             WHERE id = 'club_aranas'`,
+            [c.cnpj, c.responsibleName || null, c.crNumber || null, c.crValidity || null,
+             c.phone || null, c.cellPhone || null, c.email, c.cep || null, c.address || null, c.addressNumber || null,
+             c.complement || null, c.neighborhood || null, c.city || null, c.state || null, Boolean(c.isBlocked), c.legacyId]
+          );
+          legacyClubIdToNewId[c.legacyId] = 'club_aranas';
+        } else {
+          const newClubId = `club_legacy_${c.legacyId}`;
+          await client.query(
+            `INSERT INTO clubs (id, name, cnpj, phone, cell_phone, is_premium, created_at, cr_number, cr_validity,
+               responsible_name, email, cep, address, address_number, complement, neighborhood, city, state,
+               is_blocked, parent_club_id, legacy_id)
+             VALUES ($1,$2,$3,$4,$5,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'club_aranas',$19)
+             ON CONFLICT (legacy_id) DO UPDATE SET
+               name = EXCLUDED.name, cnpj = EXCLUDED.cnpj, phone = EXCLUDED.phone, cell_phone = EXCLUDED.cell_phone,
+               cr_number = EXCLUDED.cr_number, cr_validity = EXCLUDED.cr_validity, responsible_name = EXCLUDED.responsible_name,
+               email = EXCLUDED.email, cep = EXCLUDED.cep, address = EXCLUDED.address, address_number = EXCLUDED.address_number,
+               complement = EXCLUDED.complement, neighborhood = EXCLUDED.neighborhood, city = EXCLUDED.city, state = EXCLUDED.state,
+               is_blocked = EXCLUDED.is_blocked
+             RETURNING id`,
+            [newClubId, c.name, c.cnpj, c.phone || null, c.cellPhone || null, new Date().toISOString().split('T')[0],
+             c.crNumber || null, c.crValidity || null, c.responsibleName || null, c.email, c.cep || null, c.address || null,
+             c.addressNumber || null, c.complement || null, c.neighborhood || null, c.city || null, c.state || null,
+             Boolean(c.isBlocked), c.legacyId]
+          );
+          legacyClubIdToNewId[c.legacyId] = newClubId;
+
+          // Login de gestor do clube importado (a própria senha do legado, já em texto puro).
+          const existingAdminRes = await client.query(`SELECT id FROM users WHERE club_id = $1 AND role = 'club_admin' LIMIT 1`, [newClubId]);
+          if (existingAdminRes.rows.length === 0) {
+            const adminUserId = `user_legacy_club_${c.legacyId}`;
+            const username = await uniqueUsername(client, slugify(c.name));
+            await client.query(
+              `INSERT INTO users (id, email, username, full_name, avatar_url, bio, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, cpf, phone, password_hash)
+               VALUES ($1,$2,$3,$4,$5,$6,true,$7,'club_admin',false,$8,true,$9,$10,$11)
+               ON CONFLICT (id) DO NOTHING`,
+              [adminUserId, c.email, username, c.responsibleName || c.name, DEFAULT_AVATAR, `Administrador do clube ${c.name}.`,
+               new Date().toISOString().split('T')[0], newClubId, c.cnpj, c.phone || c.cellPhone || null, hashPassword(c.password)]
+            );
+          }
+          clubsImported++;
+        }
+      } catch (e: any) {
+        await client.query('ROLLBACK TO SAVEPOINT sp_import_item');
+        errors.push(`Clube legacyId=${c.legacyId} (${c.name}): ${e.message}`);
+      }
+    }
+
+    for (const m of members) {
+      await client.query('SAVEPOINT sp_import_item');
+      try {
+        const clubId = (m.clubLegacyId && legacyClubIdToNewId[m.clubLegacyId]) || 'club_aranas';
+        const userId = `user_legacy_${m.legacyId}`;
+        const username = await uniqueUsername(client, slugify(m.fullName));
+        await client.query(
+          `INSERT INTO users (
+             id, email, username, full_name, avatar_url, bio, cr_number, is_club_member, member_since, role,
+             has_paid_signature, club_id, is_profile_complete, cpf, rg, phone, password_hash, birth_date, sex,
+             rg_issuer, rg_issue_date, father_name, mother_name, cr_validity, military_region, nationality,
+             cep, address, address_number, complement, neighborhood, city, state,
+             legacy_id, cell_phone, affiliation_type, book_number, is_active, is_blocked
+           )
+           VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,'member',false,$9,false,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35)
+           ON CONFLICT (legacy_id) DO UPDATE SET
+             email = EXCLUDED.email, full_name = EXCLUDED.full_name, cr_number = EXCLUDED.cr_number,
+             club_id = EXCLUDED.club_id, cpf = EXCLUDED.cpf, rg = EXCLUDED.rg, phone = EXCLUDED.phone,
+             birth_date = EXCLUDED.birth_date, sex = EXCLUDED.sex, rg_issuer = EXCLUDED.rg_issuer,
+             rg_issue_date = EXCLUDED.rg_issue_date, father_name = EXCLUDED.father_name, mother_name = EXCLUDED.mother_name,
+             cr_validity = EXCLUDED.cr_validity, military_region = EXCLUDED.military_region, nationality = EXCLUDED.nationality,
+             cep = EXCLUDED.cep, address = EXCLUDED.address, address_number = EXCLUDED.address_number,
+             complement = EXCLUDED.complement, neighborhood = EXCLUDED.neighborhood, city = EXCLUDED.city, state = EXCLUDED.state,
+             cell_phone = EXCLUDED.cell_phone, affiliation_type = EXCLUDED.affiliation_type, book_number = EXCLUDED.book_number,
+             is_active = EXCLUDED.is_active, is_blocked = EXCLUDED.is_blocked
+           RETURNING id`,
+          [userId, m.email, username, m.fullName, DEFAULT_AVATAR, `Atleta G&G Competições.`, m.crNumber || null,
+           m.memberSince || new Date().toISOString().split('T')[0], clubId, m.cpf, m.rg || null, m.phone || m.cellPhone || null,
+           hashPassword(m.password), m.birthDate || null, m.sex || null, m.rgIssuer || null, m.rgIssueDate || null,
+           m.fatherName || null, m.motherName || null, m.crValidity || null, m.militaryRegion || null, m.nationality || null,
+           m.cep || null, m.address || null, m.addressNumber || null, m.complement || null, m.neighborhood || null,
+           m.city || null, m.state || null, m.legacyId, m.cellPhone || null, m.affiliationType || null, m.bookNumber || null,
+           m.isActive ?? null, Boolean(m.isBlocked)]
+        );
+        await recomputeUserProfileComplete(client, userId);
+        membersImported++;
+      } catch (e: any) {
+        await client.query('ROLLBACK TO SAVEPOINT sp_import_item');
+        errors.push(`Membro legacyId=${m.legacyId} (${m.fullName}): ${e.message}`);
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, clubsImported, membersImported, errors });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Legacy import database error:', err);
+    res.status(500).json({ error: 'Erro ao importar dados do legado.' });
   } finally {
     client.release();
   }

@@ -69,6 +69,16 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS parent_club_id TEXT REFERENCES clubs(id);
     `);
 
+    // Campos trazidos da importação do sistema legado (multicadastro).
+    // legacy_id permite reprocessar a importação sem duplicar registros.
+    await client.query(`
+      ALTER TABLE clubs
+        ADD COLUMN IF NOT EXISTS legacy_id INTEGER UNIQUE,
+        ADD COLUMN IF NOT EXISTS cell_phone TEXT,
+        ADD COLUMN IF NOT EXISTS cr_validity TEXT,
+        ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN NOT NULL DEFAULT FALSE;
+    `);
+
     // Multi-tenancy: every club (except the master itself) belongs to a "parent" tenant —
     // the club it registered under, or the club whose admin created it. Existing rows
     // predate this column, so they backfill to the master club (today's implicit default).
@@ -148,6 +158,18 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS doc_rg_cnh_key TEXT,
         ADD COLUMN IF NOT EXISTS doc_cr_key TEXT,
         ADD COLUMN IF NOT EXISTS doc_declaracao_key TEXT;
+    `);
+
+    // Campos trazidos da importação do sistema legado (multicadastro).
+    // legacy_id permite reprocessar a importação sem duplicar registros.
+    await client.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS legacy_id INTEGER UNIQUE,
+        ADD COLUMN IF NOT EXISTS cell_phone TEXT,
+        ADD COLUMN IF NOT EXISTS affiliation_type TEXT,
+        ADD COLUMN IF NOT EXISTS book_number TEXT,
+        ADD COLUMN IF NOT EXISTS is_active BOOLEAN,
+        ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN NOT NULL DEFAULT FALSE;
     `);
 
     // The role CHECK constraint on a pre-existing users table may still be the old
