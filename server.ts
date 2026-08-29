@@ -1483,19 +1483,60 @@ app.patch('/api/users/me/profile', requireAuth, async (req, res) => {
 app.patch('/api/admin/members/:id/profile', requireAdmin, async (req, res) => {
   const currentUser = (req as any).user as User;
   const memberId = req.params.id;
+  const { clubId: bodyClubId, cpf: bodyCpf, email: bodyEmail, ...profileFields } = req.body;
+  const isMasterAdmin = currentUser.role === 'master_admin';
 
   try {
     const memberCheck = await pool.query('SELECT club_id FROM users WHERE id = $1', [memberId]);
     if (memberCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Membro não encontrado.' });
     }
-    if (memberCheck.rows[0].club_id !== currentUser.clubId) {
+    if (!isMasterAdmin && memberCheck.rows[0].club_id !== currentUser.clubId) {
       return res.status(403).json({ error: 'Este membro não pertence ao seu clube.' });
     }
 
-    const user = await applyUserProfileFields(memberId, req.body);
-    if (!user) return res.status(400).json({ error: 'Nenhum campo para atualizar.' });
-    res.json({ user });
+    // Trocar de clube / editar CPF / editar e-mail são exclusivos do master_admin
+    // (tela "Novo Atleta" em Gerenciamento Plataforma) — fora do whitelist
+    // compartilhado com "Meu Cadastro", que nunca deixa o próprio membro mudá-los.
+    if (isMasterAdmin && bodyClubId && bodyClubId !== memberCheck.rows[0].club_id) {
+      const clubCheckRes = await pool.query('SELECT 1 FROM clubs WHERE id = $1', [bodyClubId]);
+      if (clubCheckRes.rows.length === 0) {
+        return res.status(400).json({ error: 'Clube selecionado não encontrado.' });
+      }
+      await pool.query('UPDATE users SET club_id = $1 WHERE id = $2', [bodyClubId, memberId]);
+    }
+    if (isMasterAdmin && bodyCpf) {
+      const cleanCpf = String(bodyCpf).replace(/\D/g, '');
+      const conflictRes = await pool.query(
+        `SELECT 1 FROM users WHERE regexp_replace(cpf, '[^0-9]', '', 'g') = $1 AND id != $2`,
+        [cleanCpf, memberId]
+      );
+      if (conflictRes.rows.length > 0) {
+        return res.status(400).json({ error: 'Já existe outro usuário cadastrado com este CPF.' });
+      }
+      await pool.query('UPDATE users SET cpf = $1 WHERE id = $2', [bodyCpf, memberId]);
+    }
+    if (isMasterAdmin && bodyEmail) {
+      const conflictRes = await pool.query('SELECT 1 FROM users WHERE email = $1 AND id != $2', [bodyEmail, memberId]);
+      if (conflictRes.rows.length > 0) {
+        return res.status(400).json({ error: 'Já existe outro usuário cadastrado com este e-mail.' });
+      }
+      await pool.query('UPDATE users SET email = $1 WHERE id = $2', [bodyEmail, memberId]);
+    }
+
+    const user = await applyUserProfileFields(memberId, profileFields);
+    if (user) return res.json({ user });
+
+    // Nenhum campo do whitelist de perfil mudou, mas clube/CPF/e-mail podem ter mudado.
+    const fullUserRes = await pool.query(
+      `SELECT u.*,
+        COALESCE((SELECT json_agg(follower_id) FROM follows WHERE following_id = u.id), '[]'::json) as followers,
+        COALESCE((SELECT json_agg(following_id) FROM follows WHERE follower_id = u.id), '[]'::json) as following
+      FROM users u WHERE id = $1`,
+      [memberId]
+    );
+    if (fullUserRes.rows.length === 0) return res.status(400).json({ error: 'Nenhum campo para atualizar.' });
+    res.json({ user: mapUser(fullUserRes.rows[0]) });
   } catch (err) {
     console.error('Admin update member profile database error:', err);
     res.status(500).json({ error: 'Erro ao salvar cadastro do membro.' });

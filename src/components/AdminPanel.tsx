@@ -5197,6 +5197,45 @@ export default function AdminPanel({
     }
   };
 
+  // Editar atleta (Novo Atleta) — inclui trocar o clube ao qual pertence,
+  // exclusivo do master_admin.
+  const [editingAthlete, setEditingAthlete] = useState<User | null>(null);
+  const [editAthleteForm, setEditAthleteForm] = useState({ fullName: '', cpf: '', email: '', clubId: '' });
+  const [savingEditAthlete, setSavingEditAthlete] = useState(false);
+  const [editAthleteError, setEditAthleteError] = useState('');
+  const [editAthleteSuccess, setEditAthleteSuccess] = useState(false);
+
+  const startEditingAthlete = (athlete: User) => {
+    setEditingAthlete(athlete);
+    setEditAthleteForm({
+      fullName: athlete.fullName || '',
+      cpf: athlete.cpf || '',
+      email: athlete.email || '',
+      clubId: athlete.clubId || '',
+    });
+    setEditAthleteError('');
+    setEditAthleteSuccess(false);
+  };
+
+  const handleSaveEditAthlete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAthlete) return;
+    setSavingEditAthlete(true);
+    setEditAthleteError('');
+    const ok = await onUpdateMemberProfile(editingAthlete.id, editAthleteForm);
+    setSavingEditAthlete(false);
+    if (ok) {
+      setEditAthleteSuccess(true);
+      if (onRefreshData) await onRefreshData();
+      setTimeout(() => {
+        setEditAthleteSuccess(false);
+        setEditingAthlete(null);
+      }, 1200);
+    } else {
+      setEditAthleteError('Erro ao salvar dados do atleta.');
+    }
+  };
+
   const startEditingClub = (club: Club) => {
     setEditingClub(club);
     setEditClubError('');
@@ -6819,17 +6858,84 @@ export default function AdminPanel({
                   {filteredAthletes.map(u => {
                     const club = clubs.find(c => c.id === u.clubId);
                     return (
-                      <div key={u.id} className="border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row justify-between sm:items-center gap-1 bg-slate-50/50 hover:border-slate-300 transition">
+                      <div key={u.id} className="border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row justify-between sm:items-center gap-2 bg-slate-50/50 hover:border-slate-300 transition">
                         <div>
                           <h4 className="font-bold text-slate-900 text-xs">{u.fullName}</h4>
                           <p className="text-[11px] text-slate-500">CPF: {u.cpf || 'N/I'} • Clube: {club?.name || 'Não vinculado'}</p>
                         </div>
+                        <button
+                          onClick={() => startEditingAthlete(u)}
+                          className="flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-[11px] px-3 py-1.5 rounded-lg transition cursor-pointer shrink-0"
+                        >
+                          <Pencil className="w-3 h-3 text-blue-600" />
+                          Editar
+                        </button>
                       </div>
                     );
                   })}
                 </div>
               )}
             </div>
+
+            {/* Modal de Edição do Atleta */}
+            {editingAthlete && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+                <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl text-slate-800 flex flex-col text-left">
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                    <div>
+                      <h4 className="font-display font-bold text-slate-900 text-base">Editar Atleta</h4>
+                      <p className="text-xs text-slate-400">{editingAthlete.fullName}</p>
+                    </div>
+                    <button onClick={() => setEditingAthlete(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <form onSubmit={handleSaveEditAthlete} className="p-6 space-y-4">
+                    {editAthleteSuccess && (
+                      <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
+                        <CheckCircle className="w-5 h-5 text-emerald-600" />
+                        Atleta atualizado com sucesso!
+                      </div>
+                    )}
+                    {editAthleteError && (
+                      <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{editAthleteError}</div>
+                    )}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Clube</label>
+                      <select
+                        value={editAthleteForm.clubId}
+                        onChange={e => setEditAthleteForm({ ...editAthleteForm, clubId: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                      >
+                        <option value="">Selecione o clube...</option>
+                        {clubs.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <MemberField label="Nome completo" value={editAthleteForm.fullName} onChange={v => setEditAthleteForm({ ...editAthleteForm, fullName: v })} />
+                    <MemberField label="CPF" value={editAthleteForm.cpf} onChange={v => setEditAthleteForm({ ...editAthleteForm, cpf: v })} />
+                    <MemberField label="E-mail" type="email" value={editAthleteForm.email} onChange={v => setEditAthleteForm({ ...editAthleteForm, email: v })} />
+                    <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setEditingAthlete(null)}
+                        className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={savingEditAthlete}
+                        className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-6 py-2.5 rounded-xl font-bold transition shadow-lg shadow-blue-100 cursor-pointer"
+                      >
+                        {savingEditAthlete ? 'Salvando...' : 'Salvar Alterações'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         );
       }
