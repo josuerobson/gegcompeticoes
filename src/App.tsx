@@ -296,7 +296,7 @@ export default function App() {
     if (r.users) setUsers(r.users);
   };
   const refreshClubs = async () => {
-    const r = await fetch('/api/clubs', { headers: buildAuthHeaders() }).then(r => r.json()).catch(() => ({}));
+    const r = await fetch('/api/clubs', { headers: buildAuthHeaders(), cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
     if (r.clubs) setClubs(r.clubs);
   };
   const refreshRegistrations = async (headerOverride?: string) => {
@@ -368,7 +368,7 @@ export default function App() {
         fetch('/api/championships', { headers: authHeaders }).then(r => r.json()),
         targetUserId ? fetch('/api/registrations', { headers: authHeaders }).then(r => r.json()) : Promise.resolve({ registrations: [] }),
         fetch('/api/scores?activeOnly=true', { headers: authHeaders }).then(r => r.json()),
-        fetch('/api/clubs', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/clubs', { headers: authHeaders, cache: 'no-store' }).then(r => r.json()),
         fetch('/api/modalities', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/stages', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/weapons', { headers: authHeaders }).then(r => r.json()),
