@@ -6491,54 +6491,6 @@ export default function AdminPanel({
               )}
             </div>
 
-            {/* Modal de Ativação de Tenant (multi-tenancy) */}
-            {activatingClub && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-                <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl text-slate-800 flex flex-col text-left">
-                  <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-                    <div>
-                      <h4 className="font-display font-bold text-slate-900 text-base">Ativar Recurso Completo</h4>
-                      <p className="text-xs text-slate-400">{activatingClub.name}</p>
-                    </div>
-                    <button onClick={() => setActivatingClub(null)} className="text-slate-400 hover:text-slate-600 p-1">
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                  <form onSubmit={handleActivateTenantSubmit} className="p-6 space-y-4">
-                    <p className="text-xs text-slate-600">
-                      Ao ativar, este clube passa a operar como um ambiente totalmente isolado: campeonatos, modalidades, atletas e feed próprios, sem nenhum compartilhamento com o clube atual. O catálogo de armas é copiado como ponto de partida; as modalidades começam zeradas.
-                    </p>
-                    {activateSuccess && (
-                      <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
-                        <CheckCircle className="w-5 h-5 text-emerald-600" />
-                        Recurso completo ativado com sucesso!
-                      </div>
-                    )}
-                    {activateError && (
-                      <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{activateError}</div>
-                    )}
-                    <MemberField label="Subdomínio" value={activateSubDomain} onChange={setActivateSubDomain} placeholder="ex: meuclube" />
-                    <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
-                      <button
-                        type="button"
-                        onClick={() => setActivatingClub(null)}
-                        className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={activatingSaving}
-                        className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs px-6 py-2.5 rounded-xl font-bold transition shadow-lg shadow-emerald-100 cursor-pointer"
-                      >
-                        {activatingSaving ? 'Ativando...' : 'Confirmar Ativação'}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            )}
-
             {/* Modal de Edição do Clube */}
             {editingClub && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
@@ -8309,10 +8261,40 @@ export default function AdminPanel({
               <Landmark className="w-5 h-5 text-blue-600 animate-pulse" />
             </div>
 
+            {/* Ativação de Recurso Completo (multi-tenancy) — promove um clube já
+                filiado ao Aranãs a um ambiente totalmente isolado */}
+            <div className="space-y-4">
+              <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Clubes Filiados — Ativação de Recurso Completo</h4>
+              <p className="text-[11px] text-slate-500 -mt-2">Promova um clube já cadastrado como filiado do Clube de Tiro Aranãs a um tenant isolado, com subdomínio, campeonatos, modalidades e atletas próprios.</p>
+
+              {clubs.filter(c => c.parentClubId === currentUser?.clubId && !c.isPremium).length === 0 ? (
+                <p className="text-xs text-slate-400">Nenhum clube filiado pendente de ativação.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-3">
+                  {clubs.filter(c => c.parentClubId === currentUser?.clubId && !c.isPremium).map((club) => (
+                    <div key={club.id} className="border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-slate-50/50 hover:border-slate-300 transition">
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-slate-900 text-sm">{club.name}</h4>
+                        <p className="text-xs text-slate-600">
+                          <strong>CNPJ:</strong> {club.cnpj || 'Não informado'} • <strong>Diretor:</strong> {club.responsibleName || 'Não informado'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => startActivatingClub(club)}
+                        className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer shadow-2xs shrink-0"
+                      >
+                        Ativar Recurso Completo
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Club List */}
             <div className="space-y-4">
               <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Unidades e Estandes Credenciados</h4>
-              
+
               <div className="grid grid-cols-1 gap-4">
                 {masterClubs.map((club) => {
                   const isPending = club.status === 'Pendente';
@@ -8786,6 +8768,56 @@ export default function AdminPanel({
           {mainTab === 'plataforma' && renderPlataformaContent()}
           {mainTab === 'master' && renderMasterContent()}
         </div>
+
+      {/* Modal de Ativação de Tenant (multi-tenancy) — global, acionável tanto
+          em Gerenciamento Plataforma > Novo Clube quanto em Administrador
+          Master > Gerenciar Clubes */}
+      {activatingClub && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl text-slate-800 flex flex-col text-left">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <div>
+                <h4 className="font-display font-bold text-slate-900 text-base">Ativar Recurso Completo</h4>
+                <p className="text-xs text-slate-400">{activatingClub.name}</p>
+              </div>
+              <button onClick={() => setActivatingClub(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleActivateTenantSubmit} className="p-6 space-y-4">
+              <p className="text-xs text-slate-600">
+                Ao ativar, este clube passa a operar como um ambiente totalmente isolado: campeonatos, modalidades, atletas e feed próprios, sem nenhum compartilhamento com o clube atual. O catálogo de armas é copiado como ponto de partida; as modalidades começam zeradas.
+              </p>
+              {activateSuccess && (
+                <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
+                  <CheckCircle className="w-5 h-5 text-emerald-600" />
+                  Recurso completo ativado com sucesso!
+                </div>
+              )}
+              {activateError && (
+                <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{activateError}</div>
+              )}
+              <MemberField label="Subdomínio" value={activateSubDomain} onChange={setActivateSubDomain} placeholder="ex: meuclube" />
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setActivatingClub(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={activatingSaving}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs px-6 py-2.5 rounded-xl font-bold transition shadow-lg shadow-emerald-100 cursor-pointer"
+                >
+                  {activatingSaving ? 'Ativando...' : 'Confirmar Ativação'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* POPUP: LISTA DE INSCRITOS */}
       {selectedChampForInscritosModal && (
