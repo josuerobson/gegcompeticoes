@@ -8927,6 +8927,9 @@ export default function AdminPanel({
                 <h4 className="text-[10px] font-bold text-slate-500 uppercase">
                   Acesso do Gestor {activatingClubHasAdmin ? '(opcional — preencha para redefinir)' : '(obrigatório, este clube ainda não tem login)'}
                 </h4>
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  O login é sempre por CPF, nunca por e-mail. Para clube, o campo "CPF" na tela de login é o <strong>CNPJ do clube</strong>{activatingClub.cnpj ? <> — neste caso <strong>{activatingClub.cnpj}</strong></> : ' — este clube ainda não tem CNPJ cadastrado, edite o cadastro antes de definir o acesso'}.
+                </p>
                 <MemberField label="Nome do Responsável" value={activateAdminFullName} onChange={setActivateAdminFullName} />
                 <MemberField label="E-mail de Acesso" type="email" value={activateAdminEmail} onChange={setActivateAdminEmail} />
                 <MemberField label="Senha de Acesso" type="password" value={activateAdminPassword} onChange={setActivateAdminPassword} />
@@ -8970,6 +8973,9 @@ export default function AdminPanel({
             <form onSubmit={handleSaveAccessSubmit} className="p-6 space-y-4">
               <p className="text-xs text-slate-600">
                 Define ou redefine o e-mail e a senha de login do administrador (club_admin) deste clube.
+              </p>
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                O login é sempre por CPF, nunca por e-mail. Para clube, o campo "CPF" na tela de login é o <strong>CNPJ do clube</strong>{managingAccessClub.cnpj ? <> — neste caso <strong>{managingAccessClub.cnpj}</strong></> : ' — este clube ainda não tem CNPJ cadastrado, edite o cadastro antes de salvar'}.
               </p>
               {accessSuccess && (
                 <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">

@@ -1455,6 +1455,13 @@ app.post('/api/admin/clubs/:id/admin-credentials', requireMasterAdmin, async (re
     }
     const club = mapClub(clubRes.rows[0]);
 
+    // Login é sempre por CPF (nunca e-mail) — para contas de clube, o "CPF" de
+    // login é o próprio CNPJ do clube, igual ao padrão já usado em Novo Clube
+    // e no cadastro público de clube. Sem isso o gestor não consegue entrar.
+    if (!club.cnpj) {
+      return res.status(400).json({ error: 'Este clube não tem CNPJ cadastrado. Edite o clube e informe o CNPJ antes de definir o acesso do gestor — é isso que ele vai digitar no campo CPF do login.' });
+    }
+
     const adminRes = await pool.query(
       `SELECT id FROM users WHERE club_id = $1 AND role = 'club_admin' ORDER BY member_since ASC NULLS LAST LIMIT 1`,
       [clubId]
@@ -1468,9 +1475,17 @@ app.post('/api/admin/clubs/:id/admin-credentials', requireMasterAdmin, async (re
       return res.status(400).json({ error: 'Este e-mail já está em uso por outro usuário.' });
     }
 
+    const cleanCnpj = String(club.cnpj).replace(/\D/g, '');
+    const cpfConflictRes = existingAdminId
+      ? await pool.query(`SELECT 1 FROM users WHERE regexp_replace(cpf, '[^0-9]', '', 'g') = $1 AND id != $2`, [cleanCnpj, existingAdminId])
+      : await pool.query(`SELECT 1 FROM users WHERE regexp_replace(cpf, '[^0-9]', '', 'g') = $1`, [cleanCnpj]);
+    if (cpfConflictRes.rows.length > 0) {
+      return res.status(400).json({ error: 'Já existe outro usuário cadastrado com o CNPJ deste clube como CPF de login.' });
+    }
+
     if (existingAdminId) {
-      const updates = ['email = $1', 'password_hash = $2'];
-      const values: unknown[] = [email, hashPassword(password)];
+      const updates = ['email = $1', 'password_hash = $2', 'cpf = $3'];
+      const values: unknown[] = [email, hashPassword(password), club.cnpj];
       if (fullName) {
         updates.push(`full_name = $${values.length + 1}`);
         values.push(fullName);
@@ -1494,9 +1509,9 @@ app.post('/api/admin/clubs/:id/admin-credentials', requireMasterAdmin, async (re
       const userId = `user_${Date.now()}`;
       const username = await uniqueUsername(client, slugify(fullName));
       await client.query(
-        `INSERT INTO users (id, email, username, full_name, avatar_url, bio, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, password_hash)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-        [userId, email, username, fullName, DEFAULT_AVATAR, `Administrador do clube ${club.name}.`, true, new Date().toISOString().split('T')[0], 'club_admin', false, clubId, false, hashPassword(password)]
+        `INSERT INTO users (id, email, username, full_name, avatar_url, bio, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, cpf, password_hash)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+        [userId, email, username, fullName, DEFAULT_AVATAR, `Administrador do clube ${club.name}.`, true, new Date().toISOString().split('T')[0], 'club_admin', false, clubId, false, club.cnpj, hashPassword(password)]
       );
       await client.query('COMMIT');
       const fullUserRes = await client.query(
