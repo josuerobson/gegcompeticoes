@@ -1074,7 +1074,7 @@ app.post('/api/admin/import/legacy', requireMasterAdmin, async (req, res) => {
       legacyId: number; isAranas?: boolean; name: string; cnpj: string; responsibleName?: string;
       crNumber?: string; crValidity?: string; phone?: string; cellPhone?: string; email: string;
       cep?: string; address?: string; addressNumber?: string; complement?: string; neighborhood?: string;
-      city?: string; state?: string; isBlocked?: boolean; password: string;
+      city?: string; state?: string; isBlocked?: boolean; password: string; logoUrl?: string;
     }>;
     members: Array<{
       legacyId: number; fullName: string; cpf: string; birthDate?: string; isBlocked?: boolean;
@@ -1083,7 +1083,7 @@ app.post('/api/admin/import/legacy', requireMasterAdmin, async (req, res) => {
       phone?: string; cellPhone?: string; email: string; cep?: string; address?: string; addressNumber?: string;
       complement?: string; neighborhood?: string; city?: string; state?: string; password: string;
       affiliationType?: string; bookNumber?: string; isActive?: boolean; memberSince?: string;
-      clubLegacyId?: number | null;
+      clubLegacyId?: number | null; avatarUrl?: string;
     }>;
   };
 
@@ -1107,11 +1107,13 @@ app.post('/api/admin/import/legacy', requireMasterAdmin, async (req, res) => {
           await client.query(
             `UPDATE clubs SET cnpj = $1, responsible_name = $2, cr_number = $3, cr_validity = $4,
                phone = $5, cell_phone = $6, email = $7, cep = $8, address = $9, address_number = $10,
-               complement = $11, neighborhood = $12, city = $13, state = $14, is_blocked = $15, legacy_id = $16
+               complement = $11, neighborhood = $12, city = $13, state = $14, is_blocked = $15, legacy_id = $16,
+               logo_url = COALESCE($17, logo_url)
              WHERE id = 'club_aranas'`,
             [c.cnpj, c.responsibleName || null, c.crNumber || null, c.crValidity || null,
              c.phone || null, c.cellPhone || null, c.email, c.cep || null, c.address || null, c.addressNumber || null,
-             c.complement || null, c.neighborhood || null, c.city || null, c.state || null, Boolean(c.isBlocked), c.legacyId]
+             c.complement || null, c.neighborhood || null, c.city || null, c.state || null, Boolean(c.isBlocked), c.legacyId,
+             c.logoUrl || null]
           );
           legacyClubIdToNewId[c.legacyId] = 'club_aranas';
         } else {
@@ -1119,19 +1121,19 @@ app.post('/api/admin/import/legacy', requireMasterAdmin, async (req, res) => {
           await client.query(
             `INSERT INTO clubs (id, name, cnpj, phone, cell_phone, is_premium, created_at, cr_number, cr_validity,
                responsible_name, email, cep, address, address_number, complement, neighborhood, city, state,
-               is_blocked, parent_club_id, legacy_id)
-             VALUES ($1,$2,$3,$4,$5,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'club_aranas',$19)
+               is_blocked, parent_club_id, legacy_id, logo_url)
+             VALUES ($1,$2,$3,$4,$5,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'club_aranas',$19,$20)
              ON CONFLICT (legacy_id) DO UPDATE SET
                name = EXCLUDED.name, cnpj = EXCLUDED.cnpj, phone = EXCLUDED.phone, cell_phone = EXCLUDED.cell_phone,
                cr_number = EXCLUDED.cr_number, cr_validity = EXCLUDED.cr_validity, responsible_name = EXCLUDED.responsible_name,
                email = EXCLUDED.email, cep = EXCLUDED.cep, address = EXCLUDED.address, address_number = EXCLUDED.address_number,
                complement = EXCLUDED.complement, neighborhood = EXCLUDED.neighborhood, city = EXCLUDED.city, state = EXCLUDED.state,
-               is_blocked = EXCLUDED.is_blocked
+               is_blocked = EXCLUDED.is_blocked, logo_url = COALESCE(EXCLUDED.logo_url, clubs.logo_url)
              RETURNING id`,
             [newClubId, c.name, c.cnpj, c.phone || null, c.cellPhone || null, new Date().toISOString().split('T')[0],
              c.crNumber || null, c.crValidity || null, c.responsibleName || null, c.email, c.cep || null, c.address || null,
              c.addressNumber || null, c.complement || null, c.neighborhood || null, c.city || null, c.state || null,
-             Boolean(c.isBlocked), c.legacyId]
+             Boolean(c.isBlocked), c.legacyId, c.logoUrl || null]
           );
           legacyClubIdToNewId[c.legacyId] = newClubId;
 
@@ -1189,9 +1191,9 @@ app.post('/api/admin/import/legacy', requireMasterAdmin, async (req, res) => {
              cep = EXCLUDED.cep, address = EXCLUDED.address, address_number = EXCLUDED.address_number,
              complement = EXCLUDED.complement, neighborhood = EXCLUDED.neighborhood, city = EXCLUDED.city, state = EXCLUDED.state,
              cell_phone = EXCLUDED.cell_phone, affiliation_type = EXCLUDED.affiliation_type, book_number = EXCLUDED.book_number,
-             is_active = EXCLUDED.is_active, is_blocked = EXCLUDED.is_blocked
+             is_active = EXCLUDED.is_active, is_blocked = EXCLUDED.is_blocked, avatar_url = EXCLUDED.avatar_url
            RETURNING id`,
-          [userId, m.email, username, m.fullName, DEFAULT_AVATAR, `Atleta G&G Competições.`, m.crNumber || null,
+          [userId, m.email, username, m.fullName, m.avatarUrl || DEFAULT_AVATAR, `Atleta G&G Competições.`, m.crNumber || null,
            m.memberSince || new Date().toISOString().split('T')[0], clubId, m.cpf, m.rg || null, m.phone || m.cellPhone || null,
            hashPassword(m.password), m.birthDate || null, m.sex || null, m.rgIssuer || null, m.rgIssueDate || null,
            m.fatherName || null, m.motherName || null, m.crValidity || null, m.militaryRegion || null, m.nationality || null,
