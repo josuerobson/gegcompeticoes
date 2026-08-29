@@ -12,6 +12,10 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
+// Domínio base da plataforma multi-tenant — cada clube ativado responde em
+// {subDomain}.PLATFORM_BASE_DOMAIN assim que o DNS/EasyPanel apontar para lá.
+const PLATFORM_BASE_DOMAIN = 'gegcompeticoes.com.br';
+
 const GALLERY_IMAGES = [
   { id: 'ipsc_range', label: 'Estande IPSC', url: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80" },
   { id: 'precision_rifle', label: 'Carabina Precisão', url: "https://images.unsplash.com/photo-1599819811279-d5ad9cccf838?w=800&auto=format&fit=crop&q=80" },
@@ -4783,7 +4787,7 @@ export default function AdminPanel({
   };
 
   // Master mock states
-  const [masterClubs, setMasterClubs] = useState([
+  const [masterClubs, setMasterClubs] = useState<{ id: string; name: string; location: string; shootersCount: number; status: string; president: string; subDomain?: string }[]>([
     { id: '1', name: 'Unidade Sede (Brasília)', location: 'Brasília - DF', shootersCount: 142, status: 'Ativo', president: 'Guilherme Guedes' },
     { id: '2', name: 'G&G Sobradinho', location: 'Sobradinho - DF', shootersCount: 68, status: 'Ativo', president: 'Gabriel Guedes' },
     { id: '3', name: 'G&G Taguatinga', location: 'Taguatinga - DF', shootersCount: 54, status: 'Ativo', president: 'Carlos Souza' },
@@ -4805,7 +4809,8 @@ export default function AdminPanel({
             location,
             shootersCount,
             status,
-            president: c.responsibleName || 'Não Informado'
+            president: c.responsibleName || 'Não Informado',
+            subDomain: c.subDomain
           };
         });
       });
@@ -8314,8 +8319,15 @@ export default function AdminPanel({
                         </div>
                         <p className="text-xs text-slate-500">{club.location} • Diretor: {club.president}</p>
                         <p className="text-[10px] text-slate-400 font-mono">Total de Atiradores: {club.shootersCount} federados</p>
+                        <p className="text-[10px] font-mono">
+                          {club.subDomain ? (
+                            <span className="text-blue-600 font-bold">{club.subDomain}.{PLATFORM_BASE_DOMAIN}</span>
+                          ) : (
+                            <span className="text-slate-400">Sem subdomínio definido</span>
+                          )}
+                        </p>
                       </div>
-                      
+
                       <div className="flex gap-2">
                         {isPending ? (
                           <>
