@@ -851,6 +851,26 @@ export default function App() {
     }
   };
 
+  const handleUpdateClubSubdomain = async (clubId: string, subDomain: string): Promise<{ club?: Club; error?: string }> => {
+    if (!currentUser) return { error: 'Não autenticado.' };
+    try {
+      const res = await fetch(`/api/admin/clubs/${clubId}/subdomain`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify({ subDomain })
+      });
+      const data = await res.json();
+      if (res.ok && data.club) {
+        await refreshClubs();
+        return { club: data.club };
+      }
+      return { error: data.error || 'Erro ao atualizar subdomínio.' };
+    } catch (err) {
+      console.error('Erro ao atualizar subdomínio do clube:', err);
+      return { error: 'Erro ao atualizar subdomínio.' };
+    }
+  };
+
   const handleGetClubAdmin = async (clubId: string): Promise<User | null> => {
     if (!currentUser) return null;
     try {
@@ -2426,6 +2446,7 @@ export default function App() {
               onActivateClubTenant={handleActivateClubTenant}
               onSetClubAdminCredentials={handleSetClubAdminCredentials}
               onGetClubAdmin={handleGetClubAdmin}
+              onUpdateClubSubdomain={handleUpdateClubSubdomain}
               multiChampionships={multiChampionships}
             />
           )}

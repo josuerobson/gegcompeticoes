@@ -72,6 +72,7 @@ interface AdminPanelProps {
   onActivateClubTenant?: (clubId: string, subDomain: string) => Promise<{ club?: Club; error?: string }>;
   onSetClubAdminCredentials?: (clubId: string, fields: { fullName?: string; email: string; password: string }) => Promise<{ user?: User; error?: string }>;
   onGetClubAdmin?: (clubId: string) => Promise<User | null>;
+  onUpdateClubSubdomain?: (clubId: string, subDomain: string) => Promise<{ club?: Club; error?: string }>;
   multiChampionships?: MultiChampionship[];
 }
 
@@ -4496,6 +4497,7 @@ export default function AdminPanel({
   onActivateClubTenant,
   onSetClubAdminCredentials,
   onGetClubAdmin,
+  onUpdateClubSubdomain,
   multiChampionships = []
 }: AdminPanelProps) {
   const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
@@ -5287,6 +5289,7 @@ export default function AdminPanel({
   // "Gerenciar Acesso" — redefine e-mail/senha do gestor de um clube já
   // ativado, a qualquer momento (sem mexer no subdomínio/ativação).
   const [managingAccessClub, setManagingAccessClub] = useState<Club | null>(null);
+  const [accessSubDomain, setAccessSubDomain] = useState('');
   const [accessFullName, setAccessFullName] = useState('');
   const [accessEmail, setAccessEmail] = useState('');
   const [accessPassword, setAccessPassword] = useState('');
@@ -5296,6 +5299,7 @@ export default function AdminPanel({
 
   const startManagingAccess = async (club: Club) => {
     setManagingAccessClub(club);
+    setAccessSubDomain(club.subDomain || '');
     setAccessFullName(club.responsibleName || '');
     setAccessEmail(club.email || '');
     setAccessPassword('');
@@ -5312,29 +5316,55 @@ export default function AdminPanel({
 
   const handleSaveAccessSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!managingAccessClub || !onSetClubAdminCredentials) return;
-    if (!accessEmail.trim() || !accessPassword.trim()) {
-      setAccessError('Preencha e-mail e senha de acesso.');
+    if (!managingAccessClub) return;
+
+    const cleanSubDomain = accessSubDomain.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+    const subDomainChanged = cleanSubDomain && cleanSubDomain !== (managingAccessClub.subDomain || '');
+    const wantsCredentialUpdate = accessPassword.trim().length > 0;
+
+    if (!subDomainChanged && !wantsCredentialUpdate) {
+      setAccessError('Altere o subdomínio ou informe uma nova senha para salvar.');
       return;
     }
+    if (wantsCredentialUpdate && !accessEmail.trim()) {
+      setAccessError('Informe o e-mail para redefinir o acesso.');
+      return;
+    }
+
     setSavingAccess(true);
     setAccessError('');
-    const result = await onSetClubAdminCredentials(managingAccessClub.id, {
-      fullName: accessFullName.trim() || undefined,
-      email: accessEmail.trim(),
-      password: accessPassword.trim()
-    });
-    setSavingAccess(false);
-    if (result.user) {
-      setAccessSuccess(true);
-      if (onRefreshData) await onRefreshData();
-      setTimeout(() => {
-        setAccessSuccess(false);
-        setManagingAccessClub(null);
-      }, 1800);
-    } else {
-      setAccessError(result.error || 'Erro ao definir acesso do gestor.');
+
+    if (subDomainChanged && onUpdateClubSubdomain) {
+      const subResult = await onUpdateClubSubdomain(managingAccessClub.id, cleanSubDomain);
+      if (!subResult.club) {
+        setSavingAccess(false);
+        setAccessError(subResult.error || 'Erro ao atualizar subdomínio.');
+        return;
+      }
     }
+
+    if (wantsCredentialUpdate && onSetClubAdminCredentials) {
+      const credResult = await onSetClubAdminCredentials(managingAccessClub.id, {
+        fullName: accessFullName.trim() || undefined,
+        email: accessEmail.trim(),
+        password: accessPassword.trim()
+      });
+      if (!credResult.user) {
+        setSavingAccess(false);
+        setAccessError(subDomainChanged
+          ? `Subdomínio atualizado, mas houve erro ao redefinir o acesso: ${credResult.error || 'erro desconhecido'}`
+          : (credResult.error || 'Erro ao definir acesso do gestor.'));
+        return;
+      }
+    }
+
+    setSavingAccess(false);
+    setAccessSuccess(true);
+    if (onRefreshData) await onRefreshData();
+    setTimeout(() => {
+      setAccessSuccess(false);
+      setManagingAccessClub(null);
+    }, 1800);
   };
 
   const saveMemberSection = async (sectionId: string, fields: Record<string, string>) => {
@@ -8979,7 +9009,7 @@ export default function AdminPanel({
             </div>
             <form onSubmit={handleSaveAccessSubmit} className="p-6 space-y-4">
               <p className="text-xs text-slate-600">
-                Define ou redefine a senha de login do administrador (club_admin) deste clube.
+                Altere o subdomínio do clube e/ou defina uma nova senha de login do administrador (club_admin). Deixe a senha em branco para manter a atual.
               </p>
               {!managingAccessClub.cnpj && (
                 <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -8995,10 +9025,14 @@ export default function AdminPanel({
               {accessError && (
                 <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{accessError}</div>
               )}
-              <MemberField label="CPF/CNPJ de Acesso (login)" value={managingAccessClub.cnpj || ''} onChange={() => {}} disabled placeholder="Defina o CNPJ do clube em Editar" />
-              <MemberField label="Nome do Responsável" value={accessFullName} onChange={setAccessFullName} />
-              <MemberField label="E-mail" type="email" value={accessEmail} onChange={setAccessEmail} />
-              <MemberField label="Senha de Acesso" type="password" value={accessPassword} onChange={setAccessPassword} placeholder="Digite a nova senha" />
+              <MemberField label="Subdomínio" value={accessSubDomain} onChange={setAccessSubDomain} placeholder="ex: meuclube" />
+              <div className="pt-2 border-t border-slate-100 space-y-3">
+                <h4 className="text-[10px] font-bold text-slate-500 uppercase">Acesso do Gestor (opcional — preencha a senha para redefinir)</h4>
+                <MemberField label="CPF/CNPJ de Acesso (login)" value={managingAccessClub.cnpj || ''} onChange={() => {}} disabled placeholder="Defina o CNPJ do clube em Editar" />
+                <MemberField label="Nome do Responsável" value={accessFullName} onChange={setAccessFullName} />
+                <MemberField label="E-mail" type="email" value={accessEmail} onChange={setAccessEmail} />
+                <MemberField label="Senha de Acesso" type="password" value={accessPassword} onChange={setAccessPassword} placeholder="Digite a nova senha" />
+              </div>
               <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
                 <button
                   type="button"

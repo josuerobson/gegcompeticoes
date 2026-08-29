@@ -1416,6 +1416,37 @@ app.post('/api/admin/clubs/:id/activate-tenant', requireMasterAdmin, async (req,
   }
 });
 
+// Altera o subdomínio de um clube já ativado, a qualquer momento (ex.: trocar
+// de subdomínio de testes para o definitivo antes de iniciar testes oficiais).
+app.patch('/api/admin/clubs/:id/subdomain', requireMasterAdmin, async (req, res) => {
+  const clubId = req.params.id;
+  const { subDomain } = req.body;
+
+  const cleanSubDomain = String(subDomain || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+  if (!cleanSubDomain) {
+    return res.status(400).json({ error: 'Informe um subdomínio válido (apenas letras, números e hífen).' });
+  }
+
+  try {
+    const clubRes = await pool.query('SELECT * FROM clubs WHERE id = $1', [clubId]);
+    if (clubRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Clube não encontrado.' });
+    }
+
+    const subDomainCheck = await pool.query('SELECT 1 FROM clubs WHERE sub_domain = $1 AND id != $2', [cleanSubDomain, clubId]);
+    if (subDomainCheck.rows.length > 0) {
+      return res.status(400).json({ error: 'Este subdomínio já está em uso por outro clube.' });
+    }
+
+    await pool.query('UPDATE clubs SET sub_domain = $1 WHERE id = $2', [cleanSubDomain, clubId]);
+    const updatedRes = await pool.query('SELECT * FROM clubs WHERE id = $1', [clubId]);
+    res.json({ club: mapClub(updatedRes.rows[0]) });
+  } catch (err) {
+    console.error('Update club subdomain database error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar subdomínio do clube.' });
+  }
+});
+
 // Define/redefine o login (e-mail + senha) do gestor (club_admin) de um clube —
 // usado tanto no momento da ativação de tenant quanto para alterar o acesso a
 // qualquer momento depois. Se o clube já tem um club_admin, atualiza esse
