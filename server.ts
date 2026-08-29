@@ -1125,17 +1125,26 @@ app.post('/api/admin/import/legacy', requireMasterAdmin, async (req, res) => {
           legacyClubIdToNewId[c.legacyId] = newClubId;
 
           // Login de gestor do clube importado (a própria senha do legado, já em texto puro).
+          // Savepoint próprio: se o e-mail já pertencer a um usuário sem relação com
+          // este clube (ex.: pessoa que já tinha conta própria no sistema novo), a
+          // falha do login não deve derrubar o clube em si nem os membros ligados a ele.
           const existingAdminRes = await client.query(`SELECT id FROM users WHERE club_id = $1 AND role = 'club_admin' LIMIT 1`, [newClubId]);
           if (existingAdminRes.rows.length === 0) {
-            const adminUserId = `user_legacy_club_${c.legacyId}`;
-            const username = await uniqueUsername(client, slugify(c.name));
-            await client.query(
-              `INSERT INTO users (id, email, username, full_name, avatar_url, bio, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, cpf, phone, password_hash)
-               VALUES ($1,$2,$3,$4,$5,$6,true,$7,'club_admin',false,$8,true,$9,$10,$11)
-               ON CONFLICT (id) DO NOTHING`,
-              [adminUserId, c.email, username, c.responsibleName || c.name, DEFAULT_AVATAR, `Administrador do clube ${c.name}.`,
-               new Date().toISOString().split('T')[0], newClubId, c.cnpj, c.phone || c.cellPhone || null, hashPassword(c.password)]
-            );
+            await client.query('SAVEPOINT sp_import_club_admin');
+            try {
+              const adminUserId = `user_legacy_club_${c.legacyId}`;
+              const username = await uniqueUsername(client, slugify(c.name));
+              await client.query(
+                `INSERT INTO users (id, email, username, full_name, avatar_url, bio, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, cpf, phone, password_hash)
+                 VALUES ($1,$2,$3,$4,$5,$6,true,$7,'club_admin',false,$8,true,$9,$10,$11)
+                 ON CONFLICT (id) DO NOTHING`,
+                [adminUserId, c.email, username, c.responsibleName || c.name, DEFAULT_AVATAR, `Administrador do clube ${c.name}.`,
+                 new Date().toISOString().split('T')[0], newClubId, c.cnpj, c.phone || c.cellPhone || null, hashPassword(c.password)]
+              );
+            } catch (adminErr: any) {
+              await client.query('ROLLBACK TO SAVEPOINT sp_import_club_admin');
+              errors.push(`Login do clube legacyId=${c.legacyId} (${c.name}): ${adminErr.message}`);
+            }
           }
           clubsImported++;
         }
