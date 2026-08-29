@@ -928,13 +928,24 @@ app.post('/api/auth/register', async (req, res) => {
 // "Meu Cadastro".
 app.post('/api/admin/members', requireAdmin, async (req, res) => {
   const currentUser = (req as any).user as User;
-  const { fullName, cpf, email, password } = req.body;
+  const { fullName, cpf, email, password, clubId: bodyClubId } = req.body;
 
-  if (!currentUser.clubId) {
+  // Master admin pode cadastrar um atleta em qualquer clube da plataforma
+  // (tela "Novo Atleta" em Gerenciamento Plataforma); demais admins só no
+  // próprio clube, ignorando qualquer clubId enviado no corpo da requisição.
+  const targetClubId = currentUser.role === 'master_admin' && bodyClubId ? bodyClubId : currentUser.clubId;
+  if (!targetClubId) {
     return res.status(400).json({ error: 'Sua conta não está vinculada a um clube.' });
   }
   if (!fullName || !cpf || !email || !password) {
     return res.status(400).json({ error: 'Preencha nome, CPF, e-mail e senha.' });
+  }
+
+  if (currentUser.role === 'master_admin' && bodyClubId) {
+    const clubCheckRes = await pool.query('SELECT 1 FROM clubs WHERE id = $1', [bodyClubId]);
+    if (clubCheckRes.rows.length === 0) {
+      return res.status(400).json({ error: 'Clube selecionado não encontrado.' });
+    }
   }
 
   const cleanCpf = String(cpf).replace(/\D/g, '');
@@ -954,7 +965,7 @@ app.post('/api/admin/members', requireAdmin, async (req, res) => {
     await client.query(
       `INSERT INTO users (id, email, username, full_name, avatar_url, bio, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, cpf, password_hash)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-      [userId, email, username, fullName, DEFAULT_AVATAR, 'Atleta G&G Competições.', true, new Date().toISOString().split('T')[0], 'member', false, currentUser.clubId, false, cpf, hashPassword(password)]
+      [userId, email, username, fullName, DEFAULT_AVATAR, 'Atleta G&G Competições.', true, new Date().toISOString().split('T')[0], 'member', false, targetClubId, false, cpf, hashPassword(password)]
     );
     await client.query('COMMIT');
 

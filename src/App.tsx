@@ -811,7 +811,7 @@ export default function App() {
   // Club-admin "Cadastrar Membros" flow — creating and progressively
   // completing a member's profile on their behalf, without logging the admin
   // in as that member.
-  const handleCreateMember = async (fields: { fullName: string; cpf: string; email: string; password: string }): Promise<{ user?: User; error?: string }> => {
+  const handleCreateMember = async (fields: { fullName: string; cpf: string; email: string; password: string; clubId?: string }): Promise<{ user?: User; error?: string }> => {
     if (!currentUser) return { error: 'Não autenticado.' };
     try {
       const res = await fetch('/api/admin/members', {

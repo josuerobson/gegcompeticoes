@@ -63,7 +63,7 @@ interface AdminPanelProps {
   onToggleAdminDemo: () => void;
   settings?: { [key: string]: string };
   onSaveSetting?: (key: string, value: string) => Promise<void>;
-  onCreateMember: (fields: { fullName: string; cpf: string; email: string; password: string }) => Promise<{ user?: User; error?: string }>;
+  onCreateMember: (fields: { fullName: string; cpf: string; email: string; password: string; clubId?: string }) => Promise<{ user?: User; error?: string }>;
   onUpdateMemberProfile: (memberId: string, fields: Record<string, unknown>) => Promise<boolean>;
   onUploadMemberDocument: (memberId: string, kind: string, file: File) => Promise<boolean>;
   clubs: Club[];
@@ -5168,6 +5168,35 @@ export default function AdminPanel({
     }
   };
 
+  // "Novo Atleta" (Gerenciamento Plataforma > Clubes) — cadastro de atleta pelo
+  // master_admin em qualquer clube da plataforma, com listagem/busca de todos
+  // os atletas já cadastrados (mesmo padrão de "Novo Clube").
+  const [createAthleteForm, setCreateAthleteForm] = useState({ fullName: '', cpf: '', email: '', password: '', clubId: '' });
+  const [creatingAthlete, setCreatingAthlete] = useState(false);
+  const [createAthleteError, setCreateAthleteError] = useState('');
+  const [createAthleteSuccess, setCreateAthleteSuccess] = useState(false);
+  const [athleteSearchQuery, setAthleteSearchQuery] = useState('');
+
+  const handleCreateAthleteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateAthleteError('');
+    if (!createAthleteForm.clubId) {
+      setCreateAthleteError('Selecione o clube do atleta.');
+      return;
+    }
+    setCreatingAthlete(true);
+    const result = await onCreateMember(createAthleteForm);
+    setCreatingAthlete(false);
+    if (result.user) {
+      setCreateAthleteForm({ fullName: '', cpf: '', email: '', password: '', clubId: '' });
+      setCreateAthleteSuccess(true);
+      setTimeout(() => setCreateAthleteSuccess(false), 2500);
+      if (onRefreshData) await onRefreshData();
+    } else {
+      setCreateAthleteError(result.error || 'Erro ao cadastrar atleta.');
+    }
+  };
+
   const startEditingClub = (club: Club) => {
     setEditingClub(club);
     setEditClubError('');
@@ -6703,6 +6732,107 @@ export default function AdminPanel({
             )}
           </div>
         );
+
+      case 'novo_atleta': {
+        const filteredAthletes = (() => {
+          const q = athleteSearchQuery.trim().toLowerCase();
+          const allMembers = users.filter(u => u.role === 'member');
+          if (!q) return allMembers.slice(0, 30);
+          return allMembers.filter(u =>
+            u.fullName.toLowerCase().includes(q) ||
+            (u.cpf || '').replace(/\D/g, '').includes(q.replace(/\D/g, ''))
+          ).slice(0, 100);
+        })();
+        const totalAthletes = users.filter(u => u.role === 'member').length;
+
+        return (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-left">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="font-display font-bold text-slate-900 text-base">Cadastrar Novo Atleta</h3>
+                  <p className="text-xs text-slate-400">Adicionar um atleta em qualquer clube da rede nacional G&G.</p>
+                </div>
+                <Users className="w-5 h-5 text-blue-600" />
+              </div>
+
+              {createAthleteSuccess && (
+                <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
+                  <CheckCircle className="w-5 h-5 text-emerald-600" />
+                  Atleta cadastrado com sucesso!
+                </div>
+              )}
+              {createAthleteError && (
+                <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{createAthleteError}</div>
+              )}
+
+              <form onSubmit={handleCreateAthleteSubmit} className="space-y-4 text-slate-800">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Clube</label>
+                    <select
+                      value={createAthleteForm.clubId}
+                      onChange={e => setCreateAthleteForm({ ...createAthleteForm, clubId: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                    >
+                      <option value="">Selecione o clube...</option>
+                      {clubs.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <MemberField label="Nome completo" value={createAthleteForm.fullName} onChange={v => setCreateAthleteForm({ ...createAthleteForm, fullName: v })} placeholder="Ex: Carlos Cabral" />
+                  <MemberField label="CPF" value={createAthleteForm.cpf} onChange={v => setCreateAthleteForm({ ...createAthleteForm, cpf: v })} placeholder="Ex: 000.000.000-00" />
+                  <MemberField label="E-mail de contato" type="email" value={createAthleteForm.email} onChange={v => setCreateAthleteForm({ ...createAthleteForm, email: v })} placeholder="carlos@exemplo.com" />
+                  <MemberField label="Senha inicial" type="password" value={createAthleteForm.password} onChange={v => setCreateAthleteForm({ ...createAthleteForm, password: v })} />
+                </div>
+                <div className="flex justify-end pt-3 border-t border-slate-100">
+                  <button
+                    type="submit"
+                    disabled={creatingAthlete}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-6 py-3 rounded-xl font-bold transition shadow-lg shadow-blue-100 cursor-pointer"
+                  >
+                    {creatingAthlete ? 'Salvando...' : 'Cadastrar Atleta'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs text-left">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <h4 className="font-display font-bold text-slate-900 text-sm">Atletas Cadastrados ({totalAthletes})</h4>
+                <input
+                  type="text"
+                  value={athleteSearchQuery}
+                  onChange={e => setAthleteSearchQuery(e.target.value)}
+                  placeholder="Buscar por nome ou CPF..."
+                  className="bg-slate-50 border border-slate-200 outline-none px-3 py-2 rounded-xl focus:border-blue-500 text-xs text-slate-700 w-full sm:w-64"
+                />
+              </div>
+              {!athleteSearchQuery.trim() && (
+                <p className="text-[11px] text-slate-400">Mostrando os 30 mais recentes — use a busca para encontrar outros atletas.</p>
+              )}
+              {filteredAthletes.length === 0 ? (
+                <p className="text-xs text-slate-400">Nenhum atleta encontrado.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-2">
+                  {filteredAthletes.map(u => {
+                    const club = clubs.find(c => c.id === u.clubId);
+                    return (
+                      <div key={u.id} className="border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row justify-between sm:items-center gap-1 bg-slate-50/50 hover:border-slate-300 transition">
+                        <div>
+                          <h4 className="font-bold text-slate-900 text-xs">{u.fullName}</h4>
+                          <p className="text-[11px] text-slate-500">CPF: {u.cpf || 'N/I'} • Clube: {club?.name || 'Não vinculado'}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
 
       case 'relatorio_financeiro': {
         // Calculations for Annuity Plans revenue
@@ -8787,6 +8917,7 @@ export default function AdminPanel({
                 {expandedSections.clubes && (
                   <div className="pl-3 border-l border-slate-100 space-y-0.5 mt-1">
                     <button onClick={() => setPlataformaMenu('novo_clube')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'novo_clube' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Novo Clube</button>
+                    <button onClick={() => setPlataformaMenu('novo_atleta')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'novo_atleta' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Novo Atleta</button>
                     <button onClick={() => setPlataformaMenu('relatorio_financeiro')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'relatorio_financeiro' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Relatorio Financeiro</button>
                   </div>
                 )}
