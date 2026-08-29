@@ -58,6 +58,7 @@ export interface Club {
   cnpj?: string;
   phone?: string;
   isPremium: boolean;
+  parentClubId?: string;
   createdAt: string;
   crNumber?: string;
   responsibleName?: string;
@@ -128,6 +129,7 @@ export interface Post {
 export interface Modality {
   id: string;
   name: string; // e.g., "IPSC Handgun", "Trap Americano", "Carabina Mira Aberta 10m"
+  clubId?: string;
   discipline?: string; // legacy/unused field, not part of the real Cadastrar Modalidades form
   targetPreview?: string;
   seriesCount?: number;
@@ -181,6 +183,7 @@ export interface WeaponLookupOption {
   id: string;
   kind: 'classe' | 'modelo' | 'calibre' | 'fabricante' | 'tipo_arma' | 'permissao_arma';
   label: string;
+  clubId?: string;
   createdAt: string;
 }
 

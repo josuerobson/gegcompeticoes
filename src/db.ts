@@ -65,7 +65,15 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS state TEXT,
         ADD COLUMN IF NOT EXISTS doc_cnpj_key TEXT,
         ADD COLUMN IF NOT EXISTS doc_cr_key TEXT,
-        ADD COLUMN IF NOT EXISTS doc_alvara_key TEXT;
+        ADD COLUMN IF NOT EXISTS doc_alvara_key TEXT,
+        ADD COLUMN IF NOT EXISTS parent_club_id TEXT REFERENCES clubs(id);
+    `);
+
+    // Multi-tenancy: every club (except the master itself) belongs to a "parent" tenant —
+    // the club it registered under, or the club whose admin created it. Existing rows
+    // predate this column, so they backfill to the master club (today's implicit default).
+    await client.query(`
+      UPDATE clubs SET parent_club_id = 'club_aranas' WHERE parent_club_id IS NULL AND id != 'club_aranas';
     `);
 
     await client.query(`
@@ -180,7 +188,15 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS shots_per_series INTEGER,
         ADD COLUMN IF NOT EXISTS time_per_series_minutes INTEGER,
         ADD COLUMN IF NOT EXISTS evaluation_type TEXT,
+        ADD COLUMN IF NOT EXISTS club_id TEXT REFERENCES clubs(id) ON DELETE CASCADE,
         ALTER COLUMN discipline DROP NOT NULL;
+    `);
+
+    // Multi-tenancy: modalities are per-club and start empty for every new tenant.
+    // Pre-existing modalities predate this column — they belonged to the single shared
+    // platform, which going forward is the master club's own tenant space.
+    await client.query(`
+      UPDATE modalities SET club_id = 'club_aranas' WHERE club_id IS NULL;
     `);
 
     await client.query(`
@@ -206,6 +222,13 @@ export async function initDB() {
       ALTER TABLE championships
         ADD COLUMN IF NOT EXISTS club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL,
         ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'individual';
+    `);
+
+    // Multi-tenancy: club_id on championships doubles as the owning tenant.
+    // Pre-existing championships predate this column — they belonged to the
+    // single shared platform, which going forward is the master club's tenant.
+    await client.query(`
+      UPDATE championships SET club_id = 'club_aranas' WHERE club_id IS NULL;
     `);
 
     // Cadastro completo de campeonato (legacy system parity): documents, PIX,
@@ -416,11 +439,19 @@ export async function initDB() {
         id TEXT PRIMARY KEY,
         kind TEXT NOT NULL CHECK (kind IN ('classe', 'modelo', 'calibre', 'fabricante', 'tipo_arma', 'permissao_arma')),
         label TEXT NOT NULL,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        club_id TEXT REFERENCES clubs(id) ON DELETE CASCADE
       );
     `);
+
+    // Multi-tenancy: the weapon catalog is per-club (cloned from the master club into
+    // every newly-activated tenant, then edited independently — see the activation
+    // endpoint in server.ts). Backfill pre-existing rows to the master club.
     await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS weapon_lookup_options_kind_label_idx ON weapon_lookup_options (kind, label);
+      ALTER TABLE weapon_lookup_options ADD COLUMN IF NOT EXISTS club_id TEXT REFERENCES clubs(id) ON DELETE CASCADE;
+      UPDATE weapon_lookup_options SET club_id = 'club_aranas' WHERE club_id IS NULL;
+      DROP INDEX IF EXISTS weapon_lookup_options_kind_label_idx;
+      CREATE UNIQUE INDEX IF NOT EXISTS weapon_lookup_options_club_kind_label_idx ON weapon_lookup_options (club_id, kind, label);
     `);
 
     const weaponLookupCountRes = await client.query('SELECT COUNT(*)::int as count FROM weapon_lookup_options');
@@ -452,7 +483,7 @@ export async function initDB() {
       for (const item of seedLookups) {
         seedIdx += 1;
         await client.query(
-          `INSERT INTO weapon_lookup_options (id, kind, label, created_at) VALUES ($1, $2, $3, $4) ON CONFLICT (kind, label) DO NOTHING`,
+          `INSERT INTO weapon_lookup_options (id, kind, label, created_at, club_id) VALUES ($1, $2, $3, $4, 'club_aranas') ON CONFLICT (club_id, kind, label) DO NOTHING`,
           [`wlo_${item.kind}_${seedIdx}`, item.kind, item.label, new Date().toISOString().split('T')[0]]
         );
       }

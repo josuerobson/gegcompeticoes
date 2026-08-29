@@ -90,6 +90,7 @@ function mapClub(c: any): Club {
     cnpj: c.cnpj || undefined,
     phone: c.phone || undefined,
     isPremium: c.is_premium,
+    parentClubId: c.parent_club_id || undefined,
     createdAt: c.created_at,
     crNumber: c.cr_number || undefined,
     responsibleName: c.responsible_name || undefined,
@@ -111,6 +112,7 @@ function mapModality(m: any): Modality {
   return {
     id: m.id,
     name: m.name,
+    clubId: m.club_id || undefined,
     discipline: m.discipline || undefined,
     targetPreview: m.target_preview || undefined,
     seriesCount: m.series_count ?? undefined,
@@ -472,6 +474,64 @@ const requireMasterAdmin = (req: express.Request, res: express.Response, next: e
   next();
 };
 
+// ─── Multi-tenancy: resolução de tenant por subdomínio ─────────────────────
+// Cada clube "premium" (ativado) é isolado: nada de campeonatos, modalidades,
+// atletas, feed ou catálogo de armas é compartilhado entre tenants. Clubes
+// não-ativados (is_premium = false) continuam agrupados com o seu clube pai
+// (parent_club_id), exatamente como no comportamento legado de pooling no
+// clube master. O master (club_aranas) é o tenant padrão quando nenhum
+// subdomínio/override resolve para um clube conhecido.
+const DEFAULT_TENANT_ID = 'club_aranas';
+
+async function resolveTenant(req: express.Request): Promise<Club> {
+  // Local/testing override: ?tenant=<clubId> ou header x-tenant-club-id, já que
+  // subdomínios reais de wildcard DNS ainda não estão configurados (Fase 5).
+  const overrideId = (req.query.tenant as string) || (req.headers['x-tenant-club-id'] as string);
+  if (overrideId) {
+    const r = await pool.query('SELECT * FROM clubs WHERE id = $1', [overrideId]);
+    if (r.rows.length > 0) return mapClub(r.rows[0]);
+  }
+
+  const host = ((req.headers['host'] as string) || '').split(':')[0];
+  const parts = host.split('.');
+  // Só considera subdomínio quando há pelo menos 3 partes (sub.dominio.tld) e
+  // o primeiro segmento não é um alias genérico (www) nem localhost puro.
+  if (parts.length >= 3 && parts[0] !== 'www') {
+    const subdomain = parts[0];
+    const r = await pool.query('SELECT * FROM clubs WHERE sub_domain = $1', [subdomain]);
+    if (r.rows.length > 0) return mapClub(r.rows[0]);
+  }
+
+  const defaultRes = await pool.query('SELECT * FROM clubs WHERE id = $1', [DEFAULT_TENANT_ID]);
+  return mapClub(defaultRes.rows[0]);
+}
+
+// Conjunto de clubes cujos dados devem aparecer agrupados sob este tenant:
+// o próprio tenant + clubes-membro que NÃO foram ativados como tenant próprio.
+async function getVisibleClubIds(tenant: Club): Promise<string[]> {
+  const r = await pool.query(
+    'SELECT id FROM clubs WHERE parent_club_id = $1 AND is_premium = false',
+    [tenant.id]
+  );
+  return [tenant.id, ...r.rows.map((row) => row.id as string)];
+}
+
+// Resolve o tenant a partir do Host/override em toda requisição e disponibiliza
+// em req.tenant, para uso pelos endpoints que precisam escopar dados por clube.
+app.use(async (req, res, next) => {
+  try {
+    (req as any).tenant = await resolveTenant(req);
+  } catch (err) {
+    console.error('Tenant resolution error:', err);
+  }
+  next();
+});
+
+app.get('/api/tenant/info', async (req, res) => {
+  const tenant = (req as any).tenant as Club;
+  res.json({ tenant });
+});
+
 // ─── Multi-campeonatos CRUD (5 endpoints) ──────────────────────────────────
 
 // GET /api/multi-championships — lista todos (público)
@@ -761,14 +821,15 @@ app.post('/api/auth/register', async (req, res) => {
         return res.status(400).json({ error: 'Já existe um cadastro com este CNPJ.' });
       }
 
+      const tenant = (req as any).tenant as Club;
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
         const clubId = `club_${Date.now()}`;
         await client.query(
-          `INSERT INTO clubs (id, name, cnpj, phone, is_premium, created_at, cr_number, responsible_name, email, cep, address, address_number, complement, neighborhood, city, state)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
-          [clubId, name, cnpj, phone || null, false, new Date().toISOString().split('T')[0], crNumber || null, responsibleName, email, cep || null, address || null, addressNumber || null, complement || null, neighborhood || null, city || null, state || null]
+          `INSERT INTO clubs (id, name, cnpj, phone, is_premium, created_at, cr_number, responsible_name, email, cep, address, address_number, complement, neighborhood, city, state, parent_club_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+          [clubId, name, cnpj, phone || null, false, new Date().toISOString().split('T')[0], crNumber || null, responsibleName, email, cep || null, address || null, addressNumber || null, complement || null, neighborhood || null, city || null, state || null, tenant.id]
         );
 
         const userId = `user_${Date.now()}`;
@@ -909,6 +970,7 @@ app.post('/api/admin/members', requireAdmin, async (req, res) => {
 // PATCH /api/clubs/:id, same as a club editing its own data.
 app.post('/api/admin/clubs', requireAdmin, async (req, res) => {
   const { name, cnpj, responsibleName, email, password, phone, crNumber, city, state, cep, address, addressNumber, complement, neighborhood } = req.body;
+  const currentUser = (req as any).user as User;
 
   if (!name || !cnpj || !responsibleName || !email || !password) {
     return res.status(400).json({ error: 'Preencha nome, CNPJ, responsável, e-mail e senha.' });
@@ -928,12 +990,13 @@ app.post('/api/admin/clubs', requireAdmin, async (req, res) => {
     await client.query('BEGIN');
     const clubId = `club_${Date.now()}`;
     await client.query(
-      `INSERT INTO clubs (id, name, cnpj, phone, is_premium, created_at, cr_number, responsible_name, email, city, state, cep, address, address_number, complement, neighborhood)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+      `INSERT INTO clubs (id, name, cnpj, phone, is_premium, created_at, cr_number, responsible_name, email, city, state, cep, address, address_number, complement, neighborhood, parent_club_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
       [
         clubId, name, cnpj, phone || null, false, new Date().toISOString().split('T')[0],
         crNumber || null, responsibleName, email, city || null, state || null,
-        cep || null, address || null, addressNumber || null, complement || null, neighborhood || null
+        cep || null, address || null, addressNumber || null, complement || null, neighborhood || null,
+        currentUser.clubId || DEFAULT_TENANT_ID
       ]
     );
 
@@ -1296,9 +1359,68 @@ app.patch('/api/clubs/:id', requireAuth, async (req, res) => {
   }
 });
 
+// Ativação de tenant completo (multi-tenancy): promove um clube-membro a
+// clube isolado com subdomínio próprio. A partir daí, nada mais é compartilhado
+// com o clube pai — campeonatos, modalidades, atletas e feed passam a ser
+// exclusivos deste clube. O catálogo de armas (weapon_lookup_options) é clonado
+// do clube master para que o novo tenant já comece com as listas padrão;
+// modalidades sempre começam zeradas, por decisão explícita do produto.
+app.post('/api/admin/clubs/:id/activate-tenant', requireMasterAdmin, async (req, res) => {
+  const clubId = req.params.id;
+  const { subDomain } = req.body;
+
+  const cleanSubDomain = String(subDomain || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+  if (!cleanSubDomain) {
+    return res.status(400).json({ error: 'Informe um subdomínio válido (apenas letras, números e hífen).' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const clubRes = await client.query('SELECT * FROM clubs WHERE id = $1 FOR UPDATE', [clubId]);
+    if (clubRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Clube não encontrado.' });
+    }
+    if (clubRes.rows[0].is_premium) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Este clube já possui recurso completo (tenant) ativado.' });
+    }
+
+    const subDomainCheck = await client.query('SELECT 1 FROM clubs WHERE sub_domain = $1 AND id != $2', [cleanSubDomain, clubId]);
+    if (subDomainCheck.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Este subdomínio já está em uso por outro clube.' });
+    }
+
+    await client.query('UPDATE clubs SET is_premium = TRUE, sub_domain = $1 WHERE id = $2', [cleanSubDomain, clubId]);
+
+    // Clona o catálogo de armas do clube master para o novo tenant.
+    await client.query(
+      `INSERT INTO weapon_lookup_options (id, kind, label, created_at, club_id)
+       SELECT $1 || '_' || id, kind, label, created_at, $2
+       FROM weapon_lookup_options WHERE club_id = $3
+       ON CONFLICT (club_id, kind, label) DO NOTHING`,
+      [clubId, clubId, DEFAULT_TENANT_ID]
+    );
+
+    await client.query('COMMIT');
+    const updatedRes = await pool.query('SELECT * FROM clubs WHERE id = $1', [clubId]);
+    res.json({ club: mapClub(updatedRes.rows[0]) });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Activate tenant database error:', err);
+    res.status(500).json({ error: 'Erro ao ativar recurso completo para o clube.' });
+  } finally {
+    client.release();
+  }
+});
+
 // 2. User & Social Feed Follow system
 app.get('/api/users', async (req, res) => {
   try {
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
     const usersRes = await pool.query(
       `SELECT u.*,
         COALESCE(f_ers.followers, '[]'::json) AS followers,
@@ -1311,7 +1433,9 @@ app.get('/api/users', async (req, res) => {
       LEFT JOIN (
         SELECT follower_id, json_agg(following_id) AS following
         FROM follows GROUP BY follower_id
-      ) f_ing ON f_ing.follower_id = u.id`
+      ) f_ing ON f_ing.follower_id = u.id
+      WHERE u.club_id = ANY($1)`,
+      [visibleClubIds]
     );
     const users = usersRes.rows.map(mapUser);
     res.json({ users });
@@ -1374,12 +1498,15 @@ app.get('/api/posts', async (req, res) => {
     const offset = (page - 1) * limit;
     // A private post (homologação privada) is only visible to its own author when logged in
     const currentUserId = (req as any).user?.id || null;
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
 
     const postsRes = await pool.query(
       `SELECT p.*,
         COALESCE(l.likes, '[]'::json) AS likes,
         COALESCE(c.comments, '[]'::json) AS comments
       FROM posts p
+      JOIN users pu ON pu.id = p.user_id
       LEFT JOIN (
         SELECT post_id, json_agg(user_id) AS likes
         FROM likes GROUP BY post_id
@@ -1398,10 +1525,11 @@ app.get('/api/posts', async (req, res) => {
           ) AS comments
         FROM comments cm GROUP BY cm.post_id
       ) c ON c.post_id = p.id
-      WHERE COALESCE(p.is_private, FALSE) = FALSE OR p.user_id = $3
+      WHERE (COALESCE(p.is_private, FALSE) = FALSE OR p.user_id = $3)
+        AND pu.club_id = ANY($4)
       ORDER BY p.created_at DESC
       LIMIT $1 OFFSET $2`,
-      [limit, offset, currentUserId]
+      [limit, offset, currentUserId, visibleClubIds]
     );
     const posts = postsRes.rows.map(mapPost);
     res.json({ posts, page, limit });
@@ -1601,7 +1729,12 @@ app.delete('/api/posts/:id', requireAuth, async (req, res) => {
 // 4. Championships, Modalities & Staging
 app.get('/api/championships', async (req, res) => {
   try {
-    const champsRes = await pool.query('SELECT * FROM championships ORDER BY COALESCE(ordem_exibicao, 0) DESC, id DESC');
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
+    const champsRes = await pool.query(
+      'SELECT * FROM championships WHERE club_id = ANY($1) ORDER BY COALESCE(ordem_exibicao, 0) DESC, id DESC',
+      [visibleClubIds]
+    );
     const championships = champsRes.rows.map(mapChampionship);
     res.json({ championships });
   } catch (err) {
@@ -1666,6 +1799,7 @@ const CHAMPIONSHIP_EXTRA_COLUMNS: Record<string, string> = {
 
 app.post('/api/championships', requireAdmin, async (req, res) => {
   const { title, description, startDate, endDate, registrationFee, modalities, stagesCount, bannerUrl, clubId, type } = req.body;
+  const currentUser = (req as any).user as User;
 
   if (!title || !description || registrationFee === undefined || registrationFee === null || !modalities || !stagesCount) {
     return res.status(400).json({ error: 'Preencha todos os campos obrigatórios do campeonato.' });
@@ -1678,7 +1812,7 @@ app.post('/api/championships', requireAdmin, async (req, res) => {
     JSON.stringify(Array.isArray(modalities) ? modalities : [modalities]),
     Number(stagesCount), 'open',
     bannerUrl || 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80',
-    clubId || null, type === 'clube' ? 'clube' : 'individual'
+    clubId || currentUser.clubId || DEFAULT_TENANT_ID, type === 'clube' ? 'clube' : 'individual'
   ];
 
   for (const [key, column] of Object.entries(CHAMPIONSHIP_EXTRA_COLUMNS)) {
@@ -1819,8 +1953,12 @@ app.get('/api/registrations', requireAuth, async (req, res) => {
   
   try {
     let regsRes;
-    if (ADMIN_ROLES.includes(currentUser.role)) {
+    if (currentUser.role === 'master_admin') {
       regsRes = await pool.query('SELECT * FROM registrations');
+    } else if (ADMIN_ROLES.includes(currentUser.role)) {
+      const tenant = (req as any).tenant as Club;
+      const visibleClubIds = await getVisibleClubIds(tenant);
+      regsRes = await pool.query('SELECT * FROM registrations WHERE club_id = ANY($1)', [visibleClubIds]);
     } else {
       regsRes = await pool.query('SELECT * FROM registrations WHERE user_id = $1', [currentUser.id]);
     }
@@ -2032,7 +2170,17 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
 // 4b. Clubs, Modalities, Stages & Weapons (lookup / registry data)
 app.get('/api/clubs', async (req, res) => {
   try {
-    const clubsRes = await pool.query('SELECT * FROM clubs');
+    // master_admin manages the whole platform and needs every club; everyone
+    // else only ever needs their own tenant's visible set (own club + members).
+    const currentUser = (req as any).user as User | undefined;
+    let clubsRes;
+    if (currentUser?.role === 'master_admin') {
+      clubsRes = await pool.query('SELECT * FROM clubs');
+    } else {
+      const tenant = (req as any).tenant as Club;
+      const visibleClubIds = await getVisibleClubIds(tenant);
+      clubsRes = await pool.query('SELECT * FROM clubs WHERE id = ANY($1)', [visibleClubIds]);
+    }
     res.set('Cache-Control', 'private, max-age=120');
     res.json({ clubs: clubsRes.rows.map(mapClub) });
   } catch (err) {
@@ -2043,7 +2191,9 @@ app.get('/api/clubs', async (req, res) => {
 
 app.get('/api/modalities', async (req, res) => {
   try {
-    const modalitiesRes = await pool.query('SELECT * FROM modalities');
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
+    const modalitiesRes = await pool.query('SELECT * FROM modalities WHERE club_id = ANY($1)', [visibleClubIds]);
     res.set('Cache-Control', 'private, max-age=300');
     res.json({ modalities: modalitiesRes.rows.map(mapModality) });
   } catch (err) {
@@ -2054,6 +2204,7 @@ app.get('/api/modalities', async (req, res) => {
 
 app.post('/api/modalities', requireAdmin, async (req, res) => {
   const { name, seriesCount, shotsPerSeries, timePerSeriesMinutes, evaluationType } = req.body;
+  const currentUser = (req as any).user as User;
   if (!name) {
     return res.status(400).json({ error: 'Nome da modalidade é obrigatório.' });
   }
@@ -2061,9 +2212,9 @@ app.post('/api/modalities', requireAdmin, async (req, res) => {
   const id = `mod_${Date.now()}`;
   try {
     const result = await pool.query(
-      `INSERT INTO modalities (id, name, series_count, shots_per_series, time_per_series_minutes, evaluation_type)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [id, name, seriesCount || null, shotsPerSeries || null, timePerSeriesMinutes || null, evaluationType || null]
+      `INSERT INTO modalities (id, name, series_count, shots_per_series, time_per_series_minutes, evaluation_type, club_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [id, name, seriesCount || null, shotsPerSeries || null, timePerSeriesMinutes || null, evaluationType || null, currentUser.clubId || DEFAULT_TENANT_ID]
     );
     res.status(201).json({ modality: mapModality(result.rows[0]) });
   } catch (err) {
@@ -2091,9 +2242,20 @@ app.delete('/api/modalities/:id', requireAdmin, async (req, res) => {
 app.get('/api/stages', async (req, res) => {
   try {
     const { championshipId } = req.query;
-    const stagesRes = championshipId
-      ? await pool.query('SELECT * FROM stages WHERE championship_id = $1 ORDER BY stage_num ASC', [championshipId])
-      : await pool.query('SELECT * FROM stages ORDER BY stage_num ASC');
+    let stagesRes;
+    if (championshipId) {
+      stagesRes = await pool.query('SELECT * FROM stages WHERE championship_id = $1 ORDER BY stage_num ASC', [championshipId]);
+    } else {
+      const tenant = (req as any).tenant as Club;
+      const visibleClubIds = await getVisibleClubIds(tenant);
+      stagesRes = await pool.query(
+        `SELECT s.* FROM stages s
+         JOIN championships c ON c.id = s.championship_id
+         WHERE c.club_id = ANY($1)
+         ORDER BY s.stage_num ASC`,
+        [visibleClubIds]
+      );
+    }
     res.json({ stages: stagesRes.rows.map(mapStage) });
   } catch (err) {
     console.error('Fetch stages database error:', err);
@@ -2231,9 +2393,20 @@ app.delete('/api/stages/:id', requireAdmin, async (req, res) => {
 app.get('/api/weapons', async (req, res) => {
   try {
     const { ownerId } = req.query;
-    const weaponsRes = ownerId
-      ? await pool.query('SELECT * FROM weapons WHERE owner_id = $1', [ownerId])
-      : await pool.query('SELECT * FROM weapons');
+    let weaponsRes;
+    if (ownerId) {
+      weaponsRes = await pool.query('SELECT * FROM weapons WHERE owner_id = $1', [ownerId]);
+    } else {
+      // owner_id is either a user id (personal weapon) or a club id (club-owned
+      // weapon) — scope both cases to the tenant's visible clubs.
+      const tenant = (req as any).tenant as Club;
+      const visibleClubIds = await getVisibleClubIds(tenant);
+      weaponsRes = await pool.query(
+        `SELECT * FROM weapons WHERE owner_id = ANY($1)
+           OR owner_id IN (SELECT id FROM users WHERE club_id = ANY($1))`,
+        [visibleClubIds]
+      );
+    }
     res.json({ weapons: weaponsRes.rows.map(mapWeapon) });
   } catch (err) {
     console.error('Fetch weapons database error:', err);
@@ -2375,15 +2548,17 @@ app.put('/api/weapons/:id', requireAuth, async (req, res) => {
 // Arma é/Status de permissão). Reading is open (club admins need it to populate
 // the weapon form); writing is restricted to master_admin.
 function mapWeaponLookupOption(o: any): WeaponLookupOption {
-  return { id: o.id, kind: o.kind, label: o.label, createdAt: o.created_at };
+  return { id: o.id, kind: o.kind, label: o.label, clubId: o.club_id || undefined, createdAt: o.created_at };
 }
 
 app.get('/api/weapon-lookups', async (req, res) => {
   try {
     const { kind } = req.query;
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
     const result = kind
-      ? await pool.query('SELECT * FROM weapon_lookup_options WHERE kind = $1 ORDER BY label ASC', [kind])
-      : await pool.query('SELECT * FROM weapon_lookup_options ORDER BY kind ASC, label ASC');
+      ? await pool.query('SELECT * FROM weapon_lookup_options WHERE kind = $1 AND club_id = ANY($2) ORDER BY label ASC', [kind, visibleClubIds])
+      : await pool.query('SELECT * FROM weapon_lookup_options WHERE club_id = ANY($1) ORDER BY kind ASC, label ASC', [visibleClubIds]);
     res.set('Cache-Control', 'private, max-age=300');
     res.json({ options: result.rows.map(mapWeaponLookupOption) });
   } catch (err) {
@@ -2400,11 +2575,12 @@ app.post('/api/weapon-lookups', requireMasterAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Informe a lista (kind) e o nome do item.' });
   }
 
+  const tenant = (req as any).tenant as Club;
   const id = `wlo_${Date.now()}`;
   try {
     const result = await pool.query(
-      `INSERT INTO weapon_lookup_options (id, kind, label, created_at) VALUES ($1, $2, $3, $4) RETURNING *`,
-      [id, kind, label, new Date().toISOString().split('T')[0]]
+      `INSERT INTO weapon_lookup_options (id, kind, label, created_at, club_id) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [id, kind, label, new Date().toISOString().split('T')[0], tenant.id]
     );
     res.status(201).json({ option: mapWeaponLookupOption(result.rows[0]) });
   } catch (err: any) {
@@ -2661,13 +2837,21 @@ app.get('/api/scores', async (req, res) => {
     // activeOnly=true limits to non-archived championships for the initial sync;
     // omit or pass false to fetch all (e.g. admin results panels).
     const activeOnly = req.query.activeOnly === 'true';
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
     const scoresRes = activeOnly
       ? await pool.query(
           `SELECT ss.* FROM stage_scores ss
            JOIN championships c ON c.id = ss.championship_id
-           WHERE c.status != 'archived'`
+           WHERE c.status != 'archived' AND c.club_id = ANY($1)`,
+          [visibleClubIds]
         )
-      : await pool.query('SELECT * FROM stage_scores');
+      : await pool.query(
+          `SELECT ss.* FROM stage_scores ss
+           JOIN championships c ON c.id = ss.championship_id
+           WHERE c.club_id = ANY($1)`,
+          [visibleClubIds]
+        );
     const stageScores = scoresRes.rows.map(mapStageScore);
     res.json({ stageScores });
   } catch (err) {
@@ -2933,16 +3117,20 @@ app.get('/api/rankings', async (req, res) => {
   const { championshipId, modality } = req.query;
 
   try {
-    let query = 'SELECT * FROM stage_scores WHERE 1=1';
-    const params: any[] = [];
-    let paramIdx = 1;
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
+    let query = `SELECT ss.* FROM stage_scores ss
+      JOIN championships c ON c.id = ss.championship_id
+      WHERE c.club_id = ANY($1)`;
+    const params: any[] = [visibleClubIds];
+    let paramIdx = 2;
 
     if (championshipId) {
-      query += ` AND championship_id = $${paramIdx++}`;
+      query += ` AND ss.championship_id = $${paramIdx++}`;
       params.push(championshipId);
     }
     if (modality) {
-      query += ` AND modality = $${paramIdx++}`;
+      query += ` AND ss.modality = $${paramIdx++}`;
       params.push(modality);
     }
 
@@ -3006,6 +3194,8 @@ app.get('/api/rankings', async (req, res) => {
 app.get('/api/feed/ranking-highlights', async (req, res) => {
   try {
     const highlights: RankingHighlight[] = [];
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
 
     // stage_scores.modality stores the modality NAME, while championships.modalities
     // stores modality IDs — this map translates one to the other.
@@ -3014,7 +3204,7 @@ app.get('/api/feed/ranking-highlights', async (req, res) => {
     modalitiesRes.rows.forEach(m => { modalityNameById[m.id] = m.name; });
 
     // ---- Championship-level: sum across all stages, one entry per modality ----
-    const champsRes = await pool.query('SELECT * FROM championships WHERE ranking_enabled = true');
+    const champsRes = await pool.query('SELECT * FROM championships WHERE ranking_enabled = true AND club_id = ANY($1)', [visibleClubIds]);
     for (const row of champsRes.rows) {
       const champ = mapChampionship(row);
       const positions = champ.rankingPositions;
@@ -3064,7 +3254,8 @@ app.get('/api/feed/ranking-highlights', async (req, res) => {
     const stagesRes = await pool.query(
       `SELECT s.*, c.title as championship_title FROM stages s
        JOIN championships c ON c.id = s.championship_id
-       WHERE s.ranking_enabled = true`
+       WHERE s.ranking_enabled = true AND c.club_id = ANY($1)`,
+      [visibleClubIds]
     );
     for (const row of stagesRes.rows) {
       const stage = mapStage(row);

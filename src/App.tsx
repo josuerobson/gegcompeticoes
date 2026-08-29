@@ -670,7 +670,7 @@ export default function App() {
       if (res.ok && data.user) {
         setCurrentUser(data.user);
         localStorage.setItem('gg_user_id', data.user.id);
-        setActiveTab('championships');
+        setActiveTab('feed');
         await syncWithBackend(data.user.id);
         return true;
       }
@@ -848,6 +848,26 @@ export default function App() {
     } catch (err) {
       console.error('Erro ao cadastrar clube:', err);
       return { error: 'Erro ao cadastrar clube.' };
+    }
+  };
+
+  const handleActivateClubTenant = async (clubId: string, subDomain: string): Promise<{ club?: Club; error?: string }> => {
+    if (!currentUser) return { error: 'Não autenticado.' };
+    try {
+      const res = await fetch(`/api/admin/clubs/${clubId}/activate-tenant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify({ subDomain })
+      });
+      const data = await res.json();
+      if (res.ok && data.club) {
+        await refreshClubs();
+        return { club: data.club };
+      }
+      return { error: data.error || 'Erro ao ativar recurso completo do clube.' };
+    } catch (err) {
+      console.error('Erro ao ativar recurso completo do clube:', err);
+      return { error: 'Erro ao ativar recurso completo do clube.' };
     }
   };
 
@@ -2369,6 +2389,7 @@ export default function App() {
               onUploadMemberDocument={handleUploadMemberDocument}
               clubs={clubs}
               onCreateClub={handleCreateClub}
+              onActivateClubTenant={handleActivateClubTenant}
               multiChampionships={multiChampionships}
             />
           )}
