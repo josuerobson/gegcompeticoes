@@ -1447,6 +1447,40 @@ app.patch('/api/admin/clubs/:id/subdomain', requireMasterAdmin, async (req, res)
   }
 });
 
+// Zera campeonatos/etapas/modalidades/inscrições/resultados de um único clube
+// (tenant) — usado antes de importar dados reais do sistema legado, sem
+// afetar nenhum outro clube da plataforma. Deletar championships já faz
+// CASCADE em stages, registrations e stage_scores (ver schema em src/db.ts);
+// modalities é apagado à parte pois não tem relação de FK com championships.
+app.post('/api/admin/clubs/:id/reset-competition-data', requireMasterAdmin, async (req, res) => {
+  const clubId = req.params.id;
+
+  const client = await pool.connect();
+  try {
+    const clubRes = await client.query('SELECT 1 FROM clubs WHERE id = $1', [clubId]);
+    if (clubRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Clube não encontrado.' });
+    }
+
+    await client.query('BEGIN');
+    const champsDeleted = await client.query('DELETE FROM championships WHERE club_id = $1 RETURNING id', [clubId]);
+    const modalitiesDeleted = await client.query('DELETE FROM modalities WHERE club_id = $1 RETURNING id', [clubId]);
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      championshipsDeleted: champsDeleted.rows.length,
+      modalitiesDeleted: modalitiesDeleted.rows.length
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Reset competition data database error:', err);
+    res.status(500).json({ error: 'Erro ao zerar dados de competição do clube.' });
+  } finally {
+    client.release();
+  }
+});
+
 // Define/redefine o login (e-mail + senha) do gestor (club_admin) de um clube —
 // usado tanto no momento da ativação de tenant quanto para alterar o acesso a
 // qualquer momento depois. Se o clube já tem um club_admin, atualiza esse
