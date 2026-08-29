@@ -1035,6 +1035,28 @@ app.post('/api/admin/clubs', requireAdmin, async (req, res) => {
 // resolução de vínculo quebrado já vêm resolvidos no payload (feito no script
 // de extração); este endpoint só valida e grava. Idempotente via legacy_id
 // (ON CONFLICT DO UPDATE), então pode ser rodado de novo com segurança.
+// Limpeza de uma importação parcial/inconsistente antes de reimportar do zero
+// — necessário quando execuções anteriores (com ordenação não-determinística
+// na extração) deixaram e-mails com sufixo +N atribuídos a pessoas diferentes
+// das da extração final, o que trava updates sequenciais em colisão cruzada.
+// Não toca em club_aranas nem em nenhum dado que não tenha legacy_id.
+app.post('/api/admin/import/legacy/cleanup', requireMasterAdmin, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const usersDeleted = await client.query('DELETE FROM users WHERE legacy_id IS NOT NULL RETURNING id');
+    const clubsDeleted = await client.query(`DELETE FROM clubs WHERE legacy_id IS NOT NULL AND id != 'club_aranas' RETURNING id`);
+    await client.query('COMMIT');
+    res.json({ success: true, usersDeleted: usersDeleted.rows.length, clubsDeleted: clubsDeleted.rows.length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Legacy import cleanup database error:', err);
+    res.status(500).json({ error: 'Erro ao limpar importação anterior.' });
+  } finally {
+    client.release();
+  }
+});
+
 app.post('/api/admin/import/legacy', requireMasterAdmin, async (req, res) => {
   const { clubs, members } = req.body as {
     clubs: Array<{
