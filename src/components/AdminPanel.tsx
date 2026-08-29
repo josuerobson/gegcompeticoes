@@ -70,6 +70,8 @@ interface AdminPanelProps {
   onCreateClub: (fields: { name: string; cnpj: string; responsibleName: string; email: string; password: string; phone?: string; crNumber?: string; city?: string; state?: string; cep?: string; address?: string; addressNumber?: string; complement?: string; neighborhood?: string }) => Promise<{ club?: Club; error?: string }>;
   onUpdateClub?: (clubId: string, fields: Record<string, unknown>) => Promise<boolean>;
   onActivateClubTenant?: (clubId: string, subDomain: string) => Promise<{ club?: Club; error?: string }>;
+  onSetClubAdminCredentials?: (clubId: string, fields: { fullName?: string; email: string; password: string }) => Promise<{ user?: User; error?: string }>;
+  onGetClubAdmin?: (clubId: string) => Promise<User | null>;
   multiChampionships?: MultiChampionship[];
 }
 
@@ -4490,6 +4492,8 @@ export default function AdminPanel({
   onCreateClub,
   onUpdateClub,
   onActivateClubTenant,
+  onSetClubAdminCredentials,
+  onGetClubAdmin,
   multiChampionships = []
 }: AdminPanelProps) {
   const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
@@ -5203,15 +5207,27 @@ export default function AdminPanel({
 
   // Ativação de tenant (multi-tenancy) — promove um clube-membro a clube
   // isolado, com subdomínio próprio e catálogo de armas clonado do master.
+  // Quando o clube ainda não tem nenhum gestor (club_admin), a ativação exige
+  // criar o login de acesso junto; se já tiver, os campos ficam opcionais
+  // (preenchê-los redefine e-mail/senha do gestor já existente).
   const [activatingClub, setActivatingClub] = useState<Club | null>(null);
+  const [activatingClubHasAdmin, setActivatingClubHasAdmin] = useState(false);
   const [activateSubDomain, setActivateSubDomain] = useState('');
+  const [activateAdminFullName, setActivateAdminFullName] = useState('');
+  const [activateAdminEmail, setActivateAdminEmail] = useState('');
+  const [activateAdminPassword, setActivateAdminPassword] = useState('');
   const [activatingSaving, setActivatingSaving] = useState(false);
   const [activateError, setActivateError] = useState('');
   const [activateSuccess, setActivateSuccess] = useState(false);
 
   const startActivatingClub = (club: Club) => {
+    const hasAdmin = users.some(u => u.clubId === club.id && u.role === 'club_admin');
     setActivatingClub(club);
+    setActivatingClubHasAdmin(hasAdmin);
     setActivateSubDomain(club.subDomain || '');
+    setActivateAdminFullName(club.responsibleName || '');
+    setActivateAdminEmail('');
+    setActivateAdminPassword('');
     setActivateError('');
     setActivateSuccess(false);
   };
@@ -5224,19 +5240,98 @@ export default function AdminPanel({
       setActivateError('Informe um subdomínio válido (apenas letras, números e hífen).');
       return;
     }
+    const wantsCredentials = activateAdminEmail.trim() || activateAdminPassword.trim();
+    if (!activatingClubHasAdmin && !wantsCredentials) {
+      setActivateError('Este clube ainda não tem gestor: informe nome, e-mail e senha de acesso.');
+      return;
+    }
+    if (wantsCredentials && (!activateAdminEmail.trim() || !activateAdminPassword.trim() || (!activatingClubHasAdmin && !activateAdminFullName.trim()))) {
+      setActivateError('Preencha nome, e-mail e senha para definir o acesso do gestor.');
+      return;
+    }
+
     setActivatingSaving(true);
     setActivateError('');
     const result = await onActivateClubTenant(activatingClub.id, cleanSubDomain);
-    setActivatingSaving(false);
-    if (result.club) {
-      setActivateSuccess(true);
+    if (!result.club) {
+      setActivatingSaving(false);
+      setActivateError(result.error || 'Erro ao ativar recurso completo do clube.');
+      return;
+    }
+
+    if (wantsCredentials && onSetClubAdminCredentials) {
+      const credResult = await onSetClubAdminCredentials(activatingClub.id, {
+        fullName: activateAdminFullName.trim() || undefined,
+        email: activateAdminEmail.trim(),
+        password: activateAdminPassword.trim()
+      });
+      setActivatingSaving(false);
+      if (!credResult.user) {
+        setActivateError(`Clube ativado, mas houve erro ao definir o acesso do gestor: ${credResult.error || 'erro desconhecido'}`);
+        return;
+      }
+    } else {
+      setActivatingSaving(false);
+    }
+
+    setActivateSuccess(true);
+    if (onRefreshData) await onRefreshData();
+    setTimeout(() => {
+      setActivateSuccess(false);
+      setActivatingClub(null);
+    }, 1800);
+  };
+
+  // "Gerenciar Acesso" — redefine e-mail/senha do gestor de um clube já
+  // ativado, a qualquer momento (sem mexer no subdomínio/ativação).
+  const [managingAccessClub, setManagingAccessClub] = useState<Club | null>(null);
+  const [accessFullName, setAccessFullName] = useState('');
+  const [accessEmail, setAccessEmail] = useState('');
+  const [accessPassword, setAccessPassword] = useState('');
+  const [savingAccess, setSavingAccess] = useState(false);
+  const [accessError, setAccessError] = useState('');
+  const [accessSuccess, setAccessSuccess] = useState(false);
+
+  const startManagingAccess = async (club: Club) => {
+    setManagingAccessClub(club);
+    setAccessFullName(club.responsibleName || '');
+    setAccessEmail('');
+    setAccessPassword('');
+    setAccessError('');
+    setAccessSuccess(false);
+    // O gestor de um clube já ativado como tenant não aparece mais no `users`
+    // do master (isolamento correto) — busca direto, ignorando o escopo.
+    const admin = onGetClubAdmin ? await onGetClubAdmin(club.id) : users.find(u => u.clubId === club.id && u.role === 'club_admin');
+    if (admin) {
+      setAccessFullName(admin.fullName || club.responsibleName || '');
+      setAccessEmail(admin.email || '');
+    }
+  };
+
+  const handleSaveAccessSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!managingAccessClub || !onSetClubAdminCredentials) return;
+    if (!accessEmail.trim() || !accessPassword.trim()) {
+      setAccessError('Preencha e-mail e senha de acesso.');
+      return;
+    }
+    setSavingAccess(true);
+    setAccessError('');
+    const result = await onSetClubAdminCredentials(managingAccessClub.id, {
+      fullName: accessFullName.trim() || undefined,
+      email: accessEmail.trim(),
+      password: accessPassword.trim()
+    });
+    setSavingAccess(false);
+    if (result.user) {
+      setAccessSuccess(true);
       if (onRefreshData) await onRefreshData();
       setTimeout(() => {
-        setActivateSuccess(false);
-        setActivatingClub(null);
+        setAccessSuccess(false);
+        setManagingAccessClub(null);
       }, 1800);
     } else {
-      setActivateError(result.error || 'Erro ao ativar recurso completo do clube.');
+      setAccessError(result.error || 'Erro ao definir acesso do gestor.');
     }
   };
 
@@ -6480,6 +6575,14 @@ export default function AdminPanel({
                             className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer shadow-2xs"
                           >
                             Ativar Recurso Completo
+                          </button>
+                        )}
+                        {currentUser?.role === 'master_admin' && club.isPremium && onSetClubAdminCredentials && (
+                          <button
+                            onClick={() => startManagingAccess(club)}
+                            className="flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer shadow-2xs"
+                          >
+                            Gerenciar Acesso
                           </button>
                         )}
                         <button
@@ -8304,6 +8407,7 @@ export default function AdminPanel({
                 {masterClubs.map((club) => {
                   const isPending = club.status === 'Pendente';
                   const isSuspended = club.status === 'Suspenso';
+                  const realClub = clubs.find(c => c.id === club.id);
                   return (
                     <div key={club.id} className="border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-slate-50/50 hover:border-slate-350 transition">
                       <div className="space-y-1">
@@ -8329,6 +8433,14 @@ export default function AdminPanel({
                       </div>
 
                       <div className="flex gap-2">
+                        {realClub?.isPremium && onSetClubAdminCredentials && (
+                          <button
+                            onClick={() => startManagingAccess(realClub)}
+                            className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-[10.5px] px-3.5 py-2 rounded-xl transition cursor-pointer"
+                          >
+                            Gerenciar Acesso
+                          </button>
+                        )}
                         {isPending ? (
                           <>
                             <button
@@ -8810,6 +8922,16 @@ export default function AdminPanel({
                 <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{activateError}</div>
               )}
               <MemberField label="Subdomínio" value={activateSubDomain} onChange={setActivateSubDomain} placeholder="ex: meuclube" />
+
+              <div className="pt-2 border-t border-slate-100 space-y-3">
+                <h4 className="text-[10px] font-bold text-slate-500 uppercase">
+                  Acesso do Gestor {activatingClubHasAdmin ? '(opcional — preencha para redefinir)' : '(obrigatório, este clube ainda não tem login)'}
+                </h4>
+                <MemberField label="Nome do Responsável" value={activateAdminFullName} onChange={setActivateAdminFullName} />
+                <MemberField label="E-mail de Acesso" type="email" value={activateAdminEmail} onChange={setActivateAdminEmail} />
+                <MemberField label="Senha de Acesso" type="password" value={activateAdminPassword} onChange={setActivateAdminPassword} />
+              </div>
+
               <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
                 <button
                   type="button"
@@ -8824,6 +8946,57 @@ export default function AdminPanel({
                   className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs px-6 py-2.5 rounded-xl font-bold transition shadow-lg shadow-emerald-100 cursor-pointer"
                 >
                   {activatingSaving ? 'Ativando...' : 'Confirmar Ativação'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal "Gerenciar Acesso" — redefine e-mail/senha do gestor de um
+          clube já ativado, a qualquer momento */}
+      {managingAccessClub && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl text-slate-800 flex flex-col text-left">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <div>
+                <h4 className="font-display font-bold text-slate-900 text-base">Gerenciar Acesso do Gestor</h4>
+                <p className="text-xs text-slate-400">{managingAccessClub.name}</p>
+              </div>
+              <button onClick={() => setManagingAccessClub(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveAccessSubmit} className="p-6 space-y-4">
+              <p className="text-xs text-slate-600">
+                Define ou redefine o e-mail e a senha de login do administrador (club_admin) deste clube.
+              </p>
+              {accessSuccess && (
+                <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
+                  <CheckCircle className="w-5 h-5 text-emerald-600" />
+                  Acesso atualizado com sucesso!
+                </div>
+              )}
+              {accessError && (
+                <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{accessError}</div>
+              )}
+              <MemberField label="Nome do Responsável" value={accessFullName} onChange={setAccessFullName} />
+              <MemberField label="E-mail de Acesso" type="email" value={accessEmail} onChange={setAccessEmail} />
+              <MemberField label="Senha de Acesso" type="password" value={accessPassword} onChange={setAccessPassword} placeholder="Digite a nova senha" />
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setManagingAccessClub(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingAccess}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-6 py-2.5 rounded-xl font-bold transition shadow-lg shadow-blue-100 cursor-pointer"
+                >
+                  {savingAccess ? 'Salvando...' : 'Salvar Acesso'}
                 </button>
               </div>
             </form>

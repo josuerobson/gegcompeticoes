@@ -945,11 +945,16 @@ export async function initDB() {
       return r.rows.length === 0;
     };
 
+    // is_premium/sub_domain são propositalmente EXCLUÍDOS do DO UPDATE: desde a
+    // multi-tenancy, esses campos deixaram de ser dado estático de seed e passaram
+    // a ser estado de runtime (definido pelo master via "Ativar Recurso Completo").
+    // Reaplicá-los a cada boot resetava a ativação de qualquer clube seedado
+    // (ex.: club_standard) de volta para o valor fixo em mockData.ts.
     for (const c of defaultClubs) {
       await client.query(
         `INSERT INTO clubs (id, name, logo_url, sub_domain, cnpj, phone, is_premium, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, logo_url = EXCLUDED.logo_url, sub_domain = EXCLUDED.sub_domain, cnpj = EXCLUDED.cnpj, phone = EXCLUDED.phone, is_premium = EXCLUDED.is_premium`,
+         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, logo_url = EXCLUDED.logo_url, cnpj = EXCLUDED.cnpj, phone = EXCLUDED.phone`,
         [c.id, c.name, c.logoUrl || null, c.subDomain || null, c.cnpj || null, c.phone || null, c.isPremium, c.createdAt]
       );
     }

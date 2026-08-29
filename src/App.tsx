@@ -851,6 +851,40 @@ export default function App() {
     }
   };
 
+  const handleGetClubAdmin = async (clubId: string): Promise<User | null> => {
+    if (!currentUser) return null;
+    try {
+      const res = await fetch(`/api/admin/clubs/${clubId}/admin`, {
+        headers: { 'x-user-id': currentUser.id }
+      });
+      const data = await res.json();
+      return res.ok ? (data.admin || null) : null;
+    } catch (err) {
+      console.error('Erro ao buscar gestor do clube:', err);
+      return null;
+    }
+  };
+
+  const handleSetClubAdminCredentials = async (clubId: string, fields: { fullName?: string; email: string; password: string }): Promise<{ user?: User; error?: string }> => {
+    if (!currentUser) return { error: 'Não autenticado.' };
+    try {
+      const res = await fetch(`/api/admin/clubs/${clubId}/admin-credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify(fields)
+      });
+      const data = await res.json();
+      if (res.ok && data.user) {
+        await refreshUsers();
+        return { user: data.user };
+      }
+      return { error: data.error || 'Erro ao definir acesso do gestor.' };
+    } catch (err) {
+      console.error('Erro ao definir acesso do gestor:', err);
+      return { error: 'Erro ao definir acesso do gestor.' };
+    }
+  };
+
   const handleActivateClubTenant = async (clubId: string, subDomain: string): Promise<{ club?: Club; error?: string }> => {
     if (!currentUser) return { error: 'Não autenticado.' };
     try {
@@ -2390,6 +2424,8 @@ export default function App() {
               clubs={clubs}
               onCreateClub={handleCreateClub}
               onActivateClubTenant={handleActivateClubTenant}
+              onSetClubAdminCredentials={handleSetClubAdminCredentials}
+              onGetClubAdmin={handleGetClubAdmin}
               multiChampionships={multiChampionships}
             />
           )}

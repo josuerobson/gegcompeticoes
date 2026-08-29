@@ -1416,6 +1416,106 @@ app.post('/api/admin/clubs/:id/activate-tenant', requireMasterAdmin, async (req,
   }
 });
 
+// Define/redefine o login (e-mail + senha) do gestor (club_admin) de um clube —
+// usado tanto no momento da ativação de tenant quanto para alterar o acesso a
+// qualquer momento depois. Se o clube já tem um club_admin, atualiza esse
+// usuário; caso contrário, cria um novo (exige nome do responsável nesse caso).
+// Consulta o gestor (club_admin) atual de um clube, ignorando o escopo de
+// tenant — necessário porque, uma vez que um clube vira tenant isolado, seu
+// gestor deixa de aparecer no GET /api/users do master (isolamento correto),
+// mas o master ainda precisa localizá-lo para gerenciar o acesso.
+app.get('/api/admin/clubs/:id/admin', requireMasterAdmin, async (req, res) => {
+  try {
+    const adminRes = await pool.query(
+      `SELECT u.*,
+        COALESCE((SELECT json_agg(follower_id) FROM follows WHERE following_id = u.id), '[]'::json) as followers,
+        COALESCE((SELECT json_agg(following_id) FROM follows WHERE follower_id = u.id), '[]'::json) as following
+      FROM users u WHERE u.club_id = $1 AND u.role = 'club_admin' ORDER BY u.member_since ASC NULLS LAST LIMIT 1`,
+      [req.params.id]
+    );
+    res.json({ admin: adminRes.rows[0] ? mapUser(adminRes.rows[0]) : null });
+  } catch (err) {
+    console.error('Fetch club admin database error:', err);
+    res.status(500).json({ error: 'Erro ao buscar gestor do clube.' });
+  }
+});
+
+app.post('/api/admin/clubs/:id/admin-credentials', requireMasterAdmin, async (req, res) => {
+  const clubId = req.params.id;
+  const { fullName, email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Informe e-mail e senha de acesso.' });
+  }
+
+  try {
+    const clubRes = await pool.query('SELECT * FROM clubs WHERE id = $1', [clubId]);
+    if (clubRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Clube não encontrado.' });
+    }
+    const club = mapClub(clubRes.rows[0]);
+
+    const adminRes = await pool.query(
+      `SELECT id FROM users WHERE club_id = $1 AND role = 'club_admin' ORDER BY member_since ASC NULLS LAST LIMIT 1`,
+      [clubId]
+    );
+    const existingAdminId = adminRes.rows[0]?.id as string | undefined;
+
+    const emailConflictRes = existingAdminId
+      ? await pool.query('SELECT 1 FROM users WHERE email = $1 AND id != $2', [email, existingAdminId])
+      : await pool.query('SELECT 1 FROM users WHERE email = $1', [email]);
+    if (emailConflictRes.rows.length > 0) {
+      return res.status(400).json({ error: 'Este e-mail já está em uso por outro usuário.' });
+    }
+
+    if (existingAdminId) {
+      const updates = ['email = $1', 'password_hash = $2'];
+      const values: unknown[] = [email, hashPassword(password)];
+      if (fullName) {
+        updates.push(`full_name = $${values.length + 1}`);
+        values.push(fullName);
+      }
+      values.push(existingAdminId);
+      await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${values.length}`, values);
+      const updatedRes = await pool.query(
+        `SELECT u.*, '[]'::json as followers, '[]'::json as following FROM users u WHERE id = $1`,
+        [existingAdminId]
+      );
+      return res.json({ user: mapUser(updatedRes.rows[0]) });
+    }
+
+    if (!fullName) {
+      return res.status(400).json({ error: 'Informe o nome do responsável para criar o login.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const userId = `user_${Date.now()}`;
+      const username = await uniqueUsername(client, slugify(fullName));
+      await client.query(
+        `INSERT INTO users (id, email, username, full_name, avatar_url, bio, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, password_hash)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        [userId, email, username, fullName, DEFAULT_AVATAR, `Administrador do clube ${club.name}.`, true, new Date().toISOString().split('T')[0], 'club_admin', false, clubId, false, hashPassword(password)]
+      );
+      await client.query('COMMIT');
+      const fullUserRes = await client.query(
+        `SELECT u.*, '[]'::json as followers, '[]'::json as following FROM users u WHERE id = $1`,
+        [userId]
+      );
+      res.status(201).json({ user: mapUser(fullUserRes.rows[0]) });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Set club admin credentials database error:', err);
+    res.status(500).json({ error: 'Erro ao definir acesso do gestor.' });
+  }
+});
+
 // 2. User & Social Feed Follow system
 app.get('/api/users', async (req, res) => {
   try {
