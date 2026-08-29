@@ -77,12 +77,13 @@ interface AdminPanelProps {
 
 // Labeled input matching this panel's existing form style (see the
 // decorative cadastrar_membros/cadastro_armas inputs this mirrors).
-function MemberField({ label, value, onChange, type = 'text', placeholder }: {
+function MemberField({ label, value, onChange, type = 'text', placeholder, disabled = false }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="space-y-1">
@@ -92,7 +93,8 @@ function MemberField({ label, value, onChange, type = 'text', placeholder }: {
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+        disabled={disabled}
+        className={`w-full border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 ${disabled ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-slate-50'}`}
       />
     </div>
   );
@@ -5221,12 +5223,12 @@ export default function AdminPanel({
   const [activateSuccess, setActivateSuccess] = useState(false);
 
   const startActivatingClub = (club: Club) => {
-    const hasAdmin = users.some(u => u.clubId === club.id && u.role === 'club_admin');
+    const existingAdmin = users.find(u => u.clubId === club.id && u.role === 'club_admin');
     setActivatingClub(club);
-    setActivatingClubHasAdmin(hasAdmin);
+    setActivatingClubHasAdmin(!!existingAdmin);
     setActivateSubDomain(club.subDomain || '');
-    setActivateAdminFullName(club.responsibleName || '');
-    setActivateAdminEmail('');
+    setActivateAdminFullName(existingAdmin?.fullName || club.responsibleName || '');
+    setActivateAdminEmail(existingAdmin?.email || club.email || '');
     setActivateAdminPassword('');
     setActivateError('');
     setActivateSuccess(false);
@@ -5295,7 +5297,7 @@ export default function AdminPanel({
   const startManagingAccess = async (club: Club) => {
     setManagingAccessClub(club);
     setAccessFullName(club.responsibleName || '');
-    setAccessEmail('');
+    setAccessEmail(club.email || '');
     setAccessPassword('');
     setAccessError('');
     setAccessSuccess(false);
@@ -5304,7 +5306,7 @@ export default function AdminPanel({
     const admin = onGetClubAdmin ? await onGetClubAdmin(club.id) : users.find(u => u.clubId === club.id && u.role === 'club_admin');
     if (admin) {
       setAccessFullName(admin.fullName || club.responsibleName || '');
-      setAccessEmail(admin.email || '');
+      setAccessEmail(admin.email || club.email || '');
     }
   };
 
@@ -8927,11 +8929,14 @@ export default function AdminPanel({
                 <h4 className="text-[10px] font-bold text-slate-500 uppercase">
                   Acesso do Gestor {activatingClubHasAdmin ? '(opcional — preencha para redefinir)' : '(obrigatório, este clube ainda não tem login)'}
                 </h4>
-                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  O login é sempre por CPF, nunca por e-mail. Para clube, o campo "CPF" na tela de login é o <strong>CNPJ do clube</strong>{activatingClub.cnpj ? <> — neste caso <strong>{activatingClub.cnpj}</strong></> : ' — este clube ainda não tem CNPJ cadastrado, edite o cadastro antes de definir o acesso'}.
-                </p>
+                {!activatingClub.cnpj && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    Este clube ainda não tem CNPJ cadastrado — edite o cadastro antes de definir o acesso, o login é feito com ele.
+                  </p>
+                )}
+                <MemberField label="CPF/CNPJ de Acesso (login)" value={activatingClub.cnpj || ''} onChange={() => {}} disabled placeholder="Defina o CNPJ do clube em Editar" />
                 <MemberField label="Nome do Responsável" value={activateAdminFullName} onChange={setActivateAdminFullName} />
-                <MemberField label="E-mail de Acesso" type="email" value={activateAdminEmail} onChange={setActivateAdminEmail} />
+                <MemberField label="E-mail" type="email" value={activateAdminEmail} onChange={setActivateAdminEmail} />
                 <MemberField label="Senha de Acesso" type="password" value={activateAdminPassword} onChange={setActivateAdminPassword} />
               </div>
 
@@ -8972,11 +8977,13 @@ export default function AdminPanel({
             </div>
             <form onSubmit={handleSaveAccessSubmit} className="p-6 space-y-4">
               <p className="text-xs text-slate-600">
-                Define ou redefine o e-mail e a senha de login do administrador (club_admin) deste clube.
+                Define ou redefine a senha de login do administrador (club_admin) deste clube.
               </p>
-              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                O login é sempre por CPF, nunca por e-mail. Para clube, o campo "CPF" na tela de login é o <strong>CNPJ do clube</strong>{managingAccessClub.cnpj ? <> — neste caso <strong>{managingAccessClub.cnpj}</strong></> : ' — este clube ainda não tem CNPJ cadastrado, edite o cadastro antes de salvar'}.
-              </p>
+              {!managingAccessClub.cnpj && (
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Este clube ainda não tem CNPJ cadastrado — edite o cadastro antes de salvar, o login é feito com ele.
+                </p>
+              )}
               {accessSuccess && (
                 <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
                   <CheckCircle className="w-5 h-5 text-emerald-600" />
@@ -8986,8 +8993,9 @@ export default function AdminPanel({
               {accessError && (
                 <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{accessError}</div>
               )}
+              <MemberField label="CPF/CNPJ de Acesso (login)" value={managingAccessClub.cnpj || ''} onChange={() => {}} disabled placeholder="Defina o CNPJ do clube em Editar" />
               <MemberField label="Nome do Responsável" value={accessFullName} onChange={setAccessFullName} />
-              <MemberField label="E-mail de Acesso" type="email" value={accessEmail} onChange={setAccessEmail} />
+              <MemberField label="E-mail" type="email" value={accessEmail} onChange={setAccessEmail} />
               <MemberField label="Senha de Acesso" type="password" value={accessPassword} onChange={setAccessPassword} placeholder="Digite a nova senha" />
               <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
                 <button
