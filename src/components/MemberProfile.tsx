@@ -1854,13 +1854,20 @@ export default function MemberProfile({
               {/* Anuidade */}
               <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                 <span className="text-slate-450 font-sans text-[11px]">Anuidade</span>
-                {selectedUser.hasPaidSignature ? (
-                  <span className="font-bold text-emerald-600 flex items-center gap-1">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" /> REGULAR
-                  </span>
-                ) : (
-                  <span className="font-bold text-rose-500">PENDENTE</span>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {selectedUser.signatureExpiry && (
+                    <span className="text-slate-450 font-sans text-[11px]">
+                      Venc: {selectedUser.signatureExpiry.includes('-') ? selectedUser.signatureExpiry.split('-').reverse().join('/') : selectedUser.signatureExpiry}
+                    </span>
+                  )}
+                  {selectedUser.hasPaidSignature ? (
+                    <span className="font-bold text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" /> REGULAR
+                    </span>
+                  ) : (
+                    <span className="font-bold text-rose-500">PENDENTE</span>
+                  )}
+                </div>
               </div>
 
               {/* Habitualidade */}
