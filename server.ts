@@ -129,6 +129,7 @@ function mapModality(m: any): Modality {
     shotsPerSeries: m.shots_per_series ?? undefined,
     timePerSeriesMinutes: m.time_per_series_minutes ?? undefined,
     evaluationType: m.evaluation_type || undefined,
+    legacyId: m.legacy_id ?? undefined,
   };
 }
 
@@ -152,6 +153,7 @@ function mapStage(s: any): Stage {
     incluirNaSomaPaginaInicial: s.incluir_na_soma_pagina_inicial || undefined,
     rankingEnabled: Boolean(s.ranking_enabled),
     rankingPositions: parsePositions(s.ranking_positions),
+    legacyId: s.legacy_id ?? undefined,
   };
 }
 
@@ -169,6 +171,7 @@ function mapWeapon(w: any): Weapon {
     weaponClass: w.class || undefined,
     permissionStatus: w.permission_status || undefined,
     registrySystem: w.registry_system || undefined,
+    legacyId: w.legacy_id ?? undefined,
   };
 }
 
@@ -248,6 +251,7 @@ function mapChampionship(c: any): Championship {
     abertoOutrosClubes: (c.aberto_outros_clubes as 'sim' | 'nao') || undefined,
     rankingEnabled: Boolean(c.ranking_enabled),
     rankingPositions: parsePositions(c.ranking_positions),
+    legacyId: c.legacy_id ?? undefined,
   };
 }
 
@@ -296,6 +300,7 @@ function mapRegistration(r: any): Registration {
     clubAmmoShots: r.club_ammo_shots != null ? Number(r.club_ammo_shots) : 0,
     clubAmmoType: (r.club_ammo_type as 'nova' | 'recarga') || 'recarga',
     multiChampionshipId: r.multi_championship_id || undefined,
+    legacyId: r.legacy_id ?? undefined,
   };
 }
 
@@ -341,6 +346,7 @@ function mapStageScore(s: any): StageScore {
     hitFactor: s.hit_factor !== null && s.hit_factor !== undefined ? Number(s.hit_factor) : undefined,
     clubAmmoType: (s.club_ammo_type as 'nova' | 'recarga') || 'recarga',
     createdAt: s.created_at,
+    legacyId: s.legacy_id ?? undefined,
   };
 }
 
@@ -1215,6 +1221,270 @@ app.post('/api/admin/import/legacy', requireMasterAdmin, async (req, res) => {
     await client.query('ROLLBACK');
     console.error('Legacy import database error:', err);
     res.status(500).json({ error: 'Erro ao importar dados do legado.' });
+  } finally {
+    client.release();
+  }
+});
+
+// Importação de armas/modalidades/campeonatos/etapas/inscrições+resultados do
+// legado (ArmasClube, Modalidades, Campeonato, etapa, inscricao_modalidades +
+// Inscricao_dados_adicionais). Roda depois da importação de clubes/atletas —
+// resolve club/athlete legacy ids consultando o que já foi importado.
+// Modalidades/Campeonatos/Etapas do legado pertencem ao clube master (Aranãs),
+// já que é o hub compartilhado por toda a rede de clubes-membro. Cada
+// inscricao_modalidades já é por etapa (não por campeonato inteiro), então
+// mapeia 1:1 para uma registration nossa — a arma por etapa já é suportada
+// sem nenhuma mudança de schema.
+app.post('/api/admin/import/legacy-competitions', requireMasterAdmin, async (req, res) => {
+  const { weapons, modalities, championships, stages, registrations } = req.body as {
+    weapons: Array<{
+      legacyId: number; ownerClubLegacyId?: number; manufacturer?: string; model?: string; caliber?: string;
+      weaponClass?: string; permissionStatus?: string; registrySystem?: string; weaponNumber?: string; sigmaNumber?: string;
+    }>;
+    modalities: Array<{
+      legacyId: number; name: string; seriesCount?: number; shotsPerSeries?: number;
+      timePerSeriesMinutes?: number; evaluationType?: string;
+    }>;
+    championships: Array<{ legacyId: number; title: string; modalityLegacyIds: number[]; [key: string]: any }>;
+    stages: Array<{ legacyId: number; championshipLegacyId: number; stageNum: number; title: string; date: string; [key: string]: any }>;
+    registrations: Array<{
+      legacyId: number; athleteLegacyId: number; clubLegacyId?: number; championshipLegacyId: number;
+      stageLegacyId: number; modalityLegacyId: number; weaponLegacyId?: number;
+      paymentStatus: 'pending' | 'approved'; valorPago?: number; dataPagamento?: string;
+      scoreX?: number; scoreP10?: number; scoreP9?: number; scoreP8?: number; scoreP7?: number; scoreP6?: number;
+      scoreP5?: number; scoreP4?: number; scoreP3?: number; scoreP2?: number; scoreP1?: number; scoreP0?: number;
+      idsc0?: number; idsc2?: number; idsc5?: number; idscMisses?: number; idscNoshoot?: number;
+      idscTempoPista?: number; idscTempoPistaExibe?: string; idscTotalSegundosExibe?: string;
+      dataExecucao?: string; horaExecucao?: string; totalMinutos?: string; totalMilesegundos?: number;
+      seriesPontos?: any[]; seriesTempos?: any[]; codigoInscricao?: number;
+      disqualified?: boolean; penalty?: number; totalPoints?: number;
+    }>;
+  };
+
+  if (!Array.isArray(weapons) || !Array.isArray(modalities) || !Array.isArray(championships) || !Array.isArray(stages) || !Array.isArray(registrations)) {
+    return res.status(400).json({ error: 'Payload deve conter arrays "weapons", "modalities", "championships", "stages" e "registrations".' });
+  }
+
+  const client = await pool.connect();
+  const errors: string[] = [];
+  let weaponsImported = 0, modalitiesImported = 0, championshipsImported = 0, stagesImported = 0, registrationsImported = 0;
+
+  try {
+    // Mapas legacy_id -> id novo, já resolvidos do que foi importado antes.
+    const clubMapRes = await client.query('SELECT id, legacy_id FROM clubs WHERE legacy_id IS NOT NULL');
+    const clubMap: Record<number, string> = {};
+    clubMapRes.rows.forEach(r => { clubMap[r.legacy_id] = r.id; });
+
+    const userMapRes = await client.query('SELECT id, legacy_id, cr_number FROM users WHERE legacy_id IS NOT NULL');
+    const userMap: Record<number, { id: string; crNumber: string | null }> = {};
+    userMapRes.rows.forEach(r => { userMap[r.legacy_id] = { id: r.id, crNumber: r.cr_number }; });
+
+    const weaponMap: Record<number, string> = {};
+    const modalityMap: Record<number, string> = {};
+    const championshipMap: Record<number, string> = {};
+    const stageMap: Record<number, string> = {};
+    // Evita N+1 queries no loop de registrations abaixo.
+    const modalityNameByLegacyId: Record<number, string> = {};
+    modalities.forEach(m => { modalityNameByLegacyId[m.legacyId] = m.name; });
+    const stageNumByLegacyId: Record<number, number> = {};
+    stages.forEach(s => { stageNumByLegacyId[s.legacyId] = s.stageNum; });
+
+    await client.query('BEGIN');
+
+    for (const w of weapons) {
+      await client.query('SAVEPOINT sp_import_item');
+      try {
+        const ownerId = (w.ownerClubLegacyId && clubMap[w.ownerClubLegacyId]) || 'club_aranas';
+        const newId = `weapon_legacy_${w.legacyId}`;
+        const serialNumber = w.sigmaNumber || w.weaponNumber || String(w.legacyId);
+        await client.query(
+          `INSERT INTO weapons (id, owner_id, manufacturer, model, caliber, serial_number, weapon_number, sigma_number, class, permission_status, registry_system, legacy_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+           ON CONFLICT (legacy_id) DO UPDATE SET
+             owner_id = EXCLUDED.owner_id, manufacturer = EXCLUDED.manufacturer, model = EXCLUDED.model, caliber = EXCLUDED.caliber,
+             weapon_number = EXCLUDED.weapon_number, sigma_number = EXCLUDED.sigma_number, class = EXCLUDED.class,
+             permission_status = EXCLUDED.permission_status, registry_system = EXCLUDED.registry_system
+           RETURNING id`,
+          [newId, ownerId, w.manufacturer || 'Não informado', w.model || 'Não informado', w.caliber || 'Não informado',
+           serialNumber, w.weaponNumber || null, w.sigmaNumber || null, w.weaponClass || null, w.permissionStatus || null,
+           w.registrySystem || null, w.legacyId]
+        );
+        weaponMap[w.legacyId] = newId;
+        weaponsImported++;
+      } catch (e: any) {
+        await client.query('ROLLBACK TO SAVEPOINT sp_import_item');
+        errors.push(`Arma legacyId=${w.legacyId}: ${e.message}`);
+      }
+    }
+
+    for (const m of modalities) {
+      await client.query('SAVEPOINT sp_import_item');
+      try {
+        const newId = `mod_legacy_${m.legacyId}`;
+        await client.query(
+          `INSERT INTO modalities (id, name, club_id, series_count, shots_per_series, time_per_series_minutes, evaluation_type, legacy_id)
+           VALUES ($1,$2,'club_aranas',$3,$4,$5,$6,$7)
+           ON CONFLICT (legacy_id) DO UPDATE SET
+             name = EXCLUDED.name, series_count = EXCLUDED.series_count, shots_per_series = EXCLUDED.shots_per_series,
+             time_per_series_minutes = EXCLUDED.time_per_series_minutes, evaluation_type = EXCLUDED.evaluation_type
+           RETURNING id`,
+          [newId, m.name, m.seriesCount || null, m.shotsPerSeries || null, m.timePerSeriesMinutes || null, m.evaluationType || null, m.legacyId]
+        );
+        modalityMap[m.legacyId] = newId;
+        modalitiesImported++;
+      } catch (e: any) {
+        await client.query('ROLLBACK TO SAVEPOINT sp_import_item');
+        errors.push(`Modalidade legacyId=${m.legacyId} (${m.name}): ${e.message}`);
+      }
+    }
+
+    for (const c of championships) {
+      await client.query('SAVEPOINT sp_import_item');
+      try {
+        const newId = `champ_legacy_${c.legacyId}`;
+        const modalityIds = (c.modalityLegacyIds || []).map((mid: number) => modalityMap[mid]).filter(Boolean);
+        const columns = ['id', 'title', 'description', 'start_date', 'end_date', 'registration_fee', 'modalities', 'stages_count', 'status', 'banner_url', 'club_id', 'type', 'legacy_id'];
+        const values: unknown[] = [
+          newId, c.title, c.title, c.startDate || '2022-01-01', c.endDate || '2022-01-01', 0,
+          JSON.stringify(modalityIds), c.stagesCount || 1, 'completed',
+          'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80',
+          'club_aranas', 'individual', c.legacyId
+        ];
+        const updates = ['title = EXCLUDED.title', 'description = EXCLUDED.description', 'modalities = EXCLUDED.modalities'];
+        for (const [key, column] of Object.entries(CHAMPIONSHIP_EXTRA_COLUMNS)) {
+          if (Object.prototype.hasOwnProperty.call(c, key)) {
+            columns.push(column);
+            values.push(c[key] === '' ? null : c[key]);
+            updates.push(`${column} = EXCLUDED.${column}`);
+          }
+        }
+        const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+        await client.query(
+          `INSERT INTO championships (${columns.join(', ')}) VALUES (${placeholders})
+           ON CONFLICT (legacy_id) DO UPDATE SET ${updates.join(', ')}`,
+          values
+        );
+        championshipMap[c.legacyId] = newId;
+        championshipsImported++;
+      } catch (e: any) {
+        await client.query('ROLLBACK TO SAVEPOINT sp_import_item');
+        errors.push(`Campeonato legacyId=${c.legacyId} (${c.title}): ${e.message}`);
+      }
+    }
+
+    for (const s of stages) {
+      await client.query('SAVEPOINT sp_import_item');
+      try {
+        const championshipId = championshipMap[s.championshipLegacyId];
+        if (!championshipId) throw new Error(`campeonato legacyId=${s.championshipLegacyId} não foi importado`);
+        const newId = `stage_legacy_${s.legacyId}`;
+        const columns = ['id', 'championship_id', 'stage_num', 'title', 'date', 'legacy_id'];
+        const values: unknown[] = [newId, championshipId, s.stageNum, s.title, s.date, s.legacyId];
+        const updates = ['stage_num = EXCLUDED.stage_num', 'title = EXCLUDED.title', 'date = EXCLUDED.date'];
+        for (const [key, column] of Object.entries(STAGE_EXTRA_COLUMNS)) {
+          if (Object.prototype.hasOwnProperty.call(s, key)) {
+            columns.push(column);
+            values.push(s[key] === '' ? null : s[key]);
+            updates.push(`${column} = EXCLUDED.${column}`);
+          }
+        }
+        const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+        await client.query(
+          `INSERT INTO stages (${columns.join(', ')}) VALUES (${placeholders})
+           ON CONFLICT (legacy_id) DO UPDATE SET ${updates.join(', ')}`,
+          values
+        );
+        stageMap[s.legacyId] = newId;
+        stagesImported++;
+      } catch (e: any) {
+        await client.query('ROLLBACK TO SAVEPOINT sp_import_item');
+        errors.push(`Etapa legacyId=${s.legacyId} (${s.title}): ${e.message}`);
+      }
+    }
+
+    for (const r of registrations) {
+      await client.query('SAVEPOINT sp_import_item');
+      try {
+        const athlete = userMap[r.athleteLegacyId];
+        if (!athlete) throw new Error(`atleta legacyId=${r.athleteLegacyId} não foi importado`);
+        const championshipId = championshipMap[r.championshipLegacyId];
+        if (!championshipId) throw new Error(`campeonato legacyId=${r.championshipLegacyId} não foi importado`);
+        const stageId = stageMap[r.stageLegacyId];
+        if (!stageId) throw new Error(`etapa legacyId=${r.stageLegacyId} não foi importada`);
+        const modalityId = modalityMap[r.modalityLegacyId];
+        if (!modalityId) throw new Error(`modalidade legacyId=${r.modalityLegacyId} não foi importada`);
+        const clubId = (r.clubLegacyId && clubMap[r.clubLegacyId]) || 'club_aranas';
+        const weaponId = r.weaponLegacyId ? weaponMap[r.weaponLegacyId] || null : null;
+
+        const newId = `reg_legacy_${r.legacyId}`;
+        await client.query(
+          `INSERT INTO registrations (
+             id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
+             payment_method, payment_status, completion_status, registered_at, approved_at,
+             disqualified, penalty, total_points, valor_pago, data_pagamento,
+             score_x, score_p10, score_p9, score_p8, score_p7, score_p6, score_p5, score_p4, score_p3, score_p2, score_p1, score_p0,
+             idsc_0, idsc_2, idsc_5, idsc_misses, idsc_noshoot, idsc_tempo_pista, idsc_tempo_pista_exibe, idsc_total_segundos_exibe,
+             data_execucao, hora_execucao, total_minutos, total_milesegundos, series_pontos, series_tempos, codigo_inscricao, legacy_id
+           ) VALUES (
+             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
+             $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
+             $31,$32,$33,$34,$35,$36,$37,$38,
+             $39,$40,$41,$42,$43,$44,$45,$46
+           )
+           ON CONFLICT (legacy_id) DO UPDATE SET
+             club_id = EXCLUDED.club_id, weapon_id = EXCLUDED.weapon_id, payment_status = EXCLUDED.payment_status,
+             completion_status = EXCLUDED.completion_status, disqualified = EXCLUDED.disqualified, penalty = EXCLUDED.penalty,
+             total_points = EXCLUDED.total_points, valor_pago = EXCLUDED.valor_pago, data_pagamento = EXCLUDED.data_pagamento,
+             score_x = EXCLUDED.score_x, score_p10 = EXCLUDED.score_p10, score_p9 = EXCLUDED.score_p9, score_p8 = EXCLUDED.score_p8,
+             score_p7 = EXCLUDED.score_p7, score_p6 = EXCLUDED.score_p6, score_p5 = EXCLUDED.score_p5, score_p4 = EXCLUDED.score_p4,
+             score_p3 = EXCLUDED.score_p3, score_p2 = EXCLUDED.score_p2, score_p1 = EXCLUDED.score_p1, score_p0 = EXCLUDED.score_p0,
+             idsc_0 = EXCLUDED.idsc_0, idsc_2 = EXCLUDED.idsc_2, idsc_5 = EXCLUDED.idsc_5, idsc_misses = EXCLUDED.idsc_misses,
+             idsc_noshoot = EXCLUDED.idsc_noshoot, idsc_tempo_pista = EXCLUDED.idsc_tempo_pista,
+             idsc_tempo_pista_exibe = EXCLUDED.idsc_tempo_pista_exibe, idsc_total_segundos_exibe = EXCLUDED.idsc_total_segundos_exibe,
+             data_execucao = EXCLUDED.data_execucao, hora_execucao = EXCLUDED.hora_execucao, total_minutos = EXCLUDED.total_minutos,
+             total_milesegundos = EXCLUDED.total_milesegundos, series_pontos = EXCLUDED.series_pontos, series_tempos = EXCLUDED.series_tempos,
+             codigo_inscricao = EXCLUDED.codigo_inscricao
+           RETURNING id`,
+          [
+            newId, championshipId, athlete.id, clubId, modalityId, stageId, weaponId, athlete.crNumber || 'N/I',
+            'pix', r.paymentStatus || 'approved', 'completed', r.dataExecucao || new Date().toISOString(), r.dataExecucao || null,
+            Boolean(r.disqualified), r.penalty || 0, r.totalPoints ?? null, r.valorPago ?? null, r.dataPagamento || null,
+            r.scoreX || 0, r.scoreP10 || 0, r.scoreP9 || 0, r.scoreP8 || 0, r.scoreP7 || 0, r.scoreP6 || 0,
+            r.scoreP5 || 0, r.scoreP4 || 0, r.scoreP3 || 0, r.scoreP2 || 0, r.scoreP1 || 0, r.scoreP0 || 0,
+            r.idsc0 || 0, r.idsc2 || 0, r.idsc5 || 0, r.idscMisses || 0, r.idscNoshoot || 0,
+            r.idscTempoPista || null, r.idscTempoPistaExibe || null, r.idscTotalSegundosExibe || null,
+            r.dataExecucao || null, r.horaExecucao || null, r.totalMinutos || null, r.totalMilesegundos || 0,
+            r.seriesPontos ? JSON.stringify(r.seriesPontos) : null, r.seriesTempos ? JSON.stringify(r.seriesTempos) : null,
+            r.codigoInscricao || null, r.legacyId
+          ]
+        );
+
+        // stage_scores espelha a registration (mesmo padrão usado pelo POST /scores em uso).
+        // Nomes/números resolvidos em memória (evita N+1 queries no loop).
+        await client.query(
+          `INSERT INTO stage_scores (id, championship_id, registration_id, user_id, shooter_name, modality, stage_num, score, time_seconds, created_at, legacy_id)
+           VALUES ($1,$2,$3,$4,(SELECT full_name FROM users WHERE id=$4),$5,$6,$7,$8,$9,$10)
+           ON CONFLICT (legacy_id) DO UPDATE SET score = EXCLUDED.score, time_seconds = EXCLUDED.time_seconds`,
+          [
+            `score_legacy_${r.legacyId}`, championshipId, newId, athlete.id,
+            modalityNameByLegacyId[r.modalityLegacyId] || 'Modalidade', stageNumByLegacyId[r.stageLegacyId] || 1,
+            r.totalPoints ?? 0, r.idscTempoPista || null, new Date().toISOString(), r.legacyId
+          ]
+        );
+
+        registrationsImported++;
+      } catch (e: any) {
+        await client.query('ROLLBACK TO SAVEPOINT sp_import_item');
+        errors.push(`Inscrição legacyId=${r.legacyId}: ${e.message}`);
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, weaponsImported, modalitiesImported, championshipsImported, stagesImported, registrationsImported, errors });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Legacy competitions import database error:', err);
+    res.status(500).json({ error: 'Erro ao importar campeonatos/etapas/inscrições do legado.' });
   } finally {
     client.release();
   }

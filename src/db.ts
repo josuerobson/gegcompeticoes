@@ -756,6 +756,19 @@ export async function initDB() {
       );
     `);
 
+    // Importação de campeonatos/etapas/modalidades/armas/inscrições do sistema
+    // legado (multicadastro + inscricao_modalidades). legacy_id permite
+    // reprocessar a importação sem duplicar registros, igual ao já usado em
+    // clubs/users.
+    await client.query(`
+      ALTER TABLE weapons ADD COLUMN IF NOT EXISTS legacy_id INTEGER UNIQUE;
+      ALTER TABLE modalities ADD COLUMN IF NOT EXISTS legacy_id INTEGER UNIQUE;
+      ALTER TABLE championships ADD COLUMN IF NOT EXISTS legacy_id INTEGER UNIQUE;
+      ALTER TABLE stages ADD COLUMN IF NOT EXISTS legacy_id INTEGER UNIQUE;
+      ALTER TABLE registrations ADD COLUMN IF NOT EXISTS legacy_id INTEGER UNIQUE;
+      ALTER TABLE stage_scores ADD COLUMN IF NOT EXISTS legacy_id INTEGER UNIQUE;
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS posts (
         id TEXT PRIMARY KEY,

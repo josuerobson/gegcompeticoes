@@ -146,6 +146,7 @@ export interface Modality {
   shotsPerSeries?: number;
   timePerSeriesMinutes?: number;
   evaluationType?: 'pontuacao' | 'pontuacao_tempo' | 'tempo';
+  legacyId?: number;
 }
 
 export interface Stage {
@@ -167,6 +168,7 @@ export interface Stage {
   incluirNaSomaPaginaInicial?: 'sim' | 'nao';
   rankingEnabled?: boolean;
   rankingPositions?: number[]; // e.g. [1,2,3] — which placements show in the feed ranking highlight card
+  legacyId?: number;
 }
 
 export type StageInput = Pick<Stage, 'championshipId' | 'title' | 'date'> & Partial<Omit<Stage, 'id' | 'championshipId' | 'title' | 'date' | 'stageNum'>>;
@@ -184,6 +186,7 @@ export interface Weapon {
   weaponClass?: string; // "Classe"
   permissionStatus?: string; // "Status de permissão" (Permitida/Restrita)
   registrySystem?: string; // "Arma é" (Sigma/Sinarm)
+  legacyId?: number;
 }
 
 // Managed dropdown option for the weapon form's Classe/Modelo/Calibre/
@@ -261,6 +264,7 @@ export interface Championship {
   abertoOutrosClubes?: 'sim' | 'nao';
   rankingEnabled?: boolean;
   rankingPositions?: number[]; // e.g. [1,2,3] — which placements show in the feed ranking highlight card
+  legacyId?: number;
 }
 
 export interface HomeBanner {
@@ -320,6 +324,7 @@ export interface Registration {
   clubAmmoShots?: number;
   clubAmmoType?: 'nova' | 'recarga';
   multiChampionshipId?: string; // Presente quando a inscrição foi gerada por um multicampeonato
+  legacyId?: number;
 }
 
 export interface StageScore {
@@ -335,6 +340,7 @@ export interface StageScore {
   hitFactor?: number;
   clubAmmoType?: 'nova' | 'recarga';
   createdAt: string;
+  legacyId?: number;
 }
 
 export interface RankingItem {
