@@ -1109,9 +1109,13 @@ export async function initDB() {
       { id: 'ath_sim_6', email: 'atleta3@balistica.com', username: 'atleta3_balistica', fullName: 'Fernanda Balistica Tres', cpf: '99999999993', clubId: 'club_sim_2', sex: 'feminino' }
     ];
 
-    const champRes = await client.query('SELECT id FROM championships LIMIT 1');
-    const stageRes = await client.query('SELECT id FROM stages LIMIT 1');
-    const modRes = await client.query('SELECT id FROM modalities LIMIT 1');
+    // Escopado aos clubes de simulação: nunca deve anexar inscrições fake a um
+    // campeonato real (antes não importava porque não havia campeonato nenhum
+    // na base; agora que há dados reais importados, um LIMIT 1 sem filtro
+    // pegaria um campeonato real arbitrário e o poluiria com atletas fake).
+    const champRes = await client.query(`SELECT id FROM championships WHERE club_id IN ('club_sim_1', 'club_sim_2') LIMIT 1`);
+    const stageRes = await client.query(`SELECT id FROM stages WHERE championship_id = ANY(SELECT id FROM championships WHERE club_id IN ('club_sim_1', 'club_sim_2')) LIMIT 1`);
+    const modRes = await client.query(`SELECT id FROM modalities WHERE club_id IN ('club_sim_1', 'club_sim_2') LIMIT 1`);
 
     if (champRes.rows.length > 0 && stageRes.rows.length > 0 && modRes.rows.length > 0) {
       const champId = champRes.rows[0].id;
@@ -1149,7 +1153,7 @@ export async function initDB() {
             payment_method, payment_status, completion_status, registered_at, approved_at, tx_id,
             disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pix', 'approved', 'pending', $9, $9, $10, false, 0, 'usr_admin_1', 'normal', 80, $11)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pix', 'approved', 'pending', $9, $9, $10, false, 0, 'usr_adm_sim_1', 'normal', 80, $11)
           ON CONFLICT (id) DO NOTHING`,
           [
             regId, champId, ath.id, ath.clubId, modalityId, stageId, weaponId, crNumber,
