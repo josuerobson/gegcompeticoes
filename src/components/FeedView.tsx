@@ -369,7 +369,7 @@ function RankingHighlightCard() {
     if (order.length <= 1) return;
     const timer = setInterval(() => {
       setCurrentIdx(prev => (prev + 1) % order.length);
-    }, 5000);
+    }, 10000);
     return () => clearInterval(timer);
   }, [order.length]);
 
