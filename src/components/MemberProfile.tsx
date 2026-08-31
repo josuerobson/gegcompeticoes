@@ -1870,93 +1870,99 @@ export default function MemberProfile({
                 </div>
               </div>
 
-              {/* Habitualidade */}
-              <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                <span className="text-slate-450 font-sans text-[11px]">Habitualidade: Últimos 12 meses</span>
-                <span className="font-extrabold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-100 font-sans text-xs">
-                  {habitualidadeCount}
-                </span>
-              </div>
-
-              {/* Guia de Trânsito */}
-              {!isEditingGuia ? (
-                <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-450 font-sans text-[11px]">Guia de Trânsito</span>
-                    {isMe && (
-                      <button
-                        type="button"
-                        onClick={startEditGuia}
-                        title="Editar Vencimento da Guia de Trânsito"
-                        className="p-0.5 text-slate-400 hover:text-blue-600 transition rounded hover:bg-slate-200/60 cursor-pointer"
-                      >
-                        <Pencil className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-slate-800 text-xs">
-                      {selectedUser.guiaTransitoExpiry
-                        ? (selectedUser.guiaTransitoExpiry.includes('-')
-                            ? selectedUser.guiaTransitoExpiry.split('T')[0].split('-').reverse().join('/')
-                            : selectedUser.guiaTransitoExpiry)
-                        : '--/--/----'}
+              {/* Habitualidade, Guia de Trânsito e Saldo de Munições são conceitos de
+                  atleta pessoa física — não fazem sentido no perfil de um clube. */}
+              {!isClubAdmin && (
+                <>
+                  {/* Habitualidade */}
+                  <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <span className="text-slate-450 font-sans text-[11px]">Habitualidade: Últimos 12 meses</span>
+                    <span className="font-extrabold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-100 font-sans text-xs">
+                      {habitualidadeCount}
                     </span>
-                    {isMe && (
-                      <button
-                        type="button"
-                        onClick={startEditGuia}
-                        title="Editar Guia de Trânsito"
-                        className="p-1 text-blue-600 hover:text-blue-800 transition rounded hover:bg-blue-50 cursor-pointer"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                    )}
                   </div>
-                </div>
-              ) : (
-                <div className="bg-blue-50/70 border border-blue-200 p-2.5 rounded-lg space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-blue-900 font-bold text-[11px]">Editar Vencimento Guia de Trânsito</span>
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingGuia(false)}
-                      className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  {guiaSaveSuccess && (
-                    <div className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Vencimento da Guia salvo!
+
+                  {/* Guia de Trânsito */}
+                  {!isEditingGuia ? (
+                    <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-450 font-sans text-[11px]">Guia de Trânsito</span>
+                        {isMe && (
+                          <button
+                            type="button"
+                            onClick={startEditGuia}
+                            title="Editar Vencimento da Guia de Trânsito"
+                            className="p-0.5 text-slate-400 hover:text-blue-600 transition rounded hover:bg-slate-200/60 cursor-pointer"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-slate-800 text-xs">
+                          {selectedUser.guiaTransitoExpiry
+                            ? (selectedUser.guiaTransitoExpiry.includes('-')
+                                ? selectedUser.guiaTransitoExpiry.split('T')[0].split('-').reverse().join('/')
+                                : selectedUser.guiaTransitoExpiry)
+                            : '--/--/----'}
+                        </span>
+                        {isMe && (
+                          <button
+                            type="button"
+                            onClick={startEditGuia}
+                            title="Editar Guia de Trânsito"
+                            className="p-1 text-blue-600 hover:text-blue-800 transition rounded hover:bg-blue-50 cursor-pointer"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-blue-50/70 border border-blue-200 p-2.5 rounded-lg space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-blue-900 font-bold text-[11px]">Editar Vencimento Guia de Trânsito</span>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingGuia(false)}
+                          className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      {guiaSaveSuccess && (
+                        <div className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Vencimento da Guia salvo!
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="date"
+                          value={guiaExpiryInput}
+                          onChange={e => setGuiaExpiryInput(e.target.value)}
+                          className="bg-white border border-slate-300 text-slate-800 text-xs rounded-lg p-1.5 w-full outline-none focus:border-blue-500 font-semibold"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSaveGuiaExpiry}
+                          disabled={savingGuia}
+                          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition shrink-0 cursor-pointer"
+                        >
+                          {savingGuia ? '...' : 'Salvar'}
+                        </button>
+                      </div>
                     </div>
                   )}
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="date"
-                      value={guiaExpiryInput}
-                      onChange={e => setGuiaExpiryInput(e.target.value)}
-                      className="bg-white border border-slate-300 text-slate-800 text-xs rounded-lg p-1.5 w-full outline-none focus:border-blue-500 font-semibold"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSaveGuiaExpiry}
-                      disabled={savingGuia}
-                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition shrink-0 cursor-pointer"
-                    >
-                      {savingGuia ? '...' : 'Salvar'}
-                    </button>
-                  </div>
-                </div>
-              )}
 
-              {/* Saldo de Munições */}
-              <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                <span className="text-slate-450 font-sans text-[11px]">Saldo de Munições</span>
-                <span className="font-bold text-slate-800">
-                  {totalClubAmmo} un
-                </span>
-              </div>
+                  {/* Saldo de Munições */}
+                  <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <span className="text-slate-450 font-sans text-[11px]">Saldo de Munições</span>
+                    <span className="font-bold text-slate-800">
+                      {totalClubAmmo} un
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
 
             {isMe && !selectedUser.hasPaidSignature && (
