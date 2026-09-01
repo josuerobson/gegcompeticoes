@@ -421,7 +421,7 @@ export default function MemberProfile({
     phone: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
   });
   const [clubForm, setClubForm] = useState({
-    name: '', crNumber: '', responsibleName: '', phone: '', email: '',
+    name: '', crNumber: '', crValidity: '', responsibleName: '', phone: '', email: '',
     cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
   });
   const [savingSection, setSavingSection] = useState<string | null>(null);
@@ -506,6 +506,7 @@ export default function MemberProfile({
     setClubForm({
       name: myClub.name || '',
       crNumber: myClub.crNumber || '',
+      crValidity: myClub.crValidity || '',
       responsibleName: myClub.responsibleName || '',
       phone: myClub.phone || '',
       email: myClub.email || '',
@@ -2087,12 +2088,13 @@ export default function MemberProfile({
                   <div className="space-y-4">
                     <ProfileSection
                       title="Dados Cadastrais do Clube"
-                      onSave={() => saveClubSection('club_data', { name: clubForm.name, crNumber: clubForm.crNumber, responsibleName: clubForm.responsibleName })}
+                      onSave={() => saveClubSection('club_data', { name: clubForm.name, crNumber: clubForm.crNumber, crValidity: clubForm.crValidity, responsibleName: clubForm.responsibleName })}
                       saving={savingSection === 'club_data'}
                       saved={savedSection === 'club_data'}
                     >
                       <div className="sm:col-span-2"><ProfileField label="Razão Social" value={clubForm.name} onChange={v => setClubForm({ ...clubForm, name: v })} /></div>
                       <ProfileField label="CR" value={clubForm.crNumber} onChange={v => setClubForm({ ...clubForm, crNumber: v })} />
+                      <ProfileField label="Validade do CR" type="date" value={clubForm.crValidity} onChange={v => setClubForm({ ...clubForm, crValidity: v })} />
                       <ProfileField label="Nome do responsável" value={clubForm.responsibleName} onChange={v => setClubForm({ ...clubForm, responsibleName: v })} />
                     </ProfileSection>
 
