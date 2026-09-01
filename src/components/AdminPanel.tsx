@@ -4741,6 +4741,7 @@ export default function AdminPanel({
 
   // Sidebar Menu selection for Master
   const [masterMenu, setMasterMenu] = useState<string>('gerenciar_clubes');
+  const [masterClubSearchQuery, setMasterClubSearchQuery] = useState('');
 
   // Gerenciar Listas de Armas (Administrador master only)
   const WEAPON_LOOKUP_KINDS: { value: WeaponLookupOption['kind']; label: string }[] = [
@@ -8710,11 +8711,42 @@ export default function AdminPanel({
               <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Clubes Filiados — Ativação de Recurso Completo</h4>
               <p className="text-[11px] text-slate-500 -mt-2">Promova um clube já cadastrado como filiado do Clube de Tiro Aranãs a um tenant isolado, com subdomínio, campeonatos, modalidades e atletas próprios.</p>
 
-              {clubs.filter(c => c.parentClubId === currentUser?.clubId && !c.isPremium).length === 0 ? (
-                <p className="text-xs text-slate-400">Nenhum clube filiado pendente de ativação.</p>
-              ) : (
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Pesquisar clube por nome ou CNPJ..."
+                  value={masterClubSearchQuery}
+                  onChange={e => setMasterClubSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 pl-9 pr-8 rounded-xl text-xs font-semibold text-slate-700 focus:border-blue-500"
+                />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                {masterClubSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setMasterClubSearchQuery('')}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {(() => {
+                const q = masterClubSearchQuery.trim().toLowerCase();
+                const pendingClubs = clubs.filter(c => c.parentClubId === currentUser?.clubId && !c.isPremium);
+                const filteredPendingClubs = q
+                  ? pendingClubs.filter(c => c.name.toLowerCase().includes(q) || (c.cnpj || '').toLowerCase().includes(q))
+                  : pendingClubs;
+
+                if (pendingClubs.length === 0) {
+                  return <p className="text-xs text-slate-400">Nenhum clube filiado pendente de ativação.</p>;
+                }
+                if (filteredPendingClubs.length === 0) {
+                  return <p className="text-xs text-slate-400">Nenhum clube encontrado para "{masterClubSearchQuery}".</p>;
+                }
+                return (
                 <div className="grid grid-cols-1 gap-3">
-                  {clubs.filter(c => c.parentClubId === currentUser?.clubId && !c.isPremium).map((club) => (
+                  {filteredPendingClubs.map((club) => (
                     <div key={club.id} className="border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-slate-50/50 hover:border-slate-300 transition">
                       <div className="space-y-1">
                         <h4 className="font-bold text-slate-900 text-sm">{club.name}</h4>
@@ -8731,7 +8763,8 @@ export default function AdminPanel({
                     </div>
                   ))}
                 </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* Club List */}
