@@ -4912,6 +4912,10 @@ export default function AdminPanel({
   const [selectedChampForInscritosModal, setSelectedChampForInscritosModal] = useState<Championship | null>(null);
   const [inscritosSearchQuery, setInscritosSearchQuery] = useState('');
 
+  // Search filters for the "Campeonatos Cadastrados" and "Etapas Cadastradas" lists
+  const [champListSearchQuery, setChampListSearchQuery] = useState('');
+  const [stageListSearchQuery, setStageListSearchQuery] = useState('');
+
   // Default image settings state (functional)
   const [defaultImageSourceMode, setDefaultImageSourceMode] = useState<'url' | 'upload' | 'gallery'>('gallery');
   const [newDefaultImage, setNewDefaultImage] = useState(settings.default_image || '');
@@ -7764,6 +7768,26 @@ export default function AdminPanel({
                 </div>
               </div>
 
+              <div className="relative mb-4">
+                <input
+                  type="text"
+                  placeholder="Pesquisar campeonato por nome..."
+                  value={champListSearchQuery}
+                  onChange={e => setChampListSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 pl-9 pr-8 rounded-xl text-xs font-semibold text-slate-700 focus:border-blue-500"
+                />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                {champListSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setChampListSearchQuery('')}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
@@ -7778,7 +7802,9 @@ export default function AdminPanel({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {championships.map((champ) => {
+                    {championships
+                      .filter(champ => champ.title.toLowerCase().includes(champListSearchQuery.trim().toLowerCase()))
+                      .map((champ) => {
                       const champRegs = registrations.filter(r => r.championshipId === champ.id);
                       const totalArrecadacao = champRegs.reduce((acc, r) => {
                         if (r.valorPago && r.valorPago > 0 && r.valorPago !== 120) return acc + r.valorPago;
@@ -8018,9 +8044,42 @@ export default function AdminPanel({
                   <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold mb-4">{stageError}</div>
                 )}
 
-                {stages.length === 0 ? (
-                  <p className="text-xs text-slate-400">Nenhuma etapa cadastrada ainda.</p>
-                ) : (
+                <div className="relative mb-4">
+                  <input
+                    type="text"
+                    placeholder="Pesquisar por campeonato ou título da etapa..."
+                    value={stageListSearchQuery}
+                    onChange={e => setStageListSearchQuery(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 pl-9 pr-8 rounded-xl text-xs font-semibold text-slate-700 focus:border-blue-500"
+                  />
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                  {stageListSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setStageListSearchQuery('')}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+
+                {(() => {
+                  const q = stageListSearchQuery.trim().toLowerCase();
+                  const filteredStages = q
+                    ? stages.filter(s =>
+                        s.title.toLowerCase().includes(q) ||
+                        (championships.find(c => c.id === s.championshipId)?.title || '').toLowerCase().includes(q)
+                      )
+                    : stages;
+
+                  if (stages.length === 0) {
+                    return <p className="text-xs text-slate-400">Nenhuma etapa cadastrada ainda.</p>;
+                  }
+                  if (filteredStages.length === 0) {
+                    return <p className="text-xs text-slate-400">Nenhuma etapa encontrada para "{stageListSearchQuery}".</p>;
+                  }
+                  return (
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
@@ -8038,7 +8097,7 @@ export default function AdminPanel({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-slate-700">
-                        {stages.map(s => (
+                        {filteredStages.map(s => (
                           <tr key={s.id} className="hover:bg-slate-50/50">
                             <td className="py-2 px-2 font-semibold">{championships.find(c => c.id === s.championshipId)?.title || s.championshipId}</td>
                             <td className="py-2 px-2">{s.title}</td>
@@ -8073,7 +8132,8 @@ export default function AdminPanel({
                       </tbody>
                     </table>
                   </div>
-                )}
+                  );
+                })()}
               </div>
             )}
           </div>
