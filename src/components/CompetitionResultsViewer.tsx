@@ -116,9 +116,9 @@ export function CompetitionResultsViewer({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setSelectedResultChampId(null)}
-              className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+              className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-800 border border-blue-200 transition cursor-pointer"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-5 h-5" strokeWidth={2.5} />
             </button>
             <div>
               <h3 className="font-display font-bold text-slate-900 text-base">Selecione a Etapa</h3>
@@ -228,9 +228,9 @@ export function CompetitionResultsViewer({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setSelectedResultStageId(null)}
-              className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+              className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-800 border border-blue-200 transition cursor-pointer"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-5 h-5" strokeWidth={2.5} />
             </button>
             <div>
               <h3 className="font-display font-bold text-slate-900 text-base">Selecione a Modalidade</h3>
@@ -622,10 +622,10 @@ export function CompetitionResultsViewer({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setSelectedResultModalityId(null)}
-            className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+            className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-800 border border-blue-200 transition cursor-pointer"
             title="Voltar para modalidades"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-5 h-5" strokeWidth={2.5} />
           </button>
           <div>
             <h3 className="font-display font-bold text-slate-900 text-base">Resultados da Competição</h3>
