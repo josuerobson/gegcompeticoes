@@ -2481,7 +2481,7 @@ export default function MemberProfile({
                                   </div>
                                   {post.targetScore.executionDate && (
                                     <div className="bg-slate-800/60 text-slate-300 font-sans border border-slate-700/50 px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap">
-                                      Data dos tiros: {new Date(post.targetScore.executionDate + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                      Data: {new Date(post.targetScore.executionDate + 'T00:00:00').toLocaleDateString('pt-BR')}
                                     </div>
                                   )}
                                 </div>
