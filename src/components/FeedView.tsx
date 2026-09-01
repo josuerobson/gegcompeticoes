@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Post, User, Comment, ShootingResult, SharedPostInfo, RankingHighlight } from '../types';
-import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat, Trash2, ZoomIn, ZoomOut, RotateCcw, Eye, Medal } from 'lucide-react';
+import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat, Trash2, ZoomIn, ZoomOut, RotateCcw, Eye, Medal, Pause, Play } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { shootingImages } from '../data/mockData';
 import likeIcon from '@/assets/like_icon.png';
@@ -347,6 +347,8 @@ function RankingHighlightCard() {
   const [highlights, setHighlights] = useState<RankingHighlight[]>([]);
   const [order, setOrder] = useState<number[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [resetSignal, setResetSignal] = useState(0);
 
   useEffect(() => {
     fetch('/api/feed/ranking-highlights')
@@ -366,12 +368,12 @@ function RankingHighlightCard() {
   }, []);
 
   useEffect(() => {
-    if (order.length <= 1) return;
+    if (order.length <= 1 || isPaused) return;
     const timer = setInterval(() => {
       setCurrentIdx(prev => (prev + 1) % order.length);
     }, 10000);
     return () => clearInterval(timer);
-  }, [order.length]);
+  }, [order.length, isPaused, resetSignal]);
 
   if (order.length === 0) return null;
 
@@ -381,6 +383,17 @@ function RankingHighlightCard() {
   const medalStyle = (rank: number) => {
     if (rank <= 3) return 'bg-emerald-100 text-emerald-700 border-emerald-300';
     return 'bg-blue-50 text-blue-700 border-blue-200';
+  };
+
+  // Navegação manual reinicia o temporizador (via resetSignal) para não
+  // "pular de novo" logo em seguida a um clique do usuário.
+  const goPrev = () => {
+    setCurrentIdx(prev => (prev - 1 + order.length) % order.length);
+    setResetSignal(s => s + 1);
+  };
+  const goNext = () => {
+    setCurrentIdx(prev => (prev + 1) % order.length);
+    setResetSignal(s => s + 1);
   };
 
   return (
@@ -395,10 +408,37 @@ function RankingHighlightCard() {
           <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">Ranking em Destaque</span>
         </div>
         {order.length > 1 && (
-          <div className="flex gap-1 w-full sm:w-auto justify-center sm:justify-end">
-            {order.map((_, i) => (
-              <span key={i} className={`h-1.5 rounded-full transition-all ${i === currentIdx ? 'w-4 bg-amber-400' : 'w-1.5 bg-white/25'}`} />
-            ))}
+          <div className="flex items-center gap-1.5 w-full sm:w-auto justify-center sm:justify-end">
+            <button
+              type="button"
+              onClick={goPrev}
+              aria-label="Ranking anterior"
+              className="p-1 rounded text-white/60 hover:text-white hover:bg-white/10 transition cursor-pointer"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <div className="flex gap-1">
+              {order.map((_, i) => (
+                <span key={i} className={`h-1.5 rounded-full transition-all ${i === currentIdx ? 'w-4 bg-amber-400' : 'w-1.5 bg-white/25'}`} />
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={goNext}
+              aria-label="Próximo ranking"
+              className="p-1 rounded text-white/60 hover:text-white hover:bg-white/10 transition cursor-pointer"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsPaused(p => !p)}
+              aria-label={isPaused ? 'Retomar rotação' : 'Pausar rotação'}
+              title={isPaused ? 'Retomar rotação automática' : 'Pausar rotação automática'}
+              className="p-1 rounded text-white/60 hover:text-white hover:bg-white/10 transition cursor-pointer ml-0.5"
+            >
+              {isPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+            </button>
           </div>
         )}
       </div>
