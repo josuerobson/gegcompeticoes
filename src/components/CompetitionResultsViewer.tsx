@@ -426,6 +426,39 @@ export function CompetitionResultsViewer({
       }
     });
 
+    // Premiação por colocação no acumulado "Todas as Etapas" — mesma fórmula
+    // usada no modal de Premiação em ChampionshipsView.tsx (mantém alinhado
+    // para não haver dois cálculos de prêmio divergentes no sistema).
+    const targetStageIds = targetStages.map(s => s.id);
+    const stageModRegs = registrations.filter(
+      r => r.championshipId === selectedResultChampId && r.modalityId === currentMod?.id && targetStageIds.includes(r.stageId)
+    );
+    const totalArrecadado = stageModRegs.reduce((acc, r) => {
+      if (r.valorPago && r.valorPago > 0 && r.valorPago !== 120) return acc + r.valorPago;
+      if (r.registrationType === 'reinscrição') {
+        return acc + (currentChamp?.valorReinscricao ?? currentChamp?.registrationFee ?? 0);
+      }
+      const isClub = Boolean(r.registeredByUserId && r.registeredByUserId !== r.userId);
+      if (isClub) {
+        return acc + (currentChamp?.valorInscricaoClube ?? currentChamp?.registrationFee ?? 0);
+      }
+      return acc + (currentChamp?.valorInscricaoIndividual ?? currentChamp?.registrationFee ?? 0);
+    }, 0);
+    const pPremiacaoAtleta = currentChamp?.percentualPremiacaoAtleta ?? 30;
+    const vPremiacaoAtleta = totalArrecadado * (pPremiacaoAtleta / 100);
+    const vAdicionalTodasEtapas = currentChamp?.premiacaoAdicionalTodasEtapas ?? 0;
+    const pTodasEtapasSlice = currentChamp?.percentualPremiacaoTodasEtapas ?? 30;
+    const vPoolTodasEtapas = (vPremiacaoAtleta * (pTodasEtapasSlice / 100)) + vAdicionalTodasEtapas;
+    const pPosTodas = [
+      currentChamp?.percentualPos1TodasEtapas ?? 40,
+      currentChamp?.percentualPos2TodasEtapas ?? 25,
+      currentChamp?.percentualPos3TodasEtapas ?? 15,
+      currentChamp?.percentualPos4TodasEtapas ?? 12,
+      currentChamp?.percentualPos5TodasEtapas ?? 8
+    ];
+    const prizeForPosition = (index: number) => index >= 0 && index <= 4 ? vPoolTodasEtapas * (pPosTodas[index] / 100) : 0;
+    const fmtBRL = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
         {/* Header / Breadcrumb navigation */}
@@ -433,10 +466,10 @@ export function CompetitionResultsViewer({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setSelectedResultModalityId(null)}
-              className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+              className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-800 border border-blue-200 transition cursor-pointer"
               title="Voltar para modalidades"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-5 h-5" strokeWidth={2.5} />
             </button>
             <div>
               <h3 className="font-display font-bold text-slate-900 text-base">Resultado Geral Acumulado</h3>
@@ -500,6 +533,11 @@ export function CompetitionResultsViewer({
                       </td>
                       <td className="py-3 px-2 font-bold text-slate-800">
                         {item.shooterName}
+                        {prizeForPosition(index) > 0 && (
+                          <div className="text-[10px] font-bold text-emerald-600 mt-0.5">
+                            Prêmio: {fmtBRL(prizeForPosition(index))}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-2 text-center text-slate-500 font-mono text-[10px]">
                         {item.clubName}
