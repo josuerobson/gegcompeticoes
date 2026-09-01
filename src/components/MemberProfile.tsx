@@ -1841,12 +1841,15 @@ export default function MemberProfile({
               <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                 <div className="flex items-center gap-1 truncate max-w-[55%]">
                   <span className="text-slate-450 font-sans text-[11px]">CR:</span>
-                  <span className="font-bold text-slate-800 truncate">{selectedUser.crNumber || 'Emitindo...'}</span>
+                  <span className="font-bold text-slate-800 truncate">{(isClubAdmin ? myClub?.crNumber : selectedUser.crNumber) || 'Emitindo...'}</span>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <span className="text-slate-450 font-sans text-[11px]">Validade:</span>
                   <span className="font-bold text-slate-800">
-                    {selectedUser.crValidity ? (selectedUser.crValidity.includes('-') ? selectedUser.crValidity.split('-').reverse().join('/') : selectedUser.crValidity) : '12/12/2030'}
+                    {(() => {
+                      const validity = isClubAdmin ? myClub?.crValidity : selectedUser.crValidity;
+                      return validity ? (validity.includes('-') ? validity.split('-').reverse().join('/') : validity) : '12/12/2030';
+                    })()}
                   </span>
                 </div>
               </div>
