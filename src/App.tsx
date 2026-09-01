@@ -1983,7 +1983,7 @@ export default function App() {
                   <img src={logoGgCompeticoes} alt="G&G Competições" className="h-16 w-auto object-contain" />
                 </div>
                 <h3 className={`font-display font-black text-xl tracking-wider bg-gradient-to-r bg-clip-text text-transparent uppercase mt-4 ${theme === 'dark' ? 'from-blue-100 to-sky-400' : 'from-blue-700 to-sky-600'}`}>
-                  {authView === 'login' ? 'Entrar no Clube G&G' : authView === 'membro' ? 'Cadastro de Membro' : 'Cadastro de Clube'}
+                  {authView === 'login' ? 'Entrar na Plataforma G&G' : authView === 'membro' ? 'Cadastro de Membro' : 'Cadastro de Clube'}
                 </h3>
                 {loginModalMessage ? (
                   <p className={`text-[11px] leading-normal max-w-xs mx-auto p-2.5 rounded-xl border ${theme === 'dark' ? 'text-amber-400 bg-amber-500/5 border-amber-500/10' : 'text-amber-600 bg-amber-50/50 border-amber-200'}`}>
