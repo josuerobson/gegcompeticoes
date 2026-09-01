@@ -67,7 +67,7 @@ interface AdminPanelProps {
   onUpdateMemberProfile: (memberId: string, fields: Record<string, unknown>) => Promise<boolean>;
   onUploadMemberDocument: (memberId: string, kind: string, file: File) => Promise<boolean>;
   clubs: Club[];
-  onCreateClub: (fields: { name: string; cnpj: string; responsibleName: string; email: string; password: string; phone?: string; crNumber?: string; city?: string; state?: string; cep?: string; address?: string; addressNumber?: string; complement?: string; neighborhood?: string }) => Promise<{ club?: Club; error?: string }>;
+  onCreateClub: (fields: { name: string; cnpj: string; responsibleName: string; email: string; password: string; phone?: string; crNumber?: string; crValidity?: string; annuityDueDate?: string; city?: string; state?: string; cep?: string; address?: string; addressNumber?: string; complement?: string; neighborhood?: string }) => Promise<{ club?: Club; error?: string }>;
   onUpdateClub?: (clubId: string, fields: Record<string, unknown>) => Promise<boolean>;
   onActivateClubTenant?: (clubId: string, subDomain: string) => Promise<{ club?: Club; error?: string }>;
   onSetClubAdminCredentials?: (clubId: string, fields: { fullName?: string; email: string; password: string }) => Promise<{ user?: User; error?: string }>;
@@ -5141,6 +5141,7 @@ export default function AdminPanel({
   // "Novo Clube" (Gerenciamento Plataforma) — create & edit clubs
   const [createClubForm, setCreateClubForm] = useState({
     name: '', cnpj: '', responsibleName: '', email: '', password: '', phone: '', crNumber: '',
+    crValidity: '', annuityDueDate: '',
     cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
   });
   const [creatingClub, setCreatingClub] = useState(false);
@@ -5149,7 +5150,7 @@ export default function AdminPanel({
 
   const [editingClub, setEditingClub] = useState<Club | null>(null);
   const [editingClubForm, setEditingClubForm] = useState({
-    name: '', cnpj: '', crNumber: '', responsibleName: '', email: '', phone: '',
+    name: '', cnpj: '', crNumber: '', crValidity: '', annuityDueDate: '', responsibleName: '', email: '', phone: '',
     cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
   });
   const [savingEditClub, setSavingEditClub] = useState(false);
@@ -5163,7 +5164,7 @@ export default function AdminPanel({
     const result = await onCreateClub(createClubForm);
     setCreatingClub(false);
     if (result.club) {
-      setCreateClubForm({ name: '', cnpj: '', responsibleName: '', email: '', password: '', phone: '', crNumber: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '' });
+      setCreateClubForm({ name: '', cnpj: '', responsibleName: '', email: '', password: '', phone: '', crNumber: '', crValidity: '', annuityDueDate: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '' });
       setCreateClubSuccess(true);
       setTimeout(() => setCreateClubSuccess(false), 2500);
       if (onRefreshData) await onRefreshData();
@@ -5248,6 +5249,8 @@ export default function AdminPanel({
       name: club.name || '',
       cnpj: club.cnpj || '',
       crNumber: club.crNumber || '',
+      crValidity: club.crValidity || '',
+      annuityDueDate: club.annuityDueDate || '',
       responsibleName: club.responsibleName || '',
       email: club.email || '',
       phone: club.phone || '',
@@ -6619,6 +6622,8 @@ export default function AdminPanel({
                   <MemberField label="Senha Inicial (Login do Clube)" type="password" value={createClubForm.password} onChange={v => setCreateClubForm({ ...createClubForm, password: v })} />
                   <MemberField label="Telefone" value={createClubForm.phone} onChange={v => setCreateClubForm({ ...createClubForm, phone: v })} placeholder="Ex: (61) 99123-4567" />
                   <MemberField label="CR do Clube" value={createClubForm.crNumber} onChange={v => setCreateClubForm({ ...createClubForm, crNumber: v })} placeholder="Opcional" />
+                  <MemberField label="Validade do CR" type="date" value={createClubForm.crValidity} onChange={v => setCreateClubForm({ ...createClubForm, crValidity: v })} />
+                  <MemberField label="Vencimento Anuidade" type="date" value={createClubForm.annuityDueDate} onChange={v => setCreateClubForm({ ...createClubForm, annuityDueDate: v })} />
                 </div>
 
                 <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 pt-2">Endereço da Unidade (Opcional)</h4>
@@ -6735,6 +6740,8 @@ export default function AdminPanel({
                       </div>
                       <MemberField label="CNPJ Entidade" value={editingClubForm.cnpj} onChange={v => setEditingClubForm({ ...editingClubForm, cnpj: v })} />
                       <MemberField label="CR do Clube" value={editingClubForm.crNumber} onChange={v => setEditingClubForm({ ...editingClubForm, crNumber: v })} />
+                      <MemberField label="Validade do CR" type="date" value={editingClubForm.crValidity} onChange={v => setEditingClubForm({ ...editingClubForm, crValidity: v })} />
+                      <MemberField label="Vencimento Anuidade" type="date" value={editingClubForm.annuityDueDate} onChange={v => setEditingClubForm({ ...editingClubForm, annuityDueDate: v })} />
                       <MemberField label="Diretor Presidente Responsável" value={editingClubForm.responsibleName} onChange={v => setEditingClubForm({ ...editingClubForm, responsibleName: v })} />
                       <MemberField label="E-mail de Contato" type="email" value={editingClubForm.email} onChange={v => setEditingClubForm({ ...editingClubForm, email: v })} />
                       <MemberField label="Telefone" value={editingClubForm.phone} onChange={v => setEditingClubForm({ ...editingClubForm, phone: v })} />

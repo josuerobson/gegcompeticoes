@@ -79,6 +79,15 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN NOT NULL DEFAULT FALSE;
     `);
 
+    // Vencimento da anuidade do próprio clube (distinto da anuidade individual
+    // de cada atleta, controlada por annuity_plan_id em users). TEXT (não DATE)
+    // para seguir o mesmo padrão de cr_validity e evitar conversão de fuso
+    // horário do node-postgres em cima de um objeto Date.
+    await client.query(`
+      ALTER TABLE clubs
+        ADD COLUMN IF NOT EXISTS annuity_due_date TEXT;
+    `);
+
     // Multi-tenancy: every club (except the master itself) belongs to a "parent" tenant —
     // the club it registered under, or the club whose admin created it. Existing rows
     // predate this column, so they backfill to the master club (today's implicit default).

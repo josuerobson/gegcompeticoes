@@ -831,7 +831,7 @@ export default function App() {
     }
   };
 
-  const handleCreateClub = async (fields: { name: string; cnpj: string; responsibleName: string; email: string; password: string; phone?: string; crNumber?: string; city?: string; state?: string; cep?: string; address?: string; addressNumber?: string; complement?: string; neighborhood?: string }): Promise<{ club?: Club; error?: string }> => {
+  const handleCreateClub = async (fields: { name: string; cnpj: string; responsibleName: string; email: string; password: string; phone?: string; crNumber?: string; crValidity?: string; annuityDueDate?: string; city?: string; state?: string; cep?: string; address?: string; addressNumber?: string; complement?: string; neighborhood?: string }): Promise<{ club?: Club; error?: string }> => {
     if (!currentUser) return { error: 'Não autenticado.' };
     try {
       const res = await fetch('/api/admin/clubs', {

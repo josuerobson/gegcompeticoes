@@ -114,6 +114,7 @@ function mapClub(c: any): Club {
     legacyId: c.legacy_id ?? undefined,
     cellPhone: c.cell_phone || undefined,
     crValidity: c.cr_validity || undefined,
+    annuityDueDate: c.annuity_due_date || undefined,
     isBlocked: c.is_blocked ?? undefined,
   };
 }
@@ -996,7 +997,7 @@ app.post('/api/admin/members', requireAdmin, async (req, res) => {
 // the club's profile (endereço, documentos) is completed afterwards through
 // PATCH /api/clubs/:id, same as a club editing its own data.
 app.post('/api/admin/clubs', requireAdmin, async (req, res) => {
-  const { name, cnpj, responsibleName, email, password, phone, crNumber, city, state, cep, address, addressNumber, complement, neighborhood } = req.body;
+  const { name, cnpj, responsibleName, email, password, phone, crNumber, crValidity, annuityDueDate, city, state, cep, address, addressNumber, complement, neighborhood } = req.body;
   const currentUser = (req as any).user as User;
 
   if (!name || !cnpj || !responsibleName || !email || !password) {
@@ -1017,11 +1018,11 @@ app.post('/api/admin/clubs', requireAdmin, async (req, res) => {
     await client.query('BEGIN');
     const clubId = `club_${Date.now()}`;
     await client.query(
-      `INSERT INTO clubs (id, name, cnpj, phone, is_premium, created_at, cr_number, responsible_name, email, city, state, cep, address, address_number, complement, neighborhood, parent_club_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+      `INSERT INTO clubs (id, name, cnpj, phone, is_premium, created_at, cr_number, cr_validity, annuity_due_date, responsible_name, email, city, state, cep, address, address_number, complement, neighborhood, parent_club_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
       [
         clubId, name, cnpj, phone || null, false, new Date().toISOString().split('T')[0],
-        crNumber || null, responsibleName, email, city || null, state || null,
+        crNumber || null, crValidity || null, annuityDueDate || null, responsibleName, email, city || null, state || null,
         cep || null, address || null, addressNumber || null, complement || null, neighborhood || null,
         currentUser.clubId || DEFAULT_TENANT_ID
       ]
@@ -1819,6 +1820,8 @@ const CLUB_PROFILE_COLUMNS: Record<string, string> = {
   name: 'name',
   cnpj: 'cnpj',
   crNumber: 'cr_number',
+  crValidity: 'cr_validity',
+  annuityDueDate: 'annuity_due_date',
   responsibleName: 'responsible_name',
   phone: 'phone',
   email: 'email',

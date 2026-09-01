@@ -82,6 +82,7 @@ export interface Club {
   legacyId?: number;
   cellPhone?: string;
   crValidity?: string;
+  annuityDueDate?: string;
   isBlocked?: boolean;
 }
 
