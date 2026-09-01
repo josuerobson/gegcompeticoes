@@ -379,9 +379,7 @@ function RankingHighlightCard() {
   if (!current) return null;
 
   const medalStyle = (rank: number) => {
-    if (rank === 1) return 'bg-amber-100 text-amber-700 border-amber-300';
-    if (rank === 2) return 'bg-slate-200 text-slate-700 border-slate-300';
-    if (rank === 3) return 'bg-orange-100 text-orange-700 border-orange-300';
+    if (rank <= 3) return 'bg-emerald-100 text-emerald-700 border-emerald-300';
     return 'bg-blue-50 text-blue-700 border-blue-200';
   };
 
@@ -391,13 +389,13 @@ function RankingHighlightCard() {
         <Trophy className="w-28 h-28" />
       </div>
 
-      <div className="flex items-center justify-between relative">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 relative">
         <div className="flex items-center gap-1.5">
           <Medal className="w-4 h-4 text-amber-400" />
           <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">Ranking em Destaque</span>
         </div>
         {order.length > 1 && (
-          <div className="flex gap-1">
+          <div className="flex gap-1 w-full sm:w-auto justify-center sm:justify-end">
             {order.map((_, i) => (
               <span key={i} className={`h-1.5 rounded-full transition-all ${i === currentIdx ? 'w-4 bg-amber-400' : 'w-1.5 bg-white/25'}`} />
             ))}
