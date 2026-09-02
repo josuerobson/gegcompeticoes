@@ -152,6 +152,10 @@ export default function ChampionshipsView({
   });
   const [savingWeapon, setSavingWeapon] = useState(false);
   const [showProfileIncompleteNotice, setShowProfileIncompleteNotice] = useState(false);
+  // Distingue "atleta com cadastro incompleto" de "isto e uma conta de clube,
+  // que nao se inscreve como se fosse atleta" — mesmo modal, aviso diferente.
+  const [profileNoticeReason, setProfileNoticeReason] = useState<'incomplete' | 'club'>('incomplete');
+  const isClubAccount = currentUser?.role === 'club_admin' || currentUser?.role === 'master_admin';
 
   const weaponLookup = (kind: string) => weaponLookupOptions.filter(o => o.kind === kind);
 
@@ -681,7 +685,13 @@ export default function ChampionshipsView({
 
                               <button
                                 onClick={() => {
+                                  if (isClubAccount) {
+                                    setProfileNoticeReason('club');
+                                    setShowProfileIncompleteNotice(true);
+                                    return;
+                                  }
                                   if (currentUser && !currentUser.isProfileComplete) {
+                                    setProfileNoticeReason('incomplete');
                                     setShowProfileIncompleteNotice(true);
                                     return;
                                   }
@@ -933,6 +943,11 @@ export default function ChampionshipsView({
                             onClick={() => {
                               if (!currentUser) {
                                 alert('Faça login para se inscrever no multicampeonato.');
+                                return;
+                              }
+                              if (isClubAccount) {
+                                setProfileNoticeReason('club');
+                                setShowProfileIncompleteNotice(true);
                                 return;
                               }
                               setSelectedMultiReg(multi);
@@ -1389,10 +1404,17 @@ export default function ChampionshipsView({
               <div className="bg-amber-50 text-amber-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto">
                 <Shield className="w-6 h-6" />
               </div>
-              <div>
-                <h4 className="font-bold text-slate-900 text-sm">Cadastro incompleto</h4>
-                <p className="text-xs text-slate-500 mt-1">Complete seu cadastro para se inscrever em campeonatos. Saia da conta e finalize o cadastro na tela de entrada.</p>
-              </div>
+              {profileNoticeReason === 'club' ? (
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm">Inscrição é feita pelo clube</h4>
+                  <p className="text-xs text-slate-500 mt-1">Um clube não se inscreve como se fosse atleta. Para inscrever seus atletas, use <strong className="text-slate-700">Inscrição Clube</strong> no Painel Diretor — lá você seleciona os atletas do clube e a arma de cada um, em lote.</p>
+                </div>
+              ) : (
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm">Cadastro incompleto</h4>
+                  <p className="text-xs text-slate-500 mt-1">Complete seu cadastro para se inscrever em campeonatos. Saia da conta e finalize o cadastro na tela de entrada.</p>
+                </div>
+              )}
               <button
                 onClick={() => setShowProfileIncompleteNotice(false)}
                 className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-semibold text-xs transition"

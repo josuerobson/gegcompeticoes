@@ -775,6 +775,113 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
   }
 });
 
+// POST /api/multi-championships/:id/register-bulk — inscrição em lote (clube) de atletas em todos os campeonatos do pacote
+app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req, res) => {
+  const multiId = req.params.id;
+  const { modalityId, athletes } = req.body as {
+    modalityId: string;
+    athletes: Array<{ userId: string; weaponId: string; crNumber: string }>;
+  };
+  const currentUser = (req as any).user as User;
+
+  if (!modalityId || !Array.isArray(athletes) || athletes.length === 0) {
+    return res.status(400).json({ error: 'modalityId e athletes são obrigatórios.' });
+  }
+
+  try {
+    const multiRes = await pool.query('SELECT * FROM multi_championships WHERE id=$1', [multiId]);
+    if (multiRes.rows.length === 0) return res.status(404).json({ error: 'Multicampeonato não encontrado.' });
+    const multi = mapMultiChampionship(multiRes.rows[0]);
+
+    if (multi.status !== 'active') {
+      return res.status(400).json({ error: 'Este multicampeonato não está ativo.' });
+    }
+
+    const targetItems: Array<{ championshipId: string; stageId: string }> = multi.items || [];
+    if (targetItems.length === 0 || targetItems.some(it => !it.stageId)) {
+      return res.status(400).json({ error: 'Etapa não definida para os campeonatos do pacote.' });
+    }
+
+    const champCount = targetItems.length;
+    const valorTotal = Number(multi.clubRegistrationFee ?? multi.registrationFee);
+    const valorUnitario = champCount > 0 ? Number((valorTotal / champCount).toFixed(2)) : valorTotal;
+    const dataPagamento = new Date().toISOString().split('T')[0];
+
+    const results: Array<{ userId: string; status: 'inscrito' | 'reinscrito' | 'erro'; message?: string }> = [];
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const athlete of athletes) {
+        try {
+          const userRes = await client.query('SELECT club_id, sex FROM users WHERE id = $1', [athlete.userId]);
+          if (userRes.rows.length === 0) throw new Error('Atleta não encontrado.');
+          const userSex = (userRes.rows[0].sex || '').toLowerCase();
+          const clubId = userRes.rows[0].club_id || currentUser.clubId;
+          const txId = `tx_multi_${Date.now()}_${athlete.userId.slice(-4)}`;
+
+          let anyCreated = false;
+          let anyExisting = false;
+
+          for (const item of targetItems) {
+            const stageRes = await client.query('SELECT sexo FROM stages WHERE id=$1', [item.stageId]);
+            if (stageRes.rows.length > 0) {
+              const stageSex = (stageRes.rows[0].sexo || 'misto').toLowerCase();
+              if (stageSex !== 'misto' && userSex !== stageSex) {
+                throw new Error(`Uma das etapas do pacote é restrita para atletas do sexo ${stageSex === 'feminino' ? 'Feminino' : 'Masculino'}.`);
+              }
+            }
+
+            const existing = await client.query(
+              'SELECT id FROM registrations WHERE championship_id=$1 AND user_id=$2 AND stage_id=$3 AND modality_id=$4',
+              [item.championshipId, athlete.userId, item.stageId, modalityId]
+            );
+            if (existing.rows.length > 0) { anyExisting = true; continue; }
+
+            const regId = `reg_multi_${Date.now()}_${item.championshipId.slice(-6)}_${Math.random().toString(36).substring(2, 5)}`;
+            await client.query(
+              `INSERT INTO registrations (
+                id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
+                payment_method, payment_status, completion_status, registered_at, approved_at, tx_id,
+                disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento,
+                multi_championship_id
+              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','approved','pending',$9,$9,$10,false,0,$11,'normal',$12,$13,$14)`,
+              [
+                regId, item.championshipId, athlete.userId, clubId, modalityId, item.stageId, athlete.weaponId,
+                athlete.crNumber, new Date().toISOString(), txId, currentUser.id, valorUnitario, dataPagamento, multiId
+              ]
+            );
+            anyCreated = true;
+          }
+
+          await client.query('UPDATE users SET cr_number = COALESCE(cr_number, $1) WHERE id = $2', [athlete.crNumber, athlete.userId]);
+
+          if (anyCreated) {
+            results.push({
+              userId: athlete.userId,
+              status: 'inscrito',
+              message: anyExisting ? 'Inscrito nas etapas restantes do pacote (já havia inscrição em pelo menos uma etapa).' : undefined,
+            });
+          } else {
+            results.push({ userId: athlete.userId, status: 'reinscrito', message: 'Atleta já inscrito em todas as etapas do pacote.' });
+          }
+        } catch (e: any) {
+          results.push({ userId: athlete.userId, status: 'erro', message: e.message });
+        }
+      }
+      await client.query('COMMIT');
+      res.status(201).json({ success: true, results });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Register-bulk multi-championship error:', err);
+    res.status(500).json({ error: 'Erro ao realizar inscrição em lote no multicampeonato.' });
+  }
+});
+
 // ==========================================
 // API ROUTES
 // ==========================================

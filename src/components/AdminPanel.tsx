@@ -621,12 +621,15 @@ interface InscricaoClubePanelProps {
   stages: Stage[];
   modalities: Modality[];
   currentUser: User | null;
+  multiChampionships?: MultiChampionship[];
 }
 
-function InscricaoClubePanel({ championships, stages, modalities, currentUser }: InscricaoClubePanelProps) {
+function InscricaoClubePanel({ championships, stages, modalities, currentUser, multiChampionships = [] }: InscricaoClubePanelProps) {
+  const [mode, setMode] = React.useState<'individual' | 'multi'>('individual');
   const [champId, setChampId] = React.useState('');
   const [stageId, setStageId] = React.useState('');
   const [modalityId, setModalityId] = React.useState('');
+  const [multiId, setMultiId] = React.useState('');
   const [members, setMembers] = React.useState<User[]>([]);
   const [clubWeapons, setClubWeapons] = React.useState<Weapon[]>([]);
   const [loadingMembers, setLoadingMembers] = React.useState(false);
@@ -638,28 +641,52 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser }:
   const [success, setSuccess] = React.useState<{ userId: string; status: string; message?: string }[] | null>(null);
   const [error, setError] = React.useState('');
 
+  const activeMultiChampionships = multiChampionships.filter(m => m.status === 'active');
+  const selectedMulti = multiChampionships.find(m => m.id === multiId);
+  const multiItems = selectedMulti?.items && selectedMulti.items.length > 0 ? selectedMulti.items : [];
+  const multiStages = multiItems.map(it => stages.find(s => s.id === it.stageId)).filter((s): s is Stage => Boolean(s));
+  const multiSexConstraints = Array.from(new Set(multiStages.map(s => (s.sexo || 'misto').toLowerCase()).filter(s => s !== 'misto')));
+  const multiImpossibleSex = multiSexConstraints.length > 1;
+  const multiSexConstraint = multiSexConstraints.length === 1 ? multiSexConstraints[0] : null;
+
+  const multiAvailableModalities = React.useMemo(() => {
+    if (!selectedMulti) return [];
+    const champIds = multiItems.length > 0 ? multiItems.map(it => it.championshipId) : (selectedMulti.championshipIds || []);
+    const packageChamps = champIds.map(id => championships.find(c => c.id === id)).filter((c): c is Championship => Boolean(c));
+    if (packageChamps.length === 0) return [];
+    const commonIds = packageChamps.reduce<string[]>(
+      (acc, c) => acc.filter(id => (c.modalities || []).includes(id)),
+      packageChamps[0].modalities || []
+    );
+    return modalities.filter(m => commonIds.includes(m.id));
+  }, [selectedMulti, multiItems, championships, modalities]);
+
   const champStages = stages.filter(s => s.championshipId === champId);
   const currentStage = stages.find(s => s.id === stageId);
   const filteredMembers = React.useMemo(() => {
-    if (!currentStage) return members;
-    const stageSex = currentStage.sexo || 'misto';
+    const stageSex = mode === 'multi' ? (multiSexConstraint || 'misto') : (currentStage?.sexo || 'misto');
     if (stageSex === 'misto') return members;
     return members.filter(m => {
       const athleteSex = (m.sex || '').toLowerCase();
       return athleteSex === stageSex.toLowerCase();
     });
-  }, [members, currentStage]);
+  }, [members, currentStage, mode, multiSexConstraint]);
 
   React.useEffect(() => {
-    if (!champId || !stageId || !modalityId || !currentUser) return;
+    if (mode === 'individual') {
+      if (!champId || !stageId || !modalityId || !currentUser) return;
+    } else {
+      if (!multiId || !modalityId || !currentUser) return;
+    }
     setLoadingMembers(true);
     setError('');
     setSuccess(null);
     setSelectedAthletes({});
-    
-    const clubId = currentUser.role === 'master_admin' 
-      ? championships.find(c => c.id === champId)?.clubId || currentUser.clubId 
-      : currentUser.clubId;
+
+    const referenceChampId = mode === 'individual' ? champId : (multiItems[0]?.championshipId || '');
+    const clubId = currentUser!.role === 'master_admin'
+      ? championships.find(c => c.id === referenceChampId)?.clubId || currentUser!.clubId
+      : currentUser!.clubId;
 
     if (!clubId) {
       setError('ID do clube não identificado.');
@@ -668,7 +695,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser }:
     }
 
     fetch(`/api/club-members?clubId=${clubId}`, {
-      headers: { 'x-user-id': currentUser.id }
+      headers: { 'x-user-id': currentUser!.id }
     })
       .then(r => {
         if (!r.ok) throw new Error('Falha ao buscar membros');
@@ -680,7 +707,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser }:
       })
       .catch(err => setError(err.message))
       .finally(() => setLoadingMembers(false));
-  }, [champId, stageId, modalityId, currentUser]);
+  }, [mode, champId, stageId, multiId, modalityId, currentUser]);
 
   const handleToggleAthlete = (userId: string) => {
     setSelectedAthletes(prev => {
@@ -723,8 +750,9 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser }:
   };
 
   const handleRegisterBulk = async () => {
-    if (!champId || !stageId || !modalityId || !currentUser) return;
-    
+    if (mode === 'individual' && (!champId || !stageId || !modalityId || !currentUser)) return;
+    if (mode === 'multi' && (!multiId || !modalityId || !currentUser)) return;
+
     const selectedList = Object.entries(selectedAthletes)
       .filter(([_, data]) => (data as any).checked)
       .map(([userId, data]) => {
@@ -752,21 +780,24 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser }:
     setSuccess(null);
 
     try {
-      const res = await fetch(`/api/championships/${champId}/register-bulk`, {
+      const url = mode === 'individual'
+        ? `/api/championships/${champId}/register-bulk`
+        : `/api/multi-championships/${multiId}/register-bulk`;
+      const body = mode === 'individual'
+        ? { stageId, modalityId, athletes: selectedList }
+        : { modalityId, athletes: selectedList };
+
+      const res = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': currentUser.id
+          'x-user-id': currentUser!.id
         },
-        body: JSON.stringify({
-          stageId,
-          modalityId,
-          athletes: selectedList
-        })
+        body: JSON.stringify(body)
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro na inscrição em lote');
-      
+
       setSuccess(data.results || []);
       setSelectedAthletes({});
     } catch (err: any) {
@@ -788,32 +819,76 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser }:
 
       {error && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{error}</div>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-slate-500 uppercase block">Campeonato</label>
-          <select value={champId} onChange={e => { setChampId(e.target.value); setStageId(''); setModalityId(''); }}
-            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
-            <option value="">Selecione...</option>
-            {championships.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-slate-500 uppercase block">Etapa</label>
-          <select value={stageId} onChange={e => setStageId(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!champId}>
-            <option value="">Selecione...</option>
-            {champStages.map(s => <option key={s.id} value={s.id}>{s.title || `Etapa ${s.stageNum}`}</option>)}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade</label>
-          <select value={modalityId} onChange={e => setModalityId(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!stageId}>
-            <option value="">Selecione...</option>
-            {modalities.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-        </div>
+      <div className="flex gap-2">
+        <button
+          onClick={() => { setMode('individual'); setMultiId(''); setModalityId(''); setMembers([]); setSuccess(null); setError(''); }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition ${mode === 'individual' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+        >
+          Campeonato Individual
+        </button>
+        <button
+          onClick={() => { setMode('multi'); setChampId(''); setStageId(''); setModalityId(''); setMembers([]); setSuccess(null); setError(''); }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition ${mode === 'multi' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+        >
+          Multicampeonato (Pacote)
+        </button>
       </div>
+
+      {mode === 'individual' ? (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase block">Campeonato</label>
+            <select value={champId} onChange={e => { setChampId(e.target.value); setStageId(''); setModalityId(''); }}
+              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
+              <option value="">Selecione...</option>
+              {championships.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase block">Etapa</label>
+            <select value={stageId} onChange={e => setStageId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!champId}>
+              <option value="">Selecione...</option>
+              {champStages.map(s => <option key={s.id} value={s.id}>{s.title || `Etapa ${s.stageNum}`}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade</label>
+            <select value={modalityId} onChange={e => setModalityId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!stageId}>
+              <option value="">Selecione...</option>
+              {modalities.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase block">Pacote (Multicampeonato)</label>
+            <select value={multiId} onChange={e => { setMultiId(e.target.value); setModalityId(''); }}
+              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
+              <option value="">Selecione...</option>
+              {activeMultiChampionships.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade</label>
+            <select value={modalityId} onChange={e => setModalityId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!multiId}>
+              <option value="">Selecione...</option>
+              {multiAvailableModalities.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+            {multiId && multiAvailableModalities.length === 0 && (
+              <p className="text-[10px] text-red-600 font-semibold">Nenhuma modalidade em comum entre os campeonatos deste pacote.</p>
+            )}
+          </div>
+          {multiImpossibleSex && (
+            <p className="sm:col-span-2 text-[10px] text-red-600 font-semibold">
+              As etapas deste pacote têm restrições de sexo incompatíveis entre si — nenhum atleta pode ser inscrito neste pacote em lote.
+            </p>
+          )}
+        </div>
+      )}
 
       {success && (
         <div className="bg-emerald-50 text-emerald-800 p-4 rounded-xl space-y-2 text-xs">
@@ -824,7 +899,9 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser }:
               return (
                 <li key={i}>
                   {athlete?.fullName}: <span className={res.status === 'erro' ? 'text-red-600' : 'text-emerald-700'}>
-                    {res.status === 'inscrito' ? 'Inscrito com sucesso' : res.status === 'reinscrito' ? 'Reinscrição efetuada' : `Erro - ${res.message}`}
+                    {res.status === 'erro'
+                      ? `Erro - ${res.message}`
+                      : `${res.status === 'inscrito' ? 'Inscrito com sucesso' : 'Reinscrição efetuada'}${res.message ? ` (${res.message})` : ''}`}
                   </span>
                 </li>
               );
@@ -837,7 +914,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser }:
 
       {!loadingMembers && members.length > 0 && filteredMembers.length === 0 && (
         <div className="text-center py-8 px-4 text-slate-500 text-xs font-semibold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-          Nenhum atleta do sexo <span className="text-slate-800 font-extrabold">{currentStage?.sexo === 'feminino' ? 'Feminino 👩' : 'Masculino 👨'}</span> cadastrado no clube está elegível para esta etapa.
+          Nenhum atleta do sexo <span className="text-slate-800 font-extrabold">{(mode === 'multi' ? multiSexConstraint : currentStage?.sexo) === 'feminino' ? 'Feminino 👩' : 'Masculino 👨'}</span> cadastrado no clube está elegível para esta etapa.
         </div>
       )}
 
@@ -845,9 +922,9 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser }:
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
             <p className="text-xs font-semibold text-slate-600">Selecione os atletas para inscrição e defina a arma:</p>
-            {currentStage && currentStage.sexo && currentStage.sexo !== 'misto' && (
+            {(mode === 'multi' ? multiSexConstraint : currentStage?.sexo) && (mode === 'multi' ? multiSexConstraint : currentStage?.sexo) !== 'misto' && (
               <span className="self-start text-[10px] bg-blue-50 text-blue-700 border border-blue-150 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                Restrição da Etapa: apenas {currentStage.sexo === 'feminino' ? 'Feminino 👩' : 'Masculino 👨'}
+                Restrição da Etapa: apenas {(mode === 'multi' ? multiSexConstraint : currentStage?.sexo) === 'feminino' ? 'Feminino 👩' : 'Masculino 👨'}
               </span>
             )}
           </div>
@@ -951,7 +1028,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser }:
         </div>
       )}
 
-      {!loadingMembers && members.length === 0 && champId && stageId && modalityId && (
+      {!loadingMembers && members.length === 0 && (mode === 'individual' ? (champId && stageId && modalityId) : (multiId && modalityId)) && (
         <p className="text-xs text-slate-400 text-center py-6 border border-dashed border-slate-200 rounded-xl">
           Nenhum filiado associado a este estande.
         </p>
@@ -5925,6 +6002,7 @@ export default function AdminPanel({
           stages={stages}
           modalities={modalities}
           currentUser={currentUser}
+          multiChampionships={multiChampionships}
         />;
 
 
