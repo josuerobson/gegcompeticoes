@@ -60,7 +60,6 @@ interface AdminPanelProps {
     score: number;
     timeSeconds?: number;
   }) => Promise<void>;
-  onToggleAdminDemo: () => void;
   settings?: { [key: string]: string };
   onSaveSetting?: (key: string, value: string) => Promise<void>;
   onCreateMember: (fields: { fullName: string; cpf: string; email: string; password: string; clubId?: string }) => Promise<{ user?: User; error?: string }>;
@@ -4554,7 +4553,6 @@ export default function AdminPanel({
   onUpdateStage,
   onRemoveStage,
   onRecordScore,
-  onToggleAdminDemo,
   onRefreshData,
   settings = {},
   onSaveSetting,
@@ -5686,17 +5684,6 @@ export default function AdminPanel({
           <p className="text-xs text-slate-550 leading-relaxed">
             O painel de gerenciamento de campeonatos, controle financeiro, homologação de notas fiduciárias e emissão de declarações é de uso restrito da diretoria G&G.
           </p>
-          <div className="bg-blue-50 p-4 rounded-xl space-y-3">
-            <span className="text-[10px] text-blue-700 font-bold block uppercase tracking-wider">MODO TESTE DISPONÍVEL</span>
-            <p className="text-[11px] text-slate-650">Deseja simular as credenciais de administrador da diretoria fiscal para testar as abas?</p>
-            <button
-              onClick={onToggleAdminDemo}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-4 py-2.5 rounded-lg font-bold transition inline-flex items-center gap-1.5 shadow-md cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              Ativar Modo Diretor (Admin)
-            </button>
-          </div>
         </div>
       </div>
     );
@@ -9158,13 +9145,6 @@ export default function AdminPanel({
           <h2 className="font-display font-bold text-xl">Diretoria Fiscal & Plataforma Nacional</h2>
           <p className="text-[11px] text-slate-300">Controle integrado de filiados, termos de segurança, anuidades e divisões de IPSC/IDSC.</p>
         </div>
-
-        <button
-          onClick={onToggleAdminDemo}
-          className="bg-white/10 hover:bg-white/20 text-white text-xs px-4 py-2.5 rounded-xl font-bold transition relative self-start sm:self-center cursor-pointer"
-        >
-          Desativar Admin
-        </button>
       </div>
 
       {/* Main Tabs Selection (Top navigation) */}

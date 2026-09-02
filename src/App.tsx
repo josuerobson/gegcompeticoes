@@ -1522,16 +1522,6 @@ export default function App() {
     }
   };
 
-  // Demo admin simulator trigger
-  const handleToggleAdminDemo = async () => {
-    if (!currentUser) return;
-    const isCurrentlyAdmin = currentUser.role === 'admin' || currentUser.role === 'master_admin' || currentUser.role === 'club_admin';
-    const targetUsername = isCurrentlyAdmin ? 'roberto_ipsc' : 'guilherme_gg';
-    const targetUser = users.find(u => u.username === targetUsername);
-    if (!targetUser?.cpf) return;
-    await handleLogin(targetUser.cpf, '123456');
-  };
-
   // Navigations routing
   const navigateToProfile = (user: User) => {
     setSelectedProfileUser(user);
@@ -2459,7 +2449,6 @@ export default function App() {
               onUpdateStage={handleUpdateStage}
               onRemoveStage={handleRemoveStage}
               onRecordScore={handleRecordScoreAdmin}
-              onToggleAdminDemo={handleToggleAdminDemo}
               onAddWeapon={handleAddWeapon}
               onRemoveWeapon={handleRemoveWeapon}
               onUpdateWeapon={handleUpdateWeapon}
