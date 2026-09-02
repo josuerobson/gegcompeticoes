@@ -29,6 +29,22 @@ function isUserRowProfileComplete(u: any): boolean {
   return USER_PROFILE_REQUIRED_COLUMNS.every(col => u[col] !== null && u[col] !== undefined && u[col] !== '');
 }
 
+// Avatares e logos são salvos como base64 direto nas colunas do Postgres (sem
+// MinIO) — embuti-los em toda linha de /api/users e /api/clubs inflava esses
+// payloads em vários MB (1300+ atletas, cada um com sua foto completa). Como
+// o valor bruto já é uma data: URI, basta trocar o VALOR retornado por uma URL
+// que serve a mesma imagem sob demanda — nenhum componente que já usa
+// <img src={user.avatarUrl}> precisa mudar. URLs externas (avatar padrão,
+// ou uma foto linkada de fora) passam direto, sem view.
+function avatarUrlFor(userId: string, rawValue: string | null | undefined): string {
+  if (rawValue && rawValue.startsWith('data:')) return `/api/users/${userId}/avatar`;
+  return rawValue || DEFAULT_AVATAR;
+}
+function logoUrlFor(clubId: string, rawValue: string | null | undefined): string | undefined {
+  if (rawValue && rawValue.startsWith('data:')) return `/api/clubs/${clubId}/logo`;
+  return rawValue || undefined;
+}
+
 // Mapping functions to convert PostgreSQL row format to client/React expected format
 function mapUser(u: any): User {
   return {
@@ -36,7 +52,7 @@ function mapUser(u: any): User {
     email: u.email,
     username: u.username,
     fullName: u.full_name,
-    avatarUrl: u.avatar_url,
+    avatarUrl: avatarUrlFor(u.id, u.avatar_url),
     bio: u.bio,
     crNumber: u.cr_number || undefined,
     isClubMember: u.is_club_member,
@@ -96,7 +112,7 @@ function mapClub(c: any): Club {
   return {
     id: c.id,
     name: c.name,
-    logoUrl: c.logo_url || undefined,
+    logoUrl: logoUrlFor(c.id, c.logo_url),
     subDomain: c.sub_domain || undefined,
     cnpj: c.cnpj || undefined,
     phone: c.phone || undefined,
@@ -2146,6 +2162,29 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
+// Serve a foto de perfil (salva como data: URI direto na coluna avatar_url)
+// sob demanda, em vez de embutida em toda linha de /api/users. Pública (foto
+// de perfil já é exibida a qualquer visitante no feed/perfil), cacheável.
+app.get('/api/users/:id/avatar', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT avatar_url FROM users WHERE id = $1', [req.params.id]);
+    const dataUri = r.rows[0]?.avatar_url as string | undefined;
+    if (!dataUri || !dataUri.startsWith('data:')) {
+      return res.redirect(302, DEFAULT_AVATAR);
+    }
+    const match = /^data:([^;]+);base64,(.+)$/.exec(dataUri);
+    if (!match) {
+      return res.redirect(302, DEFAULT_AVATAR);
+    }
+    res.setHeader('Content-Type', match[1]);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(Buffer.from(match[2], 'base64'));
+  } catch (err) {
+    console.error('Fetch user avatar database error:', err);
+    res.status(500).end();
+  }
+});
+
 app.post('/api/users/:id/follow', requireAuth, async (req, res) => {
   const targetId = req.params.id;
   const currentUser = (req as any).user as User;
@@ -2887,6 +2926,28 @@ app.get('/api/clubs', async (req, res) => {
   } catch (err) {
     console.error('Fetch clubs database error:', err);
     res.status(500).json({ error: 'Erro ao buscar clubes.' });
+  }
+});
+
+// Mesma ideia do avatar de usuário acima: serve o logo (data: URI salvo direto
+// na coluna) sob demanda em vez de embutido em toda linha de /api/clubs.
+app.get('/api/clubs/:id/logo', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT logo_url FROM clubs WHERE id = $1', [req.params.id]);
+    const dataUri = r.rows[0]?.logo_url as string | undefined;
+    if (!dataUri || !dataUri.startsWith('data:')) {
+      return res.status(404).end();
+    }
+    const match = /^data:([^;]+);base64,(.+)$/.exec(dataUri);
+    if (!match) {
+      return res.status(404).end();
+    }
+    res.setHeader('Content-Type', match[1]);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(Buffer.from(match[2], 'base64'));
+  } catch (err) {
+    console.error('Fetch club logo database error:', err);
+    res.status(500).end();
   }
 });
 
@@ -3839,7 +3900,7 @@ app.get('/api/rankings', async (req, res) => {
     }
 
     const scoresRes = await pool.query(query, params);
-    const scores = scoresRes.rows.map(row => ({ ...mapStageScore(row), uUsername: row.u_username, uAvatarUrl: row.u_avatar_url }));
+    const scores = scoresRes.rows.map(row => ({ ...mapStageScore(row), uUsername: row.u_username, uAvatarUrl: avatarUrlFor(row.user_id, row.u_avatar_url) }));
 
     // Group scores by User and Modality
     const shooterMap: { [key: string]: {
@@ -3929,7 +3990,7 @@ app.get('/api/feed/ranking-highlights', async (req, res) => {
         const byUser: Record<string, { userId: string; fullName: string; username: string; avatarUrl: string; stageScores: Record<number, number> }> = {};
         for (const r of scoresRes.rows) {
           if (!byUser[r.user_id]) {
-            byUser[r.user_id] = { userId: r.user_id, fullName: r.shooter_name, username: r.username, avatarUrl: r.avatar_url, stageScores: {} };
+            byUser[r.user_id] = { userId: r.user_id, fullName: r.shooter_name, username: r.username, avatarUrl: avatarUrlFor(r.user_id, r.avatar_url), stageScores: {} };
           }
           byUser[r.user_id].stageScores[r.stage_num] = Math.max(byUser[r.user_id].stageScores[r.stage_num] || 0, Number(r.score));
         }
@@ -3985,7 +4046,7 @@ app.get('/api/feed/ranking-highlights', async (req, res) => {
         for (const r of scoresRes.rows) {
           const score = Number(r.score);
           if (!byUser[r.user_id] || score > byUser[r.user_id].score) {
-            byUser[r.user_id] = { userId: r.user_id, fullName: r.shooter_name, username: r.username, avatarUrl: r.avatar_url, score };
+            byUser[r.user_id] = { userId: r.user_id, fullName: r.shooter_name, username: r.username, avatarUrl: avatarUrlFor(r.user_id, r.avatar_url), score };
           }
         }
 

@@ -1,16 +1,30 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { User, Post, Championship, ChampionshipInput, Registration, StageScore, RankingItem, ShootingResult, Club, Modality, Stage, StageInput, Weapon, WeaponLookupOption, SharedPostInfo, Comment, MultiChampionship, HomeBanner } from './types';
 import FeedView from './components/FeedView';
-import ChampionshipsView from './components/ChampionshipsView';
-import AdminPanel from './components/AdminPanel';
-import MemberProfile from './components/MemberProfile';
 import CardValidationView from './components/CardValidationView';
 import CertificateValidationView from './components/CertificateValidationView';
+
+// Code-split: essas três telas não são a landing padrão (Feed é), então não
+// precisam entrar no bundle inicial — sobretudo o Painel Diretor (~10.500
+// linhas), que a maioria dos visitantes (atletas navegando o feed) nunca abre.
+const ChampionshipsView = lazy(() => import('./components/ChampionshipsView'));
+const AdminPanel = lazy(() => import('./components/AdminPanel'));
+const MemberProfile = lazy(() => import('./components/MemberProfile'));
 import { Target, Trophy, ShieldCheck, User as UserIcon, Home, Zap, Loader2, Sparkles, CheckCircle2, Sun, Moon, ChevronDown, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion } from 'motion/react';
 import shootingDarkBg from '@/assets/shooting_dark_bg.png';
 import shootingBanner from '@/assets/shooting_banner.png';
 import logoGgCompeticoes from '@/assets/logo_gg_competicoes.png';
+
+// Suspense fallback for the lazy-loaded tab views below — brief, since the
+// chunk is small and usually already cached after the first visit to a tab.
+function LazyViewFallback() {
+  return (
+    <div className="flex items-center justify-center py-24">
+      <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+    </div>
+  );
+}
 
 // Small reusable labeled input for the long Membro/Clube registration forms — avoids
 // repeating the same theme-aware className/label markup for ~25 near-identical fields.
@@ -790,8 +804,12 @@ export default function App() {
         headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
         body: JSON.stringify(fields)
       });
-      if (res.ok) {
-        await refreshClubs();
+      const data = await res.json().catch(() => ({}));
+      // A resposta ja traz o clube atualizado — evita reler a lista inteira
+      // de clubes (que pode passar de 1MB com logos em base64) so por causa
+      // de 1 registro alterado.
+      if (res.ok && data.club) {
+        setClubs(prev => prev.map(c => c.id === data.club.id ? data.club : c));
         return true;
       }
       return false;
@@ -821,7 +839,7 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.user) {
-        await refreshUsers();
+        setUsers(prev => [...prev, data.user]);
         return { user: data.user };
       }
       return { error: data.error || 'Erro ao cadastrar membro.' };
@@ -841,7 +859,10 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.club) {
-        await Promise.all([refreshClubs(), refreshUsers()]);
+        // O clube ja vem pronto na resposta; so o admin do clube (criado junto)
+        // ainda precisa vir do backend, entao esse refresh de users continua.
+        setClubs(prev => [...prev, data.club]);
+        await refreshUsers();
         return { club: data.club };
       }
       return { error: data.error || 'Erro ao cadastrar clube.' };
@@ -861,7 +882,7 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.club) {
-        await refreshClubs();
+        setClubs(prev => prev.map(c => c.id === data.club.id ? data.club : c));
         return { club: data.club };
       }
       return { error: data.error || 'Erro ao atualizar subdomínio.' };
@@ -895,7 +916,10 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.user) {
-        await refreshUsers();
+        setUsers(prev => {
+          const exists = prev.some(u => u.id === data.user.id);
+          return exists ? prev.map(u => u.id === data.user.id ? data.user : u) : [...prev, data.user];
+        });
         return { user: data.user };
       }
       return { error: data.error || 'Erro ao definir acesso do gestor.' };
@@ -915,7 +939,7 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.club) {
-        await refreshClubs();
+        setClubs(prev => prev.map(c => c.id === data.club.id ? data.club : c));
         return { club: data.club };
       }
       return { error: data.error || 'Erro ao ativar recurso completo do clube.' };
@@ -933,8 +957,9 @@ export default function App() {
         headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
         body: JSON.stringify(fields)
       });
-      if (res.ok) {
-        await refreshUsers();
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.user) {
+        setUsers(prev => prev.map(u => u.id === data.user.id ? data.user : u));
         return true;
       }
       return false;
@@ -1111,10 +1136,14 @@ export default function App() {
         headers: authHeaders,
         body: JSON.stringify({ modalityId, stageId, weaponId, crNumber, paymentMethod })
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        await refreshRegistrations();
+        if (data.registration) {
+          setRegistrations(prev => [...prev, data.registration]);
+        } else {
+          await refreshRegistrations();
+        }
       } else {
-        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Erro ao realizar inscrição.');
       }
     } catch (err) {
@@ -2385,6 +2414,7 @@ export default function App() {
           )}
 
           {activeTab === 'championships' && (
+            <Suspense fallback={<LazyViewFallback />}>
             <ChampionshipsView
               championships={filteredChampionshipsList}
               registrations={registrations}
@@ -2404,9 +2434,11 @@ export default function App() {
               multiChampionships={multiChampionships}
               onRefreshData={syncWithBackend}
             />
+            </Suspense>
           )}
 
           {activeTab === 'admin' && (
+            <Suspense fallback={<LazyViewFallback />}>
             <AdminPanel
               currentUser={currentUser}
               championships={championships}
@@ -2449,9 +2481,11 @@ export default function App() {
               onUpdateClubSubdomain={handleUpdateClubSubdomain}
               multiChampionships={multiChampionships}
             />
+            </Suspense>
           )}
 
           {activeTab === 'profile' && (
+            <Suspense fallback={<LazyViewFallback />}>
             <MemberProfile
               currentUser={currentUser}
               selectedUser={selectedProfileUser || currentUser}
@@ -2487,6 +2521,7 @@ export default function App() {
               onUploadDocument={handleUploadDocument}
               defaultImage={settings.default_image}
             />
+            </Suspense>
           )}
         </div>
 
