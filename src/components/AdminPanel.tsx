@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, MultiChampionshipItem, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession, AnnuityPlan } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
@@ -124,6 +124,78 @@ function MemberSelect({ label, value, onChange, options }: {
   );
 }
 
+// Dropdown com campo de busca embutido — usado no lugar de <select> quando a
+// lista de opções é longa (dezenas de campeonatos, por exemplo) e digitar o
+// nome é bem mais rápido que rolar/usar o teclado num <select> nativo.
+function SearchableSelect({ label, value, onChange, options, placeholder = 'Selecione...', disabled = false }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selected = options.find(o => o.value === value);
+  const q = query.trim().toLowerCase();
+  const filtered = q ? options.filter(o => o.label.toLowerCase().includes(q)) : options;
+
+  return (
+    <div className="space-y-1 relative" ref={containerRef}>
+      <label className="text-[10px] font-bold text-slate-500 uppercase block">{label}</label>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => { setOpen(o => !o); setQuery(''); }}
+        className={`w-full text-left bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold flex justify-between items-center gap-1 ${disabled ? 'opacity-60 cursor-not-allowed text-slate-400' : 'cursor-pointer hover:border-blue-400 text-slate-700'}`}
+      >
+        <span className={`truncate ${selected ? '' : 'text-slate-400 font-normal'}`}>{selected ? selected.label : placeholder}</span>
+        <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+      </button>
+      {open && !disabled && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-72 overflow-hidden flex flex-col">
+          <div className="p-2 border-b border-slate-100 shrink-0">
+            <input
+              autoFocus
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Pesquisar..."
+              className="w-full bg-slate-50 border border-slate-200 outline-none px-2.5 py-1.5 rounded-lg text-xs text-slate-700 focus:border-blue-500"
+            />
+          </div>
+          <div className="overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-2.5 text-xs text-slate-400">Nenhum resultado encontrado.</div>
+            ) : filtered.map(o => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => { onChange(o.value); setOpen(false); setQuery(''); }}
+                className={`w-full text-left px-3 py-2 text-xs transition cursor-pointer ${o.value === value ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700 hover:bg-slate-50'}`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // A section of the member's profile that saves independently — the director
 // fills in whatever part they have on hand and comes back later for the rest,
@@ -2100,14 +2172,12 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
       {error && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{error}</div>}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-slate-500 uppercase block">Campeonato</label>
-          <select value={champId} onChange={e => { setChampId(e.target.value); setStageId(''); setModalityId(''); setSelectedReg(null); setSearchAthlete(''); }}
-            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
-            <option value="">Selecione...</option>
-            {championships.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-          </select>
-        </div>
+        <SearchableSelect
+          label="Campeonato"
+          value={champId}
+          onChange={v => { setChampId(v); setStageId(''); setModalityId(''); setSelectedReg(null); setSearchAthlete(''); }}
+          options={championships.map(c => ({ value: c.id, label: c.title }))}
+        />
         <div className="space-y-1">
           <label className="text-[10px] font-bold text-slate-500 uppercase block">Etapa</label>
           <select value={stageId} onChange={e => { setStageId(e.target.value); setSelectedReg(null); setSearchAthlete(''); }}
@@ -4916,6 +4986,7 @@ export default function AdminPanel({
   // Search filters for the "Campeonatos Cadastrados" and "Etapas Cadastradas" lists
   const [champListSearchQuery, setChampListSearchQuery] = useState('');
   const [stageListSearchQuery, setStageListSearchQuery] = useState('');
+  const [clubeChampListSearchQuery, setClubeChampListSearchQuery] = useState('');
 
   // Default image settings state (functional)
   const [defaultImageSourceMode, setDefaultImageSourceMode] = useState<'url' | 'upload' | 'gallery'>('gallery');
@@ -5140,6 +5211,7 @@ export default function AdminPanel({
   // club_admin login; the club later completes endereço/documentos itself
   // through the same PATCH /api/clubs/:id used by "Meu Cadastro".
   // "Novo Clube" (Gerenciamento Plataforma) — create & edit clubs
+  const [novoClubeListSearchQuery, setNovoClubeListSearchQuery] = useState('');
   const [createClubForm, setCreateClubForm] = useState({
     name: '', cnpj: '', responsibleName: '', email: '', password: '', phone: '', crNumber: '',
     crValidity: '', annuityDueDate: '',
@@ -5646,6 +5718,26 @@ export default function AdminPanel({
               <Trophy className="w-5 h-5 text-blue-600" />
             </div>
 
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Pesquisar campeonato por nome..."
+                value={clubeChampListSearchQuery}
+                onChange={e => setClubeChampListSearchQuery(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 pl-9 pr-8 rounded-xl text-xs font-semibold text-slate-700 focus:border-blue-500"
+              />
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+              {clubeChampListSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setClubeChampListSearchQuery('')}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
@@ -5659,7 +5751,9 @@ export default function AdminPanel({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {championships.map((champ) => {
+                  {championships
+                    .filter(champ => champ.title.toLowerCase().includes(clubeChampListSearchQuery.trim().toLowerCase()))
+                    .map((champ) => {
                     const champRegs = registrations.filter(r => r.championshipId === champ.id);
                     const totalArrecadacao = champRegs.reduce((acc, r) => {
                       if (r.valorPago && r.valorPago > 0 && r.valorPago !== 120) return acc + r.valorPago;
@@ -6654,11 +6748,42 @@ export default function AdminPanel({
 
             <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs text-left">
               <h4 className="font-display font-bold text-slate-900 text-sm">Clubes Cadastrados ({clubs.length})</h4>
+
+              {clubs.length > 0 && (
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Pesquisar clube por nome ou CNPJ..."
+                    value={novoClubeListSearchQuery}
+                    onChange={e => setNovoClubeListSearchQuery(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 pl-9 pr-8 rounded-xl text-xs font-semibold text-slate-700 focus:border-blue-500"
+                  />
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                  {novoClubeListSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setNovoClubeListSearchQuery('')}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              )}
+
               {clubs.length === 0 ? (
                 <p className="text-xs text-slate-400">Nenhum clube filiado cadastrado ainda.</p>
-              ) : (
+              ) : (() => {
+                const q = novoClubeListSearchQuery.trim().toLowerCase();
+                const filteredClubs = q
+                  ? clubs.filter(c => c.name.toLowerCase().includes(q) || (c.cnpj || '').toLowerCase().includes(q))
+                  : clubs;
+                if (filteredClubs.length === 0) {
+                  return <p className="text-xs text-slate-400">Nenhum clube encontrado para "{novoClubeListSearchQuery}".</p>;
+                }
+                return (
                 <div className="grid grid-cols-1 gap-3">
-                  {clubs.map((club) => (
+                  {filteredClubs.map((club) => (
                     <div key={club.id} className="border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-slate-50/50 hover:border-slate-300 transition">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
@@ -6706,7 +6831,8 @@ export default function AdminPanel({
                     </div>
                   ))}
                 </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* Modal de Edição do Clube */}

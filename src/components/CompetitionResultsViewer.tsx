@@ -33,6 +33,7 @@ export function CompetitionResultsViewer({
   const [selectedResultStageId, setSelectedResultStageId] = useState<string | null>(initialStageId);
   const [selectedResultModalityId, setSelectedResultModalityId] = useState<string | null>(initialModalityId);
   const [selectedMedalFilter, setSelectedMedalFilter] = useState<'geral' | 'ouro' | 'prata' | 'bronze'>('geral');
+  const [selectedYearFilter, setSelectedYearFilter] = useState<string>(() => String(new Date().getFullYear()));
 
   // Reset medal filter when selection changes
   useEffect(() => {
@@ -46,7 +47,14 @@ export function CompetitionResultsViewer({
   // 1. Sem campeonato selecionado: exibe a lista de campeonatos em cards
   if (!selectedResultChampId) {
     const clubChamps = championships.filter(c => !c.clubId || !currentUser?.clubId || c.clubId === currentUser?.clubId);
-    const displayChamps = clubChamps.length > 0 ? clubChamps : championships;
+    const allDisplayChamps = clubChamps.length > 0 ? clubChamps : championships;
+
+    const availableYears = Array.from(
+      new Set(allDisplayChamps.map(c => new Date(c.startDate).getFullYear()).filter(y => !isNaN(y)))
+    ).sort((a, b) => b - a);
+    const displayChamps = selectedYearFilter === 'todos'
+      ? allDisplayChamps
+      : allDisplayChamps.filter(c => new Date(c.startDate).getFullYear().toString() === selectedYearFilter);
 
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
@@ -58,9 +66,28 @@ export function CompetitionResultsViewer({
           <Trophy className="w-5 h-5 text-blue-600" />
         </div>
 
+        {/* Filtro por ano */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          <button
+            onClick={() => setSelectedYearFilter('todos')}
+            className={`shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${selectedYearFilter === 'todos' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+          >
+            Todos
+          </button>
+          {availableYears.map(year => (
+            <button
+              key={year}
+              onClick={() => setSelectedYearFilter(year.toString())}
+              className={`shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${selectedYearFilter === year.toString() ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >
+              {year}
+            </button>
+          ))}
+        </div>
+
         {displayChamps.length === 0 ? (
           <div className="text-center py-8 text-slate-400 text-xs">
-            Nenhum campeonato cadastrado no sistema ainda.
+            Nenhum campeonato encontrado {selectedYearFilter !== 'todos' ? `em ${selectedYearFilter}` : 'no sistema ainda'}.
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
