@@ -29,6 +29,24 @@ function isUserRowProfileComplete(u: any): boolean {
   return USER_PROFILE_REQUIRED_COLUMNS.every(col => u[col] !== null && u[col] !== undefined && u[col] !== '');
 }
 
+// Gate usado antes de aceitar uma inscrição em campeonato. Para um atleta
+// pessoa física, "cadastro completo" é isUserRowProfileComplete (RG, data de
+// nascimento, endereço...). Contas de clube (club_admin/master_admin) nunca
+// preenchem essas colunas — usam os dados do próprio clube — então checar
+// isProfileComplete nelas trava a inscrição pra sempre, mesmo com o clube
+// 100% cadastrado. Mesma lista de campos usada em MemberProfile.tsx
+// (isClubDataComplete) para manter os dois lados consistentes.
+async function isRegistrationEligible(user: User): Promise<boolean> {
+  if (user.role === 'club_admin' || user.role === 'master_admin') {
+    if (!user.clubId) return false;
+    const clubRes = await pool.query('SELECT * FROM clubs WHERE id = $1', [user.clubId]);
+    if (clubRes.rows.length === 0) return false;
+    const club = mapClub(clubRes.rows[0]);
+    return Boolean(club.crNumber && club.responsibleName && club.phone && club.email && club.address && club.city && club.state);
+  }
+  return Boolean(user.isProfileComplete);
+}
+
 // Avatares e logos são salvos como base64 direto nas colunas do Postgres (sem
 // MinIO) — embuti-los em toda linha de /api/users e /api/clubs inflava esses
 // payloads em vários MB (1300+ atletas, cada um com sua foto completa). Como
@@ -656,7 +674,7 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
   if (!modalityId || !weaponId || !crNumber || !paymentMethod) {
     return res.status(400).json({ error: 'Modalidade, arma, CR e método de pagamento são obrigatórios.' });
   }
-  if (!currentUser.isProfileComplete) {
+  if (!(await isRegistrationEligible(currentUser))) {
     return res.status(403).json({ error: 'Complete seu cadastro antes de se inscrever.' });
   }
 
@@ -2796,7 +2814,7 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Inscrição requer modalidade, etapa, arma, CR válido e meio de pagamento.' });
   }
 
-  if (!currentUser.isProfileComplete) {
+  if (!(await isRegistrationEligible(currentUser))) {
     return res.status(403).json({ error: 'Complete seu cadastro antes de se inscrever em campeonatos.' });
   }
 
