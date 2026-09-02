@@ -401,8 +401,11 @@ export default function MemberProfile({
     }
   };
 
-  // "Meu cadastro" — progressive profile completion, saved one section at a time
-  const isClubAdmin = selectedUser.role === 'club_admin';
+  // "Meu cadastro" — progressive profile completion, saved one section at a time.
+  // master_admin também é um login de clube na prática (CNPJ, sem RG/data de
+  // nascimento/etc) — hoje é literalmente a conta do clube G&G Competições
+  // Ltda promovida a master, então conta como "clube" aqui igual a club_admin.
+  const isClubAdmin = selectedUser.role === 'club_admin' || selectedUser.role === 'master_admin';
   const myClub = clubs.find(c => c.id === selectedUser.clubId);
 
   // users.is_profile_complete is always true for club_admin accounts (it only
@@ -434,7 +437,7 @@ export default function MemberProfile({
   const [batchPayError, setBatchPayError] = useState('');
   const [pixCopied, setPixCopied] = useState(false);
 
-  const isClubLogin = selectedUser.role === 'club_admin';
+  const isClubLogin = selectedUser.role === 'club_admin' || selectedUser.role === 'master_admin';
 
   const relevantRegistrations = registrations.filter(r => {
     if (isClubLogin) {
