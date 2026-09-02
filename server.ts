@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import compression from 'compression';
 import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
 import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, MultiChampionshipItem, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan, RankingHighlight } from './src/types.js';
@@ -12,6 +13,10 @@ import multer from 'multer';
 
 const app = express();
 const PORT = 3000;
+
+// Respostas JSON de listas grandes (usuários, inscrições, clubes com logos em
+// base64) saem sem compressão hoje — isso sozinho corta boa parte do peso.
+app.use(compression());
 
 // Fields a member profile needs to be considered complete for championship
 // registration. Computed live from the row on every read (not trusted from
@@ -533,9 +538,11 @@ async function getVisibleClubIds(tenant: Club): Promise<string[]> {
   return [tenant.id, ...r.rows.map((row) => row.id as string)];
 }
 
-// Resolve o tenant a partir do Host/override em toda requisição e disponibiliza
-// em req.tenant, para uso pelos endpoints que precisam escopar dados por clube.
-app.use(async (req, res, next) => {
+// Resolve o tenant a partir do Host/override em toda requisição de API e
+// disponibiliza em req.tenant, para uso pelos endpoints que precisam escopar
+// dados por clube. Restrito a /api — antes rodava em toda requisição, inclusive
+// assets estáticos (JS/CSS/imagens), gerando 1 consulta ao Postgres por arquivo.
+app.use('/api', async (req, res, next) => {
   try {
     (req as any).tenant = await resolveTenant(req);
   } catch (err) {
@@ -3813,8 +3820,11 @@ app.get('/api/rankings', async (req, res) => {
   try {
     const tenant = (req as any).tenant as Club;
     const visibleClubIds = await getVisibleClubIds(tenant);
-    let query = `SELECT ss.* FROM stage_scores ss
+    // JOIN direto em vez de 1 SELECT por linha de stage_scores (era um N+1 que
+    // chegava a levar +15s / milhares de round-trips em campeonatos grandes).
+    let query = `SELECT ss.*, u.username as u_username, u.avatar_url as u_avatar_url FROM stage_scores ss
       JOIN championships c ON c.id = ss.championship_id
+      LEFT JOIN users u ON u.id = ss.user_id
       WHERE c.club_id = ANY($1)`;
     const params: any[] = [visibleClubIds];
     let paramIdx = 2;
@@ -3829,10 +3839,10 @@ app.get('/api/rankings', async (req, res) => {
     }
 
     const scoresRes = await pool.query(query, params);
-    const scores = scoresRes.rows.map(mapStageScore);
+    const scores = scoresRes.rows.map(row => ({ ...mapStageScore(row), uUsername: row.u_username, uAvatarUrl: row.u_avatar_url }));
 
     // Group scores by User and Modality
-    const shooterMap: { [key: string]: { 
+    const shooterMap: { [key: string]: {
       userId: string;
       username: string;
       fullName: string;
@@ -3844,15 +3854,13 @@ app.get('/api/rankings', async (req, res) => {
 
     for (const s of scores) {
       const key = `${s.userId}_${s.modality}`;
-      const userRes = await pool.query('SELECT username, avatar_url FROM users WHERE id = $1', [s.userId]);
-      const user = userRes.rows[0];
 
       if (!shooterMap[key]) {
         shooterMap[key] = {
           userId: s.userId,
-          username: user?.username || 'Federado',
+          username: s.uUsername || 'Federado',
           fullName: s.shooterName,
-          avatarUrl: user?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+          avatarUrl: s.uAvatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
           modality: s.modality,
           totalScore: 0,
           stageScores: {}

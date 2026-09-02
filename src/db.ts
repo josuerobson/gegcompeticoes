@@ -351,6 +351,23 @@ export async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);
     `);
 
+    // Índices adicionados após análise de performance: getVisibleClubIds() roda em
+    // quase toda rota autenticada (filtra por club_id/parent_club_id), o middleware
+    // de tenant resolve por sub_domain em toda requisição, e login/checagem de CPF
+    // único usa regexp_replace(cpf,...) — que só usa índice se ele for sobre a
+    // mesma expressão (índice funcional), não sobre a coluna cpf pura.
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_clubs_sub_domain ON clubs(sub_domain);
+      CREATE INDEX IF NOT EXISTS idx_clubs_parent_club_id ON clubs(parent_club_id);
+      CREATE INDEX IF NOT EXISTS idx_users_club_id ON users(club_id);
+      CREATE INDEX IF NOT EXISTS idx_users_cpf_digits ON users ((regexp_replace(cpf, '[^0-9]', '', 'g')));
+      CREATE INDEX IF NOT EXISTS idx_stage_scores_user_id ON stage_scores(user_id);
+      CREATE INDEX IF NOT EXISTS idx_registrations_stage ON registrations(stage_id);
+      CREATE INDEX IF NOT EXISTS idx_registrations_modality ON registrations(modality_id);
+      CREATE INDEX IF NOT EXISTS idx_stages_championship ON stages(championship_id);
+      CREATE INDEX IF NOT EXISTS idx_weapons_owner ON weapons(owner_id);
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS trainings (
         id TEXT PRIMARY KEY,

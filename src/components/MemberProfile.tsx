@@ -1714,7 +1714,12 @@ export default function MemberProfile({
     { id: 'declarations', label: 'Declarações', icon: FileText, public: false },
   ];
 
-  const filteredMenuItems = menuItems.filter(item => isMe || item.public);
+  // Certificados, carteirinhas, treinamentos e declarações são conceitos de
+  // atleta pessoa física — não fazem sentido no menu de uma conta de clube.
+  const ATHLETE_ONLY_MENU_IDS = new Set(['certificates', 'club_card', 'playoff_card', 'shooter_card', 'gg_card', 'trainings', 'declarations']);
+  const filteredMenuItems = menuItems
+    .filter(item => isMe || item.public)
+    .filter(item => !isClubAdmin || !ATHLETE_ONLY_MENU_IDS.has(item.id));
 
   return (
     <div className="pt-0.5 pb-6 md:py-6 space-y-3 md:space-y-6">
