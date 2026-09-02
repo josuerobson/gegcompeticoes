@@ -394,6 +394,13 @@ export interface TrainingSession {
   createdAt?: string;
 }
 
+// ─── Inscrição em lote (clube) ─────────────────────────────────────────────────
+// Prefill enviado da tela de campeonatos para "Inscrição Clube" no Painel Diretor
+// quando uma conta de clube tenta se inscrever como se fosse atleta.
+export type ClubBulkRegistrationPrefill =
+  | { mode: 'individual'; championshipId: string; stageId: string }
+  | { mode: 'multi'; multiChampionshipId: string };
+
 // ─── Multi-campeonatos ────────────────────────────────────────────────────────
 // Pacote de campeonatos agrupados com inscrição unificada (valor único).
 export interface MultiChampionshipItem {

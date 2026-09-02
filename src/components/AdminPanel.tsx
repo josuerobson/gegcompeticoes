@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, MultiChampionshipItem, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession, AnnuityPlan } from '../types';
+import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, MultiChampionshipItem, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession, AnnuityPlan, ClubBulkRegistrationPrefill } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
@@ -73,6 +73,8 @@ interface AdminPanelProps {
   onGetClubAdmin?: (clubId: string) => Promise<User | null>;
   onUpdateClubSubdomain?: (clubId: string, subDomain: string) => Promise<{ club?: Club; error?: string }>;
   multiChampionships?: MultiChampionship[];
+  clubBulkRegistrationPrefill?: ClubBulkRegistrationPrefill | null;
+  onConsumeClubBulkRegistrationPrefill?: () => void;
 }
 
 // Labeled input matching this panel's existing form style (see the
@@ -622,14 +624,21 @@ interface InscricaoClubePanelProps {
   modalities: Modality[];
   currentUser: User | null;
   multiChampionships?: MultiChampionship[];
+  initialPrefill?: ClubBulkRegistrationPrefill | null;
+  onPrefillApplied?: () => void;
 }
 
-function InscricaoClubePanel({ championships, stages, modalities, currentUser, multiChampionships = [] }: InscricaoClubePanelProps) {
-  const [mode, setMode] = React.useState<'individual' | 'multi'>('individual');
-  const [champId, setChampId] = React.useState('');
-  const [stageId, setStageId] = React.useState('');
+function InscricaoClubePanel({ championships, stages, modalities, currentUser, multiChampionships = [], initialPrefill, onPrefillApplied }: InscricaoClubePanelProps) {
+  const [mode, setMode] = React.useState<'individual' | 'multi'>(() => initialPrefill?.mode || 'individual');
+  const [champId, setChampId] = React.useState(() => initialPrefill?.mode === 'individual' ? initialPrefill.championshipId : '');
+  const [stageId, setStageId] = React.useState(() => initialPrefill?.mode === 'individual' ? initialPrefill.stageId : '');
   const [modalityId, setModalityId] = React.useState('');
-  const [multiId, setMultiId] = React.useState('');
+  const [multiId, setMultiId] = React.useState(() => initialPrefill?.mode === 'multi' ? initialPrefill.multiChampionshipId : '');
+
+  React.useEffect(() => {
+    if (initialPrefill) onPrefillApplied?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [members, setMembers] = React.useState<User[]>([]);
   const [clubWeapons, setClubWeapons] = React.useState<Weapon[]>([]);
   const [loadingMembers, setLoadingMembers] = React.useState(false);
@@ -4638,7 +4647,9 @@ export default function AdminPanel({
   onSetClubAdminCredentials,
   onGetClubAdmin,
   onUpdateClubSubdomain,
-  multiChampionships = []
+  multiChampionships = [],
+  clubBulkRegistrationPrefill,
+  onConsumeClubBulkRegistrationPrefill
 }: AdminPanelProps) {
   const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
 
@@ -4844,8 +4855,20 @@ export default function AdminPanel({
   // Main tabs: 'clube' | 'plataforma' | 'master'
   const [mainTab, setMainTab] = useState<'clube' | 'plataforma' | 'master'>('clube');
 
-  // Sidebar Menu selection for Clube
-  const [clubeMenu, setClubeMenu] = useState<string>('campeonatos');
+  // Sidebar Menu selection for Clube — abre direto em "Inscrição Clube" quando
+  // chegamos aqui redirecionados de uma tentativa de inscrição de conta de clube.
+  const [clubeMenu, setClubeMenu] = useState<string>(() => clubBulkRegistrationPrefill ? 'inscricao_clube' : 'campeonatos');
+
+  // Captura o prefill recebido no mount (a navegação sempre remonta o AdminPanel,
+  // já que ele só é renderizado quando a aba "admin" está ativa) e avisa o pai
+  // para limpar seu estado, evitando reaplicar o mesmo prefill em remounts futuros.
+  const [pendingClubPrefill, setPendingClubPrefill] = useState(clubBulkRegistrationPrefill || null);
+  useEffect(() => {
+    if (clubBulkRegistrationPrefill) {
+      onConsumeClubBulkRegistrationPrefill?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Seleção de filtros para a tela de resultados
   const [selectedResultChampId, setSelectedResultChampId] = useState<string | null>(null);
@@ -6003,6 +6026,8 @@ export default function AdminPanel({
           modalities={modalities}
           currentUser={currentUser}
           multiChampionships={multiChampionships}
+          initialPrefill={pendingClubPrefill}
+          onPrefillApplied={() => setPendingClubPrefill(null)}
         />;
 
 

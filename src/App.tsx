@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
-import { User, Post, Championship, ChampionshipInput, Registration, StageScore, RankingItem, ShootingResult, Club, Modality, Stage, StageInput, Weapon, WeaponLookupOption, SharedPostInfo, Comment, MultiChampionship, HomeBanner } from './types';
+import { User, Post, Championship, ChampionshipInput, Registration, StageScore, RankingItem, ShootingResult, Club, Modality, Stage, StageInput, Weapon, WeaponLookupOption, SharedPostInfo, Comment, MultiChampionship, HomeBanner, ClubBulkRegistrationPrefill } from './types';
 import FeedView from './components/FeedView';
 import CardValidationView from './components/CardValidationView';
 import CertificateValidationView from './components/CertificateValidationView';
@@ -233,6 +233,7 @@ export default function App() {
   // UI States
   const [activeTab, setActiveTab] = useState<'feed' | 'championships' | 'admin' | 'profile'>('feed');
   const [selectedProfileUser, setSelectedProfileUser] = useState<User | null>(null);
+  const [clubBulkRegistrationPrefill, setClubBulkRegistrationPrefill] = useState<ClubBulkRegistrationPrefill | null>(null);
   const [loginCpf, setLoginCpf] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [authView, setAuthView] = useState<'login' | 'membro' | 'clube'>('login');
@@ -2423,6 +2424,10 @@ export default function App() {
               onViewProfile={handleViewProfile}
               multiChampionships={multiChampionships}
               onRefreshData={syncWithBackend}
+              onClubBulkRegister={(prefill) => {
+                setClubBulkRegistrationPrefill(prefill);
+                setActiveTab('admin');
+              }}
             />
             </Suspense>
           )}
@@ -2469,6 +2474,8 @@ export default function App() {
               onGetClubAdmin={handleGetClubAdmin}
               onUpdateClubSubdomain={handleUpdateClubSubdomain}
               multiChampionships={multiChampionships}
+              clubBulkRegistrationPrefill={clubBulkRegistrationPrefill}
+              onConsumeClubBulkRegistrationPrefill={() => setClubBulkRegistrationPrefill(null)}
             />
             </Suspense>
           )}
