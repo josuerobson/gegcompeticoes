@@ -154,7 +154,7 @@ function SearchableSelect({ label, value, onChange, options, placeholder = 'Sele
 
   return (
     <div className="space-y-1 relative" ref={containerRef}>
-      <label className="text-[10px] font-bold text-slate-500 uppercase block">{label}</label>
+      {label && <label className="text-[10px] font-bold text-slate-500 uppercase block">{label}</label>}
       <button
         type="button"
         disabled={disabled}
@@ -4277,24 +4277,19 @@ function MultiChampionshipsManager({ championships, stages, multiChampionships =
                       <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-bold">1</span>
                       Selecione o Campeonato
                     </label>
-                    <select
+                    <SearchableSelect
+                      label=""
                       value={tempChampId}
-                      onChange={(e) => {
-                        setTempChampId(e.target.value);
+                      onChange={(v) => {
+                        setTempChampId(v);
                         setTempStageId('');
                       }}
-                      className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-700 focus:border-blue-500"
-                    >
-                      <option value="">Selecione um campeonato...</option>
-                      {championships.map((c) => {
+                      placeholder="Selecione um campeonato..."
+                      options={championships.map((c) => {
                         const alreadyAdded = packageItems.some(it => it.championshipId === c.id);
-                        return (
-                          <option key={c.id} value={c.id}>
-                            {c.title} {alreadyAdded ? '✓ (já incluso)' : ''}
-                          </option>
-                        );
+                        return { value: c.id, label: `${c.title}${alreadyAdded ? ' ✓ (já incluso)' : ''}` };
                       })}
-                    </select>
+                    />
                   </div>
 
                   {/* 2) Marca a única etapa que será vinculada à oferta */}

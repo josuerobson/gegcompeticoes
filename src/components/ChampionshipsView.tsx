@@ -1972,27 +1972,51 @@ export default function ChampionshipsView({
                     </div>
                   )}
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade / Divisão</label>
-                    <select
-                      value={multiModalityId}
-                      onChange={e => {
-                        setMultiModalityId(e.target.value);
-                        setMultiWeaponId('');
-                        setSelectedWeaponId('');
-                        setWeaponSearchQuery('');
-                        setWeaponSearchResults([]);
-                        setSearchingWeapon(false);
-                        setMultiError('');
-                      }}
-                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-700"
-                    >
-                      <option value="">Selecione a modalidade...</option>
-                      {modalities.map(m => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                    </select>
-                  </div>
+                  {(() => {
+                    // So faz sentido oferecer uma modalidade se ela existe em TODOS os
+                    // campeonatos do pacote — a inscricao unificada usa uma unica
+                    // modalidade para todos eles de uma vez.
+                    const packageChampIds = selectedMultiReg.items && selectedMultiReg.items.length > 0
+                      ? selectedMultiReg.items.map(it => it.championshipId)
+                      : (selectedMultiReg.championshipIds || []);
+                    const packageChamps = packageChampIds
+                      .map(id => championships.find(c => c.id === id))
+                      .filter((c): c is Championship => Boolean(c));
+                    const commonModalityIds = packageChamps.length > 0
+                      ? packageChamps.reduce<string[]>(
+                          (acc, c) => acc.filter(id => (c.modalities || []).includes(id)),
+                          packageChamps[0].modalities || []
+                        )
+                      : [];
+                    const availableModalities = modalities.filter(m => commonModalityIds.includes(m.id));
+
+                    return (
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade / Divisão</label>
+                        <select
+                          value={multiModalityId}
+                          onChange={e => {
+                            setMultiModalityId(e.target.value);
+                            setMultiWeaponId('');
+                            setSelectedWeaponId('');
+                            setWeaponSearchQuery('');
+                            setWeaponSearchResults([]);
+                            setSearchingWeapon(false);
+                            setMultiError('');
+                          }}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs font-semibold text-slate-700"
+                        >
+                          <option value="">Selecione a modalidade...</option>
+                          {availableModalities.map(m => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </select>
+                        {availableModalities.length === 0 && (
+                          <p className="text-[10px] text-amber-600 font-semibold">Nenhuma modalidade em comum entre os campeonatos deste pacote.</p>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Seleção de Arma via Pesquisa + Cadastrar Nova Arma */}
                   <div className="space-y-1 relative">
