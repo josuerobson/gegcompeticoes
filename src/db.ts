@@ -851,6 +851,13 @@ export async function initDB() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_ranking_highlight_comments_key ON ranking_highlight_comments(highlight_key)`);
 
     await client.query(`
+      CREATE TABLE IF NOT EXISTS ranking_highlight_views (
+        highlight_key TEXT PRIMARY KEY,
+        count INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL

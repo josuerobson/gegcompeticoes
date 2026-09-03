@@ -375,6 +375,7 @@ export interface RankingHighlight {
   likesCount: number;
   likedByMe: boolean;
   commentsCount: number;
+  viewsCount: number;
 }
 
 export interface TrainingSession {

@@ -382,6 +382,27 @@ function RankingHighlightCard({ currentUser, onViewProfile }: { currentUser: Use
     setCommentInput('');
   }, [currentIdx]);
 
+  // Registra 1 visualização por destaque por sessão (dedup local via ref)
+  const trackedViewsRef = useRef<Set<string>>(new Set());
+  const currentHighlightKey = order.length > 0 ? highlights[order[currentIdx]]?.highlightKey : undefined;
+
+  useEffect(() => {
+    if (!currentHighlightKey || trackedViewsRef.current.has(currentHighlightKey)) return;
+    trackedViewsRef.current.add(currentHighlightKey);
+    fetch('/api/ranking-highlights/view', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ highlightKey: currentHighlightKey })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (typeof data.viewsCount === 'number') {
+          setHighlights(prev => prev.map(h => h.highlightKey === currentHighlightKey ? { ...h, viewsCount: data.viewsCount } : h));
+        }
+      })
+      .catch(() => {});
+  }, [currentHighlightKey]);
+
   useEffect(() => {
     if (order.length <= 1 || isPaused) return;
     const timer = setInterval(() => {
@@ -607,6 +628,10 @@ function RankingHighlightCard({ currentUser, onViewProfile }: { currentUser: Use
           <Share2 className="w-4 h-4" />
           {shareFeedback && <span className="text-emerald-400">{shareFeedback}</span>}
         </button>
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-white/60 select-none ml-auto" title="Visualizações">
+          <Eye className="w-4 h-4" />
+          <span>{current.viewsCount}</span>
+        </div>
       </div>
 
       {showComments && (

@@ -4141,7 +4141,8 @@ app.get('/api/feed/ranking-highlights', async (req, res) => {
             highlightKey: rankingHighlightKey(champ.id, undefined, modalityName),
             likesCount: 0,
             likedByMe: false,
-            commentsCount: 0
+            commentsCount: 0,
+            viewsCount: 0
           });
         }
       }
@@ -4201,7 +4202,8 @@ app.get('/api/feed/ranking-highlights', async (req, res) => {
             highlightKey: rankingHighlightKey(stage.championshipId, stage.id, modalityName),
             likesCount: 0,
             likedByMe: false,
-            commentsCount: 0
+            commentsCount: 0,
+            viewsCount: 0
           });
         }
       }
@@ -4223,6 +4225,13 @@ app.get('/api/feed/ranking-highlights', async (req, res) => {
       const commentCountByKey: Record<string, number> = {};
       commentCountsRes.rows.forEach(r => { commentCountByKey[r.highlight_key] = r.cnt; });
 
+      const viewCountsRes = await pool.query(
+        'SELECT highlight_key, count FROM ranking_highlight_views WHERE highlight_key = ANY($1)',
+        [keys]
+      );
+      const viewCountByKey: Record<string, number> = {};
+      viewCountsRes.rows.forEach(r => { viewCountByKey[r.highlight_key] = r.count; });
+
       let likedKeys = new Set<string>();
       if (currentUser) {
         const likedRes = await pool.query(
@@ -4235,6 +4244,7 @@ app.get('/api/feed/ranking-highlights', async (req, res) => {
       for (const h of highlights) {
         h.likesCount = likeCountByKey[h.highlightKey] || 0;
         h.commentsCount = commentCountByKey[h.highlightKey] || 0;
+        h.viewsCount = viewCountByKey[h.highlightKey] || 0;
         h.likedByMe = likedKeys.has(h.highlightKey);
       }
     }
@@ -4243,6 +4253,25 @@ app.get('/api/feed/ranking-highlights', async (req, res) => {
   } catch (err) {
     console.error('Fetch ranking highlights database error:', err);
     res.status(500).json({ error: 'Erro ao montar destaques de ranking.' });
+  }
+});
+
+// POST /api/ranking-highlights/view — registra 1 visualização de um ranking em destaque
+app.post('/api/ranking-highlights/view', async (req, res) => {
+  const { highlightKey } = req.body;
+  if (!highlightKey) return res.status(400).json({ error: 'highlightKey é obrigatório.' });
+
+  try {
+    const updateRes = await pool.query(
+      `INSERT INTO ranking_highlight_views (highlight_key, count) VALUES ($1, 1)
+       ON CONFLICT (highlight_key) DO UPDATE SET count = ranking_highlight_views.count + 1
+       RETURNING count`,
+      [highlightKey]
+    );
+    res.json({ success: true, viewsCount: updateRes.rows[0].count });
+  } catch (err) {
+    console.error('View ranking highlight database error:', err);
+    res.status(500).json({ error: 'Erro ao registrar visualização.' });
   }
 });
 
