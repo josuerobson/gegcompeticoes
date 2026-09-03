@@ -4079,11 +4079,16 @@ app.get('/api/rankings', async (req, res) => {
 // least one athlete landing on a configured position — and lets the client pick/rotate
 // through them at random. A championship-level entry aggregates points across ALL of its
 // stages for that modality; a stage-level entry uses only that single stage's results.
+function rankingHighlightKey(championshipId: string, stageId: string | undefined, modalityName: string): string {
+  return `${championshipId}::${stageId || 'champ'}::${modalityName}`;
+}
+
 app.get('/api/feed/ranking-highlights', async (req, res) => {
   try {
     const highlights: RankingHighlight[] = [];
     const tenant = (req as any).tenant as Club;
     const visibleClubIds = await getVisibleClubIds(tenant);
+    const currentUser = (req as any).user as User | undefined;
 
     // stage_scores.modality stores the modality NAME, while championships.modalities
     // stores modality IDs — this map translates one to the other.
@@ -4132,7 +4137,11 @@ app.get('/api/feed/ranking-highlights', async (req, res) => {
             championshipId: champ.id,
             championshipTitle: champ.title,
             modalityName,
-            positions: ranked
+            positions: ranked,
+            highlightKey: rankingHighlightKey(champ.id, undefined, modalityName),
+            likesCount: 0,
+            likedByMe: false,
+            commentsCount: 0
           });
         }
       }
@@ -4188,9 +4197,45 @@ app.get('/api/feed/ranking-highlights', async (req, res) => {
             stageId: stage.id,
             stageTitle: stage.title,
             modalityName,
-            positions: ranked
+            positions: ranked,
+            highlightKey: rankingHighlightKey(stage.championshipId, stage.id, modalityName),
+            likesCount: 0,
+            likedByMe: false,
+            commentsCount: 0
           });
         }
+      }
+    }
+
+    if (highlights.length > 0) {
+      const keys = highlights.map(h => h.highlightKey);
+      const likeCountsRes = await pool.query(
+        'SELECT highlight_key, COUNT(*)::int as cnt FROM ranking_highlight_likes WHERE highlight_key = ANY($1) GROUP BY highlight_key',
+        [keys]
+      );
+      const likeCountByKey: Record<string, number> = {};
+      likeCountsRes.rows.forEach(r => { likeCountByKey[r.highlight_key] = r.cnt; });
+
+      const commentCountsRes = await pool.query(
+        'SELECT highlight_key, COUNT(*)::int as cnt FROM ranking_highlight_comments WHERE highlight_key = ANY($1) GROUP BY highlight_key',
+        [keys]
+      );
+      const commentCountByKey: Record<string, number> = {};
+      commentCountsRes.rows.forEach(r => { commentCountByKey[r.highlight_key] = r.cnt; });
+
+      let likedKeys = new Set<string>();
+      if (currentUser) {
+        const likedRes = await pool.query(
+          'SELECT highlight_key FROM ranking_highlight_likes WHERE highlight_key = ANY($1) AND user_id = $2',
+          [keys, currentUser.id]
+        );
+        likedKeys = new Set(likedRes.rows.map(r => r.highlight_key));
+      }
+
+      for (const h of highlights) {
+        h.likesCount = likeCountByKey[h.highlightKey] || 0;
+        h.commentsCount = commentCountByKey[h.highlightKey] || 0;
+        h.likedByMe = likedKeys.has(h.highlightKey);
       }
     }
 
@@ -4198,6 +4243,84 @@ app.get('/api/feed/ranking-highlights', async (req, res) => {
   } catch (err) {
     console.error('Fetch ranking highlights database error:', err);
     res.status(500).json({ error: 'Erro ao montar destaques de ranking.' });
+  }
+});
+
+// POST /api/ranking-highlights/like — curtir/descurtir um ranking em destaque (toggle)
+app.post('/api/ranking-highlights/like', requireAuth, async (req, res) => {
+  const { highlightKey } = req.body;
+  const currentUser = (req as any).user as User;
+
+  if (!highlightKey) return res.status(400).json({ error: 'highlightKey é obrigatório.' });
+
+  try {
+    const likeCheck = await pool.query(
+      'SELECT 1 FROM ranking_highlight_likes WHERE highlight_key = $1 AND user_id = $2',
+      [highlightKey, currentUser.id]
+    );
+    const alreadyLiked = likeCheck.rows.length > 0;
+
+    if (alreadyLiked) {
+      await pool.query('DELETE FROM ranking_highlight_likes WHERE highlight_key = $1 AND user_id = $2', [highlightKey, currentUser.id]);
+    } else {
+      await pool.query('INSERT INTO ranking_highlight_likes (highlight_key, user_id) VALUES ($1, $2)', [highlightKey, currentUser.id]);
+    }
+
+    const countRes = await pool.query('SELECT COUNT(*)::int as cnt FROM ranking_highlight_likes WHERE highlight_key = $1', [highlightKey]);
+
+    res.json({ success: true, liked: !alreadyLiked, likesCount: countRes.rows[0].cnt });
+  } catch (err) {
+    console.error('Like ranking highlight database error:', err);
+    res.status(500).json({ error: 'Erro ao curtir o ranking em destaque.' });
+  }
+});
+
+// GET /api/ranking-highlights/comments — lista comentários de um ranking em destaque
+app.get('/api/ranking-highlights/comments', async (req, res) => {
+  const highlightKey = req.query.highlightKey as string;
+  if (!highlightKey) return res.status(400).json({ error: 'highlightKey é obrigatório.' });
+
+  try {
+    const commentsRes = await pool.query(
+      `SELECT id, user_id as "userId", username, user_avatar as "userAvatar", content, created_at as "createdAt"
+       FROM ranking_highlight_comments WHERE highlight_key = $1 ORDER BY created_at ASC`,
+      [highlightKey]
+    );
+    res.json({ comments: commentsRes.rows });
+  } catch (err) {
+    console.error('Fetch ranking highlight comments database error:', err);
+    res.status(500).json({ error: 'Erro ao buscar comentários.' });
+  }
+});
+
+// POST /api/ranking-highlights/comments — comenta em um ranking em destaque
+app.post('/api/ranking-highlights/comments', requireAuth, async (req, res) => {
+  const { highlightKey, content } = req.body;
+  const currentUser = (req as any).user as User;
+
+  if (!highlightKey) return res.status(400).json({ error: 'highlightKey é obrigatório.' });
+  if (!content || !content.trim()) return res.status(400).json({ error: 'O comentário não pode ficar vazio.' });
+
+  try {
+    const newComment: Comment = {
+      id: `rhc_${Date.now()}`,
+      userId: currentUser.id,
+      username: currentUser.username,
+      userAvatar: currentUser.avatarUrl,
+      content: content.trim(),
+      createdAt: new Date().toISOString()
+    };
+
+    await pool.query(
+      `INSERT INTO ranking_highlight_comments (id, highlight_key, user_id, username, user_avatar, content, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [newComment.id, highlightKey, newComment.userId, newComment.username, newComment.userAvatar, newComment.content, newComment.createdAt]
+    );
+
+    res.status(201).json({ comment: newComment });
+  } catch (err) {
+    console.error('Comment ranking highlight database error:', err);
+    res.status(500).json({ error: 'Erro ao adicionar comentário.' });
   }
 });
 

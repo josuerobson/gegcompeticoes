@@ -829,6 +829,28 @@ export async function initDB() {
     `);
 
     await client.query(`
+      CREATE TABLE IF NOT EXISTS ranking_highlight_likes (
+        highlight_key TEXT NOT NULL,
+        user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+        PRIMARY KEY (highlight_key, user_id)
+      );
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ranking_highlight_likes_key ON ranking_highlight_likes(highlight_key)`);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ranking_highlight_comments (
+        id TEXT PRIMARY KEY,
+        highlight_key TEXT NOT NULL,
+        user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+        username TEXT NOT NULL,
+        user_avatar TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ranking_highlight_comments_key ON ranking_highlight_comments(highlight_key)`);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL

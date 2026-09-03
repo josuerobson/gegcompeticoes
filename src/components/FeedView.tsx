@@ -343,15 +343,24 @@ export function PostImageCarousel({
 // it every 5 seconds. Shuffling (instead of just picking one random entry) is what makes
 // each page load start the cycle at a different point instead of always repeating the same
 // sequence.
-function RankingHighlightCard() {
+function RankingHighlightCard({ currentUser, onViewProfile }: { currentUser: User | null; onViewProfile: (username: string) => void }) {
   const [highlights, setHighlights] = useState<RankingHighlight[]>([]);
   const [order, setOrder] = useState<number[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [resetSignal, setResetSignal] = useState(0);
+  const [showComments, setShowComments] = useState(false);
+  const [commentsByKey, setCommentsByKey] = useState<Record<string, Comment[]>>({});
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [commentInput, setCommentInput] = useState('');
+  const [sendingComment, setSendingComment] = useState(false);
+  const [likeBusy, setLikeBusy] = useState(false);
+  const [shareFeedback, setShareFeedback] = useState('');
 
   useEffect(() => {
-    fetch('/api/feed/ranking-highlights')
+    fetch('/api/feed/ranking-highlights', {
+      headers: currentUser ? { 'x-user-id': currentUser.id } : {}
+    })
       .then(res => res.json())
       .then(data => {
         const list: RankingHighlight[] = data.highlights || [];
@@ -365,7 +374,13 @@ function RankingHighlightCard() {
         setCurrentIdx(0);
       })
       .catch(() => { setHighlights([]); setOrder([]); });
-  }, []);
+  }, [currentUser]);
+
+  // Reseta o painel de comentários ao trocar de destaque (rotação ou navegação manual)
+  useEffect(() => {
+    setShowComments(false);
+    setCommentInput('');
+  }, [currentIdx]);
 
   useEffect(() => {
     if (order.length <= 1 || isPaused) return;
@@ -395,6 +410,98 @@ function RankingHighlightCard() {
     setCurrentIdx(prev => (prev + 1) % order.length);
     setResetSignal(s => s + 1);
   };
+
+  const updateCurrent = (patch: Partial<RankingHighlight>) => {
+    setHighlights(prev => prev.map(h => h.highlightKey === current.highlightKey ? { ...h, ...patch } : h));
+  };
+
+  const handleToggleLike = async () => {
+    if (!currentUser) { alert('Faça login para curtir.'); return; }
+    if (likeBusy) return;
+    setLikeBusy(true);
+    const wasLiked = current.likedByMe;
+    updateCurrent({ likedByMe: !wasLiked, likesCount: current.likesCount + (wasLiked ? -1 : 1) });
+    try {
+      const res = await fetch('/api/ranking-highlights/like', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify({ highlightKey: current.highlightKey })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        updateCurrent({ likedByMe: data.liked, likesCount: data.likesCount });
+      } else {
+        updateCurrent({ likedByMe: wasLiked, likesCount: current.likesCount });
+      }
+    } catch {
+      updateCurrent({ likedByMe: wasLiked, likesCount: current.likesCount });
+    } finally {
+      setLikeBusy(false);
+    }
+  };
+
+  const handleToggleComments = async () => {
+    const next = !showComments;
+    setShowComments(next);
+    if (next && !commentsByKey[current.highlightKey]) {
+      setLoadingComments(true);
+      try {
+        const res = await fetch(`/api/ranking-highlights/comments?highlightKey=${encodeURIComponent(current.highlightKey)}`);
+        const data = await res.json();
+        setCommentsByKey(prev => ({ ...prev, [current.highlightKey]: data.comments || [] }));
+      } catch {
+        setCommentsByKey(prev => ({ ...prev, [current.highlightKey]: [] }));
+      } finally {
+        setLoadingComments(false);
+      }
+    }
+  };
+
+  const handleSendComment = async () => {
+    if (!currentUser) { alert('Faça login para comentar.'); return; }
+    const text = commentInput.trim();
+    if (!text || sendingComment) return;
+    setSendingComment(true);
+    try {
+      const res = await fetch('/api/ranking-highlights/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify({ highlightKey: current.highlightKey, content: text })
+      });
+      const data = await res.json();
+      if (res.ok && data.comment) {
+        setCommentsByKey(prev => ({ ...prev, [current.highlightKey]: [...(prev[current.highlightKey] || []), data.comment] }));
+        updateCurrent({ commentsCount: current.commentsCount + 1 });
+        setCommentInput('');
+      }
+    } finally {
+      setSendingComment(false);
+    }
+  };
+
+  const handleShare = async () => {
+    const podium = current.positions.map(p => `${p.rank}º ${p.fullName} (${p.totalScore} pts)`).join(', ');
+    const label = [current.championshipTitle, current.stageTitle, current.modalityName].filter(Boolean).join(' > ');
+    const text = `🏆 Ranking em Destaque — ${label}\n${podium}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Ranking em Destaque', text, url: window.location.href });
+      } catch {
+        // usuário cancelou o share nativo — não é um erro a reportar
+      }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(`${text}\n${window.location.href}`);
+      setShareFeedback('Copiado!');
+      setTimeout(() => setShareFeedback(''), 2000);
+    } catch {
+      setShareFeedback('Não foi possível copiar.');
+      setTimeout(() => setShareFeedback(''), 2000);
+    }
+  };
+
+  const currentComments = commentsByKey[current.highlightKey] || [];
 
   return (
     <div className="bg-gradient-to-br from-blue-950 to-slate-900 text-white rounded-xl shadow-sm border border-blue-900/40 p-4 space-y-3 overflow-hidden relative">
@@ -473,6 +580,71 @@ function RankingHighlightCard() {
           </div>
         ))}
       </div>
+
+      <div className="flex items-center gap-4 pt-1 relative border-t border-white/10 mt-1 pt-2.5">
+        <button
+          type="button"
+          onClick={handleToggleLike}
+          disabled={likeBusy}
+          className={`flex items-center gap-1.5 text-xs font-semibold transition cursor-pointer ${current.likedByMe ? 'text-rose-400' : 'text-white/60 hover:text-white'}`}
+        >
+          <Heart className={`w-4 h-4 ${current.likedByMe ? 'fill-rose-400' : ''}`} />
+          {current.likesCount > 0 && <span>{current.likesCount}</span>}
+        </button>
+        <button
+          type="button"
+          onClick={handleToggleComments}
+          className={`flex items-center gap-1.5 text-xs font-semibold transition cursor-pointer ${showComments ? 'text-sky-300' : 'text-white/60 hover:text-white'}`}
+        >
+          <MessageCircle className="w-4 h-4" />
+          {current.commentsCount > 0 && <span>{current.commentsCount}</span>}
+        </button>
+        <button
+          type="button"
+          onClick={handleShare}
+          className="flex items-center gap-1.5 text-xs font-semibold text-white/60 hover:text-white transition cursor-pointer"
+        >
+          <Share2 className="w-4 h-4" />
+          {shareFeedback && <span className="text-emerald-400">{shareFeedback}</span>}
+        </button>
+      </div>
+
+      {showComments && (
+        <div className="relative space-y-2 pt-1">
+          {loadingComments ? (
+            <p className="text-[11px] text-white/50">Carregando comentários...</p>
+          ) : currentComments.length === 0 ? (
+            <p className="text-[11px] text-white/50">Nenhum comentário ainda. Seja o primeiro!</p>
+          ) : (
+            <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+              {currentComments.map(c => (
+                <div key={c.id} className="flex gap-1.5 text-xs">
+                  <span className="font-bold text-white cursor-pointer hover:underline shrink-0" onClick={() => onViewProfile(c.username)}>@{c.username}:</span>
+                  <span className="text-slate-300 break-words">{c.content}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2 items-center bg-white/10 rounded-xl px-3 py-1.5">
+            <input
+              type="text"
+              placeholder="Escreva um comentário..."
+              value={commentInput}
+              onChange={e => setCommentInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSendComment()}
+              className="flex-1 bg-transparent border-none outline-none text-xs text-white placeholder:text-white/40"
+            />
+            <button
+              type="button"
+              onClick={handleSendComment}
+              disabled={sendingComment || !commentInput.trim()}
+              className="text-sky-300 hover:text-sky-200 disabled:text-white/30 p-1 rounded-lg transition cursor-pointer"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -827,7 +999,7 @@ export default function FeedView({
           })}
         </div>
 
-        <RankingHighlightCard />
+        <RankingHighlightCard currentUser={currentUser} onViewProfile={onViewProfile} />
 
         {/* Simple fixed post composer (photo/caption only — training homologation happens via the "Postar Treino" modal below) */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">

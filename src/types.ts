@@ -371,6 +371,10 @@ export interface RankingHighlight {
     avatarUrl: string;
     totalScore: number;
   }>;
+  highlightKey: string;
+  likesCount: number;
+  likedByMe: boolean;
+  commentsCount: number;
 }
 
 export interface TrainingSession {
