@@ -672,6 +672,8 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
 
   const champStages = stages.filter(s => s.championshipId === champId);
   const currentStage = stages.find(s => s.id === stageId);
+  const selectedChamp = championships.find(c => c.id === champId);
+  const champAvailableModalities = modalities.filter(m => (selectedChamp?.modalities || []).includes(m.id));
   const filteredMembers = React.useMemo(() => {
     const stageSex = mode === 'multi' ? (multiSexConstraint || 'misto') : (currentStage?.sexo || 'misto');
     if (stageSex === 'misto') return members;
@@ -880,7 +882,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
             <select value={modalityId} onChange={e => setModalityId(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!stageId}>
               <option value="">Selecione...</option>
-              {modalities.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              {champAvailableModalities.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           </div>
         </div>
