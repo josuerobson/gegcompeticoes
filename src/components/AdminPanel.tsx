@@ -967,13 +967,13 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
             </div>
           ) : (
           <div className="overflow-x-auto border border-slate-200 rounded-xl">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full min-w-[640px] text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
-                  <th className="py-2.5 px-3 w-10">Sel</th>
-                  <th className="py-2.5 px-3">Atleta</th>
-                  <th className="py-2.5 px-3">CR</th>
-                  <th className="py-2.5 px-3">Arma do Atleta / Busca por Sigma</th>
+                  <th className="py-2.5 px-3 w-10 whitespace-nowrap">Sel</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Atleta</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">CR</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[260px]">Arma do Atleta / Busca por Sigma</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
