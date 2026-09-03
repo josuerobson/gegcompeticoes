@@ -972,7 +972,6 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
                   <th className="py-2.5 px-3 w-10 whitespace-nowrap">Sel</th>
                   <th className="py-2.5 px-3 whitespace-nowrap">Atleta</th>
-                  <th className="py-2.5 px-3 whitespace-nowrap">CR</th>
                   <th className="py-2.5 px-3 whitespace-nowrap min-w-[260px]">Arma do Atleta / Busca por Sigma</th>
                 </tr>
               </thead>
@@ -994,7 +993,6 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
                         <span className="font-bold text-slate-800 block">{member.fullName}</span>
                         <span className="text-[10px] text-slate-400 font-mono block">CPF: {member.cpf || 'N/A'}</span>
                       </td>
-                      <td className="py-3 px-3 font-mono text-[11px] font-bold text-slate-655">{member.crNumber || 'N/A'}</td>
                       <td className="py-3 px-3">
                         {state.checked ? (
                           <div className="space-y-2 max-w-xs">
