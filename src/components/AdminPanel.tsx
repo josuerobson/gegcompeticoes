@@ -650,6 +650,22 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
   const [success, setSuccess] = React.useState<{ userId: string; status: string; message?: string }[] | null>(null);
   const [error, setError] = React.useState('');
 
+  // No celular, marcar um atleta abre um popup para vincular a arma em vez de
+  // expandir a linha (que ficava espremida/escondida no scroll horizontal da tabela).
+  const [isMobile, setIsMobile] = React.useState(false);
+  const [weaponModalMemberId, setWeaponModalMemberId] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const update = () => setIsMobile(window.innerWidth <= 767);
+    update();
+    mq.addEventListener('change', update);
+    window.addEventListener('resize', update);
+    return () => {
+      mq.removeEventListener('change', update);
+      window.removeEventListener('resize', update);
+    };
+  }, []);
+
   const activeMultiChampionships = multiChampionships.filter(m => m.status === 'active');
   const selectedMulti = multiChampionships.find(m => m.id === multiId);
   const multiItems = selectedMulti?.items && selectedMulti.items.length > 0 ? selectedMulti.items : [];
@@ -707,6 +723,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
     setSuccess(null);
     setSelectedAthletes({});
     setAthleteFilterQuery('');
+    setWeaponModalMemberId(null);
 
     const referenceChampId = mode === 'individual' ? champId : (multiItems[0]?.championshipId || '');
     const clubId = currentUser!.role === 'master_admin'
@@ -735,6 +752,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
   }, [mode, champId, stageId, multiId, modalityId, currentUser]);
 
   const handleToggleAthlete = (userId: string) => {
+    const wasChecked = selectedAthletes[userId]?.checked || false;
     setSelectedAthletes(prev => {
       const current = prev[userId] || { weaponId: '', checked: false };
       return {
@@ -742,6 +760,9 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
         [userId]: { ...current, checked: !current.checked }
       };
     });
+    if (!wasChecked && isMobile) {
+      setWeaponModalMemberId(userId);
+    }
   };
 
   const handleSelectWeapon = (userId: string, weaponId: string) => {
@@ -831,6 +852,55 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
       setSaving(false);
     }
   };
+
+  // Compartilhado entre a célula inline (desktop) e o popup de arma (mobile)
+  const renderWeaponFields = (member: User, state: { weaponId: string; checked: boolean }, athleteWeapons: Weapon[], searchInput: string, results: Weapon[], searching: boolean) => (
+    <div className="space-y-2">
+      <select value={state.weaponId} onChange={e => handleSelectWeapon(member.id, e.target.value)}
+        className="w-full bg-white border border-slate-200 p-2 rounded-xl text-xs text-slate-700 font-semibold outline-none focus:border-blue-400">
+        <option value="">Selecione a arma...</option>
+        {athleteWeapons.map(w => (
+          <option key={w.id} value={w.id}>
+            {w.model} {w.caliber} (Sigma: {w.sigmaNumber || 'N/A'})
+          </option>
+        ))}
+        {state.weaponId && !athleteWeapons.some(w => w.id === state.weaponId) && (
+          <option value={state.weaponId}>
+            Arma selecionada via busca
+          </option>
+        )}
+      </select>
+
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="Ou busque por Sigma/Série..."
+          value={searchInput}
+          onChange={e => handleSearchWeapon(member.id, e.target.value)}
+          className="w-full bg-white border border-slate-200 p-2 rounded-xl text-[11px] text-slate-700 outline-none focus:border-blue-400 font-mono"
+        />
+        {searching && <span className="absolute right-3 top-2.5 text-[9px] text-slate-400 font-semibold">Buscando...</span>}
+
+        {results.length > 0 && (
+          <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-40 overflow-y-auto divide-y divide-slate-100">
+            {results.map(w => (
+              <button
+                key={w.id}
+                onClick={() => {
+                  handleSelectWeapon(member.id, w.id);
+                  setSearchResults(prev => ({ ...prev, [member.id]: [] }));
+                  setSearchQueries(prev => ({ ...prev, [member.id]: `${w.model} (Sigma: ${w.sigmaNumber || 'N/A'})` }));
+                }}
+                className="w-full text-left px-3 py-2 text-[11px] text-slate-700 hover:bg-blue-50 font-mono"
+              >
+                {w.model} {w.caliber} - Sigma: {w.sigmaNumber || 'N/A'} (Série: {w.serialNumber})
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
@@ -997,51 +1067,19 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
                       </td>
                       <td className="py-3 px-3">
                         {state.checked ? (
-                          <div className="space-y-2 max-w-xs">
-                            <select value={state.weaponId} onChange={e => handleSelectWeapon(member.id, e.target.value)}
-                              className="w-full bg-white border border-slate-200 p-2 rounded-xl text-xs text-slate-700 font-semibold outline-none focus:border-blue-400">
-                              <option value="">Selecione a arma...</option>
-                              {athleteWeapons.map(w => (
-                                <option key={w.id} value={w.id}>
-                                  {w.model} {w.caliber} (Sigma: {w.sigmaNumber || 'N/A'})
-                                </option>
-                              ))}
-                              {state.weaponId && !athleteWeapons.some(w => w.id === state.weaponId) && (
-                                <option value={state.weaponId}>
-                                  Arma selecionada via busca
-                                </option>
-                              )}
-                            </select>
-
-                            <div className="relative">
-                              <input
-                                type="text"
-                                placeholder="Ou busque por Sigma/Série..."
-                                value={searchInput}
-                                onChange={e => handleSearchWeapon(member.id, e.target.value)}
-                                className="w-full bg-white border border-slate-200 p-2 rounded-xl text-[11px] text-slate-700 outline-none focus:border-blue-400 font-mono"
-                              />
-                              {searching && <span className="absolute right-3 top-2.5 text-[9px] text-slate-400 font-semibold">Buscando...</span>}
-                              
-                              {results.length > 0 && (
-                                <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-40 overflow-y-auto divide-y divide-slate-100">
-                                  {results.map(w => (
-                                    <button
-                                      key={w.id}
-                                      onClick={() => {
-                                        handleSelectWeapon(member.id, w.id);
-                                        setSearchResults(prev => ({ ...prev, [member.id]: [] }));
-                                        setSearchQueries(prev => ({ ...prev, [member.id]: `${w.model} (Sigma: ${w.sigmaNumber || 'N/A'})` }));
-                                      }}
-                                      className="w-full text-left px-3 py-2 text-[11px] text-slate-700 hover:bg-blue-50 font-mono"
-                                    >
-                                      {w.model} {w.caliber} - Sigma: {w.sigmaNumber || 'N/A'} (Série: {w.serialNumber})
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
+                          isMobile ? (
+                            <button
+                              type="button"
+                              onClick={() => setWeaponModalMemberId(member.id)}
+                              className={`text-[11px] font-bold underline underline-offset-2 cursor-pointer ${state.weaponId ? 'text-emerald-600' : 'text-blue-600'}`}
+                            >
+                              {state.weaponId ? 'Arma selecionada ✓ (trocar)' : 'Selecionar arma'}
+                            </button>
+                          ) : (
+                            <div className="max-w-xs">
+                              {renderWeaponFields(member, state, athleteWeapons, searchInput, results, searching)}
                             </div>
-                          </div>
+                          )
                         ) : (
                           <span className="text-[11px] text-slate-400 italic">Marque para vincular arma</span>
                         )}
@@ -1072,6 +1110,43 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
           Nenhum filiado associado a este estande.
         </p>
       )}
+
+      {weaponModalMemberId && (() => {
+        const modalMember = members.find(m => m.id === weaponModalMemberId);
+        if (!modalMember) return null;
+        const modalState = selectedAthletes[modalMember.id] || { weaponId: '', checked: false };
+        const modalAthleteWeapons = clubWeapons.filter(w => w.ownerId === modalMember.id);
+        const modalSearchInput = searchQueries[modalMember.id] || '';
+        const modalResults = searchResults[modalMember.id] || [];
+        const modalSearching = searchingWeapon[modalMember.id] || false;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 w-full max-w-sm shadow-2xl space-y-4">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm">{modalMember.fullName}</h4>
+                  <p className="text-[10px] text-slate-400 font-mono">CPF: {modalMember.cpf || 'N/A'}</p>
+                </div>
+                <button onClick={() => setWeaponModalMemberId(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1.5">Arma do Atleta</label>
+                {renderWeaponFields(modalMember, modalState, modalAthleteWeapons, modalSearchInput, modalResults, modalSearching)}
+              </div>
+              <button
+                type="button"
+                onClick={() => setWeaponModalMemberId(null)}
+                disabled={!modalState.weaponId}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white text-xs py-2.5 rounded-xl font-bold transition cursor-pointer"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
