@@ -654,6 +654,8 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
   // expandir a linha (que ficava espremida/escondida no scroll horizontal da tabela).
   const [isMobile, setIsMobile] = React.useState(false);
   const [weaponModalMemberId, setWeaponModalMemberId] = React.useState<string | null>(null);
+  // Campo único de arma: qual atleta tem o dropdown de busca/seleção aberto no momento.
+  const [openWeaponFieldId, setOpenWeaponFieldId] = React.useState<string | null>(null);
   React.useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
     const update = () => setIsMobile(window.innerWidth <= 767);
@@ -854,43 +856,56 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
   };
 
   // Compartilhado entre a célula inline (desktop) e o popup de arma (mobile)
-  const renderWeaponFields = (member: User, state: { weaponId: string; checked: boolean }, athleteWeapons: Weapon[], searchInput: string, results: Weapon[], searching: boolean) => (
-    <div className="space-y-2">
-      <select value={state.weaponId} onChange={e => handleSelectWeapon(member.id, e.target.value)}
-        className="w-full bg-white border border-slate-200 p-2 rounded-xl text-xs text-slate-700 font-semibold outline-none focus:border-blue-400">
-        <option value="">Selecione a arma...</option>
-        {athleteWeapons.map(w => (
-          <option key={w.id} value={w.id}>
-            {w.model} {w.caliber} (Sigma: {w.sigmaNumber || 'N/A'})
-          </option>
-        ))}
-        {state.weaponId && !athleteWeapons.some(w => w.id === state.weaponId) && (
-          <option value={state.weaponId}>
-            Arma selecionada via busca
-          </option>
-        )}
-      </select>
+  const renderWeaponFields = (member: User, state: { weaponId: string; checked: boolean }, athleteWeapons: Weapon[], searchInput: string, results: Weapon[], searching: boolean) => {
+    const isOpen = openWeaponFieldId === member.id;
+    const query = (searchInput || '').trim().toLowerCase();
+    const filteredOwn = athleteWeapons.filter(w =>
+      !query || `${w.model} ${w.caliber} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`.toLowerCase().includes(query)
+    );
+    const extraResults = results.filter(w => !filteredOwn.some(fw => fw.id === w.id));
 
+    const selectWeapon = (w: Weapon, label: string) => {
+      handleSelectWeapon(member.id, w.id);
+      setSearchQueries(prev => ({ ...prev, [member.id]: label }));
+      setSearchResults(prev => ({ ...prev, [member.id]: [] }));
+      setOpenWeaponFieldId(null);
+    };
+
+    return (
       <div className="relative">
         <input
           type="text"
-          placeholder="Ou busque por Sigma/Série..."
+          placeholder="Selecione a arma..."
           value={searchInput}
+          onFocus={() => setOpenWeaponFieldId(member.id)}
           onChange={e => handleSearchWeapon(member.id, e.target.value)}
-          className="w-full bg-white border border-slate-200 p-2 rounded-xl text-[11px] text-slate-700 outline-none focus:border-blue-400 font-mono"
+          onBlur={() => setTimeout(() => setOpenWeaponFieldId(prev => prev === member.id ? null : prev), 150)}
+          className="w-full bg-white border border-slate-200 p-2 rounded-xl text-xs text-slate-700 font-semibold outline-none focus:border-blue-400"
         />
         {searching && <span className="absolute right-3 top-2.5 text-[9px] text-slate-400 font-semibold">Buscando...</span>}
 
-        {results.length > 0 && (
-          <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-40 overflow-y-auto divide-y divide-slate-100">
-            {results.map(w => (
+        {isOpen && (
+          <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
+            {filteredOwn.length === 0 && extraResults.length === 0 && (
+              <div className="px-3 py-2 text-[11px] text-slate-400 font-semibold">
+                {searching ? 'Buscando...' : 'Nenhuma arma encontrada.'}
+              </div>
+            )}
+            {filteredOwn.map(w => (
               <button
                 key={w.id}
-                onClick={() => {
-                  handleSelectWeapon(member.id, w.id);
-                  setSearchResults(prev => ({ ...prev, [member.id]: [] }));
-                  setSearchQueries(prev => ({ ...prev, [member.id]: `${w.model} (Sigma: ${w.sigmaNumber || 'N/A'})` }));
-                }}
+                type="button"
+                onMouseDown={e => { e.preventDefault(); selectWeapon(w, `${w.model} ${w.caliber} (Sigma: ${w.sigmaNumber || 'N/A'})`); }}
+                className="w-full text-left px-3 py-2 text-[11px] text-slate-700 hover:bg-blue-50 font-mono"
+              >
+                {w.model} {w.caliber} (Sigma: {w.sigmaNumber || 'N/A'})
+              </button>
+            ))}
+            {extraResults.map(w => (
+              <button
+                key={w.id}
+                type="button"
+                onMouseDown={e => { e.preventDefault(); selectWeapon(w, `${w.model} (Sigma: ${w.sigmaNumber || 'N/A'})`); }}
                 className="w-full text-left px-3 py-2 text-[11px] text-slate-700 hover:bg-blue-50 font-mono"
               >
                 {w.model} {w.caliber} - Sigma: {w.sigmaNumber || 'N/A'} (Série: {w.serialNumber})
@@ -899,8 +914,8 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
           </div>
         )}
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
