@@ -8,7 +8,7 @@ import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal
+  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -2431,6 +2431,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
                 {filteredRegs.map(r => {
                   const isSelected = selectedReg?.id === r.id;
                   const isReinsc = r.registrationType === 'reinscrição';
+                  const isClubRegistered = Boolean(r.registeredByUserId && r.registeredByUserId !== r.userId);
                   return (
                     <button
                       key={r.id}
@@ -2446,6 +2447,11 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
                     >
                       <div className="truncate pr-2 space-y-0.5">
                         <div className="flex items-center gap-1.5 truncate">
+                          {isClubRegistered ? (
+                            <Users className={`w-3 h-3 shrink-0 ${isSelected ? 'text-white' : 'text-blue-500'}`} title="Inscrição feita pelo clube" />
+                          ) : (
+                            <UserIcon className={`w-3 h-3 shrink-0 ${isSelected ? 'text-white' : 'text-slate-400'}`} title="Inscrição feita pelo atleta" />
+                          )}
                           <span className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-800'}`}>
                             {r.athleteName || 'Atleta'}
                           </span>
