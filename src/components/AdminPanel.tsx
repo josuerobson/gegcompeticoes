@@ -5033,6 +5033,17 @@ export default function AdminPanel({
   const [masterMenu, setMasterMenu] = useState<string>('gerenciar_clubes');
   const [masterClubSearchQuery, setMasterClubSearchQuery] = useState('');
 
+  // No celular, sidebar e conteúdo ficam empilhados (grid-cols-1) em vez de
+  // lado a lado — trocar de menu não move a viewport, então o conteúdo novo
+  // renderiza abaixo da dobra e parece que nada aconteceu. Rola até ele.
+  const contentViewportRef = useRef<HTMLDivElement>(null);
+  const isFirstMenuRenderRef = useRef(true);
+  useEffect(() => {
+    if (isFirstMenuRenderRef.current) { isFirstMenuRenderRef.current = false; return; }
+    if (window.innerWidth >= 768) return;
+    contentViewportRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [clubeMenu, plataformaMenu, masterMenu, mainTab]);
+
   // Gerenciar Listas de Armas (Administrador master only)
   const WEAPON_LOOKUP_KINDS: { value: WeaponLookupOption['kind']; label: string }[] = [
     { value: 'classe', label: 'Classe' },
@@ -9589,7 +9600,7 @@ export default function AdminPanel({
         </div>
 
         {/* Dynamic content viewport column */}
-        <div className="md:col-span-3 space-y-6">
+        <div ref={contentViewportRef} className="md:col-span-3 space-y-6 scroll-mt-4">
           {mainTab === 'clube' && renderClubeContent()}
           {mainTab === 'plataforma' && renderPlataformaContent()}
           {mainTab === 'master' && currentUser?.role === 'master_admin' && renderMasterContent()}
