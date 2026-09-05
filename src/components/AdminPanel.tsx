@@ -1000,26 +1000,6 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
         </div>
       )}
 
-      {success && (
-        <div className="bg-emerald-50 text-emerald-800 p-4 rounded-xl space-y-2 text-xs">
-          <h4 className="font-bold flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-emerald-600" /> Resultados do Lote:</h4>
-          <ul className="list-disc pl-4 space-y-1 font-semibold">
-            {success.map((res, i) => {
-              const athlete = members.find(m => m.id === res.userId);
-              return (
-                <li key={i}>
-                  {athlete?.fullName}: <span className={res.status === 'erro' ? 'text-red-600' : 'text-emerald-700'}>
-                    {res.status === 'erro'
-                      ? `Erro - ${res.message}`
-                      : `${res.status === 'inscrito' ? 'Inscrito com sucesso' : 'Reinscrição efetuada'}${res.message ? ` (${res.message})` : ''}`}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-
       {loadingMembers && <p className="text-xs text-slate-400 text-center py-4">Buscando sócios do estande...</p>}
 
       {!loadingMembers && members.length > 0 && filteredMembers.length === 0 && (
@@ -1162,6 +1142,43 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
           </div>
         );
       })()}
+
+      {success && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 w-full max-w-sm shadow-2xl space-y-4 max-h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100 shrink-0">
+              <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4 text-emerald-600" /> Resultados do Lote
+              </h4>
+              <button onClick={() => setSuccess(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <ul className="space-y-1.5 text-xs overflow-y-auto">
+              {success.map((res, i) => {
+                const athlete = members.find(m => m.id === res.userId);
+                return (
+                  <li key={i} className="flex items-start gap-1.5">
+                    <span className="font-bold text-slate-800 shrink-0">{athlete?.fullName}:</span>
+                    <span className={res.status === 'erro' ? 'text-red-600 font-semibold' : 'text-emerald-700 font-semibold'}>
+                      {res.status === 'erro'
+                        ? `Erro - ${res.message}`
+                        : `${res.status === 'inscrito' ? 'Inscrito com sucesso' : 'Reinscrição efetuada'}${res.message ? ` (${res.message})` : ''}`}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            <button
+              type="button"
+              onClick={() => setSuccess(null)}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-2.5 rounded-xl font-bold transition cursor-pointer shrink-0"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
