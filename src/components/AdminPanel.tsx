@@ -2217,6 +2217,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
 
   const currentChamp = championships.find(c => c.id === champId);
   const xValue = (currentChamp && typeof currentChamp.valorX === 'number') ? currentChamp.valorX : 11;
+  const champAvailableModalities = modalities.filter(m => (currentChamp?.modalities || []).includes(m.id));
 
   const serieTotals = seriesData.map(s => calcSeriePts(Object.fromEntries(Object.entries(s).map(([k,v]) => [k, Number(v)||0])), xValue));
   const bestIdx = serieTotals.indexOf(Math.max(...serieTotals));
@@ -2381,7 +2382,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
           <select value={modalityId} onChange={e => { setModalityId(e.target.value); setSelectedReg(null); setSearchAthlete(''); }}
             className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!stageId}>
             <option value="">Todas as modalidades ({registrations.length})</option>
-            {modalities.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            {champAvailableModalities.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
         </div>
       </div>
