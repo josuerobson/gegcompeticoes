@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Post, User, Comment, ShootingResult, SharedPostInfo, RankingHighlight } from '../types';
-import { Heart, MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat, Trash2, ZoomIn, ZoomOut, RotateCcw, Eye, Medal, Pause, Play } from 'lucide-react';
+import { MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat, Trash2, ZoomIn, ZoomOut, RotateCcw, Eye, Medal, Pause, Play } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { shootingImages } from '../data/mockData';
 import likeIcon from '@/assets/like_icon.png';
@@ -607,10 +607,21 @@ function RankingHighlightCard({ currentUser, onViewProfile }: { currentUser: Use
           type="button"
           onClick={handleToggleLike}
           disabled={likeBusy}
-          className={`flex items-center gap-1.5 text-xs font-semibold transition cursor-pointer ${current.likedByMe ? 'text-rose-400' : 'text-white/60 hover:text-white'}`}
+          className="flex items-center gap-1.5 group transition duration-150 cursor-pointer select-none"
+          title={current.likedByMe ? 'Descurtir' : 'Curtir'}
         >
-          <Heart className={`w-4 h-4 ${current.likedByMe ? 'fill-rose-400' : ''}`} />
-          {current.likesCount > 0 && <span>{current.likesCount}</span>}
+          <img
+            src={likeIcon}
+            alt="Curtir"
+            className={`w-5 h-5 object-contain transition-all duration-200 ${
+              current.likedByMe
+                ? 'scale-110 drop-shadow-md brightness-105'
+                : 'opacity-40 grayscale group-hover:grayscale-0 group-hover:opacity-100 group-hover:scale-115'
+            }`}
+          />
+          <span className={`text-xs ${current.likedByMe ? 'text-amber-300 font-extrabold' : 'text-white/60 font-semibold'}`}>
+            {current.likesCount > 0 ? current.likesCount : ''}
+          </span>
         </button>
         <button
           type="button"
