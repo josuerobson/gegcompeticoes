@@ -5,7 +5,7 @@ import fs from 'fs';
 import compression from 'compression';
 import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
-import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, MultiChampionshipItem, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan, RankingHighlight } from './src/types.js';
+import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, MultiChampionshipItem, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan, RankingHighlight, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult } from './src/types.js';
 import { pool, initDB } from './src/db.js';
 import { hashPassword, verifyPassword } from './src/auth.js';
 import { uploadDocument, getDocumentStream, storageEnabled } from './src/storage.js';
@@ -370,7 +370,93 @@ function mapMultiChampionship(m: any): MultiChampionship {
   };
 }
 
+// ─── IDSC ──────────────────────────────────────────────────────────────────
+function mapIdscChampionship(c: any): IdscChampionship {
+  return {
+    id: c.id,
+    clubId: c.club_id || undefined,
+    title: c.title,
+    regulamentoUploaded: Boolean(c.regulamento_key),
+    clubRegistrationFee: Number(c.club_registration_fee) || 0,
+    individualRegistrationFee: Number(c.individual_registration_fee) || 0,
+    clubPercentage: c.club_percentage != null ? Number(c.club_percentage) : undefined,
+    championshipType: (c.championship_type as 'clubes' | 'individual') || 'individual',
+    maxAthletesPerClub: c.max_athletes_per_club != null ? Number(c.max_athletes_per_club) : undefined,
+    status: (c.status as 'active' | 'inactive') || 'active',
+    createdAt: c.created_at,
+  };
+}
 
+function mapIdscCourse(c: any): IdscCourse {
+  return {
+    id: c.id,
+    stageId: c.stage_id,
+    name: c.name,
+    targetCount: Number(c.target_count) || 0,
+    shotsPerTarget: Number(c.shots_per_target) || 0,
+    timeLimitSeconds: c.time_limit_seconds != null ? Number(c.time_limit_seconds) : undefined,
+    position: Number(c.position) || 0,
+  };
+}
+
+function mapIdscStage(s: any): IdscStage {
+  return {
+    id: s.id,
+    championshipId: s.championship_id,
+    title: s.title,
+    description: s.description || undefined,
+    startDate: s.start_date || undefined,
+    endDate: s.end_date || undefined,
+    homologarResultado: Boolean(s.homologar_resultado),
+    abertoResultados: Boolean(s.aberto_resultados),
+  };
+}
+
+function mapIdscRegistration(r: any): IdscRegistration {
+  return {
+    id: r.id,
+    courseId: r.course_id,
+    userId: r.user_id,
+    clubId: r.club_id || undefined,
+    weaponId: r.weapon_id || undefined,
+    crNumber: r.cr_number || undefined,
+    registeredByUserId: r.registered_by_user_id || undefined,
+    registrationType: (r.registration_type as 'normal' | 'reinscrição') || 'normal',
+    valorPago: r.valor_pago != null ? Number(r.valor_pago) : undefined,
+    paymentMethod: r.payment_method || undefined,
+    paymentStatus: r.payment_status || 'approved',
+    registeredAt: r.registered_at,
+  };
+}
+
+function mapIdscResult(r: any): IdscResult {
+  const targets = typeof r.targets === 'string' ? JSON.parse(r.targets) : (r.targets || []);
+  return {
+    id: r.id,
+    registrationId: r.registration_id,
+    targets,
+    rawTimeSeconds: r.raw_time_seconds != null ? Number(r.raw_time_seconds) : undefined,
+    totalTimeSeconds: r.total_time_seconds != null ? Number(r.total_time_seconds) : undefined,
+    completionStatus: (r.completion_status as IdscResult['completionStatus']) || 'pending',
+    executionDate: r.execution_date || undefined,
+    executionTime: r.execution_time || undefined,
+    recordedByUserId: r.recorded_by_user_id || undefined,
+  };
+}
+
+// Fórmula confirmada empiricamente contra o sistema legado (idsc_resultado_final):
+// tempo_final = tempo_bruto + bravo*2 + charlie*5 + misses*10 + (alvos com no-shoot)*10
+// No-shoot penaliza uma única vez por alvo, independente de quantos tiros acertaram nele.
+function calcIdscTotalTime(rawTimeSeconds: number, targets: IdscTargetResult[]): number {
+  let penalty = 0;
+  for (const t of targets) {
+    penalty += (Number(t.bravo) || 0) * 2;
+    penalty += (Number(t.charlie) || 0) * 5;
+    penalty += (Number(t.misses) || 0) * 10;
+    penalty += (Number(t.noshoot) || 0) > 0 ? 10 : 0;
+  }
+  return Number((Number(rawTimeSeconds || 0) + penalty).toFixed(2));
+}
 
 function mapStageScore(s: any): StageScore {
   return {
@@ -879,6 +965,362 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
   } catch (err) {
     console.error('Register-bulk multi-championship error:', err);
     res.status(500).json({ error: 'Erro ao realizar inscrição em lote no multicampeonato.' });
+  }
+});
+
+// ==========================================
+// IDSC (tiro dinâmico por tempo + penalidades)
+// ==========================================
+
+// GET /api/idsc/championships — lista (escopo por tenant, como os campeonatos normais)
+app.get('/api/idsc/championships', async (req, res) => {
+  try {
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
+    const result = await pool.query(
+      'SELECT * FROM idsc_championships WHERE club_id = ANY($1) OR club_id IS NULL ORDER BY created_at DESC',
+      [visibleClubIds]
+    );
+    res.json({ idscChampionships: result.rows.map(mapIdscChampionship) });
+  } catch (err) {
+    console.error('Fetch idsc championships error:', err);
+    res.status(500).json({ error: 'Erro ao buscar campeonatos IDSC.' });
+  }
+});
+
+app.post('/api/idsc/championships', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { title, clubRegistrationFee, individualRegistrationFee, clubPercentage, championshipType, maxAthletesPerClub, status } = req.body;
+  if (!title) return res.status(400).json({ error: 'Título é obrigatório.' });
+  try {
+    const id = `idsc_champ_${Date.now()}`;
+    const result = await pool.query(
+      `INSERT INTO idsc_championships (id, club_id, title, club_registration_fee, individual_registration_fee, club_percentage, championship_type, max_athletes_per_club, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [id, currentUser.clubId || null, title, Number(clubRegistrationFee) || 0, Number(individualRegistrationFee) || 0, clubPercentage != null ? Number(clubPercentage) : null, championshipType === 'clubes' ? 'clubes' : 'individual', maxAthletesPerClub ? Number(maxAthletesPerClub) : null, status || 'active']
+    );
+    res.status(201).json({ idscChampionship: mapIdscChampionship(result.rows[0]) });
+  } catch (err) {
+    console.error('Create idsc championship error:', err);
+    res.status(500).json({ error: 'Erro ao criar campeonato IDSC.' });
+  }
+});
+
+app.put('/api/idsc/championships/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { title, clubRegistrationFee, individualRegistrationFee, clubPercentage, championshipType, maxAthletesPerClub, status } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE idsc_championships SET title=$1, club_registration_fee=$2, individual_registration_fee=$3, club_percentage=$4, championship_type=$5, max_athletes_per_club=$6, status=$7
+       WHERE id=$8 RETURNING *`,
+      [title, Number(clubRegistrationFee) || 0, Number(individualRegistrationFee) || 0, clubPercentage != null ? Number(clubPercentage) : null, championshipType === 'clubes' ? 'clubes' : 'individual', maxAthletesPerClub ? Number(maxAthletesPerClub) : null, status || 'active', id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Campeonato IDSC não encontrado.' });
+    res.json({ idscChampionship: mapIdscChampionship(result.rows[0]) });
+  } catch (err) {
+    console.error('Update idsc championship error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar campeonato IDSC.' });
+  }
+});
+
+app.delete('/api/idsc/championships/:id', requireAdmin, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM idsc_championships WHERE id=$1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete idsc championship error:', err);
+    res.status(500).json({ error: 'Erro ao remover campeonato IDSC.' });
+  }
+});
+
+// GET /api/idsc/stages?championshipId= — etapas com as pistas já embutidas
+app.get('/api/idsc/stages', async (req, res) => {
+  const { championshipId } = req.query;
+  try {
+    let query = 'SELECT * FROM idsc_stages';
+    const params: any[] = [];
+    if (championshipId) { query += ' WHERE championship_id = $1'; params.push(championshipId); }
+    query += ' ORDER BY created_at DESC';
+    const stagesRes = await pool.query(query, params);
+    const stageIds = stagesRes.rows.map(r => r.id);
+    let coursesByStage: Record<string, IdscCourse[]> = {};
+    if (stageIds.length > 0) {
+      const coursesRes = await pool.query('SELECT * FROM idsc_courses WHERE stage_id = ANY($1) ORDER BY position ASC', [stageIds]);
+      coursesByStage = coursesRes.rows.reduce((acc: Record<string, IdscCourse[]>, c) => {
+        (acc[c.stage_id] = acc[c.stage_id] || []).push(mapIdscCourse(c));
+        return acc;
+      }, {});
+    }
+    const stages = stagesRes.rows.map(s => ({ ...mapIdscStage(s), courses: coursesByStage[s.id] || [] }));
+    res.json({ idscStages: stages });
+  } catch (err) {
+    console.error('Fetch idsc stages error:', err);
+    res.status(500).json({ error: 'Erro ao buscar etapas IDSC.' });
+  }
+});
+
+app.post('/api/idsc/stages', requireAdmin, async (req, res) => {
+  const { championshipId, title, description, startDate, endDate, homologarResultado, abertoResultados, courses } = req.body;
+  if (!championshipId || !title) return res.status(400).json({ error: 'Campeonato e título são obrigatórios.' });
+  const courseList: Array<{ name: string; targetCount: number; shotsPerTarget: number; timeLimitSeconds?: number }> = Array.isArray(courses) ? courses.filter(c => c && c.name) : [];
+  if (courseList.length === 0) return res.status(400).json({ error: 'Adicione pelo menos uma pista.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const id = `idsc_stage_${Date.now()}`;
+    const stageRes = await client.query(
+      `INSERT INTO idsc_stages (id, championship_id, title, description, start_date, end_date, homologar_resultado, aberto_resultados)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [id, championshipId, title, description || null, startDate || null, endDate || null, homologarResultado !== false, abertoResultados !== false]
+    );
+    const createdCourses: IdscCourse[] = [];
+    for (let i = 0; i < courseList.length; i++) {
+      const c = courseList[i];
+      const courseId = `idsc_course_${Date.now()}_${i}`;
+      const courseRes = await client.query(
+        `INSERT INTO idsc_courses (id, stage_id, name, target_count, shots_per_target, time_limit_seconds, position)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [courseId, id, c.name, Number(c.targetCount) || 1, Number(c.shotsPerTarget) || 1, c.timeLimitSeconds ? Number(c.timeLimitSeconds) : null, i]
+      );
+      createdCourses.push(mapIdscCourse(courseRes.rows[0]));
+    }
+    await client.query('COMMIT');
+    res.status(201).json({ idscStage: { ...mapIdscStage(stageRes.rows[0]), courses: createdCourses } });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Create idsc stage error:', err);
+    res.status(500).json({ error: 'Erro ao criar etapa IDSC.' });
+  } finally {
+    client.release();
+  }
+});
+
+app.put('/api/idsc/stages/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { title, description, startDate, endDate, homologarResultado, abertoResultados, courses } = req.body;
+  const courseList: Array<{ name: string; targetCount: number; shotsPerTarget: number; timeLimitSeconds?: number }> = Array.isArray(courses) ? courses.filter(c => c && c.name) : [];
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const stageRes = await client.query(
+      `UPDATE idsc_stages SET title=$1, description=$2, start_date=$3, end_date=$4, homologar_resultado=$5, aberto_resultados=$6
+       WHERE id=$7 RETURNING *`,
+      [title, description || null, startDate || null, endDate || null, homologarResultado !== false, abertoResultados !== false, id]
+    );
+    if (stageRes.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Etapa IDSC não encontrada.' }); }
+
+    // Substitui as pistas por completo — mais simples e seguro que tentar
+    // casar edições parciais numa lista pequena e reordenável.
+    await client.query('DELETE FROM idsc_courses WHERE stage_id = $1', [id]);
+    const createdCourses: IdscCourse[] = [];
+    for (let i = 0; i < courseList.length; i++) {
+      const c = courseList[i];
+      const courseId = `idsc_course_${Date.now()}_${i}`;
+      const courseRes = await client.query(
+        `INSERT INTO idsc_courses (id, stage_id, name, target_count, shots_per_target, time_limit_seconds, position)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [courseId, id, c.name, Number(c.targetCount) || 1, Number(c.shotsPerTarget) || 1, c.timeLimitSeconds ? Number(c.timeLimitSeconds) : null, i]
+      );
+      createdCourses.push(mapIdscCourse(courseRes.rows[0]));
+    }
+    await client.query('COMMIT');
+    res.json({ idscStage: { ...mapIdscStage(stageRes.rows[0]), courses: createdCourses } });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Update idsc stage error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar etapa IDSC.' });
+  } finally {
+    client.release();
+  }
+});
+
+app.delete('/api/idsc/stages/:id', requireAdmin, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM idsc_stages WHERE id=$1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete idsc stage error:', err);
+    res.status(500).json({ error: 'Erro ao remover etapa IDSC.' });
+  }
+});
+
+// GET /api/idsc/registrations?courseId= — inscrições de uma pista, com atleta/arma/resultado
+app.get('/api/idsc/registrations', async (req, res) => {
+  const { courseId } = req.query;
+  if (!courseId) return res.status(400).json({ error: 'courseId é obrigatório.' });
+  try {
+    const result = await pool.query(
+      `SELECT r.*, u.full_name as athlete_name, u.cr_number as athlete_cr_default, c.name as club_name,
+        w.model as weapon_model, w.caliber as weapon_caliber,
+        res.id as result_id, res.targets, res.raw_time_seconds, res.total_time_seconds, res.completion_status, res.execution_date, res.execution_time
+       FROM idsc_registrations r
+       LEFT JOIN users u ON u.id = r.user_id
+       LEFT JOIN clubs c ON c.id = r.club_id
+       LEFT JOIN weapons w ON w.id = r.weapon_id
+       LEFT JOIN idsc_results res ON res.registration_id = r.id
+       WHERE r.course_id = $1
+       ORDER BY u.full_name ASC`,
+      [courseId]
+    );
+    const registrations = result.rows.map(r => ({
+      ...mapIdscRegistration(r),
+      athleteName: r.athlete_name,
+      athleteCr: r.cr_number || r.athlete_cr_default,
+      clubName: r.club_name,
+      weaponModel: r.weapon_model,
+      weaponCaliber: r.weapon_caliber,
+      result: r.result_id ? mapIdscResult({ id: r.result_id, registration_id: r.id, targets: r.targets, raw_time_seconds: r.raw_time_seconds, total_time_seconds: r.total_time_seconds, completion_status: r.completion_status, execution_date: r.execution_date, execution_time: r.execution_time }) : null,
+    }));
+
+    // Ranking: só entre quem completou, ordenado por tempo total crescente (menor tempo vence)
+    const completed = registrations.filter(r => r.result && r.result.completionStatus === 'completed' && r.result.totalTimeSeconds != null);
+    completed.sort((a, b) => (a.result!.totalTimeSeconds! - b.result!.totalTimeSeconds!));
+    const positionByRegId = new Map(completed.map((r, idx) => [r.id, idx + 1]));
+    const enriched = registrations.map(r => ({ ...r, posicao: positionByRegId.get(r.id) || null }));
+
+    res.json({ idscRegistrations: enriched });
+  } catch (err) {
+    console.error('Fetch idsc registrations error:', err);
+    res.status(500).json({ error: 'Erro ao buscar inscrições IDSC.' });
+  }
+});
+
+// POST /api/idsc/courses/:id/register — inscrição individual do próprio atleta
+app.post('/api/idsc/courses/:id/register', requireAuth, async (req, res) => {
+  const courseId = req.params.id;
+  const { weaponId, crNumber, paymentMethod } = req.body;
+  const currentUser = (req as any).user as User;
+  if (!weaponId) return res.status(400).json({ error: 'Selecione a arma que será utilizada.' });
+
+  try {
+    const courseRes = await pool.query('SELECT c.*, s.championship_id FROM idsc_courses c JOIN idsc_stages s ON s.id = c.stage_id WHERE c.id = $1', [courseId]);
+    if (courseRes.rows.length === 0) return res.status(404).json({ error: 'Pista não encontrada.' });
+    const champRes = await pool.query('SELECT * FROM idsc_championships WHERE id = $1', [courseRes.rows[0].championship_id]);
+    const champ = champRes.rows[0];
+
+    const existing = await pool.query('SELECT id FROM idsc_registrations WHERE course_id=$1 AND user_id=$2', [courseId, currentUser.id]);
+    const isReinscricao = existing.rows.length > 0;
+
+    const id = `idsc_reg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const valorPago = champ ? Number(champ.individual_registration_fee) : 0;
+    const result = await pool.query(
+      `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'approved') RETURNING *`,
+      [id, courseId, currentUser.id, currentUser.clubId || null, weaponId, crNumber || currentUser.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago, paymentMethod || 'pix']
+    );
+    res.status(201).json({ idscRegistration: mapIdscRegistration(result.rows[0]) });
+  } catch (err) {
+    console.error('Register idsc course error:', err);
+    res.status(500).json({ error: 'Erro ao realizar inscrição IDSC.' });
+  }
+});
+
+// POST /api/idsc/courses/:id/register-bulk — inscrição em lote pelo clube
+app.post('/api/idsc/courses/:id/register-bulk', requireAdmin, async (req, res) => {
+  const courseId = req.params.id;
+  const { athletes } = req.body as { athletes: Array<{ userId: string; weaponId: string; crNumber: string }> };
+  const currentUser = (req as any).user as User;
+  if (!Array.isArray(athletes) || athletes.length === 0) return res.status(400).json({ error: 'athletes é obrigatório.' });
+
+  try {
+    const courseRes = await pool.query('SELECT c.*, s.championship_id FROM idsc_courses c JOIN idsc_stages s ON s.id = c.stage_id WHERE c.id = $1', [courseId]);
+    if (courseRes.rows.length === 0) return res.status(404).json({ error: 'Pista não encontrada.' });
+    const champRes = await pool.query('SELECT * FROM idsc_championships WHERE id = $1', [courseRes.rows[0].championship_id]);
+    const champ = champRes.rows[0];
+    const valorPago = champ ? Number(champ.club_registration_fee) : 0;
+
+    const results: Array<{ userId: string; status: 'inscrito' | 'reinscrito' | 'erro'; message?: string }> = [];
+    for (const athlete of athletes) {
+      try {
+        const userRes = await pool.query('SELECT club_id FROM users WHERE id = $1', [athlete.userId]);
+        if (userRes.rows.length === 0) throw new Error('Atleta não encontrado.');
+        const clubId = userRes.rows[0].club_id || currentUser.clubId;
+
+        const existing = await pool.query('SELECT id FROM idsc_registrations WHERE course_id=$1 AND user_id=$2', [courseId, athlete.userId]);
+        const isReinscricao = existing.rows.length > 0;
+
+        const id = `idsc_reg_${Date.now()}_${athlete.userId.slice(-4)}`;
+        await pool.query(
+          `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pix','approved')`,
+          [id, courseId, athlete.userId, clubId, athlete.weaponId, athlete.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago]
+        );
+        results.push({ userId: athlete.userId, status: isReinscricao ? 'reinscrito' : 'inscrito' });
+      } catch (e: any) {
+        results.push({ userId: athlete.userId, status: 'erro', message: e.message });
+      }
+    }
+    res.status(201).json({ success: true, results });
+  } catch (err) {
+    console.error('Register-bulk idsc course error:', err);
+    res.status(500).json({ error: 'Erro ao realizar inscrição em lote IDSC.' });
+  }
+});
+
+app.delete('/api/idsc/registrations/:id', requireAdmin, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM idsc_registrations WHERE id=$1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete idsc registration error:', err);
+    res.status(500).json({ error: 'Erro ao remover inscrição IDSC.' });
+  }
+});
+
+// POST /api/idsc/registrations/:id/result — lança/atualiza o resultado de uma pista
+app.post('/api/idsc/registrations/:id/result', requireAdmin, async (req, res) => {
+  const registrationId = req.params.id;
+  const { acao, targets, rawTimeSeconds, executionDate, executionTime } = req.body as {
+    acao: 'salvar' | 'nao_participou' | 'desclassificar';
+    targets?: IdscTargetResult[];
+    rawTimeSeconds?: number;
+    executionDate?: string;
+    executionTime?: string;
+  };
+  const currentUser = (req as any).user as User;
+
+  if (!acao || !['salvar', 'nao_participou', 'desclassificar'].includes(acao)) {
+    return res.status(400).json({ error: "acao deve ser 'salvar', 'nao_participou' ou 'desclassificar'." });
+  }
+
+  try {
+    const regRes = await pool.query('SELECT * FROM idsc_registrations WHERE id = $1', [registrationId]);
+    if (regRes.rows.length === 0) return res.status(404).json({ error: 'Inscrição IDSC não encontrada.' });
+
+    let completionStatus: IdscResult['completionStatus'] = 'completed';
+    let totalTime: number | null = null;
+    let rawTime: number | null = null;
+    let targetsJson: IdscTargetResult[] = [];
+
+    if (acao === 'nao_participou') {
+      completionStatus = 'absent';
+    } else if (acao === 'desclassificar') {
+      completionStatus = 'disqualified';
+    } else {
+      if (rawTimeSeconds == null) return res.status(400).json({ error: 'Informe o tempo de execução da pista.' });
+      if (!executionDate) return res.status(400).json({ error: 'A data de execução é obrigatória.' });
+      targetsJson = Array.isArray(targets) ? targets : [];
+      rawTime = Number(rawTimeSeconds);
+      totalTime = calcIdscTotalTime(rawTime, targetsJson);
+    }
+
+    const id = `idsc_result_${Date.now()}`;
+    const result = await pool.query(
+      `INSERT INTO idsc_results (id, registration_id, targets, raw_time_seconds, total_time_seconds, completion_status, execution_date, execution_time, recorded_by_user_id, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, NOW())
+       ON CONFLICT (registration_id) DO UPDATE SET
+         targets = EXCLUDED.targets, raw_time_seconds = EXCLUDED.raw_time_seconds, total_time_seconds = EXCLUDED.total_time_seconds,
+         completion_status = EXCLUDED.completion_status, execution_date = EXCLUDED.execution_date, execution_time = EXCLUDED.execution_time,
+         recorded_by_user_id = EXCLUDED.recorded_by_user_id, updated_at = NOW()
+       RETURNING *`,
+      [id, registrationId, JSON.stringify(targetsJson), rawTime, totalTime, completionStatus, executionDate || null, executionTime || null, currentUser.id]
+    );
+    res.status(201).json({ idscResult: mapIdscResult(result.rows[0]) });
+  } catch (err) {
+    console.error('Save idsc result error:', err);
+    res.status(500).json({ error: 'Erro ao salvar resultado IDSC.' });
   }
 });
 

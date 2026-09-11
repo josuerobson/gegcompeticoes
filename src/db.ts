@@ -1274,6 +1274,90 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS multi_championship_id TEXT;
     `);
 
+    // ─── Módulo IDSC (tiro dinâmico por tempo + penalidades) ──────────────────
+    // Estruturalmente distinto do Campeonato normal (sem modalidades, "pista"
+    // em vez de modalidade/série, tipo Clubes/Individual, taxas mais simples),
+    // então usa tabelas próprias em vez de forçar dentro de championships/stages
+    // — mesmo raciocínio já aplicado a multi_championships.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS idsc_championships (
+        id TEXT PRIMARY KEY,
+        club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL,
+        title TEXT NOT NULL,
+        regulamento_key TEXT,
+        club_registration_fee NUMERIC(10,2) NOT NULL DEFAULT 0,
+        individual_registration_fee NUMERIC(10,2) NOT NULL DEFAULT 0,
+        club_percentage NUMERIC(5,2) DEFAULT 0,
+        championship_type TEXT NOT NULL DEFAULT 'individual' CHECK (championship_type IN ('clubes','individual')),
+        max_athletes_per_club INTEGER,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS idsc_stages (
+        id TEXT PRIMARY KEY,
+        championship_id TEXT NOT NULL REFERENCES idsc_championships(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        description TEXT,
+        start_date TEXT,
+        end_date TEXT,
+        homologar_resultado BOOLEAN NOT NULL DEFAULT TRUE,
+        aberto_resultados BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_idsc_stages_championship ON idsc_stages(championship_id);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS idsc_courses (
+        id TEXT PRIMARY KEY,
+        stage_id TEXT NOT NULL REFERENCES idsc_stages(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        target_count INTEGER NOT NULL DEFAULT 1,
+        shots_per_target INTEGER NOT NULL DEFAULT 1,
+        time_limit_seconds NUMERIC(10,2),
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_idsc_courses_stage ON idsc_courses(stage_id);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS idsc_registrations (
+        id TEXT PRIMARY KEY,
+        course_id TEXT NOT NULL REFERENCES idsc_courses(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL,
+        weapon_id TEXT REFERENCES weapons(id) ON DELETE SET NULL,
+        cr_number TEXT,
+        registered_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        registration_type TEXT NOT NULL DEFAULT 'normal',
+        valor_pago NUMERIC(10,2),
+        payment_method TEXT,
+        payment_status TEXT NOT NULL DEFAULT 'approved',
+        registered_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_idsc_registrations_course ON idsc_registrations(course_id);
+      CREATE INDEX IF NOT EXISTS idx_idsc_registrations_user ON idsc_registrations(user_id);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS idsc_results (
+        id TEXT PRIMARY KEY,
+        registration_id TEXT NOT NULL UNIQUE REFERENCES idsc_registrations(id) ON DELETE CASCADE,
+        targets JSONB NOT NULL DEFAULT '[]'::jsonb,
+        raw_time_seconds NUMERIC(10,2),
+        total_time_seconds NUMERIC(10,2),
+        completion_status TEXT NOT NULL DEFAULT 'pending' CHECK (completion_status IN ('pending','completed','absent','disqualified')),
+        execution_date TEXT,
+        execution_time TEXT,
+        recorded_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
     console.log('Database seed check complete.');
 
     try {

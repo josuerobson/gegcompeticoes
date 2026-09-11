@@ -429,6 +429,81 @@ export interface MultiChampionship {
   createdAt: string;
 }
 
+// ─── Módulo IDSC (tiro dinâmico por tempo + penalidades) ──────────────────────
+// Estrutura própria, distinta do Campeonato normal: sem modalidades, cada Etapa
+// tem uma ou mais "Pistas" (cada uma é sua própria prova cronometrada e gera
+// inscrição/resultado/ranking independentes).
+export interface IdscChampionship {
+  id: string;
+  clubId?: string;
+  title: string;
+  regulamentoUploaded?: boolean;
+  clubRegistrationFee: number;
+  individualRegistrationFee: number;
+  clubPercentage?: number;
+  championshipType: 'clubes' | 'individual';
+  maxAthletesPerClub?: number;
+  status: 'active' | 'inactive';
+  createdAt: string;
+}
+
+export interface IdscCourse {
+  id: string;
+  stageId: string;
+  name: string;
+  targetCount: number;
+  shotsPerTarget: number;
+  timeLimitSeconds?: number;
+  position: number;
+}
+
+export interface IdscStage {
+  id: string;
+  championshipId: string;
+  title: string;
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+  homologarResultado: boolean;
+  abertoResultados: boolean;
+  courses?: IdscCourse[];
+}
+
+export interface IdscRegistration {
+  id: string;
+  courseId: string;
+  userId: string;
+  clubId?: string;
+  weaponId?: string;
+  crNumber?: string;
+  registeredByUserId?: string;
+  registrationType: 'normal' | 'reinscrição';
+  valorPago?: number;
+  paymentMethod?: string;
+  paymentStatus: string;
+  registeredAt: string;
+}
+
+export interface IdscTargetResult {
+  alpha: number;
+  bravo: number;
+  charlie: number;
+  misses: number;
+  noshoot: number;
+}
+
+export interface IdscResult {
+  id: string;
+  registrationId: string;
+  targets: IdscTargetResult[];
+  rawTimeSeconds?: number;
+  totalTimeSeconds?: number;
+  completionStatus: 'pending' | 'completed' | 'absent' | 'disqualified';
+  executionDate?: string;
+  executionTime?: string;
+  recordedByUserId?: string;
+}
+
 // ─── Módulo de Munições ────────────────────────────────────────────────────────
 export interface AmmoCaliberStock {
   id: string;

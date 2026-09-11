@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, MultiChampionshipItem, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession, AnnuityPlan, ClubBulkRegistrationPrefill } from '../types';
+import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, MultiChampionshipItem, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession, AnnuityPlan, ClubBulkRegistrationPrefill, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
@@ -2751,6 +2751,902 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
               </div>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// IdscCampeonatosPanel — Cadastro de Campeonatos IDSC (tiro dinâmico por tempo)
+// =============================================================================
+const DEFAULT_IDSC_CHAMP_FORM = {
+  title: '', clubRegistrationFee: '', individualRegistrationFee: '', clubPercentage: '',
+  championshipType: 'individual' as 'individual' | 'clubes', maxAthletesPerClub: '', status: 'active' as 'active' | 'inactive',
+};
+
+function IdscCampeonatosPanel({ currentUser }: { currentUser: User | null }) {
+  const [list, setList] = React.useState<IdscChampionship[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [showForm, setShowForm] = React.useState(false);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [form, setForm] = React.useState(DEFAULT_IDSC_CHAMP_FORM);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  const fetchList = React.useCallback(() => {
+    setLoading(true);
+    fetch('/api/idsc/championships', { headers: { 'x-user-id': currentUser?.id || '' } })
+      .then(r => r.json())
+      .then(d => setList(d.idscChampionships || []))
+      .catch(() => setList([]))
+      .finally(() => setLoading(false));
+  }, [currentUser]);
+
+  React.useEffect(() => { fetchList(); }, [fetchList]);
+
+  const startCreate = () => { setForm(DEFAULT_IDSC_CHAMP_FORM); setEditingId(null); setShowForm(true); setError(''); };
+  const startEdit = (c: IdscChampionship) => {
+    setForm({
+      title: c.title,
+      clubRegistrationFee: String(c.clubRegistrationFee),
+      individualRegistrationFee: String(c.individualRegistrationFee),
+      clubPercentage: c.clubPercentage != null ? String(c.clubPercentage) : '',
+      championshipType: c.championshipType,
+      maxAthletesPerClub: c.maxAthletesPerClub != null ? String(c.maxAthletesPerClub) : '',
+      status: c.status,
+    });
+    setEditingId(c.id);
+    setShowForm(true);
+    setError('');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim()) { setError('Título é obrigatório.'); return; }
+    setSaving(true); setError('');
+    try {
+      const url = editingId ? `/api/idsc/championships/${editingId}` : '/api/idsc/championships';
+      const res = await fetch(url, {
+        method: editingId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
+        body: JSON.stringify({
+          title: form.title.trim(),
+          clubRegistrationFee: Number(form.clubRegistrationFee) || 0,
+          individualRegistrationFee: Number(form.individualRegistrationFee) || 0,
+          clubPercentage: form.clubPercentage ? Number(form.clubPercentage) : null,
+          championshipType: form.championshipType,
+          maxAthletesPerClub: form.maxAthletesPerClub ? Number(form.maxAthletesPerClub) : null,
+          status: form.status,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar campeonato IDSC.');
+      setShowForm(false);
+      fetchList();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Excluir este campeonato IDSC? Etapas, pistas, inscrições e resultados vinculados também serão excluídos.')) return;
+    await fetch(`/api/idsc/championships/${id}`, { method: 'DELETE', headers: { 'x-user-id': currentUser?.id || '' } });
+    fetchList();
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
+      <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+        <div>
+          <h3 className="font-display font-bold text-slate-900 text-base">Campeonatos IDSC</h3>
+          <p className="text-xs text-slate-400">Tiro dinâmico por tempo — pontuação em segundos (Alpha/Bravo/Charlie + penalidades).</p>
+        </div>
+        {!showForm && (
+          <button onClick={startCreate} className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-4 py-2.5 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer">
+            <PlusCircle className="w-4 h-4" /> Novo Campeonato IDSC
+          </button>
+        )}
+      </div>
+
+      {showForm ? (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{error}</div>}
+          <MemberField label="Título do Campeonato" value={form.title} onChange={v => setForm({ ...form, title: v })} placeholder="Ex: Copa G&G Tiro Dinâmico 2026" />
+          <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 pt-2">Valores de inscrição por modalidade</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <MemberField label="Valor Inscrição Clube (R$)" type="number" value={form.clubRegistrationFee} onChange={v => setForm({ ...form, clubRegistrationFee: v })} placeholder="0.00" />
+            <MemberField label="Valor Inscrição Individual (R$)" type="number" value={form.individualRegistrationFee} onChange={v => setForm({ ...form, individualRegistrationFee: v })} placeholder="0.00" />
+            <MemberField label="Percentual Clube (%)" type="number" value={form.clubPercentage} onChange={v => setForm({ ...form, clubPercentage: v })} placeholder="0" />
+          </div>
+          <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 pt-2">Tipo de campeonato</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase block">Tipo de campeonato</label>
+              <select value={form.championshipType} onChange={e => setForm({ ...form, championshipType: e.target.value as 'individual' | 'clubes' })}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
+                <option value="individual">Individual</option>
+                <option value="clubes">Clubes</option>
+              </select>
+            </div>
+            <MemberField label="Quantidade de atletas por clube" type="number" value={form.maxAthletesPerClub} onChange={v => setForm({ ...form, maxAthletesPerClub: v })} placeholder="Opcional" />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Cancelar</button>
+            <button type="submit" disabled={saving} className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-350 rounded-xl cursor-pointer">
+              {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </form>
+      ) : loading ? (
+        <p className="text-xs text-slate-400 text-center py-6">Carregando...</p>
+      ) : list.length === 0 ? (
+        <div className="text-center py-8 px-4 text-slate-500 text-xs font-semibold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          Nenhum campeonato IDSC cadastrado ainda.
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {list.map(c => (
+            <div key={c.id} className="border border-slate-200 rounded-xl p-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-900 text-sm truncate">{c.title}</span>
+                  <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full ${c.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                    {c.status === 'active' ? 'Ativo' : 'Inativo'}
+                  </span>
+                  <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{c.championshipType === 'clubes' ? 'Clubes' : 'Individual'}</span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-mono mt-0.5">Clube: R$ {c.clubRegistrationFee.toFixed(2)} · Individual: R$ {c.individualRegistrationFee.toFixed(2)}</p>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button onClick={() => startEdit(c)} className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer" title="Editar"><Pencil className="w-4 h-4" /></button>
+                <button onClick={() => handleDelete(c.id)} className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer" title="Excluir"><Trash2 className="w-4 h-4" /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// IdscEtapasPanel — Cadastro de Etapas IDSC (com pistas repetíveis)
+// =============================================================================
+interface IdscCourseFormRow { name: string; targetCount: string; shotsPerTarget: string; timeLimitSeconds: string }
+const EMPTY_IDSC_COURSE_ROW: IdscCourseFormRow = { name: '', targetCount: '', shotsPerTarget: '', timeLimitSeconds: '' };
+
+function IdscEtapasPanel({ currentUser }: { currentUser: User | null }) {
+  const [championships, setChampionships] = React.useState<IdscChampionship[]>([]);
+  const [championshipId, setChampionshipId] = React.useState('');
+  const [stages, setStages] = React.useState<IdscStage[]>([]);
+  const [loadingStages, setLoadingStages] = React.useState(false);
+  const [showForm, setShowForm] = React.useState(false);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [title, setTitle] = React.useState('');
+  const [description, setDescription] = React.useState('');
+  const [startDate, setStartDate] = React.useState('');
+  const [endDate, setEndDate] = React.useState('');
+  const [homologar, setHomologar] = React.useState(true);
+  const [aberto, setAberto] = React.useState(true);
+  const [courseRows, setCourseRows] = React.useState<IdscCourseFormRow[]>([{ ...EMPTY_IDSC_COURSE_ROW }]);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    fetch('/api/idsc/championships', { headers: { 'x-user-id': currentUser?.id || '' } })
+      .then(r => r.json())
+      .then(d => setChampionships(d.idscChampionships || []))
+      .catch(() => setChampionships([]));
+  }, [currentUser]);
+
+  const fetchStages = React.useCallback(() => {
+    if (!championshipId) { setStages([]); return; }
+    setLoadingStages(true);
+    fetch(`/api/idsc/stages?championshipId=${championshipId}`, { headers: { 'x-user-id': currentUser?.id || '' } })
+      .then(r => r.json())
+      .then(d => setStages(d.idscStages || []))
+      .catch(() => setStages([]))
+      .finally(() => setLoadingStages(false));
+  }, [championshipId, currentUser]);
+
+  React.useEffect(() => { fetchStages(); }, [fetchStages]);
+
+  const startCreate = () => {
+    setTitle(''); setDescription(''); setStartDate(''); setEndDate(''); setHomologar(true); setAberto(true);
+    setCourseRows([{ ...EMPTY_IDSC_COURSE_ROW }]);
+    setEditingId(null); setShowForm(true); setError('');
+  };
+  const startEdit = (s: IdscStage) => {
+    setTitle(s.title); setDescription(s.description || ''); setStartDate(s.startDate || ''); setEndDate(s.endDate || '');
+    setHomologar(s.homologarResultado); setAberto(s.abertoResultados);
+    setCourseRows((s.courses && s.courses.length > 0 ? s.courses : [{}]).map((c: any) => ({
+      name: c.name || '', targetCount: c.targetCount != null ? String(c.targetCount) : '',
+      shotsPerTarget: c.shotsPerTarget != null ? String(c.shotsPerTarget) : '', timeLimitSeconds: c.timeLimitSeconds != null ? String(c.timeLimitSeconds) : '',
+    })));
+    setEditingId(s.id); setShowForm(true); setError('');
+  };
+
+  const updateCourseRow = (idx: number, patch: Partial<IdscCourseFormRow>) => {
+    setCourseRows(prev => prev.map((r, i) => i === idx ? { ...r, ...patch } : r));
+  };
+  const removeCourseRow = (idx: number) => setCourseRows(prev => prev.filter((_, i) => i !== idx));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!championshipId) { setError('Selecione o campeonato.'); return; }
+    if (!title.trim()) { setError('Título é obrigatório.'); return; }
+    const validCourses = courseRows.filter(c => c.name.trim());
+    if (validCourses.length === 0) { setError('Adicione pelo menos uma pista.'); return; }
+
+    setSaving(true); setError('');
+    try {
+      const url = editingId ? `/api/idsc/stages/${editingId}` : '/api/idsc/stages';
+      const res = await fetch(url, {
+        method: editingId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
+        body: JSON.stringify({
+          championshipId, title: title.trim(), description: description.trim() || null,
+          startDate: startDate || null, endDate: endDate || null,
+          homologarResultado: homologar, abertoResultados: aberto,
+          courses: validCourses.map(c => ({
+            name: c.name.trim(), targetCount: Number(c.targetCount) || 1, shotsPerTarget: Number(c.shotsPerTarget) || 1,
+            timeLimitSeconds: c.timeLimitSeconds ? Number(c.timeLimitSeconds) : null,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar etapa IDSC.');
+      setShowForm(false);
+      fetchStages();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Excluir esta etapa IDSC? Pistas, inscrições e resultados vinculados também serão excluídos.')) return;
+    await fetch(`/api/idsc/stages/${id}`, { method: 'DELETE', headers: { 'x-user-id': currentUser?.id || '' } });
+    fetchStages();
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
+      <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+        <div>
+          <h3 className="font-display font-bold text-slate-900 text-base">Etapas IDSC</h3>
+          <p className="text-xs text-slate-400">Cada etapa pode ter quantas pistas o diretor quiser — cada pista é uma prova cronometrada independente.</p>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-[10px] font-bold text-slate-500 uppercase block">Campeonato IDSC</label>
+        <select value={championshipId} onChange={e => { setChampionshipId(e.target.value); setShowForm(false); }}
+          className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
+          <option value="">Selecione...</option>
+          {championships.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+        </select>
+      </div>
+
+      {championshipId && !showForm && (
+        <button onClick={startCreate} className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-4 py-2.5 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer">
+          <PlusCircle className="w-4 h-4" /> Nova Etapa
+        </button>
+      )}
+
+      {showForm ? (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{error}</div>}
+          <MemberField label="Título" value={title} onChange={setTitle} placeholder="Ex: 1ª Etapa" />
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase block">Descrição</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
+              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <MemberField label="Data Início" type="date" value={startDate} onChange={setStartDate} />
+            <MemberField label="Data Encerramento" type="date" value={endDate} onChange={setEndDate} />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase block">Homologar resultado</label>
+              <select value={homologar ? 'sim' : 'nao'} onChange={e => setHomologar(e.target.value === 'sim')}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
+                <option value="sim">Sim</option>
+                <option value="nao">Não</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase block">Aberto para resultados</label>
+              <select value={aberto ? 'sim' : 'nao'} onChange={e => setAberto(e.target.value === 'sim')}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
+                <option value="sim">Sim</option>
+                <option value="nao">Não</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/40 space-y-3">
+            <h4 className="font-bold text-slate-800 text-xs">Pistas</h4>
+            {courseRows.map((row, idx) => (
+              <div key={idx} className="bg-white border border-slate-200 rounded-xl p-3 space-y-2 relative">
+                {courseRows.length > 1 && (
+                  <button type="button" onClick={() => removeCourseRow(idx)} className="absolute top-2 right-2 text-red-400 hover:text-red-600 cursor-pointer" title="Remover pista">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <MemberField label="Nome da pista" value={row.name} onChange={v => updateCourseRow(idx, { name: v })} placeholder="Ex: ShotGun" />
+                  <MemberField label="Tempo da pista (segundos)" type="number" value={row.timeLimitSeconds} onChange={v => updateCourseRow(idx, { timeLimitSeconds: v })} placeholder="Ex: 50" />
+                  <MemberField label="Quantidade de alvos" type="number" value={row.targetCount} onChange={v => updateCourseRow(idx, { targetCount: v })} placeholder="Ex: 5" />
+                  <MemberField label="Qtd tiros por alvo" type="number" value={row.shotsPerTarget} onChange={v => updateCourseRow(idx, { shotsPerTarget: v })} placeholder="Ex: 5" />
+                </div>
+              </div>
+            ))}
+            <button type="button" onClick={() => setCourseRows(prev => [...prev, { ...EMPTY_IDSC_COURSE_ROW }])}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg cursor-pointer">
+              Add +1
+            </button>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Cancelar</button>
+            <button type="submit" disabled={saving} className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-350 rounded-xl cursor-pointer">
+              {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </form>
+      ) : !championshipId ? (
+        <p className="text-xs text-slate-400 text-center py-6">Selecione um campeonato para ver/cadastrar as etapas.</p>
+      ) : loadingStages ? (
+        <p className="text-xs text-slate-400 text-center py-6">Carregando...</p>
+      ) : stages.length === 0 ? (
+        <div className="text-center py-8 px-4 text-slate-500 text-xs font-semibold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          Nenhuma etapa cadastrada para este campeonato ainda.
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {stages.map(s => (
+            <div key={s.id} className="border border-slate-200 rounded-xl p-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <span className="font-bold text-slate-900 text-sm truncate block">{s.title}</span>
+                <p className="text-[11px] text-slate-500 mt-0.5">{(s.courses || []).length} pista(s): {(s.courses || []).map(c => c.name).join(', ')}</p>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button onClick={() => startEdit(s)} className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer" title="Editar"><Pencil className="w-4 h-4" /></button>
+                <button onClick={() => handleDelete(s.id)} className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer" title="Excluir"><Trash2 className="w-4 h-4" /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// IdscInscricaoPanel — Inscrição em Lote IDSC (por pista, com arma vinculada)
+// =============================================================================
+function IdscInscricaoPanel({ currentUser }: { currentUser: User | null }) {
+  const [championships, setChampionships] = React.useState<IdscChampionship[]>([]);
+  const [championshipId, setChampionshipId] = React.useState('');
+  const [stages, setStages] = React.useState<IdscStage[]>([]);
+  const [stageId, setStageId] = React.useState('');
+  const [courseId, setCourseId] = React.useState('');
+  const [members, setMembers] = React.useState<User[]>([]);
+  const [clubWeapons, setClubWeapons] = React.useState<Weapon[]>([]);
+  const [loadingMembers, setLoadingMembers] = React.useState(false);
+  const [selectedAthletes, setSelectedAthletes] = React.useState<Record<string, { weaponId: string; checked: boolean }>>({});
+  const [saving, setSaving] = React.useState(false);
+  const [success, setSuccess] = React.useState<{ userId: string; status: string; message?: string }[] | null>(null);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    fetch('/api/idsc/championships', { headers: { 'x-user-id': currentUser?.id || '' } })
+      .then(r => r.json())
+      .then(d => setChampionships(d.idscChampionships || []))
+      .catch(() => setChampionships([]));
+  }, [currentUser]);
+
+  React.useEffect(() => {
+    if (!championshipId) { setStages([]); return; }
+    fetch(`/api/idsc/stages?championshipId=${championshipId}`, { headers: { 'x-user-id': currentUser?.id || '' } })
+      .then(r => r.json())
+      .then(d => setStages(d.idscStages || []))
+      .catch(() => setStages([]));
+  }, [championshipId, currentUser]);
+
+  const selectedStage = stages.find(s => s.id === stageId);
+  const courses = selectedStage?.courses || [];
+  const selectedCourse = courses.find(c => c.id === courseId);
+
+  React.useEffect(() => {
+    if (!courseId || !currentUser?.clubId) return;
+    setLoadingMembers(true);
+    setError(''); setSuccess(null); setSelectedAthletes({});
+    fetch(`/api/club-members?clubId=${currentUser.clubId}`, { headers: { 'x-user-id': currentUser.id } })
+      .then(r => { if (!r.ok) throw new Error('Falha ao buscar membros'); return r.json(); })
+      .then(data => { setMembers(data.members || []); setClubWeapons(data.weapons || []); })
+      .catch(err => setError(err.message))
+      .finally(() => setLoadingMembers(false));
+  }, [courseId, currentUser]);
+
+  const handleToggle = (userId: string) => {
+    setSelectedAthletes(prev => {
+      const cur = prev[userId] || { weaponId: '', checked: false };
+      return { ...prev, [userId]: { ...cur, checked: !cur.checked } };
+    });
+  };
+  const handleWeapon = (userId: string, weaponId: string) => {
+    setSelectedAthletes(prev => {
+      const cur = prev[userId] || { weaponId: '', checked: false };
+      return { ...prev, [userId]: { ...cur, weaponId } };
+    });
+  };
+
+  const handleSubmit = async () => {
+    if (!courseId || !currentUser) return;
+    const list = (Object.entries(selectedAthletes) as [string, { weaponId: string; checked: boolean }][])
+      .filter(([, d]) => d.checked)
+      .map(([userId, d]) => {
+        const m = members.find(mm => mm.id === userId);
+        return { userId, weaponId: d.weaponId, crNumber: m?.crNumber || 'N/A' };
+      });
+    if (list.length === 0) { setError('Selecione pelo menos um atleta.'); return; }
+    if (list.some(a => !a.weaponId)) { setError('Selecione uma arma para cada atleta marcado.'); return; }
+
+    setSaving(true); setError(''); setSuccess(null);
+    try {
+      const res = await fetch(`/api/idsc/courses/${courseId}/register-bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify({ athletes: list }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro na inscrição em lote IDSC.');
+      setSuccess(data.results || []);
+      setSelectedAthletes({});
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
+      <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+        <div>
+          <h3 className="font-display font-bold text-slate-900 text-base">Inscrição IDSC (Clube)</h3>
+          <p className="text-xs text-slate-400">Inscrever atletas do clube em uma pista específica, com a arma de cada um.</p>
+        </div>
+        <Target className="w-5 h-5 text-blue-600" />
+      </div>
+
+      {error && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{error}</div>}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Campeonato</label>
+          <select value={championshipId} onChange={e => { setChampionshipId(e.target.value); setStageId(''); setCourseId(''); }}
+            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
+            <option value="">Selecione...</option>
+            {championships.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Etapa</label>
+          <select value={stageId} onChange={e => { setStageId(e.target.value); setCourseId(''); }} disabled={!championshipId}
+            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
+            <option value="">Selecione...</option>
+            {stages.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Pista</label>
+          <select value={courseId} onChange={e => setCourseId(e.target.value)} disabled={!stageId}
+            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
+            <option value="">Selecione...</option>
+            {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {selectedCourse && (
+        <p className="text-[11px] text-slate-500">
+          {selectedCourse.targetCount} alvos × {selectedCourse.shotsPerTarget} tiros{selectedCourse.timeLimitSeconds ? ` · tempo da pista: ${selectedCourse.timeLimitSeconds}s` : ''}
+        </p>
+      )}
+
+      {loadingMembers && <p className="text-xs text-slate-400 text-center py-4">Buscando sócios do estande...</p>}
+
+      {!loadingMembers && members.length > 0 && (
+        <div className="space-y-4">
+          <p className="text-xs font-semibold text-slate-600">Selecione os atletas para inscrição e defina a arma:</p>
+          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <table className="w-full min-w-[520px] text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
+                  <th className="py-2.5 px-3 w-10 whitespace-nowrap">Sel</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Atleta</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Arma</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {members.map(member => {
+                  const state = selectedAthletes[member.id] || { weaponId: '', checked: false };
+                  const athleteWeapons = clubWeapons.filter(w => w.ownerId === member.id);
+                  return (
+                    <tr key={member.id} className={state.checked ? 'bg-blue-50/20' : 'hover:bg-slate-50/50'}>
+                      <td className="py-3 px-3">
+                        <input type="checkbox" checked={state.checked} onChange={() => handleToggle(member.id)} className="w-4 h-4 text-blue-600 border-slate-350 rounded-sm cursor-pointer" />
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="font-bold text-slate-800 block">{member.fullName}</span>
+                        <span className="text-[10px] text-slate-400 font-mono block">CPF: {member.cpf || 'N/A'}</span>
+                      </td>
+                      <td className="py-3 px-3">
+                        {state.checked ? (
+                          <select value={state.weaponId} onChange={e => handleWeapon(member.id, e.target.value)}
+                            className="w-full max-w-xs bg-white border border-slate-200 p-2 rounded-xl text-xs text-slate-700 font-semibold outline-none focus:border-blue-400">
+                            <option value="">Selecione a arma...</option>
+                            {athleteWeapons.map(w => <option key={w.id} value={w.id}>{w.model} {w.caliber}</option>)}
+                          </select>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">Marque para vincular arma</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="pt-2 flex justify-end">
+            <button onClick={handleSubmit} disabled={saving}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-350 text-white text-xs px-6 py-3 rounded-xl font-bold transition flex items-center gap-1.5 shadow-md cursor-pointer">
+              <FileCheck className="w-4 h-4" />
+              {saving ? 'Registrando lote...' : 'Inscrever Atletas Selecionados'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!loadingMembers && members.length === 0 && courseId && (
+        <p className="text-xs text-slate-400 text-center py-6 border border-dashed border-slate-200 rounded-xl">Nenhum filiado associado a este estande.</p>
+      )}
+
+      {success && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 w-full max-w-sm shadow-2xl space-y-4 max-h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100 shrink-0">
+              <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-emerald-600" /> Resultados do Lote</h4>
+              <button onClick={() => setSuccess(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X className="w-4 h-4" /></button>
+            </div>
+            <ul className="space-y-1.5 text-xs overflow-y-auto">
+              {success.map((res, i) => {
+                const athlete = members.find(m => m.id === res.userId);
+                return (
+                  <li key={i} className="flex items-start gap-1.5">
+                    <span className="font-bold text-slate-800 shrink-0">{athlete?.fullName}:</span>
+                    <span className={res.status === 'erro' ? 'text-red-600 font-semibold' : 'text-emerald-700 font-semibold'}>
+                      {res.status === 'erro' ? `Erro - ${res.message}` : (res.status === 'inscrito' ? 'Inscrito com sucesso' : 'Reinscrição efetuada')}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            <button onClick={() => setSuccess(null)} className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-2.5 rounded-xl font-bold transition cursor-pointer shrink-0">Fechar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// IdscResultadosPanel — Lançamento de resultados IDSC (grid Alvo × Alpha/Bravo/
+// Charlie/Misses/No-shoot, tempo bruto → tempo final em segundos)
+// =============================================================================
+
+// Aceita "mm:ss:cs" (ex: 00:35:01) ou segundos decimais direto (ex: 35.01).
+function parseIdscTime(input: string): number | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  const parts = trimmed.split(/[:.]/).map(p => p.trim());
+  if (parts.length === 3) {
+    const [mm, ss, cs] = parts.map(Number);
+    if ([mm, ss, cs].some(Number.isNaN)) return null;
+    return mm * 60 + ss + cs / 100;
+  }
+  if (parts.length === 2) {
+    const [mm, ss] = parts.map(Number);
+    if ([mm, ss].some(Number.isNaN)) return null;
+    return mm * 60 + ss;
+  }
+  const n = Number(trimmed);
+  return Number.isNaN(n) ? null : n;
+}
+
+function formatIdscTime(totalSeconds: number): string {
+  if (!Number.isFinite(totalSeconds)) return '--:--:--';
+  const mm = Math.floor(totalSeconds / 60);
+  const rem = totalSeconds - mm * 60;
+  const ss = Math.floor(rem);
+  const cs = Math.round((rem - ss) * 100);
+  return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}:${String(cs).padStart(2, '0')}`;
+}
+
+function calcIdscTotalTimeClient(rawTimeSeconds: number, targets: IdscTargetResult[]): number {
+  let penalty = 0;
+  for (const t of targets) {
+    penalty += (Number(t.bravo) || 0) * 2;
+    penalty += (Number(t.charlie) || 0) * 5;
+    penalty += (Number(t.misses) || 0) * 10;
+    penalty += (Number(t.noshoot) || 0) > 0 ? 10 : 0;
+  }
+  return Number((Number(rawTimeSeconds || 0) + penalty).toFixed(2));
+}
+
+type IdscEnrichedRegistration = IdscRegistration & {
+  athleteName?: string; athleteCr?: string; clubName?: string; weaponModel?: string; weaponCaliber?: string;
+  result: IdscResult | null; posicao: number | null;
+};
+
+function IdscResultadosPanel({ currentUser }: { currentUser: User | null }) {
+  const [championships, setChampionships] = React.useState<IdscChampionship[]>([]);
+  const [championshipId, setChampionshipId] = React.useState('');
+  const [stages, setStages] = React.useState<IdscStage[]>([]);
+  const [stageId, setStageId] = React.useState('');
+  const [courseId, setCourseId] = React.useState('');
+  const [registrations, setRegistrations] = React.useState<IdscEnrichedRegistration[]>([]);
+  const [loadingRegs, setLoadingRegs] = React.useState(false);
+  const [selectedReg, setSelectedReg] = React.useState<IdscEnrichedRegistration | null>(null);
+
+  const [executionDate, setExecutionDate] = React.useState('');
+  const [executionTime, setExecutionTime] = React.useState('');
+  const [rawTimeInput, setRawTimeInput] = React.useState('');
+  const [targets, setTargets] = React.useState<IdscTargetResult[]>([]);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    fetch('/api/idsc/championships', { headers: { 'x-user-id': currentUser?.id || '' } })
+      .then(r => r.json()).then(d => setChampionships(d.idscChampionships || [])).catch(() => setChampionships([]));
+  }, [currentUser]);
+
+  React.useEffect(() => {
+    if (!championshipId) { setStages([]); return; }
+    fetch(`/api/idsc/stages?championshipId=${championshipId}`, { headers: { 'x-user-id': currentUser?.id || '' } })
+      .then(r => r.json()).then(d => setStages(d.idscStages || [])).catch(() => setStages([]));
+  }, [championshipId, currentUser]);
+
+  const selectedStage = stages.find(s => s.id === stageId);
+  const courses = selectedStage?.courses || [];
+  const selectedCourse = courses.find(c => c.id === courseId);
+
+  const fetchRegistrations = React.useCallback(() => {
+    if (!courseId) { setRegistrations([]); return; }
+    setLoadingRegs(true);
+    fetch(`/api/idsc/registrations?courseId=${courseId}`, { headers: { 'x-user-id': currentUser?.id || '' } })
+      .then(r => r.json())
+      .then(d => setRegistrations(d.idscRegistrations || []))
+      .catch(() => setRegistrations([]))
+      .finally(() => setLoadingRegs(false));
+  }, [courseId, currentUser]);
+
+  React.useEffect(() => { fetchRegistrations(); }, [fetchRegistrations]);
+
+  const openModal = (reg: IdscEnrichedRegistration) => {
+    setSelectedReg(reg);
+    setError('');
+    const n = selectedCourse?.targetCount || 1;
+    if (reg.result?.targets && reg.result.targets.length > 0) {
+      setTargets(reg.result.targets);
+    } else {
+      setTargets(Array.from({ length: n }, () => ({ alpha: 0, bravo: 0, charlie: 0, misses: 0, noshoot: 0 })));
+    }
+    setExecutionDate(reg.result?.executionDate || '');
+    setExecutionTime(reg.result?.executionTime || '');
+    setRawTimeInput(reg.result?.rawTimeSeconds != null ? formatIdscTime(reg.result.rawTimeSeconds) : '');
+  };
+
+  const updateTarget = (idx: number, field: keyof IdscTargetResult, value: string) => {
+    setTargets(prev => prev.map((t, i) => i === idx ? { ...t, [field]: Math.max(0, Number(value) || 0) } : t));
+  };
+
+  const shotsPerTarget = selectedCourse?.shotsPerTarget || 0;
+  const parsedRawTime = parseIdscTime(rawTimeInput);
+  const liveTotal = parsedRawTime != null ? calcIdscTotalTimeClient(parsedRawTime, targets) : null;
+  const totals = targets.reduce((acc, t) => ({
+    alpha: acc.alpha + (t.alpha || 0), bravo: acc.bravo + (t.bravo || 0), charlie: acc.charlie + (t.charlie || 0),
+    misses: acc.misses + (t.misses || 0), noshoot: acc.noshoot + (t.noshoot || 0),
+  }), { alpha: 0, bravo: 0, charlie: 0, misses: 0, noshoot: 0 });
+
+  const handleAction = async (acao: 'salvar' | 'nao_participou' | 'desclassificar') => {
+    if (!selectedReg || !currentUser) return;
+    setError('');
+    if (acao === 'salvar') {
+      if (!executionDate) { setError('A data de execução é obrigatória.'); return; }
+      if (parsedRawTime == null) { setError('Informe o tempo de execução da pista (mm:ss:cs).'); return; }
+      const badRow = targets.findIndex(t => (t.alpha + t.bravo + t.charlie + t.misses + t.noshoot) !== shotsPerTarget);
+      if (shotsPerTarget > 0 && badRow !== -1) {
+        setError(`O Alvo ${badRow + 1} tem ${targets[badRow].alpha + targets[badRow].bravo + targets[badRow].charlie + targets[badRow].misses + targets[badRow].noshoot} tiros informados, mas a pista exige exatamente ${shotsPerTarget}.`);
+        return;
+      }
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/idsc/registrations/${selectedReg.id}/result`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify({
+          acao, targets, rawTimeSeconds: parsedRawTime, executionDate: executionDate || null, executionTime: executionTime || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar resultado IDSC.');
+      setSelectedReg(null);
+      fetchRegistrations();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const statusLabel = (r: IdscEnrichedRegistration) => {
+    if (!r.result || r.result.completionStatus === 'pending') return { text: 'Pendente', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
+    if (r.result.completionStatus === 'absent') return { text: 'Não Participou', cls: 'bg-slate-100 text-slate-600 border-slate-200' };
+    if (r.result.completionStatus === 'disqualified') return { text: 'Desclassificado', cls: 'bg-red-50 text-red-700 border-red-200' };
+    return { text: `${formatIdscTime(r.result.totalTimeSeconds || 0)}${r.posicao ? ` · ${r.posicao}º` : ''}`, cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
+      <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+        <div>
+          <h3 className="font-display font-bold text-slate-900 text-base">Resultados IDSC</h3>
+          <p className="text-xs text-slate-400">Menor tempo vence. Alpha: +0s · Bravo: +2s · Charlie: +5s · Miss: +10s/tiro · No-shoot: +10s por alvo.</p>
+        </div>
+        <Target className="w-5 h-5 text-blue-600" />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Campeonato</label>
+          <select value={championshipId} onChange={e => { setChampionshipId(e.target.value); setStageId(''); setCourseId(''); }}
+            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
+            <option value="">Selecione...</option>
+            {championships.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Etapa</label>
+          <select value={stageId} onChange={e => { setStageId(e.target.value); setCourseId(''); }} disabled={!championshipId}
+            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
+            <option value="">Selecione...</option>
+            {stages.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase block">Pista</label>
+          <select value={courseId} onChange={e => setCourseId(e.target.value)} disabled={!stageId}
+            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
+            <option value="">Selecione...</option>
+            {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {loadingRegs ? (
+        <p className="text-xs text-slate-400 text-center py-6">Carregando inscrições...</p>
+      ) : !courseId ? (
+        <p className="text-xs text-slate-400 text-center py-6">Selecione campeonato, etapa e pista para ver os inscritos.</p>
+      ) : registrations.length === 0 ? (
+        <div className="text-center py-8 px-4 text-slate-500 text-xs font-semibold bg-slate-50 rounded-2xl border border-dashed border-slate-200">Nenhuma inscrição nesta pista ainda.</div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+          {registrations.map(r => {
+            const st = statusLabel(r);
+            return (
+              <button key={r.id} type="button" onClick={() => openModal(r)}
+                className="p-3 rounded-xl text-left border border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50 transition cursor-pointer">
+                <div className="text-xs font-bold text-slate-800 truncate">{r.athleteName || 'Atleta'}</div>
+                <div className="text-[10px] text-slate-400 truncate">{r.weaponModel} {r.weaponCaliber}</div>
+                <span className={`inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${st.cls}`}>{st.text}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {selectedReg && selectedCourse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-2xl shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center px-5 pt-5 shrink-0">
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">{selectedReg.athleteName}</h4>
+                <p className="text-[11px] text-slate-500">{selectedReg.clubName} · {selectedCourse.name} · {selectedCourse.targetCount} alvos × {selectedCourse.shotsPerTarget} tiros{selectedCourse.timeLimitSeconds ? ` · limite ${selectedCourse.timeLimitSeconds}s` : ''}</p>
+              </div>
+              <button onClick={() => setSelectedReg(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="px-5 space-y-4 overflow-y-auto">
+              {error && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{error}</div>}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <MemberField label="Data de execução" type="date" value={executionDate} onChange={setExecutionDate} />
+                <MemberField label="Hora" type="time" value={executionTime} onChange={setExecutionTime} />
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Tempo de execução (mm:ss:cs)</label>
+                  <input type="text" value={rawTimeInput} onChange={e => setRawTimeInput(e.target.value)} placeholder="Ex: 00:35:01"
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-mono font-semibold" />
+                </div>
+              </div>
+
+              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full min-w-[520px] text-center text-[11px] border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
+                      <th className="py-2 px-2 text-left">Alvo</th>
+                      <th className="py-2 px-2">Alpha</th>
+                      <th className="py-2 px-2">Bravo</th>
+                      <th className="py-2 px-2">Charlie</th>
+                      <th className="py-2 px-2">Misses</th>
+                      <th className="py-2 px-2">No-shoot</th>
+                      <th className="py-2 px-2">Total tiros</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {targets.map((t, idx) => {
+                      const rowTotal = t.alpha + t.bravo + t.charlie + t.misses + t.noshoot;
+                      const rowBad = shotsPerTarget > 0 && rowTotal !== shotsPerTarget;
+                      return (
+                        <tr key={idx}>
+                          <td className="py-1.5 px-2 text-left font-bold text-slate-700">Alvo {idx + 1}</td>
+                          {(['alpha', 'bravo', 'charlie', 'misses', 'noshoot'] as const).map(field => (
+                            <td key={field} className="py-1.5 px-2">
+                              <input type="number" min={0} value={t[field]} onChange={e => updateTarget(idx, field, e.target.value)}
+                                className="w-14 text-center bg-slate-50 border border-slate-200 rounded-lg p-1 outline-none focus:border-blue-400" />
+                            </td>
+                          ))}
+                          <td className={`py-1.5 px-2 font-mono font-bold ${rowBad ? 'text-red-600' : 'text-slate-700'}`}>{rowTotal}</td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="bg-slate-50 font-bold text-slate-700">
+                      <td className="py-1.5 px-2 text-left">Totais</td>
+                      <td className="py-1.5 px-2">{totals.alpha}</td>
+                      <td className="py-1.5 px-2">{totals.bravo}</td>
+                      <td className="py-1.5 px-2">{totals.charlie}</td>
+                      <td className="py-1.5 px-2">{totals.misses}</td>
+                      <td className="py-1.5 px-2">{totals.noshoot}</td>
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-800">Tempo total</span>
+                <span className="text-lg font-mono font-extrabold text-emerald-700">{liveTotal != null ? formatIdscTime(liveTotal) : '--:--:--'}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2 px-5 pb-5 pt-2 border-t border-slate-100 shrink-0">
+              <button onClick={() => setSelectedReg(null)} className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Fechar</button>
+              <button onClick={() => handleAction('desclassificar')} disabled={saving} className="px-4 py-2 text-xs font-bold text-white bg-slate-500 hover:bg-slate-600 rounded-xl cursor-pointer">Desclassificar</button>
+              <button onClick={() => handleAction('nao_participou')} disabled={saving} className="px-4 py-2 text-xs font-bold text-white bg-red-500 hover:bg-red-600 rounded-xl cursor-pointer">Não Participou</button>
+              <button onClick={() => handleAction('salvar')} disabled={saving} className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-350 rounded-xl cursor-pointer flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4" /> {saving ? 'Salvando...' : 'Salvar resultados'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -9046,6 +9942,17 @@ export default function AdminPanel({
       case 'integracoes_sicoob':
         return <SicoobPixManager currentUser={currentUser} />;
 
+      case 'idsc_campeonatos':
+        return <IdscCampeonatosPanel currentUser={currentUser} />;
+
+      case 'idsc_etapas':
+        return <IdscEtapasPanel currentUser={currentUser} />;
+
+      case 'idsc_inscricao':
+        return <IdscInscricaoPanel currentUser={currentUser} />;
+
+      case 'idsc_resultados':
+        return <IdscResultadosPanel currentUser={currentUser} />;
 
       default:
         return (
