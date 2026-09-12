@@ -3147,9 +3147,30 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
   const [clubWeapons, setClubWeapons] = React.useState<Weapon[]>([]);
   const [loadingMembers, setLoadingMembers] = React.useState(false);
   const [selectedAthletes, setSelectedAthletes] = React.useState<Record<string, { weaponId: string; checked: boolean }>>({});
+  const [searchQueries, setSearchQueries] = React.useState<Record<string, string>>({});
+  const [searchResults, setSearchResults] = React.useState<Record<string, Weapon[]>>({});
+  const [searchingWeapon, setSearchingWeapon] = React.useState<Record<string, boolean>>({});
   const [saving, setSaving] = React.useState(false);
   const [success, setSuccess] = React.useState<{ userId: string; status: string; message?: string }[] | null>(null);
   const [error, setError] = React.useState('');
+
+  // No celular, marcar um atleta abre um popup para vincular a arma em vez de
+  // expandir a linha (mesmo padrão da Inscrição Clube normal).
+  const [isMobile, setIsMobile] = React.useState(false);
+  const [weaponModalMemberId, setWeaponModalMemberId] = React.useState<string | null>(null);
+  // Campo único de arma: qual atleta tem o dropdown de busca/seleção aberto no momento.
+  const [openWeaponFieldId, setOpenWeaponFieldId] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const update = () => setIsMobile(window.innerWidth <= 767);
+    update();
+    mq.addEventListener('change', update);
+    window.addEventListener('resize', update);
+    return () => {
+      mq.removeEventListener('change', update);
+      window.removeEventListener('resize', update);
+    };
+  }, []);
 
   React.useEffect(() => {
     if (initialPrefill) onPrefillApplied?.();
@@ -3179,6 +3200,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
     if (!courseId || !currentUser?.clubId) return;
     setLoadingMembers(true);
     setError(''); setSuccess(null); setSelectedAthletes({});
+    setSearchQueries({}); setSearchResults({}); setSearchingWeapon({}); setWeaponModalMemberId(null);
     fetch(`/api/club-members?clubId=${currentUser.clubId}`, { headers: { 'x-user-id': currentUser.id } })
       .then(r => { if (!r.ok) throw new Error('Falha ao buscar membros'); return r.json(); })
       .then(data => { setMembers(data.members || []); setClubWeapons(data.weapons || []); })
@@ -3187,16 +3209,102 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
   }, [courseId, currentUser]);
 
   const handleToggle = (userId: string) => {
+    const wasChecked = selectedAthletes[userId]?.checked || false;
     setSelectedAthletes(prev => {
       const cur = prev[userId] || { weaponId: '', checked: false };
       return { ...prev, [userId]: { ...cur, checked: !cur.checked } };
     });
+    if (!wasChecked && isMobile) {
+      setWeaponModalMemberId(userId);
+    }
   };
   const handleWeapon = (userId: string, weaponId: string) => {
     setSelectedAthletes(prev => {
       const cur = prev[userId] || { weaponId: '', checked: false };
       return { ...prev, [userId]: { ...cur, weaponId } };
     });
+  };
+
+  const handleSearchWeapon = async (userId: string, q: string) => {
+    setSearchQueries(prev => ({ ...prev, [userId]: q }));
+    if (q.trim().length < 2) {
+      setSearchResults(prev => ({ ...prev, [userId]: [] }));
+      return;
+    }
+    setSearchingWeapon(prev => ({ ...prev, [userId]: true }));
+    try {
+      const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(q)}`, {
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      const data = await r.json();
+      setSearchResults(prev => ({ ...prev, [userId]: data.weapons || [] }));
+    } catch {
+      setSearchResults(prev => ({ ...prev, [userId]: [] }));
+    } finally {
+      setSearchingWeapon(prev => ({ ...prev, [userId]: false }));
+    }
+  };
+
+  // Compartilhado entre a célula inline (desktop) e o popup de arma (mobile)
+  const renderWeaponFields = (member: User, state: { weaponId: string; checked: boolean }, athleteWeapons: Weapon[], searchInput: string, results: Weapon[], searching: boolean) => {
+    const isOpen = openWeaponFieldId === member.id;
+    const query = (searchInput || '').trim().toLowerCase();
+    const filteredOwn = athleteWeapons.filter(w =>
+      !query || `${w.model} ${w.caliber} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`.toLowerCase().includes(query)
+    );
+    const extraResults = results.filter(w => !filteredOwn.some(fw => fw.id === w.id));
+
+    const selectWeapon = (w: Weapon, label: string) => {
+      handleWeapon(member.id, w.id);
+      setSearchQueries(prev => ({ ...prev, [member.id]: label }));
+      setSearchResults(prev => ({ ...prev, [member.id]: [] }));
+      setOpenWeaponFieldId(null);
+    };
+
+    return (
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="Selecione a arma..."
+          value={searchInput}
+          onFocus={() => setOpenWeaponFieldId(member.id)}
+          onChange={e => handleSearchWeapon(member.id, e.target.value)}
+          onBlur={() => setTimeout(() => setOpenWeaponFieldId(prev => prev === member.id ? null : prev), 150)}
+          className="w-full bg-white border border-slate-200 p-2 rounded-xl text-xs text-slate-700 font-semibold outline-none focus:border-blue-400"
+        />
+        {searching && <span className="absolute right-3 top-2.5 text-[9px] text-slate-400 font-semibold">Buscando...</span>}
+
+        {isOpen && (
+          <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
+            {filteredOwn.length === 0 && extraResults.length === 0 && (
+              <div className="px-3 py-2 text-[11px] text-slate-400 font-semibold">
+                {searching ? 'Buscando...' : 'Nenhuma arma encontrada.'}
+              </div>
+            )}
+            {filteredOwn.map(w => (
+              <button
+                key={w.id}
+                type="button"
+                onMouseDown={e => { e.preventDefault(); selectWeapon(w, `${w.model} ${w.caliber} (Sigma: ${w.sigmaNumber || 'N/A'})`); }}
+                className="w-full text-left px-3 py-2 text-[11px] text-slate-700 hover:bg-blue-50 font-mono"
+              >
+                {w.model} {w.caliber} (Sigma: {w.sigmaNumber || 'N/A'})
+              </button>
+            ))}
+            {extraResults.map(w => (
+              <button
+                key={w.id}
+                type="button"
+                onMouseDown={e => { e.preventDefault(); selectWeapon(w, `${w.model} (Sigma: ${w.sigmaNumber || 'N/A'})`); }}
+                className="w-full text-left px-3 py-2 text-[11px] text-slate-700 hover:bg-blue-50 font-mono"
+              >
+                {w.model} {w.caliber} - Sigma: {w.sigmaNumber || 'N/A'} (Série: {w.serialNumber})
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const handleSubmit = async () => {
@@ -3284,7 +3392,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
                   <th className="py-2.5 px-3 w-10 whitespace-nowrap">Sel</th>
                   <th className="py-2.5 px-3 whitespace-nowrap">Atleta</th>
-                  <th className="py-2.5 px-3 whitespace-nowrap">Arma</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[260px]">Arma do Atleta / Busca por Sigma</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -3302,11 +3410,19 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
                       </td>
                       <td className="py-3 px-3">
                         {state.checked ? (
-                          <select value={state.weaponId} onChange={e => handleWeapon(member.id, e.target.value)}
-                            className="w-full max-w-xs bg-white border border-slate-200 p-2 rounded-xl text-xs text-slate-700 font-semibold outline-none focus:border-blue-400">
-                            <option value="">Selecione a arma...</option>
-                            {athleteWeapons.map(w => <option key={w.id} value={w.id}>{w.model} {w.caliber}</option>)}
-                          </select>
+                          isMobile ? (
+                            <button
+                              type="button"
+                              onClick={() => setWeaponModalMemberId(member.id)}
+                              className={`text-[11px] font-bold underline underline-offset-2 cursor-pointer ${state.weaponId ? 'text-emerald-600' : 'text-blue-600'}`}
+                            >
+                              {state.weaponId ? 'Arma selecionada ✓ (trocar)' : 'Selecionar arma'}
+                            </button>
+                          ) : (
+                            <div className="max-w-xs">
+                              {renderWeaponFields(member, state, athleteWeapons, searchQueries[member.id] || '', searchResults[member.id] || [], searchingWeapon[member.id] || false)}
+                            </div>
+                          )
                         ) : (
                           <span className="text-[11px] text-slate-400 italic">Marque para vincular arma</span>
                         )}
@@ -3330,6 +3446,43 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
       {!loadingMembers && members.length === 0 && courseId && (
         <p className="text-xs text-slate-400 text-center py-6 border border-dashed border-slate-200 rounded-xl">Nenhum filiado associado a este estande.</p>
       )}
+
+      {weaponModalMemberId && (() => {
+        const modalMember = members.find(m => m.id === weaponModalMemberId);
+        if (!modalMember) return null;
+        const modalState = selectedAthletes[modalMember.id] || { weaponId: '', checked: false };
+        const modalAthleteWeapons = clubWeapons.filter(w => w.ownerId === modalMember.id);
+        const modalSearchInput = searchQueries[modalMember.id] || '';
+        const modalResults = searchResults[modalMember.id] || [];
+        const modalSearching = searchingWeapon[modalMember.id] || false;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 w-full max-w-sm shadow-2xl space-y-4">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm">{modalMember.fullName}</h4>
+                  <p className="text-[10px] text-slate-400 font-mono">CPF: {modalMember.cpf || 'N/A'}</p>
+                </div>
+                <button onClick={() => setWeaponModalMemberId(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1.5">Arma do Atleta</label>
+                {renderWeaponFields(modalMember, modalState, modalAthleteWeapons, modalSearchInput, modalResults, modalSearching)}
+              </div>
+              <button
+                type="button"
+                onClick={() => setWeaponModalMemberId(null)}
+                disabled={!modalState.weaponId}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white text-xs py-2.5 rounded-xl font-bold transition cursor-pointer"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {success && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
