@@ -3131,12 +3131,18 @@ function IdscEtapasPanel({ currentUser }: { currentUser: User | null }) {
 // =============================================================================
 // IdscInscricaoPanel — Inscrição em Lote IDSC (por pista, com arma vinculada)
 // =============================================================================
-function IdscInscricaoPanel({ currentUser }: { currentUser: User | null }) {
+interface IdscInscricaoPanelProps {
+  currentUser: User | null;
+  initialPrefill?: ClubBulkRegistrationPrefill | null;
+  onPrefillApplied?: () => void;
+}
+
+function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: IdscInscricaoPanelProps) {
   const [championships, setChampionships] = React.useState<IdscChampionship[]>([]);
-  const [championshipId, setChampionshipId] = React.useState('');
+  const [championshipId, setChampionshipId] = React.useState(() => initialPrefill?.mode === 'idsc' ? initialPrefill.championshipId : '');
   const [stages, setStages] = React.useState<IdscStage[]>([]);
-  const [stageId, setStageId] = React.useState('');
-  const [courseId, setCourseId] = React.useState('');
+  const [stageId, setStageId] = React.useState(() => initialPrefill?.mode === 'idsc' ? initialPrefill.stageId : '');
+  const [courseId, setCourseId] = React.useState(() => initialPrefill?.mode === 'idsc' ? initialPrefill.courseId : '');
   const [members, setMembers] = React.useState<User[]>([]);
   const [clubWeapons, setClubWeapons] = React.useState<Weapon[]>([]);
   const [loadingMembers, setLoadingMembers] = React.useState(false);
@@ -3144,6 +3150,11 @@ function IdscInscricaoPanel({ currentUser }: { currentUser: User | null }) {
   const [saving, setSaving] = React.useState(false);
   const [success, setSuccess] = React.useState<{ userId: string; status: string; message?: string }[] | null>(null);
   const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    if (initialPrefill) onPrefillApplied?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   React.useEffect(() => {
     fetch('/api/idsc/championships', { headers: { 'x-user-id': currentUser?.id || '' } })
@@ -5892,12 +5903,13 @@ export default function AdminPanel({
     }
   };
 
-  // Main tabs: 'clube' | 'plataforma' | 'master'
-  const [mainTab, setMainTab] = useState<'clube' | 'plataforma' | 'master'>('clube');
+  // Main tabs: 'clube' | 'plataforma' | 'master' — a inscrição IDSC vive em
+  // "Gerenciamento Plataforma", diferente da inscrição normal (Gerenciamento Clube).
+  const [mainTab, setMainTab] = useState<'clube' | 'plataforma' | 'master'>(() => clubBulkRegistrationPrefill?.mode === 'idsc' ? 'plataforma' : 'clube');
 
   // Sidebar Menu selection for Clube — abre direto em "Inscrição Clube" quando
   // chegamos aqui redirecionados de uma tentativa de inscrição de conta de clube.
-  const [clubeMenu, setClubeMenu] = useState<string>(() => clubBulkRegistrationPrefill ? 'inscricao_clube' : 'campeonatos');
+  const [clubeMenu, setClubeMenu] = useState<string>(() => clubBulkRegistrationPrefill && clubBulkRegistrationPrefill.mode !== 'idsc' ? 'inscricao_clube' : 'campeonatos');
 
   // Captura o prefill recebido no mount (a navegação sempre remonta o AdminPanel,
   // já que ele só é renderizado quando a aba "admin" está ativa) e avisa o pai
@@ -5928,8 +5940,9 @@ export default function AdminPanel({
     setSelectedMedalFilter('geral');
   }, [selectedResultChampId, selectedResultStageId, selectedResultModalityId]);
 
-  // Sidebar Menu selection for Plataforma
-  const [plataformaMenu, setPlataformaMenu] = useState<string>('novo_campeonato');
+  // Sidebar Menu selection for Plataforma — abre direto em "IDSC > Inscrição" quando
+  // chegamos aqui redirecionados de uma tentativa de inscrição IDSC de conta de clube.
+  const [plataformaMenu, setPlataformaMenu] = useState<string>(() => clubBulkRegistrationPrefill?.mode === 'idsc' ? 'idsc_inscricao' : 'novo_campeonato');
 
   useEffect(() => {
     if (plataformaMenu !== 'novo_campeonato') {
@@ -6079,7 +6092,7 @@ export default function AdminPanel({
     clubes: true,
     campeonatos: true,
     adm: false,
-    idsc: false,
+    idsc: clubBulkRegistrationPrefill?.mode === 'idsc',
     site: false,
     integracoes: true
   });
@@ -9949,7 +9962,11 @@ export default function AdminPanel({
         return <IdscEtapasPanel currentUser={currentUser} />;
 
       case 'idsc_inscricao':
-        return <IdscInscricaoPanel currentUser={currentUser} />;
+        return <IdscInscricaoPanel
+          currentUser={currentUser}
+          initialPrefill={pendingClubPrefill}
+          onPrefillApplied={() => setPendingClubPrefill(null)}
+        />;
 
       case 'idsc_resultados':
         return <IdscResultadosPanel currentUser={currentUser} />;

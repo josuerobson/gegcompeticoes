@@ -404,7 +404,8 @@ export interface TrainingSession {
 // quando uma conta de clube tenta se inscrever como se fosse atleta.
 export type ClubBulkRegistrationPrefill =
   | { mode: 'individual'; championshipId: string; stageId: string }
-  | { mode: 'multi'; multiChampionshipId: string };
+  | { mode: 'multi'; multiChampionshipId: string }
+  | { mode: 'idsc'; championshipId: string; stageId: string; courseId: string };
 
 // ─── Multi-campeonatos ────────────────────────────────────────────────────────
 // Pacote de campeonatos agrupados com inscrição unificada (valor único).

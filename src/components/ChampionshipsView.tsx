@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
-import { Championship, User, Registration, StageScore, RankingItem, Modality, Stage, Weapon, WeaponLookupOption, MultiChampionship, ClubBulkRegistrationPrefill } from '../types';
-import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, Award, Printer, Copy, CreditCard, ChevronRight, Download, Medal, PlusCircle, X, Search, Layers, Zap } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Championship, User, Registration, StageScore, RankingItem, Modality, Stage, Weapon, WeaponLookupOption, MultiChampionship, ClubBulkRegistrationPrefill, IdscChampionship, IdscStage, IdscCourse } from '../types';
+import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, CreditCard, ChevronRight, Download, Medal, PlusCircle, X, Search, Layers, Zap, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { QRCodeView } from './QRCodeView';
 
 interface ChampionshipsProps {
   championships: Championship[];
@@ -46,7 +45,7 @@ export default function ChampionshipsView({
   onClubBulkRegister
 }: ChampionshipsProps) {
   // Navigation states
-  const [activeTab, setActiveTab] = useState<'tournaments' | 'multicampeonatos' | 'certificates'>('tournaments');
+  const [activeTab, setActiveTab] = useState<'tournaments' | 'multicampeonatos' | 'idsc'>('tournaments');
   const [selectedYearFilter, setSelectedYearFilter] = useState<string>(() => String(new Date().getFullYear()));
   const [viewingChampionship, setViewingChampionship] = useState<Championship | null>(null);
   const [selectedPremiacaoModal, setSelectedPremiacaoModal] = useState<{ champ: Championship; modality: Modality } | null>(null);
@@ -288,13 +287,104 @@ export default function ChampionshipsView({
             : (selectedChampReg.valorInscricaoIndividual ?? selectedChampReg.registrationFee)))
     : 0;
 
-  // Selected Certificate to show print preview
-  const [activeCertificate, setActiveCertificate] = useState<{
-    championship: Championship;
-    registration: Registration;
-    finalScore?: number;
-    position?: number;
-  } | null>(null);
+  // IDSC tab navigation & data
+  const [idscChampionships, setIdscChampionships] = useState<IdscChampionship[]>([]);
+  const [idscStagesForChamp, setIdscStagesForChamp] = useState<IdscStage[]>([]);
+  const [viewingIdscChampionship, setViewingIdscChampionship] = useState<IdscChampionship | null>(null);
+
+  // IDSC registration modal
+  const [selectedIdscCourse, setSelectedIdscCourse] = useState<{ champ: IdscChampionship; stage: IdscStage; course: IdscCourse } | null>(null);
+  const [idscCrInput, setIdscCrInput] = useState(currentUser?.crNumber || '');
+  const [idscSubmitting, setIdscSubmitting] = useState(false);
+  const [idscError, setIdscError] = useState('');
+  const [idscSuccessMsg, setIdscSuccessMsg] = useState('');
+  const [idscAlreadyRegistered, setIdscAlreadyRegistered] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== 'idsc') return;
+    fetch('/api/idsc/championships', { headers: currentUser ? { 'x-user-id': currentUser.id } : {} })
+      .then(r => r.json())
+      .then(d => setIdscChampionships(d.idscChampionships || []))
+      .catch(() => setIdscChampionships([]));
+  }, [activeTab, currentUser]);
+
+  useEffect(() => {
+    if (!viewingIdscChampionship) { setIdscStagesForChamp([]); return; }
+    fetch(`/api/idsc/stages?championshipId=${viewingIdscChampionship.id}`, { headers: currentUser ? { 'x-user-id': currentUser.id } : {} })
+      .then(r => r.json())
+      .then(d => setIdscStagesForChamp(d.idscStages || []))
+      .catch(() => setIdscStagesForChamp([]));
+  }, [viewingIdscChampionship, currentUser]);
+
+  const openIdscRegistration = async (champ: IdscChampionship, stage: IdscStage, course: IdscCourse) => {
+    if (isClubAccount) {
+      onClubBulkRegister?.({ mode: 'idsc', championshipId: champ.id, stageId: stage.id, courseId: course.id });
+      return;
+    }
+    if (currentUser && !currentUser.isProfileComplete) {
+      setShowProfileIncompleteNotice(true);
+      return;
+    }
+    setSelectedIdscCourse({ champ, stage, course });
+    setSelectedWeaponId('');
+    setWeaponSearchQuery('');
+    setWeaponSearchResults([]);
+    setSearchingWeapon(false);
+    setIdscCrInput(currentUser?.crNumber || '');
+    setIdscError('');
+    setIdscSuccessMsg('');
+    setIdscSubmitting(false);
+    setIdscAlreadyRegistered(false);
+    setShowAddWeapon(false);
+
+    try {
+      const r = await fetch(`/api/idsc/registrations?courseId=${course.id}`, { headers: currentUser ? { 'x-user-id': currentUser.id } : {} });
+      if (r.ok) {
+        const data = await r.json();
+        const mine = (data.idscRegistrations || []).some((reg: any) => reg.userId === currentUser?.id);
+        setIdscAlreadyRegistered(mine);
+      }
+    } catch {
+      // Não bloqueia a inscrição se a checagem de reinscrição falhar.
+    }
+  };
+
+  const closeIdscRegModal = () => {
+    setSelectedIdscCourse(null);
+    setSelectedWeaponId('');
+    setWeaponSearchQuery('');
+    setWeaponSearchResults([]);
+    setSearchingWeapon(false);
+    setIdscError('');
+    setIdscSuccessMsg('');
+    setIdscSubmitting(false);
+    setShowAddWeapon(false);
+  };
+
+  const handleIdscRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIdscCourse || !selectedWeaponId) {
+      setIdscError('Selecione a arma a ser utilizada pesquisando no mínimo 3 caracteres.');
+      return;
+    }
+    setIdscError('');
+    setIdscSubmitting(true);
+    try {
+      const res = await fetch(`/api/idsc/courses/${selectedIdscCourse.course.id}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
+        body: JSON.stringify({ weaponId: selectedWeaponId, crNumber: idscCrInput || currentUser?.crNumber || 'N/A', paymentMethod: 'pix' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao realizar inscrição IDSC.');
+      setIdscSuccessMsg('Inscrição na pista IDSC confirmada com sucesso!');
+      if (onRefreshData) await onRefreshData();
+    } catch (err: any) {
+      setIdscError(err.message);
+    } finally {
+      setIdscSubmitting(false);
+    }
+  };
 
   // Available unique modalities (by display name) in the database for the rankings dropdown/selector
   const allModalities = Array.from(new Set(
@@ -344,45 +434,6 @@ export default function ChampionshipsView({
     setShowAddWeapon(false);
   };
 
-  // Helper to compute total score for a registration
-  const getRegScore = (r: Registration): number => {
-    if (r.totalPoints != null && r.totalPoints > 0) return Number(r.totalPoints);
-    const modObj = modalities.find(m => m.id === r.modalityId);
-    const modName = modObj?.name || '';
-    const targetStage = stages.find(s => s.id === r.stageId);
-    const stageNum = targetStage?.stageNum;
-
-    const matching = stageScores.filter(s =>
-      s.registrationId === r.id ||
-      (s.userId === r.userId &&
-       s.championshipId === r.championshipId &&
-       ((s as any).modalityId === r.modalityId || (modName && s.modality?.toLowerCase() === modName.toLowerCase())) &&
-       (stageNum ? s.stageNum === stageNum : true))
-    );
-
-    if (matching.length > 0) {
-      return matching.reduce((sum, sc) => sum + (sc.score || 0), 0);
-    }
-    return 0;
-  };
-
-  // Find users approved registrations for certificate retrieval (Rule 1: score > 0)
-  const rawUserRegistrations = registrations.filter(
-    r => r.userId === currentUser?.id && r.paymentStatus === 'approved' && getRegScore(r) > 0
-  );
-
-  // Rule 2: Keep only highest score registration per (championship, stage, modality)
-  const userBestGrouped: Record<string, { reg: Registration; score: number }> = {};
-  for (const r of rawUserRegistrations) {
-    const score = getRegScore(r);
-    const key = `${r.championshipId}_${r.stageId || 'all'}_${r.modalityId}`;
-    if (!userBestGrouped[key] || score > userBestGrouped[key].score) {
-      userBestGrouped[key] = { reg: r, score };
-    }
-  }
-
-  const userApprovedRegistrations = Object.values(userBestGrouped).map(item => item.reg);
-
   // Copy pix key simulation
   const handleCopyPix = () => {
     navigator.clipboard.writeText("pix.copiaecola.gegpistol.online.producao1029384756");
@@ -407,168 +458,27 @@ export default function ChampionshipsView({
 
         <div className="flex bg-slate-100 p-1 rounded-xl self-start">
           <button
-            onClick={() => { setActiveTab('tournaments'); setActiveCertificate(null); }}
+            onClick={() => setActiveTab('tournaments')}
             className={`px-4 py-2 text-xs font-semibold rounded-lg transition duration-200 ${activeTab === 'tournaments' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
           >
             Campeonatos
           </button>
           <button
-            onClick={() => { setActiveTab('multicampeonatos'); setActiveCertificate(null); }}
+            onClick={() => setActiveTab('multicampeonatos')}
             className={`px-4 py-2 text-xs font-semibold rounded-lg transition duration-200 ${activeTab === 'multicampeonatos' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
           >
             Multicampeonatos
           </button>
           <button
-            onClick={() => { setActiveTab('certificates'); }}
-            className={`px-4 py-2 text-xs font-semibold rounded-lg transition duration-200 ${activeTab === 'certificates' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+            onClick={() => setActiveTab('idsc')}
+            className={`px-4 py-2 text-xs font-semibold rounded-lg transition duration-200 ${activeTab === 'idsc' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
           >
-            Certificados
+            IDSC
           </button>
         </div>
       </div>
 
-      {activeCertificate ? (
-        /* ==================================================== */
-        /* ELEGANT CERTIFICATE PREVIEW AND PRINT STYLING PANEL */
-        /* ==================================================== */
-        <motion.div
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-white rounded-2xl smooth-shadow border border-slate-200 p-6 space-y-6"
-        >
-          <div className="flex justify-between items-center no-print">
-            <button
-              onClick={() => setActiveCertificate(null)}
-              className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl transition font-medium"
-            >
-              ← Voltar aos Certificados
-            </button>
-            <div className="flex gap-2">
-              <button
-                onClick={() => window.print()}
-                className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl transition flex items-center gap-1.5 font-semibold"
-              >
-                <Printer className="w-4 h-4" />
-                Imprimir Certificado
-              </button>
-            </div>
-          </div>
-
-          {/* Certificate Design Viewport */}
-          <div className="border-[14px] border-double border-blue-950 p-8 sm:p-14 bg-slate-50 text-slate-900 relative overflow-hidden font-sans smooth-shadow max-w-4xl mx-auto rounded-lg">
-            
-            {/* Watermark decorations */}
-            <div className="absolute inset-0 pointer-events-none opacity-[0.03] flex items-center justify-center">
-              <Trophy className="w-[500px] h-[500px] text-slate-950" />
-            </div>
-
-            {/* Header Logos */}
-            <div className="text-center space-y-2 relative">
-              <div className="flex justify-center items-center gap-2">
-                <Target className="w-8 h-8 text-blue-900" />
-                <span className="font-display font-black text-2xl tracking-widest text-blue-950">G&G COMPETIÇÕES</span>
-              </div>
-              <p className="text-[10px] tracking-widest text-amber-600 font-bold uppercase">Clube e Escola de Tiro Credenciado</p>
-              <div className="w-24 h-0.5 bg-blue-900 mx-auto mt-2"></div>
-            </div>
-
-            {/* Cert Body */}
-            <div className="text-center mt-10 space-y-6 relative">
-              <h3 className="font-display font-medium text-amber-600 tracking-wider text-sm uppercase">Certificado de Participação Homologado</h3>
-
-              <p className="text-slate-600 leading-relaxed text-sm sm:text-base max-w-xl mx-auto">
-                Certificamos para fins de comprovação junto ao Comando do Exército (SFPC) e demais órgãos de controle que o atleta desportista federado:
-              </p>
-
-              <div className="py-2">
-                <h2 className="font-display font-bold text-2xl sm:text-3xl text-blue-950 tracking-tight underline decoration-amber-500/50 decoration-2">
-                  {currentUser?.fullName}
-                </h2>
-                <div className="flex justify-center gap-4 text-xs font-mono text-slate-500 mt-2">
-                  <span>CR: {activeCertificate.registration.crNumber}</span>
-                  <span>ID: {currentUser?.id}</span>
-                </div>
-              </div>
-
-              <p className="text-slate-600 leading-relaxed text-sm sm:text-base max-w-xl mx-auto">
-                participou e concluiu com aproveitamento técnico o campeonato <strong className="text-slate-900">{activeCertificate.championship.title}</strong>, concorrendo na modalidade esportiva oficial <strong className="text-slate-900">{modalityName(activeCertificate.registration.modalityId)}</strong>.
-              </p>
-
-              {activeCertificate.finalScore ? (
-                <div className="inline-block bg-blue-950 text-white font-mono rounded-lg px-6 py-3 border border-amber-500/20 shadow-md">
-                  <div className="text-[10px] text-slate-400">DESEMPENHO FINAL</div>
-                  <div className="text-lg font-bold text-amber-400 mt-0.5">Pontos: {activeCertificate.finalScore}</div>
-                  {activeCertificate.position && (
-                    <div className="text-xs text-sky-300 font-sans">Colocação no Ranking: {activeCertificate.position}º Lugar</div>
-                  )}
-                </div>
-              ) : (
-                <div className="inline-block bg-slate-200 text-slate-700 font-mono rounded-lg px-6 py-2">
-                  Participação Registrada e Homologada
-                </div>
-              )}
-            </div>
-
-            {/* Certificate Signatures block */}
-            <div className="grid grid-cols-2 gap-8 mt-14 pt-8 border-t border-slate-200/60 relative text-center text-xs">
-              <div>
-                <img
-                  src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&auto=format&fit=crop&q=85"
-                  alt="Founder signature placeholder"
-                  className="w-10 h-10 object-cover rounded-full mx-auto opacity-75 ring-2 ring-slate-100 mb-2"
-                  referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    e.currentTarget.onerror = null;
-                    e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
-                  }}
-                />
-                <div className="w-40 h-px bg-slate-300 mx-auto mt-2"></div>
-                <p className="font-bold text-slate-800 mt-1">Guilherme Guedes</p>
-                <p className="text-[10px] text-slate-400">Diretoria Fiscal - G&G</p>
-              </div>
-              
-              <div>
-                <img
-                  src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80&auto=format&fit=crop&q=85"
-                  alt="Founder signature placeholder"
-                  className="w-10 h-10 object-cover rounded-full mx-auto opacity-75 ring-2 ring-slate-100 mb-2"
-                  referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    e.currentTarget.onerror = null;
-                    e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80";
-                  }}
-                />
-                <div className="w-40 h-px bg-slate-300 mx-auto mt-2"></div>
-                <p className="font-bold text-slate-800 mt-1">Gabriel G&G</p>
-                <p className="text-[10px] text-slate-400">Instrutor Chefe - G&G</p>
-              </div>
-            </div>
-
-            {/* Bottom metadata & QR Code validation */}
-            <div className="flex flex-col sm:flex-row justify-between items-center mt-10 text-[10px] text-slate-400 font-mono pt-4 border-t border-slate-200/60 gap-3">
-              <div className="space-y-0.5 text-center sm:text-left">
-                <p>Emissão: {new Date(activeCertificate.registration.registeredAt).toLocaleDateString('pt-BR')}</p>
-                <p className="font-bold text-slate-700">Chave Autenticidade: GG-CERT-{activeCertificate.registration.id.replace(/^REG_/i, '').toUpperCase()}</p>
-              </div>
-
-              <div className="flex flex-col items-center justify-center p-1.5 bg-white border border-slate-300 rounded-lg shadow-2xs">
-                <QRCodeView
-                  value={`${window.location.origin}/validar/certificado/GG-CERT-${activeCertificate.registration.id.replace(/^REG_/i, '').toUpperCase()}`}
-                  size={60}
-                />
-                <span className="text-[7px] font-mono text-slate-500 font-bold mt-0.5 uppercase">VALIDE O CERTIFICADO</span>
-              </div>
-
-              <span className="flex items-center gap-1 font-bold text-amber-600">
-                <Shield className="w-4 h-4 text-amber-500" />
-                Homologação G&G Competições
-              </span>
-            </div>
-
-          </div>
-        </motion.div>
-      ) : (
-        <>
+      <>
           {activeTab === 'tournaments' && (
             /* ==================================================== */
             /* TOURNAMENTS LIST & DETAIL VIEW                       */
@@ -972,69 +882,136 @@ export default function ChampionshipsView({
             </div>
           )}
 
-          {activeTab === 'certificates' && (
+          {activeTab === 'idsc' && (
             /* ==================================================== */
-            /* CERTIFICATES DISCOVERY TAB                           */
+            /* IDSC TAB — CAMPEONATOS DE TIRO DINÂMICO POR TEMPO    */
             /* ==================================================== */
-            <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-5 space-y-4">
-              <div>
-                <h3 className="font-display font-semibold text-slate-900 text-sm uppercase tracking-wider">Seus Certificados Registrados</h3>
-                <p className="text-xs text-slate-400">Gere e imprima documentos oficiais de filiação e participação homologados.</p>
-              </div>
-
-              {!currentUser ? (
-                <p className="text-xs text-red-500 font-medium">Faça login com seu usuário para visualizar seus certificados.</p>
-              ) : userApprovedRegistrations.length === 0 ? (
-                <div className="text-center py-12 border border-dashed border-slate-200 rounded-xl">
-                  <Award className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                  <p className="text-slate-500 text-sm font-medium">Nenhum certificado elegível.</p>
-                  <p className="text-xs text-slate-400">Inscreva-se em um campeonato e compita para poder gerar certificados de participação.</p>
+            viewingIdscChampionship ? (
+              <div className="bg-white rounded-2xl smooth-shadow border border-slate-100 p-3.5 sm:p-6 space-y-4 sm:space-y-8 text-slate-800">
+                <div className="space-y-2 sm:space-y-3 border-b border-slate-100 pb-3 sm:pb-4">
+                  <button
+                    onClick={() => setViewingIdscChampionship(null)}
+                    className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg transition font-bold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    ← Voltar para IDSC
+                  </button>
+                  <div className="pt-1 sm:pt-2">
+                    <span className="text-[10px] sm:text-[11px] font-semibold text-slate-450 uppercase tracking-wider block">Campeonato IDSC</span>
+                    <h2 className="font-display font-black text-xl sm:text-3xl text-blue-950 uppercase tracking-tight mt-0.5">
+                      {viewingIdscChampionship.title}
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-1 max-w-3xl leading-relaxed font-mono">
+                      Inscrição individual: R$ {Number(viewingIdscChampionship.individualRegistrationFee || 0).toFixed(2)}
+                    </p>
+                  </div>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {userApprovedRegistrations.map((reg) => {
-                    const champ = championships.find(c => c.id === reg.championshipId);
-                    if (!champ) return null;
 
-                    // Compute score if available
-                    const regModalityName = modalityName(reg.modalityId);
-                    const score = globalRankings.find(r => r.userId === currentUser.id && r.modality === regModalityName);
-                    const positionInMod = globalRankings.findIndex(r => r.userId === currentUser.id && r.modality === regModalityName) + 1;
-
-                    return (
-                      <div key={reg.id} className="border border-slate-100 rounded-xl p-4 flex items-center justify-between hover:bg-slate-50/50 transition">
-                        <div className="space-y-1">
-                          <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold uppercase font-mono">
-                            CERTIFICADO ELEGÍVEL
-                          </span>
-                          <h4 className="font-bold text-slate-900 font-display text-sm truncate max-w-[240px]">{champ.title}</h4>
-                          <span className="text-xs text-slate-400 block">{regModalityName}</span>
-                          <span className="text-[10px] text-slate-400 font-mono block">Liberação: {new Date(reg.registeredAt).toLocaleDateString()}</span>
+                <div className="space-y-2.5 sm:space-y-4">
+                  <h3 className="font-display font-bold text-slate-900 text-sm sm:text-lg">Etapas e Pistas</h3>
+                  {idscStagesForChamp.length === 0 ? (
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 sm:p-8 text-center text-slate-400 text-xs">
+                      Nenhuma etapa cadastrada para este campeonato ainda.
+                    </div>
+                  ) : (
+                    <div className="space-y-4 sm:space-y-6">
+                      {idscStagesForChamp.map(stage => (
+                        <div key={stage.id} className="space-y-2">
+                          <h4 className="font-display font-bold text-slate-800 text-xs sm:text-sm uppercase tracking-wide flex items-center gap-2">
+                            <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                            {stage.title}
+                            {stage.startDate && (
+                              <span className="text-[10px] text-slate-400 font-mono normal-case">
+                                ({new Date(stage.startDate).toLocaleDateString('pt-BR')})
+                              </span>
+                            )}
+                          </h4>
+                          {stage.description && <p className="text-[10px] sm:text-[11px] text-slate-400">{stage.description}</p>}
+                          {(stage.courses || []).length === 0 ? (
+                            <p className="text-[10px] text-slate-400 italic">Nenhuma pista cadastrada nesta etapa.</p>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4">
+                              {(stage.courses || []).map(course => (
+                                <div
+                                  key={course.id}
+                                  className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-5 text-center shadow-xs flex flex-col justify-between space-y-2.5 sm:space-y-4 hover:border-indigo-300 transition"
+                                >
+                                  <div className="space-y-1">
+                                    <h5 className="font-display font-bold text-slate-900 text-xs sm:text-sm uppercase flex items-center justify-center gap-1.5">
+                                      <Zap className="w-3.5 h-3.5 text-amber-500" /> {course.name}
+                                    </h5>
+                                    <p className="text-[10.5px] sm:text-xs text-slate-500 font-mono">
+                                      {course.targetCount} alvos × {course.shotsPerTarget} tiros
+                                      {course.timeLimitSeconds ? ` · limite ${course.timeLimitSeconds}s` : ''}
+                                    </p>
+                                  </div>
+                                  <button
+                                    onClick={() => openIdscRegistration(viewingIdscChampionship, stage, course)}
+                                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 sm:py-2.5 rounded-xl shadow-xs transition cursor-pointer"
+                                  >
+                                    Participar
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        
-                        <button
-                          onClick={() => {
-                            setActiveCertificate({
-                              championship: champ,
-                              registration: reg,
-                              finalScore: score?.totalScore,
-                              position: positionInMod > 0 ? positionInMod : undefined
-                            });
-                          }}
-                          className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition leading-none shadow-md shadow-blue-50"
-                        >
-                          <Printer className="w-3.5 h-3.5" />
-                          Emitir
-                        </button>
-                      </div>
-                    );
-                  })}
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="space-y-3 sm:space-y-4">
+                {idscChampionships.filter(c => c.status === 'active').length === 0 ? (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 text-center text-slate-400 text-xs">
+                    Nenhum campeonato IDSC disponível no momento.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-5">
+                    {idscChampionships.filter(c => c.status === 'active').map(champ => (
+                      <div
+                        key={champ.id}
+                        onClick={() => setViewingIdscChampionship(champ)}
+                        className="bg-white dark:bg-slate-900 rounded-2xl smooth-shadow border border-slate-200 dark:border-slate-800 hover:border-blue-500 hover:shadow-md transition duration-200 cursor-pointer overflow-hidden flex flex-col justify-between p-2.5 sm:p-4 space-y-2 sm:space-y-3 group"
+                      >
+                        <div className="space-y-2">
+                          <span className="bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 text-[9px] px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wider flex items-center gap-1 w-fit">
+                            <Zap className="w-3 h-3 text-amber-500" /> IDSC
+                          </span>
+                          <h3 className="font-display font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white leading-snug group-hover:text-blue-600 dark:group-hover:text-blue-400 transition line-clamp-2">
+                            {champ.title}
+                          </h3>
+                        </div>
+
+                        <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                          <div className="grid grid-cols-2 gap-1 text-[10px] font-mono text-slate-600 dark:text-slate-300">
+                            <div>
+                              <span className="text-[8.5px] text-slate-400 uppercase block font-sans font-bold">Tipo</span>
+                              <span className="font-semibold font-sans">{champ.championshipType === 'clubes' ? 'Clubes' : 'Individual'}</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-[8.5px] text-slate-400 uppercase block font-sans font-bold">Inscrição</span>
+                              <span className="text-blue-600 dark:text-blue-400 font-bold font-sans">
+                                R$ {currentUser?.role === 'club_admin' ? Number(champ.clubRegistrationFee || 0) : Number(champ.individualRegistrationFee || 0)}
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setViewingIdscChampionship(champ); }}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-[10.5px] font-bold py-2 rounded-xl transition flex items-center justify-center gap-1 shadow-xs cursor-pointer"
+                          >
+                            Ver Etapas
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
           )}
         </>
-      )}
 
       {/* REGISTRATION & PAYMENT MODAL WINDOW */}
       <AnimatePresence>
@@ -1576,6 +1553,247 @@ export default function ChampionshipsView({
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* IDSC REGISTRATION MODAL */}
+      <AnimatePresence>
+        {selectedIdscCourse && (
+          <div
+            className="fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) closeIdscRegModal();
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white max-w-lg w-full rounded-2xl smooth-shadow overflow-hidden max-h-[90vh] flex flex-col my-auto"
+            >
+              <div className="bg-blue-900 text-white p-4 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-amber-400" />
+                  <span className="font-display font-semibold text-sm">Inscrição IDSC — {selectedIdscCourse.course.name}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeIdscRegModal}
+                  className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer text-base leading-none font-bold"
+                  title="Fechar janela"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {idscSuccessMsg ? (
+                <div className="p-6 text-center space-y-4 flex-1 overflow-y-auto">
+                  <div className="bg-emerald-50 text-emerald-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto shadow-md">
+                    <CheckCircle className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-slate-900 text-sm">Inscrição confirmada!</h4>
+                    <p className="text-xs text-slate-500">{idscSuccessMsg}</p>
+                  </div>
+                  <button
+                    onClick={closeIdscRegModal}
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-semibold text-xs transition"
+                  >
+                    Fechar Ficha e Voltar
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleIdscRegisterSubmit} className="p-5 space-y-4 flex-1 overflow-y-auto">
+                  <div className="bg-blue-50 p-3 rounded-lg flex flex-col gap-1 text-xs">
+                    <div className="flex items-center justify-between text-blue-900">
+                      <span className="font-semibold">{selectedIdscCourse.champ.title} · {selectedIdscCourse.stage.title}</span>
+                      <span className="font-bold">R$ {Number(selectedIdscCourse.champ.individualRegistrationFee || 0).toFixed(2)}</span>
+                    </div>
+                    <span className="text-[10px] text-blue-700 font-mono">
+                      {selectedIdscCourse.course.name} · {selectedIdscCourse.course.targetCount} alvos × {selectedIdscCourse.course.shotsPerTarget} tiros
+                    </span>
+                    {idscAlreadyRegistered && (
+                      <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider block mt-0.5">
+                        ✨ Você já está inscrito nesta pista — esta será uma reinscrição
+                      </span>
+                    )}
+                  </div>
+
+                  {idscError && (
+                    <div className="bg-red-50 border border-red-100 text-red-700 text-xs p-2.5 rounded-lg font-medium">
+                      {idscError}
+                    </div>
+                  )}
+
+                  {/* Seleção de Arma via Pesquisa + Cadastrar Nova Arma */}
+                  <div className="space-y-1 relative">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="text-[10px] text-slate-500 uppercase block font-semibold">
+                        Arma a ser utilizada <span className="text-red-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddWeapon(true)}
+                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" />
+                        + Cadastrar Nova Arma
+                      </button>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Digite fabricante, modelo, calibre ou número Sigma..."
+                        value={weaponSearchQuery}
+                        onChange={(e) => handleSearchWeapon(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-800 font-medium pl-9 shadow-xs"
+                      />
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                      {searchingWeapon && <span className="absolute right-3 top-3.5 text-[10px] text-blue-600 font-bold">Buscando...</span>}
+                    </div>
+
+                    {weaponSearchQuery.length > 0 && weaponSearchQuery.length < 3 && (
+                      <div className="flex justify-between items-center mt-1">
+                        <p className="text-[10.5px] text-amber-600 font-medium">
+                          Digite mais {3 - weaponSearchQuery.length} caractere(s) para pesquisar...
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewWeaponData(prev => ({ ...prev, model: weaponSearchQuery }));
+                            setShowAddWeapon(true);
+                          }}
+                          className="text-[10.5px] font-bold text-blue-600 hover:underline cursor-pointer"
+                        >
+                          + Cadastrar Nova Arma
+                        </button>
+                      </div>
+                    )}
+
+                    {weaponSearchQuery.length >= 3 && (
+                      <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100">
+                        {weaponSearchResults.length === 0 ? (
+                          <div className="p-4 text-center space-y-2">
+                            <p className="text-slate-500 text-xs">Nenhuma arma encontrada para "{weaponSearchQuery}".</p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewWeaponData(prev => ({ ...prev, model: weaponSearchQuery }));
+                                setShowAddWeapon(true);
+                              }}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 mx-auto cursor-pointer shadow-xs"
+                            >
+                              <PlusCircle className="w-3.5 h-3.5" />
+                              Cadastrar Nova Arma Agora
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            {weaponSearchResults.map(w => (
+                              <button
+                                key={w.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedWeaponId(w.id);
+                                  setWeaponSearchQuery(`${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'}) - Sigma: ${w.sigmaNumber || 'N/A'}`.trim());
+                                  setWeaponSearchResults([]);
+                                }}
+                                className="w-full text-left p-3 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
+                              >
+                                <div>
+                                  <div className="font-bold text-slate-900 text-xs">
+                                    {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[11px]">({w.caliber})</span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                    Sigma: {w.sigmaNumber || 'N/A'} | Série: {w.serialNumber || 'N/A'}
+                                  </div>
+                                </div>
+                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                                  Selecionar
+                                </span>
+                              </button>
+                            ))}
+                            <div className="p-2.5 bg-slate-50 text-center">
+                              <button
+                                type="button"
+                                onClick={() => setShowAddWeapon(true)}
+                                className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center justify-center gap-1 mx-auto cursor-pointer"
+                              >
+                                <PlusCircle className="w-3.5 h-3.5" />
+                                Sua arma não está na lista? Cadastrar Nova Arma
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {selectedWeaponId && (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 flex items-center justify-between mt-2 text-xs">
+                        <div className="flex items-center gap-2 truncate pr-2">
+                          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span className="font-bold text-emerald-950 truncate">Arma: {weaponSearchQuery}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedWeaponId('');
+                            setWeaponSearchQuery('');
+                            setWeaponSearchResults([]);
+                          }}
+                          className="text-[10px] text-slate-500 hover:text-red-600 font-bold underline cursor-pointer shrink-0"
+                        >
+                          Trocar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 uppercase block font-semibold">Número do CR</label>
+                    <input
+                      type="text"
+                      value={idscCrInput}
+                      onChange={(e) => setIdscCrInput(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
+                      placeholder="Ex: 123456"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5 pt-1">
+                    <label className="text-[10px] text-slate-500 uppercase block font-semibold">Forma de Pagamento</label>
+                    <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
+                        PIX
+                      </div>
+                      <div>
+                        <span className="font-bold text-blue-950 text-xs block">Pagamento via PIX</span>
+                        <span className="text-[10px] text-blue-700">Aprovação e homologação imediata da inscrição</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-3">
+                    <button
+                      type="button"
+                      onClick={closeIdscRegModal}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-semibold text-xs transition"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={idscSubmitting}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold text-xs shadow-md shadow-blue-100 transition disabled:opacity-60"
+                    >
+                      {idscSubmitting ? 'Enviando...' : 'Confirmar e Pagar'}
+                    </button>
+                  </div>
+                </form>
+              )}
             </motion.div>
           </div>
         )}
