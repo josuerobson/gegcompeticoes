@@ -4578,7 +4578,7 @@ export default function MemberProfile({
       {/* FULL SCREEN WEB PRINT VIEW OVERLAY */}
       <AnimatePresence>
         {printMode && printData && (
-          <div className="fixed inset-0 z-[9999] bg-slate-900 overflow-y-auto p-4 md:p-8 flex flex-col items-center justify-start print:p-0 print:bg-white print:absolute print:inset-0 select-none">
+          <div className="fixed inset-0 z-[9999] bg-slate-900 overflow-y-auto p-4 md:p-8 flex flex-col items-center justify-start print:p-0 print:bg-white print:static print:block print:overflow-visible print:h-auto print:w-auto select-none">
             
             {/* Control bar - Hidden during paper print */}
             <div className="no-print w-full max-w-4xl bg-slate-800 text-white rounded-xl p-4 mb-6 flex justify-between items-center shadow-lg border border-slate-700">

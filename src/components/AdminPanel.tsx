@@ -8407,9 +8407,10 @@ export default function AdminPanel({
           const q = athleteSearchQuery.trim().toLowerCase();
           const allMembers = users.filter(u => u.role === 'member');
           if (!q) return allMembers.slice(0, 30);
+          const qDigits = q.replace(/\D/g, '');
           return allMembers.filter(u =>
             u.fullName.toLowerCase().includes(q) ||
-            (u.cpf || '').replace(/\D/g, '').includes(q.replace(/\D/g, ''))
+            (qDigits && (u.cpf || '').replace(/\D/g, '').includes(qDigits))
           ).slice(0, 100);
         })();
         const totalAthletes = users.filter(u => u.role === 'member').length;
