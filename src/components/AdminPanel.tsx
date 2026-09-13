@@ -3154,6 +3154,19 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
   const [success, setSuccess] = React.useState<{ userId: string; status: string; message?: string }[] | null>(null);
   const [error, setError] = React.useState('');
 
+  const [athleteFilterQuery, setAthleteFilterQuery] = React.useState('');
+  const displayedMembers = React.useMemo(() => {
+    const q = athleteFilterQuery.trim().toLowerCase();
+    if (!q) return members;
+    const qDigits = q.replace(/\D/g, '');
+    return members.filter(m => {
+      if ((m.fullName || '').toLowerCase().includes(q)) return true;
+      if (qDigits && (m.cpf || '').replace(/\D/g, '').includes(qDigits)) return true;
+      if (qDigits && (m.crNumber || '').replace(/\D/g, '').includes(qDigits)) return true;
+      return false;
+    });
+  }, [members, athleteFilterQuery]);
+
   // No celular, marcar um atleta abre um popup para vincular a arma em vez de
   // expandir a linha (mesmo padrão da Inscrição Clube normal).
   const [isMobile, setIsMobile] = React.useState(false);
@@ -3201,6 +3214,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
     setLoadingMembers(true);
     setError(''); setSuccess(null); setSelectedAthletes({});
     setSearchQueries({}); setSearchResults({}); setSearchingWeapon({}); setWeaponModalMemberId(null);
+    setAthleteFilterQuery('');
     fetch(`/api/club-members?clubId=${currentUser.clubId}`, { headers: { 'x-user-id': currentUser.id } })
       .then(r => { if (!r.ok) throw new Error('Falha ao buscar membros'); return r.json(); })
       .then(data => { setMembers(data.members || []); setClubWeapons(data.weapons || []); })
@@ -3386,6 +3400,21 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
       {!loadingMembers && members.length > 0 && (
         <div className="space-y-4">
           <p className="text-xs font-semibold text-slate-600">Selecione os atletas para inscrição e defina a arma:</p>
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={athleteFilterQuery}
+              onChange={e => setAthleteFilterQuery(e.target.value)}
+              placeholder="Buscar atleta por nome, CPF ou CR..."
+              className="w-full bg-slate-50 border border-slate-200 outline-none pl-9 pr-3 py-2.5 rounded-xl text-xs text-slate-700 font-semibold focus:border-blue-400"
+            />
+          </div>
+          {displayedMembers.length === 0 ? (
+            <div className="text-center py-8 px-4 text-slate-500 text-xs font-semibold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+              Nenhum atleta encontrado para "{athleteFilterQuery}".
+            </div>
+          ) : (
           <div className="overflow-x-auto border border-slate-200 rounded-xl">
             <table className="w-full min-w-[520px] text-left text-xs border-collapse">
               <thead>
@@ -3396,7 +3425,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {members.map(member => {
+                {displayedMembers.map(member => {
                   const state = selectedAthletes[member.id] || { weaponId: '', checked: false };
                   const athleteWeapons = clubWeapons.filter(w => w.ownerId === member.id);
                   return (
@@ -3433,6 +3462,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
               </tbody>
             </table>
           </div>
+          )}
           <div className="pt-2 flex justify-end">
             <button onClick={handleSubmit} disabled={saving}
               className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-350 text-white text-xs px-6 py-3 rounded-xl font-bold transition flex items-center gap-1.5 shadow-md cursor-pointer">
