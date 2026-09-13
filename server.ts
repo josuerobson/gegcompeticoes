@@ -1146,9 +1146,13 @@ app.delete('/api/idsc/stages/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// GET /api/idsc/registrations?courseId= — inscrições de uma pista, com atleta/arma/resultado
+// GET /api/idsc/registrations?courseId=&clubId= — inscrições de uma pista, com atleta/arma/resultado.
+// clubId é opcional: quando informado, restringe a LISTA retornada àquele clube, mas a
+// posição no ranking (posicao) continua calculada sobre todos os inscritos da pista —
+// usado para escopar a tela de "Cadastrar Resultados" de Gerenciamento Clube sem
+// deixar um clube filiado editar o resultado de atletas de outro clube.
 app.get('/api/idsc/registrations', async (req, res) => {
-  const { courseId } = req.query;
+  const { courseId, clubId } = req.query;
   if (!courseId) return res.status(400).json({ error: 'courseId é obrigatório.' });
   try {
     const result = await pool.query(
@@ -1179,8 +1183,9 @@ app.get('/api/idsc/registrations', async (req, res) => {
     completed.sort((a, b) => (a.result!.totalTimeSeconds! - b.result!.totalTimeSeconds!));
     const positionByRegId = new Map(completed.map((r, idx) => [r.id, idx + 1]));
     const enriched = registrations.map(r => ({ ...r, posicao: positionByRegId.get(r.id) || null }));
+    const filtered = clubId ? enriched.filter(r => r.clubId === clubId) : enriched;
 
-    res.json({ idscRegistrations: enriched });
+    res.json({ idscRegistrations: filtered });
   } catch (err) {
     console.error('Fetch idsc registrations error:', err);
     res.status(500).json({ error: 'Erro ao buscar inscrições IDSC.' });

@@ -3591,7 +3591,19 @@ type IdscEnrichedRegistration = IdscRegistration & {
   result: IdscResult | null; posicao: number | null;
 };
 
-function IdscResultadosPanel({ currentUser }: { currentUser: User | null }) {
+interface IdscResultadosPanelProps {
+  currentUser: User | null;
+  // Somente leitura: mostra a tabela de ranking (usado em "Resultados" de
+  // Gerenciamento Clube), sem abrir o modal de lançamento de nota.
+  readOnly?: boolean;
+  // Restringe a lista de inscrições exibidas/editáveis a um único clube — usado
+  // ao embutir este painel em "Cadastrar Resultados" de Gerenciamento Clube,
+  // para que um clube filiado não veja/edite o resultado de outro clube. A
+  // posição no ranking continua calculada sobre todos os inscritos da pista.
+  scopeClubId?: string;
+}
+
+function IdscResultadosPanel({ currentUser, readOnly = false, scopeClubId }: IdscResultadosPanelProps) {
   const [championships, setChampionships] = React.useState<IdscChampionship[]>([]);
   const [championshipId, setChampionshipId] = React.useState('');
   const [stages, setStages] = React.useState<IdscStage[]>([]);
@@ -3626,12 +3638,13 @@ function IdscResultadosPanel({ currentUser }: { currentUser: User | null }) {
   const fetchRegistrations = React.useCallback(() => {
     if (!courseId) { setRegistrations([]); return; }
     setLoadingRegs(true);
-    fetch(`/api/idsc/registrations?courseId=${courseId}`, { headers: { 'x-user-id': currentUser?.id || '' } })
+    const url = `/api/idsc/registrations?courseId=${courseId}${scopeClubId ? `&clubId=${scopeClubId}` : ''}`;
+    fetch(url, { headers: { 'x-user-id': currentUser?.id || '' } })
       .then(r => r.json())
       .then(d => setRegistrations(d.idscRegistrations || []))
       .catch(() => setRegistrations([]))
       .finally(() => setLoadingRegs(false));
-  }, [courseId, currentUser]);
+  }, [courseId, currentUser, scopeClubId]);
 
   React.useEffect(() => { fetchRegistrations(); }, [fetchRegistrations]);
 
@@ -3743,6 +3756,38 @@ function IdscResultadosPanel({ currentUser }: { currentUser: User | null }) {
         <p className="text-xs text-slate-400 text-center py-6">Selecione campeonato, etapa e pista para ver os inscritos.</p>
       ) : registrations.length === 0 ? (
         <div className="text-center py-8 px-4 text-slate-500 text-xs font-semibold bg-slate-50 rounded-2xl border border-dashed border-slate-200">Nenhuma inscrição nesta pista ainda.</div>
+      ) : readOnly ? (
+        <div className="overflow-x-auto border border-slate-200 rounded-xl">
+          <table className="w-full min-w-[560px] text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
+                <th className="py-2.5 px-3 whitespace-nowrap">Pos.</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Atleta</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Clube</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Arma</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Resultado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-slate-700">
+              {[...registrations]
+                .sort((a, b) => (a.posicao ?? Infinity) - (b.posicao ?? Infinity))
+                .map(r => {
+                  const st = statusLabel(r);
+                  return (
+                    <tr key={r.id}>
+                      <td className="py-2.5 px-3 font-mono font-bold text-slate-500">{r.posicao ? `${r.posicao}º` : '—'}</td>
+                      <td className="py-2.5 px-3 font-bold text-slate-800">{r.athleteName || 'Atleta'}</td>
+                      <td className="py-2.5 px-3 text-slate-500">{r.clubName || '—'}</td>
+                      <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px]">{r.weaponModel} {r.weaponCaliber}</td>
+                      <td className="py-2.5 px-3">
+                        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border ${st.cls}`}>{st.text}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
           {registrations.map(r => {
@@ -3759,7 +3804,7 @@ function IdscResultadosPanel({ currentUser }: { currentUser: User | null }) {
         </div>
       )}
 
-      {selectedReg && selectedCourse && (
+      {!readOnly && selectedReg && selectedCourse && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
           <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-2xl shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center px-5 pt-5 shrink-0">
@@ -6086,13 +6131,26 @@ export default function AdminPanel({
     }
   };
 
-  // Main tabs: 'clube' | 'plataforma' | 'master' — a inscrição IDSC vive em
-  // "Gerenciamento Plataforma", diferente da inscrição normal (Gerenciamento Clube).
-  const [mainTab, setMainTab] = useState<'clube' | 'plataforma' | 'master'>(() => clubBulkRegistrationPrefill?.mode === 'idsc' ? 'plataforma' : 'clube');
+  // Clubes filiados (não-premium, com clube-pai) só enxergam o próprio estande —
+  // "Gerenciamento Plataforma" é reservado ao master_admin e a clubes premium
+  // (donos do próprio tenant). master_admin sempre tem acesso.
+  const currentUserClub = clubs.find(c => c.id === currentUser?.clubId);
+  const isAffiliatedChildClub = Boolean(currentUserClub?.parentClubId) && !currentUserClub?.isPremium;
+  const canSeePlataforma = currentUser?.role === 'master_admin' || !isAffiliatedChildClub;
+
+  // Main tabs: 'clube' | 'plataforma' | 'master'
+  const [mainTab, setMainTab] = useState<'clube' | 'plataforma' | 'master'>('clube');
 
   // Sidebar Menu selection for Clube — abre direto em "Inscrição Clube" quando
-  // chegamos aqui redirecionados de uma tentativa de inscrição de conta de clube.
-  const [clubeMenu, setClubeMenu] = useState<string>(() => clubBulkRegistrationPrefill && clubBulkRegistrationPrefill.mode !== 'idsc' ? 'inscricao_clube' : 'campeonatos');
+  // chegamos aqui redirecionados de uma tentativa de inscrição de conta de clube
+  // (individual, multi ou IDSC — todas vivem em Gerenciamento Clube).
+  const [clubeMenu, setClubeMenu] = useState<string>(() => clubBulkRegistrationPrefill ? 'inscricao_clube' : 'campeonatos');
+  // Sub-aba interna de "Inscrição Clube": Campeonatos (individual/multi) ou IDSC.
+  const [clubeInscricaoTab, setClubeInscricaoTab] = useState<'campeonatos' | 'idsc'>(() => clubBulkRegistrationPrefill?.mode === 'idsc' ? 'idsc' : 'campeonatos');
+  // Sub-aba interna de "Resultados" (visualização): Campeonatos ou IDSC.
+  const [clubeResultadosTab, setClubeResultadosTab] = useState<'campeonatos' | 'idsc'>('campeonatos');
+  // Sub-aba interna de "Cadastrar Resultados" (lançamento): Campeonatos ou IDSC.
+  const [clubeCadastrarResultadosTab, setClubeCadastrarResultadosTab] = useState<'campeonatos' | 'idsc'>('campeonatos');
 
   // Captura o prefill recebido no mount (a navegação sempre remonta o AdminPanel,
   // já que ele só é renderizado quando a aba "admin" está ativa) e avisa o pai
@@ -6123,9 +6181,8 @@ export default function AdminPanel({
     setSelectedMedalFilter('geral');
   }, [selectedResultChampId, selectedResultStageId, selectedResultModalityId]);
 
-  // Sidebar Menu selection for Plataforma — abre direto em "IDSC > Inscrição" quando
-  // chegamos aqui redirecionados de uma tentativa de inscrição IDSC de conta de clube.
-  const [plataformaMenu, setPlataformaMenu] = useState<string>(() => clubBulkRegistrationPrefill?.mode === 'idsc' ? 'idsc_inscricao' : 'novo_campeonato');
+  // Sidebar Menu selection for Plataforma
+  const [plataformaMenu, setPlataformaMenu] = useState<string>('novo_campeonato');
 
   useEffect(() => {
     if (plataformaMenu !== 'novo_campeonato') {
@@ -6275,7 +6332,7 @@ export default function AdminPanel({
     clubes: true,
     campeonatos: true,
     adm: false,
-    idsc: clubBulkRegistrationPrefill?.mode === 'idsc',
+    idsc: false,
     site: false,
     integracoes: true
   });
@@ -7174,16 +7231,36 @@ export default function AdminPanel({
 
       case 'resultados':
         return (
-          <CompetitionResultsViewer
-            championships={championships}
-            stages={stages}
-            modalities={modalities}
-            registrations={registrations}
-            stageScores={stageScores}
-            clubs={clubs}
-            users={users}
-            currentUser={currentUser}
-          />
+          <div className="space-y-4">
+            <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
+              <button
+                onClick={() => setClubeResultadosTab('campeonatos')}
+                className={`px-4 py-2 text-xs font-semibold rounded-lg transition duration-200 cursor-pointer ${clubeResultadosTab === 'campeonatos' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                Campeonatos
+              </button>
+              <button
+                onClick={() => setClubeResultadosTab('idsc')}
+                className={`px-4 py-2 text-xs font-semibold rounded-lg transition duration-200 cursor-pointer ${clubeResultadosTab === 'idsc' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                IDSC
+              </button>
+            </div>
+            {clubeResultadosTab === 'idsc' ? (
+              <IdscResultadosPanel currentUser={currentUser} readOnly />
+            ) : (
+              <CompetitionResultsViewer
+                championships={championships}
+                stages={stages}
+                modalities={modalities}
+                registrations={registrations}
+                stageScores={stageScores}
+                clubs={clubs}
+                users={users}
+                currentUser={currentUser}
+              />
+            )}
+          </div>
         );
 
       case 'financeiro':
@@ -7256,26 +7333,74 @@ export default function AdminPanel({
         );
 
       case 'cadastrar_resultados':
-        return <CadastrarResultadosPanel
-          championships={championships}
-          stages={stages}
-          modalities={modalities}
-          currentUser={currentUser}
-          onRecordScore={onRecordScore}
-          onRefreshData={onRefreshData}
-          isPlataformaScope={false}
-        />;
+        return (
+          <div className="space-y-4">
+            <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
+              <button
+                onClick={() => setClubeCadastrarResultadosTab('campeonatos')}
+                className={`px-4 py-2 text-xs font-semibold rounded-lg transition duration-200 cursor-pointer ${clubeCadastrarResultadosTab === 'campeonatos' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                Campeonatos
+              </button>
+              <button
+                onClick={() => setClubeCadastrarResultadosTab('idsc')}
+                className={`px-4 py-2 text-xs font-semibold rounded-lg transition duration-200 cursor-pointer ${clubeCadastrarResultadosTab === 'idsc' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                IDSC
+              </button>
+            </div>
+            {clubeCadastrarResultadosTab === 'idsc' ? (
+              <IdscResultadosPanel currentUser={currentUser} scopeClubId={currentUser?.clubId} />
+            ) : (
+              <CadastrarResultadosPanel
+                championships={championships}
+                stages={stages}
+                modalities={modalities}
+                currentUser={currentUser}
+                onRecordScore={onRecordScore}
+                onRefreshData={onRefreshData}
+                isPlataformaScope={false}
+              />
+            )}
+          </div>
+        );
 
       case 'inscricao_clube':
-        return <InscricaoClubePanel
-          championships={championships}
-          stages={stages}
-          modalities={modalities}
-          currentUser={currentUser}
-          multiChampionships={multiChampionships}
-          initialPrefill={pendingClubPrefill}
-          onPrefillApplied={() => setPendingClubPrefill(null)}
-        />;
+        return (
+          <div className="space-y-4">
+            <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
+              <button
+                onClick={() => setClubeInscricaoTab('campeonatos')}
+                className={`px-4 py-2 text-xs font-semibold rounded-lg transition duration-200 cursor-pointer ${clubeInscricaoTab === 'campeonatos' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                Campeonatos
+              </button>
+              <button
+                onClick={() => setClubeInscricaoTab('idsc')}
+                className={`px-4 py-2 text-xs font-semibold rounded-lg transition duration-200 cursor-pointer ${clubeInscricaoTab === 'idsc' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                IDSC
+              </button>
+            </div>
+            {clubeInscricaoTab === 'idsc' ? (
+              <IdscInscricaoPanel
+                currentUser={currentUser}
+                initialPrefill={pendingClubPrefill}
+                onPrefillApplied={() => setPendingClubPrefill(null)}
+              />
+            ) : (
+              <InscricaoClubePanel
+                championships={championships}
+                stages={stages}
+                modalities={modalities}
+                currentUser={currentUser}
+                multiChampionships={multiChampionships}
+                initialPrefill={pendingClubPrefill}
+                onPrefillApplied={() => setPendingClubPrefill(null)}
+              />
+            )}
+          </div>
+        );
 
 
       case 'certificados':
@@ -10515,12 +10640,14 @@ export default function AdminPanel({
         >
           Gerenciamento Clube
         </button>
-        <button
-          onClick={() => setMainTab('plataforma')}
-          className={`px-4 py-2.5 text-xs font-semibold rounded-lg transition duration-200 cursor-pointer ${mainTab === 'plataforma' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-655 hover:text-slate-900'}`}
-        >
-          Gerenciamento Plataforma
-        </button>
+        {canSeePlataforma && (
+          <button
+            onClick={() => setMainTab('plataforma')}
+            className={`px-4 py-2.5 text-xs font-semibold rounded-lg transition duration-200 cursor-pointer ${mainTab === 'plataforma' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-655 hover:text-slate-900'}`}
+          >
+            Gerenciamento Plataforma
+          </button>
+        )}
         {currentUser?.role === 'master_admin' && (
           <button
             onClick={() => setMainTab('master')}
@@ -10570,7 +10697,7 @@ export default function AdminPanel({
             </div>
           )}
 
-          {mainTab === 'plataforma' && (
+          {mainTab === 'plataforma' && canSeePlataforma && (
             /* ==================================================== */
             /* PLATAFORMA SIDEBAR COLLAPSIBLE ACCORDIONS            */
             /* ==================================================== */
@@ -10726,7 +10853,7 @@ export default function AdminPanel({
         {/* Dynamic content viewport column */}
         <div ref={contentViewportRef} className="md:col-span-3 space-y-6 scroll-mt-4">
           {mainTab === 'clube' && renderClubeContent()}
-          {mainTab === 'plataforma' && renderPlataformaContent()}
+          {mainTab === 'plataforma' && canSeePlataforma && renderPlataformaContent()}
           {mainTab === 'master' && currentUser?.role === 'master_admin' && renderMasterContent()}
         </div>
 
