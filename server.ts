@@ -6336,6 +6336,35 @@ app.delete('/api/trainings/:id', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/admin/fix-legacy-training-dates — endpoint de uso único (master_admin)
+// para corrigir 5 registros de trainings importados do legado cujo ano ficou
+// corrompido (ex.: "0222-01-13" em vez de "2022-01-13", "1923-02-07" em vez de
+// "2023-02-07"). Verificado manualmente contra a data plausível de cada sessão.
+// Remover após a execução única em produção.
+app.post('/api/admin/fix-legacy-training-dates', requireMasterAdmin, async (req, res) => {
+  const fixes: { id: string; dateTime: string }[] = [
+    { id: 'training_legacy_187', dateTime: '2022-01-13T00:00:00' },
+    { id: 'training_legacy_483', dateTime: '2022-06-11T00:00:00' },
+    { id: 'training_legacy_569', dateTime: '2020-06-22T00:00:00' },
+    { id: 'training_legacy_1056', dateTime: '2023-02-07T00:00:00' },
+    { id: 'training_legacy_4317', dateTime: '2024-10-22T18:00:00' },
+  ];
+  try {
+    const results = [];
+    for (const fix of fixes) {
+      const r = await pool.query(
+        `UPDATE trainings SET date_time = $1 WHERE id = $2 RETURNING id, date_time`,
+        [fix.dateTime, fix.id]
+      );
+      results.push(r.rows[0] || { id: fix.id, error: 'not found' });
+    }
+    res.json({ success: true, results });
+  } catch (err) {
+    console.error('Fix legacy training dates error:', err);
+    res.status(500).json({ error: 'Erro ao corrigir datas de treinamentos legados.' });
+  }
+});
+
 // ==========================================
 // HOME BANNERS API (Gerenciamento de Banners da Home)
 // ==========================================
