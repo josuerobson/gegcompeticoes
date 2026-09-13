@@ -8,7 +8,7 @@ import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon
+  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -75,6 +75,9 @@ interface AdminPanelProps {
   multiChampionships?: MultiChampionship[];
   clubBulkRegistrationPrefill?: ClubBulkRegistrationPrefill | null;
   onConsumeClubBulkRegistrationPrefill?: () => void;
+  // "Entrar como" — troca a sessão local para o usuário informado (o atleta,
+  // ou o club_admin de um clube), preservando a conta original para retorno.
+  onLoginAs?: (userId: string) => void;
 }
 
 // Labeled input matching this panel's existing form style (see the
@@ -5928,7 +5931,8 @@ export default function AdminPanel({
   onUpdateClubSubdomain,
   multiChampionships = [],
   clubBulkRegistrationPrefill,
-  onConsumeClubBulkRegistrationPrefill
+  onConsumeClubBulkRegistrationPrefill,
+  onLoginAs
 }: AdminPanelProps) {
   const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
 
@@ -6856,6 +6860,26 @@ export default function AdminPanel({
     if (admin) {
       setAccessFullName(admin.fullName || club.responsibleName || '');
       setAccessEmail(admin.email || club.email || '');
+    }
+  };
+
+  // "Entrar como Clube" — loga como o usuário club_admin daquele clube, para
+  // que o master consiga fazer ajustes exatamente como o clube veria.
+  const [loginAsClubLoadingId, setLoginAsClubLoadingId] = useState<string | null>(null);
+  const handleLoginAsClub = async (club: Club) => {
+    if (!onLoginAs) return;
+    setLoginAsClubLoadingId(club.id);
+    try {
+      const admin = onGetClubAdmin ? await onGetClubAdmin(club.id) : users.find(u => u.clubId === club.id && u.role === 'club_admin');
+      if (!admin) {
+        alert(`O clube "${club.name}" ainda não possui um usuário administrador configurado.`);
+        return;
+      }
+      if (window.confirm(`Entrar como o clube "${club.name}" (usuário ${admin.fullName})? Você pode voltar para sua conta a qualquer momento pela barra que vai aparecer no topo.`)) {
+        onLoginAs(admin.id);
+      }
+    } finally {
+      setLoginAsClubLoadingId(null);
     }
   };
 
@@ -8277,6 +8301,17 @@ export default function AdminPanel({
                             Gerenciar Acesso
                           </button>
                         )}
+                        {onLoginAs && (
+                          <button
+                            onClick={() => handleLoginAsClub(club)}
+                            disabled={loginAsClubLoadingId === club.id}
+                            className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer shadow-2xs disabled:opacity-60"
+                            title="Entrar no sistema como este clube"
+                          >
+                            <LogIn className="w-3.5 h-3.5" />
+                            {loginAsClubLoadingId === club.id ? 'Entrando...' : 'Entrar como Clube'}
+                          </button>
+                        )}
                         <button
                           onClick={() => startEditingClub(club)}
                           className="flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer shadow-2xs"
@@ -8458,13 +8493,29 @@ export default function AdminPanel({
                           <h4 className="font-bold text-slate-900 text-xs">{u.fullName}</h4>
                           <p className="text-[11px] text-slate-500">CPF: {u.cpf || 'N/I'} • Clube: {club?.name || 'Não vinculado'}</p>
                         </div>
-                        <button
-                          onClick={() => startEditingAthlete(u)}
-                          className="flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-[11px] px-3 py-1.5 rounded-lg transition cursor-pointer shrink-0"
-                        >
-                          <Pencil className="w-3 h-3 text-blue-600" />
-                          Editar
-                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {onLoginAs && (
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Entrar como o atleta "${u.fullName}"? Você pode voltar para sua conta a qualquer momento pela barra que vai aparecer no topo.`)) {
+                                  onLoginAs(u.id);
+                                }
+                              }}
+                              className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold text-[11px] px-3 py-1.5 rounded-lg transition cursor-pointer"
+                              title="Entrar no sistema como este atleta"
+                            >
+                              <LogIn className="w-3 h-3" />
+                              Entrar como Atleta
+                            </button>
+                          )}
+                          <button
+                            onClick={() => startEditingAthlete(u)}
+                            className="flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-[11px] px-3 py-1.5 rounded-lg transition cursor-pointer"
+                          >
+                            <Pencil className="w-3 h-3 text-blue-600" />
+                            Editar
+                          </button>
+                        </div>
                       </div>
                     );
                   })}

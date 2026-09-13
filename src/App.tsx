@@ -141,6 +141,32 @@ export default function App() {
 
   // Global App States
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // "Entrar como" (impersonação) — gg_impersonator_id/name guardam quem é o admin
+  // real, para permitir voltar. Só existe enquanto a sessão local aponta para
+  // outro usuário; sobrevive a reloads, mas nunca é aninhado (não sobrescreve
+  // um impersonador já salvo).
+  const [impersonatorInfo] = useState<{ id: string; name: string } | null>(() => {
+    const id = localStorage.getItem('gg_impersonator_id');
+    if (!id) return null;
+    return { id, name: localStorage.getItem('gg_impersonator_name') || 'Administrador' };
+  });
+  const handleLoginAs = (userId: string) => {
+    if (!currentUser || userId === currentUser.id) return;
+    if (!localStorage.getItem('gg_impersonator_id')) {
+      localStorage.setItem('gg_impersonator_id', currentUser.id);
+      localStorage.setItem('gg_impersonator_name', currentUser.fullName || currentUser.username || 'Administrador');
+    }
+    localStorage.setItem('gg_user_id', userId);
+    window.location.reload();
+  };
+  const handleReturnToAdmin = () => {
+    const id = localStorage.getItem('gg_impersonator_id');
+    if (!id) return;
+    localStorage.setItem('gg_user_id', id);
+    localStorage.removeItem('gg_impersonator_id');
+    localStorage.removeItem('gg_impersonator_name');
+    window.location.reload();
+  };
   const [users, setUsers] = useState<User[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [championships, setChampionships] = useState<Championship[]>([]);
@@ -2273,7 +2299,20 @@ export default function App() {
   /* ==================================================== */
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      
+
+      {/* Impersonação ("Entrar como") — sempre visível enquanto durar */}
+      {impersonatorInfo && (
+        <div className="sticky top-0 z-50 bg-amber-500 text-white py-2 px-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] sm:text-xs font-bold text-center">
+          <span>🔧 Modo suporte: você está logado como <strong>{currentUser?.fullName}</strong> (entrou como {impersonatorInfo.name})</span>
+          <button
+            onClick={handleReturnToAdmin}
+            className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg transition cursor-pointer shrink-0"
+          >
+            Voltar para minha conta
+          </button>
+        </div>
+      )}
+
       {/* Dynamic Sync Status bar */}
       {isSyncing && (
         <div className="fixed top-0 left-0 right-0 z-50 bg-blue-600 text-white py-1 px-4 text-center text-[10px] font-bold tracking-widest uppercase flex items-center justify-center gap-1">
@@ -2476,6 +2515,7 @@ export default function App() {
               multiChampionships={multiChampionships}
               clubBulkRegistrationPrefill={clubBulkRegistrationPrefill}
               onConsumeClubBulkRegistrationPrefill={() => setClubBulkRegistrationPrefill(null)}
+              onLoginAs={handleLoginAs}
             />
             </Suspense>
           )}
