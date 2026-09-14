@@ -4578,8 +4578,8 @@ export default function MemberProfile({
       {/* FULL SCREEN WEB PRINT VIEW OVERLAY */}
       <AnimatePresence>
         {printMode && printData && (
-          <div className="fixed inset-0 z-[9999] bg-slate-900 overflow-y-auto p-4 md:p-8 flex flex-col items-center justify-start print:p-0 print:bg-white print:static print:block print:overflow-visible print:h-auto print:w-auto select-none">
-            
+          <div className="absolute inset-x-0 top-0 z-[9999] bg-slate-900 p-4 md:p-8 flex flex-col items-center justify-start print:p-0 print:bg-white print:static print:block select-none">
+
             {/* Control bar - Hidden during paper print */}
             <div className="no-print w-full max-w-4xl bg-slate-800 text-white rounded-xl p-4 mb-6 flex justify-between items-center shadow-lg border border-slate-700">
               <div className="flex items-center gap-2">
@@ -4605,8 +4605,8 @@ export default function MemberProfile({
 
             {/* Document sheet */}
             <div
-              style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
-              className={`print-content ${printMode.includes('card') ? 'max-w-[360px] min-h-auto p-6 rounded-2xl shadow-2xl border border-slate-200 flex flex-col gap-6 items-center justify-center' : 'max-w-4xl min-h-[297mm] p-[20mm] rounded-2xl shadow-2xl flex flex-col justify-between border border-slate-150'} font-sans relative print:shadow-none print:rounded-none print:p-0 print:border-none print:w-full`}
+              style={printMode === 'declaration_habitualidade' ? { color: '#0f172a' } : { backgroundColor: '#ffffff', color: '#0f172a' }}
+              className={`print-content ${printMode.includes('card') ? 'max-w-[360px] min-h-auto p-6 rounded-2xl shadow-2xl border border-slate-200 flex flex-col gap-6 items-center justify-center' : printMode === 'declaration_habitualidade' ? 'max-w-4xl p-[20mm] flex flex-col justify-between gap-3' : 'max-w-4xl min-h-[297mm] p-[20mm] rounded-none shadow-none flex flex-col justify-between border border-slate-150'} font-sans relative print:shadow-none print:rounded-none print:p-0 print:border-none print:w-full`}
             >
               
               {/* CERTIFICATE LAYOUT */}
@@ -4845,109 +4845,134 @@ export default function MemberProfile({
               )}
 
               {/* DECLARAÇÃO DE HABITUALIDADE (TABELAS CONFORME PADRÃO DO EXÉRCITO) */}
-              {printMode === 'declaration_habitualidade' && (
-                <div className="w-full flex-1 flex flex-col justify-between min-h-[250mm] font-sans p-4 text-slate-900">
-                  {/* Timbre Header */}
-                  <div className="text-center border-b-2 border-slate-900 pb-3">
-                    <h2 className="font-display font-extrabold text-xl text-slate-900 tracking-wider">G&G CLUBE DE TIRO E COMPETIÇÕES</h2>
-                    <p className="text-[10px] font-sans text-slate-600 uppercase tracking-widest mt-0.5">
-                      Filiado ao SFPC/11ª RM - Registro de Entidade nº 9410 - CNPJ: 45.981.042/0001-12
-                    </p>
-                  </div>
+              {printMode === 'declaration_habitualidade' && (() => {
+                // Um atleta com centenas de treinos/competições gera um documento de
+                // dezenas de milhares de pixels de altura, o que pode estourar o limite
+                // de composição/rasterização do navegador e sumir (tela preta/em branco)
+                // ao rolar. Cada "página" usa content-visibility:auto para só ser
+                // renderizada quando estiver perto da tela, mantendo cada pedaço leve
+                // independente da altura total do documento (forçado a visível na
+                // impressão, já que aí o navegador precisa desenhar tudo de uma vez).
+                const CHUNK_SIZE = 15;
+                const activities: any[] = printData.activities || [];
+                const chunks: any[][] = [];
+                for (let i = 0; i < activities.length; i += CHUNK_SIZE) {
+                  chunks.push(activities.slice(i, i + CHUNK_SIZE));
+                }
+                return (
+                  <>
+                    {/* Timbre Header + Intro */}
+                    <div className="w-full bg-white font-sans text-slate-900 p-4">
+                      <div className="text-center border-b-2 border-slate-900 pb-3">
+                        <h2 className="font-display font-extrabold text-xl text-slate-900 tracking-wider">G&G CLUBE DE TIRO E COMPETIÇÕES</h2>
+                        <p className="text-[10px] font-sans text-slate-600 uppercase tracking-widest mt-0.5">
+                          Filiado ao SFPC/11ª RM - Registro de Entidade nº 9410 - CNPJ: 45.981.042/0001-12
+                        </p>
+                      </div>
 
-                  {/* Title */}
-                  <div className="text-center my-4">
-                    <h1 className="text-base font-bold uppercase underline tracking-wider text-slate-900">
-                      Declaração de Habitualidade e Treinamentos
-                    </h1>
-                  </div>
+                      <div className="text-center my-4">
+                        <h1 className="text-base font-bold uppercase underline tracking-wider text-slate-900">
+                          Declaração de Habitualidade e Treinamentos
+                        </h1>
+                      </div>
 
-                  {/* Intro */}
-                  <div className="text-justify text-xs text-slate-800 leading-relaxed mb-4 px-2">
-                    <p>
-                      Declaramos, sob as penas da lei e em cumprimento às diretrizes legais estabelecidas pelo Exército Brasileiro para fins de manutenção, revalidação ou aquisição de armamentos desportivos, que o(a) atleta <strong>{printData.fullName}</strong>, titular do CR nº <strong>{printData.crNumber}</strong>, realizou treinamentos e/ou participou de etapas oficiais de competição neste estabelecimento no período de <strong>{printData.startDate?.split('-').reverse().join('/')}</strong> a <strong>{printData.endDate?.split('-').reverse().join('/')}</strong>, conforme os registros oficiais abaixo detalhados:
-                    </p>
-                  </div>
+                      <div className="text-justify text-xs text-slate-800 leading-relaxed px-2">
+                        <p>
+                          Declaramos, sob as penas da lei e em cumprimento às diretrizes legais estabelecidas pelo Exército Brasileiro para fins de manutenção, revalidação ou aquisição de armamentos desportivos, que o(a) atleta <strong>{printData.fullName}</strong>, titular do CR nº <strong>{printData.crNumber}</strong>, realizou treinamentos e/ou participou de etapas oficiais de competição neste estabelecimento no período de <strong>{printData.startDate?.split('-').reverse().join('/')}</strong> a <strong>{printData.endDate?.split('-').reverse().join('/')}</strong>, conforme os registros oficiais abaixo detalhados:
+                        </p>
+                      </div>
+                    </div>
 
-                  {/* Individual Event Tables matching the user's screenshot layout */}
-                  <div className="flex-1 space-y-4 px-1">
-                    {printData.activities.map((item: any, idx: number) => (
-                      <div key={item.id || idx} className="border border-slate-900 text-xs overflow-hidden page-break-inside-avoid shadow-xs">
-                        <table className="w-full border-collapse text-xs text-slate-900">
-                          <tbody>
-                            {/* Row 1: Nome do Evento */}
-                            <tr className="border-b border-slate-900 bg-slate-50">
-                              <td colSpan={6} className="px-3 py-1.5 font-bold uppercase text-left text-[11px]">
-                                Nome do evento: {item.eventName}
-                              </td>
-                            </tr>
+                    {/* Individual Event Tables, paginadas em blocos independentes */}
+                    {chunks.map((chunk, chunkIdx) => (
+                      <div
+                        key={chunkIdx}
+                        className="w-full bg-white space-y-4 p-4 print:[content-visibility:visible]"
+                        style={{ contentVisibility: 'auto', containIntrinsicSize: '0 2800px' } as React.CSSProperties}
+                      >
+                        {chunk.map((item: any, i: number) => {
+                          const idx = chunkIdx * CHUNK_SIZE + i;
+                          return (
+                            <div key={item.id || idx} className="border border-slate-900 text-xs overflow-hidden page-break-inside-avoid shadow-xs">
+                              <table className="w-full border-collapse text-xs text-slate-900">
+                                <tbody>
+                                  {/* Row 1: Nome do Evento */}
+                                  <tr className="border-b border-slate-900 bg-slate-50">
+                                    <td colSpan={6} className="px-3 py-1.5 font-bold uppercase text-left text-[11px]">
+                                      Nome do evento: {item.eventName}
+                                    </td>
+                                  </tr>
 
-                            {/* Row 2: Arma Utilizada */}
-                            <tr className="border-b border-slate-900">
-                              <td colSpan={6} className="px-3 py-1.5 font-medium text-[10.5px]">
-                                Arma utilizada: {item.weaponClass} - {item.model} - N° {item.weaponNumber} - {item.manufacturer} - Calibre : {item.caliber} - {item.permissionStatus}
-                              </td>
-                            </tr>
+                                  {/* Row 2: Arma Utilizada */}
+                                  <tr className="border-b border-slate-900">
+                                    <td colSpan={6} className="px-3 py-1.5 font-medium text-[10.5px]">
+                                      Arma utilizada: {item.weaponClass} - {item.model} - N° {item.weaponNumber} - {item.manufacturer} - Calibre : {item.caliber} - {item.permissionStatus}
+                                    </td>
+                                  </tr>
 
-                            {/* Row 3: Table Header */}
-                            <tr className="bg-slate-100 font-bold text-[10px] text-center border-b border-slate-900 uppercase tracking-wider">
-                              <td className="border-r border-slate-900 py-1.5 px-2 w-14">Ordem</td>
-                              <td className="border-r border-slate-900 py-1.5 px-2 w-28">Data</td>
-                              <td className="border-r border-slate-900 py-1.5 px-2 w-20">Hora</td>
-                              <td className="border-r border-slate-900 py-1.5 px-2 w-32">Sigma</td>
-                              <td className="border-r border-slate-900 py-1.5 px-2 w-28">Qtd Munições</td>
-                              <td className="py-1.5 px-2">Tipo de Evento</td>
-                            </tr>
+                                  {/* Row 3: Table Header */}
+                                  <tr className="bg-slate-100 font-bold text-[10px] text-center border-b border-slate-900 uppercase tracking-wider">
+                                    <td className="border-r border-slate-900 py-1.5 px-2 w-14">Ordem</td>
+                                    <td className="border-r border-slate-900 py-1.5 px-2 w-28">Data</td>
+                                    <td className="border-r border-slate-900 py-1.5 px-2 w-20">Hora</td>
+                                    <td className="border-r border-slate-900 py-1.5 px-2 w-32">Sigma</td>
+                                    <td className="border-r border-slate-900 py-1.5 px-2 w-28">Qtd Munições</td>
+                                    <td className="py-1.5 px-2">Tipo de Evento</td>
+                                  </tr>
 
-                            {/* Row 4: Data Row */}
-                            <tr className="text-center font-mono text-[11px] border-b border-slate-900">
-                              <td className="border-r border-slate-900 py-2 px-2 font-bold">{String(idx + 1).padStart(2, '0')}</td>
-                              <td className="border-r border-slate-900 py-2 px-2">{item.dateFormatted}</td>
-                              <td className="border-r border-slate-900 py-2 px-2">{item.timeFormatted}</td>
-                              <td className="border-r border-slate-900 py-2 px-2">{item.sigma}</td>
-                              <td className="border-r border-slate-900 py-2 px-2 font-bold">{item.shotsCount}</td>
-                              <td className="py-2 px-2 font-sans font-semibold text-slate-800">{item.eventType}</td>
-                            </tr>
+                                  {/* Row 4: Data Row */}
+                                  <tr className="text-center font-mono text-[11px] border-b border-slate-900">
+                                    <td className="border-r border-slate-900 py-2 px-2 font-bold">{String(idx + 1).padStart(2, '0')}</td>
+                                    <td className="border-r border-slate-900 py-2 px-2">{item.dateFormatted}</td>
+                                    <td className="border-r border-slate-900 py-2 px-2">{item.timeFormatted}</td>
+                                    <td className="border-r border-slate-900 py-2 px-2">{item.sigma}</td>
+                                    <td className="border-r border-slate-900 py-2 px-2 font-bold">{item.shotsCount}</td>
+                                    <td className="py-2 px-2 font-sans font-semibold text-slate-800">{item.eventType}</td>
+                                  </tr>
 
-                            {/* Row 5: Arma & Munições ownership */}
-                            <tr className="border-b border-slate-900 text-[10.5px]">
-                              <td colSpan={3} className="border-r border-slate-900 px-3 py-1.5 font-medium">
-                                Arma: {item.weaponOwnerText}
-                              </td>
-                              <td colSpan={3} className="px-3 py-1.5 font-medium">
-                                Munições: {item.ammoOwnerText}
-                              </td>
-                            </tr>
+                                  {/* Row 5: Arma & Munições ownership */}
+                                  <tr className="border-b border-slate-900 text-[10.5px]">
+                                    <td colSpan={3} className="border-r border-slate-900 px-3 py-1.5 font-medium">
+                                      Arma: {item.weaponOwnerText}
+                                    </td>
+                                    <td colSpan={3} className="px-3 py-1.5 font-medium">
+                                      Munições: {item.ammoOwnerText}
+                                    </td>
+                                  </tr>
 
-                            {/* Row 6: Evento Footer */}
-                            <tr>
-                              <td colSpan={6} className="px-3 py-1.5 font-medium uppercase text-[10.5px]">
-                                Evento: {item.eventName}
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
+                                  {/* Row 6: Evento Footer */}
+                                  <tr>
+                                    <td colSpan={6} className="px-3 py-1.5 font-medium uppercase text-[10.5px]">
+                                      Evento: {item.eventName}
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          );
+                        })}
                       </div>
                     ))}
-                  </div>
 
-                  {/* Signatures & Footer */}
-                  <div className="mt-8 space-y-8">
-                    <div className="text-center text-slate-800 text-[11px]">
-                      <p>Atestamos a veracidade e exatidão dos registros de habitualidade acima especificados.</p>
-                      <p className="mt-1">Brasília - DF, {new Date(printData.date).toLocaleDateString('pt-BR')}.</p>
+                    {/* Signatures & Footer */}
+                    <div className="w-full bg-white p-4">
+                      <div className="mt-4 space-y-8">
+                        <div className="text-center text-slate-800 text-[11px]">
+                          <p>Atestamos a veracidade e exatidão dos registros de habitualidade acima especificados.</p>
+                          <p className="mt-1">Brasília - DF, {new Date(printData.date).toLocaleDateString('pt-BR')}.</p>
+                        </div>
+
+                        <div className="text-center text-[10px] space-y-1">
+                          <div className="h-0.5 bg-slate-400 w-56 mx-auto"></div>
+                          <span className="font-bold text-slate-900 block mt-1">Oficial de Segurança de Estande / Controle de Frequência</span>
+                          <span className="text-slate-500 block">Homologação de Frequência G&G Competições</span>
+                          <span className="text-slate-400 font-mono text-[8px] block">Registro de Autenticidade: {printData.hash}</span>
+                        </div>
+                      </div>
                     </div>
-
-                    <div className="text-center text-[10px] space-y-1">
-                      <div className="h-0.5 bg-slate-400 w-56 mx-auto"></div>
-                      <span className="font-bold text-slate-900 block mt-1">Oficial de Segurança de Estande / Controle de Frequência</span>
-                      <span className="text-slate-500 block">Homologação de Frequência G&G Competições</span>
-                      <span className="text-slate-400 font-mono text-[8px] block">Registro de Autenticidade: {printData.hash}</span>
-                    </div>
-                  </div>
-
-                </div>
-              )}
+                  </>
+                );
+              })()}
 
             </div>
           </div>
