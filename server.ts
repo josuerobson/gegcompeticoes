@@ -6648,6 +6648,163 @@ app.post(['/api/webhooks/sicoob-pix', '/api/webhooks/sicoob-pix/:chave'], async 
   }
 });
 
+// ─── Endpoint temporário: unificação de cadastros duplicados (Gilson) ──────
+// Gilson tinha duas contas com o mesmo CPF: uma criada como teste no app
+// (posts, seguidores, armas e alguns treinos reais) e outra vinda da
+// importação do sistema legado (517 treinos + 144 inscrições históricas).
+// Este endpoint audita e depois migra tudo da conta teste para a conta
+// legado (que fica como definitiva, por concentrar o histórico ligado a
+// legacy_id), preservando os dois lados sem duplicar/perder nada. Remover
+// após uso único, como já feito com o fix de datas de treinos legados.
+app.get('/api/admin/merge-preview', requireMasterAdmin, async (req, res) => {
+  const fromId = req.query.fromId as string;
+  const toId = req.query.toId as string;
+  if (!fromId || !toId) return res.status(400).json({ error: 'fromId e toId são obrigatórios.' });
+
+  try {
+    const tables = [
+      { table: 'trainings', col: 'user_id' },
+      { table: 'weapons', col: 'owner_id' },
+      { table: 'ammo_athlete_allocations', col: 'user_id' },
+      { table: 'ammo_athlete_balances', col: 'user_id' },
+      { table: 'registrations', col: 'user_id' },
+      { table: 'registrations', col: 'registered_by_user_id' },
+      { table: 'stage_scores', col: 'user_id' },
+      { table: 'posts', col: 'user_id' },
+      { table: 'likes', col: 'user_id' },
+      { table: 'comments', col: 'user_id' },
+      { table: 'follows', col: 'follower_id' },
+      { table: 'follows', col: 'following_id' },
+      { table: 'ranking_highlight_likes', col: 'user_id' },
+      { table: 'ranking_highlight_comments', col: 'user_id' },
+      { table: 'weapon_concessions', col: 'athlete_id' },
+      { table: 'ammo_athlete_stock', col: 'athlete_id' },
+      { table: 'ammo_allocations', col: 'athlete_id' },
+      { table: 'idsc_registrations', col: 'user_id' },
+      { table: 'idsc_registrations', col: 'registered_by_user_id' },
+      { table: 'idsc_results', col: 'recorded_by_user_id' },
+    ];
+
+    const usersRes = await pool.query('SELECT * FROM users WHERE id = ANY($1)', [[fromId, toId]]);
+    const counts: Record<string, { from: number; to: number; rows_from: any[] }> = {};
+    for (const { table, col } of tables) {
+      const key = `${table}.${col}`;
+      const fromRows = await pool.query(`SELECT * FROM ${table} WHERE ${col} = $1`, [fromId]);
+      const toCountRes = await pool.query(`SELECT COUNT(*)::int as c FROM ${table} WHERE ${col} = $1`, [toId]);
+      counts[key] = { from: fromRows.rows.length, to: toCountRes.rows[0].c, rows_from: fromRows.rows };
+    }
+
+    res.json({ users: usersRes.rows.map(mapUser), counts });
+  } catch (err) {
+    console.error('Merge preview error:', err);
+    res.status(500).json({ error: 'Erro ao gerar preview de unificação.' });
+  }
+});
+
+app.post('/api/admin/merge-users', requireMasterAdmin, async (req, res) => {
+  const { fromId, toId, keepPasswordFrom } = req.body;
+  if (!fromId || !toId || fromId === toId) {
+    return res.status(400).json({ error: 'fromId e toId são obrigatórios e devem ser diferentes.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const usersCheck = await client.query('SELECT id FROM users WHERE id = ANY($1)', [[fromId, toId]]);
+    if (usersCheck.rows.length !== 2) {
+      throw new Error('Uma ou ambas as contas não foram encontradas.');
+    }
+
+    // Tabelas simples (sem risco de violar unicidade) — reatribuição direta.
+    const simpleTables: { table: string; col: string }[] = [
+      { table: 'trainings', col: 'user_id' },
+      { table: 'weapons', col: 'owner_id' },
+      { table: 'ammo_athlete_allocations', col: 'user_id' },
+      { table: 'registrations', col: 'user_id' },
+      { table: 'registrations', col: 'registered_by_user_id' },
+      { table: 'stage_scores', col: 'user_id' },
+      { table: 'posts', col: 'user_id' },
+      { table: 'comments', col: 'user_id' },
+      { table: 'ranking_highlight_comments', col: 'user_id' },
+      { table: 'weapon_concessions', col: 'athlete_id' },
+      { table: 'ammo_allocations', col: 'athlete_id' },
+      { table: 'idsc_registrations', col: 'user_id' },
+      { table: 'idsc_registrations', col: 'registered_by_user_id' },
+      { table: 'idsc_results', col: 'recorded_by_user_id' },
+    ];
+    for (const { table, col } of simpleTables) {
+      await client.query(`UPDATE ${table} SET ${col} = $1 WHERE ${col} = $2`, [toId, fromId]);
+    }
+
+    // Tabelas com chave única/composta — descarta a linha duplicada de "from"
+    // quando "to" já tem uma equivalente, senão reatribui normalmente.
+    await client.query(
+      `DELETE FROM likes l1 WHERE l1.user_id = $2 AND EXISTS (
+         SELECT 1 FROM likes l2 WHERE l2.post_id = l1.post_id AND l2.user_id = $1)`,
+      [toId, fromId]
+    );
+    await client.query(`UPDATE likes SET user_id = $1 WHERE user_id = $2`, [toId, fromId]);
+
+    await client.query(
+      `DELETE FROM ranking_highlight_likes h1 WHERE h1.user_id = $2 AND EXISTS (
+         SELECT 1 FROM ranking_highlight_likes h2 WHERE h2.highlight_key = h1.highlight_key AND h2.user_id = $1)`,
+      [toId, fromId]
+    );
+    await client.query(`UPDATE ranking_highlight_likes SET user_id = $1 WHERE user_id = $2`, [toId, fromId]);
+
+    await client.query(
+      `DELETE FROM ammo_athlete_balances b1 WHERE b1.user_id = $2 AND EXISTS (
+         SELECT 1 FROM ammo_athlete_balances b2 WHERE b2.caliber = b1.caliber AND b2.user_id = $1)`,
+      [toId, fromId]
+    );
+    await client.query(`UPDATE ammo_athlete_balances SET user_id = $1 WHERE user_id = $2`, [toId, fromId]);
+
+    await client.query(
+      `DELETE FROM ammo_athlete_stock s1 WHERE s1.athlete_id = $2 AND EXISTS (
+         SELECT 1 FROM ammo_athlete_stock s2 WHERE s2.club_id = s1.club_id AND s2.caliber = s1.caliber AND s2.athlete_id = $1)`,
+      [toId, fromId]
+    );
+    await client.query(`UPDATE ammo_athlete_stock SET athlete_id = $1 WHERE athlete_id = $2`, [toId, fromId]);
+
+    // follows: reatribui os dois lados, depois remove qualquer auto-follow
+    // resultante (ex.: "from" seguia "to" ou vice-versa) e duplicatas.
+    await client.query(
+      `DELETE FROM follows f1 WHERE f1.follower_id = $2 AND EXISTS (
+         SELECT 1 FROM follows f2 WHERE f2.following_id = f1.following_id AND f2.follower_id = $1)`,
+      [toId, fromId]
+    );
+    await client.query(`UPDATE follows SET follower_id = $1 WHERE follower_id = $2`, [toId, fromId]);
+    await client.query(
+      `DELETE FROM follows f1 WHERE f1.following_id = $2 AND EXISTS (
+         SELECT 1 FROM follows f2 WHERE f2.follower_id = f1.follower_id AND f2.following_id = $1)`,
+      [toId, fromId]
+    );
+    await client.query(`UPDATE follows SET following_id = $1 WHERE following_id = $2`, [toId, fromId]);
+    await client.query(`DELETE FROM follows WHERE follower_id = following_id`);
+
+    // Login: preserva a senha real (evita herdar a senha padrão de importação).
+    if (keepPasswordFrom === 'from') {
+      await client.query(
+        `UPDATE users u_to SET password_hash = u_from.password_hash
+         FROM users u_from WHERE u_from.id = $2 AND u_to.id = $1`,
+        [toId, fromId]
+      );
+    }
+
+    await client.query('DELETE FROM users WHERE id = $1', [fromId]);
+
+    await client.query('COMMIT');
+    res.json({ success: true, mergedFrom: fromId, keptId: toId });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    console.error('Merge users error:', err);
+    res.status(500).json({ error: err.message || 'Erro ao unificar cadastros.' });
+  } finally {
+    client.release();
+  }
+});
+
 // ==========================================
 // VITE DEV SERVER AND PRODUCTION ASSET HANDLERS
 // ==========================================
