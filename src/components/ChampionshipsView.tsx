@@ -574,7 +574,7 @@ export default function ChampionshipsView({
                       );
                     }
                     return (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4">
                         {champStages.map((stage) => {
                           const stageDateStr = new Date(stage.date).toLocaleDateString('pt-BR');
                           return (
@@ -730,7 +730,7 @@ export default function ChampionshipsView({
                             }}
                             className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10.5px] font-bold py-2 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer"
                           >
-                            Ver Resultados
+                            Ver e Participar
                           </button>
                         ) : (
                           <button
