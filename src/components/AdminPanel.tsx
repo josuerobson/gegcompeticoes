@@ -7178,19 +7178,8 @@ export default function AdminPanel({
 
                     return (
                       <tr key={champ.id} className="hover:bg-slate-50/50">
-                        <td className="py-3 px-2 flex items-center gap-3">
-                          <img
-                            src={champ.bannerUrl}
-                            alt=""
-                            className="w-12 h-8 rounded-lg object-cover border border-slate-200"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80';
-                            }}
-                          />
-                          <div>
-                            <span className="font-bold text-slate-800 block">{champ.title}</span>
-                            <span className="text-[10px] text-slate-450 block truncate max-w-[200px]">{champ.description}</span>
-                          </div>
+                        <td className="py-3 px-2">
+                          <span className="font-bold text-slate-800 block">{champ.title}</span>
                         </td>
                         <td className="py-3 px-2 font-mono text-slate-600">
                           {new Date(champ.startDate).toLocaleDateString()} - {new Date(champ.endDate).toLocaleDateString()}
