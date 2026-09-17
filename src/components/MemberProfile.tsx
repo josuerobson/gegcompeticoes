@@ -1586,17 +1586,24 @@ export default function MemberProfile({
     });
 
     // 2. Process Stage Scores (Competition participations)
+    // A data real do evento é registrations.dataExecucao/horaExecucao — nunca
+    // s.createdAt (quando o registro veio da importação do legado, createdAt é
+    // o instante em que o import rodou, não a data da competição; isso fazia
+    // competições de anos atrás aparecerem com a data de hoje na declaração).
+    // Sem dataExecucao, a data real é desconhecida — melhor omitir o item do
+    // período do que arriscar uma data errada num documento de comprovação.
     (userScores || []).forEach(s => {
-      const rawDate = new Date(s.createdAt || '');
+      const reg = approvedRegs.find(r => r.id === s.registrationId) || approvedRegs.find(r => r.championshipId === s.championshipId);
+      if (!reg?.dataExecucao) return;
+      const rawDate = new Date(`${reg.dataExecucao}T${reg.horaExecucao || '00:00:00'}`);
       if (isNaN(rawDate.getTime())) return;
       if (rawDate < start || rawDate > end) return;
 
       const champ = championships.find(c => c.id === s.championshipId);
-      const reg = approvedRegs.find(r => r.championshipId === s.championshipId);
       const w = weapons.find(wpn => wpn.id === reg?.weaponId);
 
       const dateFormatted = rawDate.toLocaleDateString('pt-BR');
-      const timeFormatted = rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) || '15:54';
+      const timeFormatted = reg.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:54';
 
       const weaponClass = w?.weaponClass || 'Pistola';
       const model = w?.model || (reg as any)?.gunModel || s.modality || 'Arma de Competição';
@@ -1628,9 +1635,13 @@ export default function MemberProfile({
     });
 
     // 3. Process Approved Registrations if userScores is empty
+    // Mesmo cuidado da seção 2: usa dataExecucao/horaExecucao (data real do
+    // evento), nunca registeredAt — em registros importados do legado,
+    // registeredAt é o instante do import, não a data da competição.
     if (userScores.length === 0) {
       (approvedRegs || []).forEach(reg => {
-        const rawDate = new Date(reg.registeredAt || '');
+        if (!reg.dataExecucao) return;
+        const rawDate = new Date(`${reg.dataExecucao}T${reg.horaExecucao || '00:00:00'}`);
         if (isNaN(rawDate.getTime())) return;
         if (rawDate < start || rawDate > end) return;
 
@@ -1641,7 +1652,7 @@ export default function MemberProfile({
           id: `reg_${reg.id}`,
           rawDate,
           dateFormatted: rawDate.toLocaleDateString('pt-BR'),
-          timeFormatted: '15:54',
+          timeFormatted: reg.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:54',
           eventType: 'Competição',
           eventName: champ?.title?.toUpperCase() || 'CAMPEONATO DE TIRO ESPORTIVO',
           weaponClass: w?.weaponClass || 'Pistola',
