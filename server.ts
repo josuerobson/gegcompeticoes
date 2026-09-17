@@ -814,12 +814,15 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
         const champRow = await client.query('SELECT * FROM championships WHERE id=$1', [item.championshipId]);
         if (champRow.rows.length === 0) continue;
 
-        // Verificar inscrição duplicada (não bloqueia, apenas pula)
+        // Reinscrição é permitida (igual ao fluxo de campeonato individual/normal): se o
+        // atleta já tem inscrição nesta etapa do pacote, a nova inscrição é registrada
+        // como 'reinscrição' para rastreamento, mas o valor cobrado é SEMPRE o do
+        // multicampeonato — o pacote não tem um valor de reinscrição próprio.
         const existing = await client.query(
           'SELECT 1 FROM registrations WHERE championship_id=$1 AND user_id=$2 AND stage_id=$3 AND modality_id=$4',
           [item.championshipId, currentUser.id, item.stageId, modalityId]
         );
-        if (existing.rows.length > 0) continue;
+        const isReinscricao = existing.rows.length > 0;
 
         const regId = `reg_multi_${Date.now()}_${item.championshipId.slice(-6)}_${Math.random().toString(36).substring(2, 5)}`;
         await client.query(
@@ -828,10 +831,11 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
             payment_method, payment_status, completion_status, registered_at, approved_at, tx_id,
             disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento,
             multi_championship_id
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'approved','pending',$10,$10,$11,false,0,$12,'normal',$13,$14,$15)`,
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'approved','pending',$10,$10,$11,false,0,$12,$13,$14,$15,$16)`,
           [
             regId, item.championshipId, currentUser.id, currentUser.clubId || null, modalityId, item.stageId, weaponId, crNumber,
-            paymentMethod, new Date().toISOString(), txId, currentUser.id, valorUnitario, dataPagamento, multiId
+            paymentMethod, new Date().toISOString(), txId, currentUser.id,
+            isReinscricao ? 'reinscrição' : 'normal', valorUnitario, dataPagamento, multiId
           ]
         );
         createdRegs.push({ id: regId, championshipId: item.championshipId } as Registration);
@@ -905,8 +909,7 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
           const clubId = userRes.rows[0].club_id || currentUser.clubId;
           const txId = `tx_multi_${Date.now()}_${athlete.userId.slice(-4)}`;
 
-          let anyCreated = false;
-          let anyExisting = false;
+          let anyReinscricao = false;
 
           for (const item of targetItems) {
             const stageRes = await client.query('SELECT sexo FROM stages WHERE id=$1', [item.stageId]);
@@ -917,11 +920,17 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
               }
             }
 
+            // Reinscrição é permitida (igual ao fluxo de campeonato individual/normal):
+            // se o atleta já tem inscrição nesta etapa do pacote, a nova inscrição é
+            // registrada como 'reinscrição' para fins de rastreamento, mas o valor
+            // cobrado é SEMPRE o do multicampeonato — o pacote não tem um valor de
+            // reinscrição próprio, então nunca deve usar champ.valorReinscricao.
             const existing = await client.query(
               'SELECT id FROM registrations WHERE championship_id=$1 AND user_id=$2 AND stage_id=$3 AND modality_id=$4',
               [item.championshipId, athlete.userId, item.stageId, modalityId]
             );
-            if (existing.rows.length > 0) { anyExisting = true; continue; }
+            const isReinscricao = existing.rows.length > 0;
+            if (isReinscricao) anyReinscricao = true;
 
             const regId = `reg_multi_${Date.now()}_${item.championshipId.slice(-6)}_${Math.random().toString(36).substring(2, 5)}`;
             await client.query(
@@ -930,26 +939,22 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
                 payment_method, payment_status, completion_status, registered_at, approved_at, tx_id,
                 disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento,
                 multi_championship_id
-              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','approved','pending',$9,$9,$10,false,0,$11,'normal',$12,$13,$14)`,
+              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','approved','pending',$9,$9,$10,false,0,$11,$12,$13,$14,$15)`,
               [
                 regId, item.championshipId, athlete.userId, clubId, modalityId, item.stageId, athlete.weaponId,
-                athlete.crNumber, new Date().toISOString(), txId, currentUser.id, valorUnitario, dataPagamento, multiId
+                athlete.crNumber, new Date().toISOString(), txId, currentUser.id,
+                isReinscricao ? 'reinscrição' : 'normal', valorUnitario, dataPagamento, multiId
               ]
             );
-            anyCreated = true;
           }
 
           await client.query('UPDATE users SET cr_number = COALESCE(cr_number, $1) WHERE id = $2', [athlete.crNumber, athlete.userId]);
 
-          if (anyCreated) {
-            results.push({
-              userId: athlete.userId,
-              status: 'inscrito',
-              message: anyExisting ? 'Inscrito nas etapas restantes do pacote (já havia inscrição em pelo menos uma etapa).' : undefined,
-            });
-          } else {
-            results.push({ userId: athlete.userId, status: 'reinscrito', message: 'Atleta já inscrito em todas as etapas do pacote.' });
-          }
+          results.push({
+            userId: athlete.userId,
+            status: anyReinscricao ? 'reinscrito' : 'inscrito',
+            message: anyReinscricao ? 'Reinscrito em ao menos uma etapa do pacote (valor do multicampeonato aplicado).' : undefined,
+          });
         } catch (e: any) {
           results.push({ userId: athlete.userId, status: 'erro', message: e.message });
         }
