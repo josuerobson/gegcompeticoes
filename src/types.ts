@@ -296,8 +296,8 @@ export interface Registration {
   stageId: string;
   weaponId: string;
   crNumber: string;
-  paymentMethod: 'pix' | 'credit_card';
-  paymentStatus: 'pending' | 'approved';
+  paymentMethod: 'pix' | 'credit_card' | 'debit_card' | 'ticket' | 'account_money' | 'bank_transfer';
+  paymentStatus: 'pending' | 'approved' | 'rejected';
   completionStatus: 'pending' | 'completed' | 'absent';
   registeredAt: string;
   approvedAt?: string;
@@ -326,6 +326,9 @@ export interface Registration {
   clubAmmoType?: 'nova' | 'recarga';
   multiChampionshipId?: string; // Presente quando a inscrição foi gerada por um multicampeonato
   legacyId?: number;
+  paymentGateway?: 'manual' | 'mercado_pago';
+  mpPreferenceId?: string;
+  mpPaymentId?: string;
 }
 
 export interface StageScore {
@@ -483,6 +486,11 @@ export interface IdscRegistration {
   paymentMethod?: string;
   paymentStatus: string;
   registeredAt: string;
+  approvedAt?: string;
+  txId?: string;
+  paymentGateway?: 'manual' | 'mercado_pago';
+  mpPreferenceId?: string;
+  mpPaymentId?: string;
 }
 
 export interface IdscTargetResult {

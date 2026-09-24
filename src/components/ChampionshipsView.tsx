@@ -12,7 +12,7 @@ interface ChampionshipsProps {
   stages: Stage[];
   weapons: Weapon[];
   weaponLookupOptions?: WeaponLookupOption[];
-  onRegister: (championshipId: string, modalityId: string, stageId: string, weaponId: string, crNumber: string, paymentMethod: 'pix' | 'credit_card') => Promise<void>;
+  onRegister: (championshipId: string, modalityId: string, stageId: string, weaponId: string, crNumber: string, paymentMethod: 'pix' | 'credit_card') => Promise<{ initPoint?: string }>;
   onAddWeapon: (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; serialNumber?: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string; weaponType?: string }) => Promise<void>;
   globalRankings: RankingItem[];
   onSelectModalityRanking: (modality: string) => void;
@@ -60,7 +60,6 @@ export default function ChampionshipsView({
   const [multiPaymentMethod, setMultiPaymentMethod] = useState<'pix' | 'credit_card'>('pix');
   const [multiSubmitting, setMultiSubmitting] = useState(false);
   const [multiError, setMultiError] = useState('');
-  const [multiSuccessMsg, setMultiSuccessMsg] = useState('');
 
   const handleRegisterMultiSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,17 +99,13 @@ export default function ChampionshipsView({
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao realizar inscrição no multicampeonato.');
+      if (!data.initPoint) throw new Error('Não foi possível gerar o link de pagamento.');
 
-      setMultiSuccessMsg(`Inscrição unificada realizada com sucesso! ${data.inscricoesGeradas} inscrição(ões) gerada(s).`);
-      setMultiWeaponId('');
-      setSelectedWeaponId('');
-      setWeaponSearchQuery('');
-      setWeaponSearchResults([]);
-      setSearchingWeapon(false);
-      if (onRefreshData) await onRefreshData();
+      // A inscrição fica pendente até o pagamento ser confirmado — o
+      // checkout do Mercado Pago é a próxima etapa, não uma confirmação.
+      window.location.href = data.initPoint;
     } catch (err: any) {
       setMultiError(err.message);
-    } finally {
       setMultiSubmitting(false);
     }
   };
@@ -125,7 +120,6 @@ export default function ChampionshipsView({
     setWeaponSearchResults([]);
     setSearchingWeapon(false);
     setMultiError('');
-    setMultiSuccessMsg('');
     setMultiSubmitting(false);
     setShowAddWeapon(false);
   };
@@ -137,8 +131,7 @@ export default function ChampionshipsView({
   const [selectedWeaponId, setSelectedWeaponId] = useState('');
   const [crInput, setCrInput] = useState(currentUser?.crNumber || '');
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card'>('pix');
-  const [paymentStep, setPaymentStep] = useState<'form' | 'processing' | 'done'>('form');
-  const [pixCopied, setPixCopied] = useState(false);
+  const [paymentStep, setPaymentStep] = useState<'form' | 'processing'>('form');
   const [registerError, setRegisterError] = useState('');
   const [showAddWeapon, setShowAddWeapon] = useState(false);
   const [newWeaponData, setNewWeaponData] = useState({
@@ -297,7 +290,6 @@ export default function ChampionshipsView({
   const [idscCrInput, setIdscCrInput] = useState(currentUser?.crNumber || '');
   const [idscSubmitting, setIdscSubmitting] = useState(false);
   const [idscError, setIdscError] = useState('');
-  const [idscSuccessMsg, setIdscSuccessMsg] = useState('');
   const [idscAlreadyRegistered, setIdscAlreadyRegistered] = useState(false);
 
   useEffect(() => {
@@ -332,7 +324,6 @@ export default function ChampionshipsView({
     setSearchingWeapon(false);
     setIdscCrInput(currentUser?.crNumber || '');
     setIdscError('');
-    setIdscSuccessMsg('');
     setIdscSubmitting(false);
     setIdscAlreadyRegistered(false);
     setShowAddWeapon(false);
@@ -356,7 +347,6 @@ export default function ChampionshipsView({
     setWeaponSearchResults([]);
     setSearchingWeapon(false);
     setIdscError('');
-    setIdscSuccessMsg('');
     setIdscSubmitting(false);
     setShowAddWeapon(false);
   };
@@ -377,11 +367,10 @@ export default function ChampionshipsView({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao realizar inscrição IDSC.');
-      setIdscSuccessMsg('Inscrição na pista IDSC confirmada com sucesso!');
-      if (onRefreshData) await onRefreshData();
+      if (!data.initPoint) throw new Error('Não foi possível gerar o link de pagamento.');
+      window.location.href = data.initPoint;
     } catch (err: any) {
       setIdscError(err.message);
-    } finally {
       setIdscSubmitting(false);
     }
   };
@@ -402,20 +391,14 @@ export default function ChampionshipsView({
     setRegisterError('');
     setPaymentStep('processing');
 
-    // Simulate payment response delay
-    setTimeout(async () => {
-      try {
-        await onRegister(selectedChampReg.id, selectedModalityId, selectedStageId, selectedWeaponId, finalCr, 'pix');
-        setSelectedWeaponId('');
-        setWeaponSearchQuery('');
-        setWeaponSearchResults([]);
-        setSearchingWeapon(false);
-        setPaymentStep('done');
-      } catch (err) {
-        setRegisterError(err instanceof Error ? err.message : 'Erro ao realizar inscrição.');
-        setPaymentStep('form');
-      }
-    }, 1800);
+    try {
+      const { initPoint } = await onRegister(selectedChampReg.id, selectedModalityId, selectedStageId, selectedWeaponId, finalCr, 'pix');
+      if (!initPoint) throw new Error('Não foi possível gerar o link de pagamento.');
+      window.location.href = initPoint;
+    } catch (err) {
+      setRegisterError(err instanceof Error ? err.message : 'Erro ao realizar inscrição.');
+      setPaymentStep('form');
+    }
   };
 
 
@@ -429,16 +412,8 @@ export default function ChampionshipsView({
     setSearchingWeapon(false);
     setPaymentStep('form');
     setPaymentMethod('pix');
-    setPixCopied(false);
     setRegisterError('');
     setShowAddWeapon(false);
-  };
-
-  // Copy pix key simulation
-  const handleCopyPix = () => {
-    navigator.clipboard.writeText("pix.copiaecola.gegpistol.online.producao1029384756");
-    setPixCopied(true);
-    setTimeout(() => setPixCopied(false), 2000);
   };
 
   return (
@@ -611,7 +586,6 @@ export default function ChampionshipsView({
                                   setSearchingWeapon(false);
                                   setPaymentStep('form');
                                   setPaymentMethod('pix');
-                                  setPixCopied(false);
                                   setRegisterError('');
                                   setShowAddWeapon(false);
                                 }}
@@ -865,7 +839,6 @@ export default function ChampionshipsView({
                               setWeaponSearchResults([]);
                               setSearchingWeapon(false);
                               setMultiError('');
-                              setMultiSuccessMsg('');
                               setMultiSubmitting(false);
                               setShowAddWeapon(false);
                             }}
@@ -1290,73 +1263,9 @@ export default function ChampionshipsView({
                     <div className="w-12 h-12 rounded-full border-4 border-slate-200 animate-spin border-t-blue-600"></div>
                   </div>
                   <div className="space-y-1">
-                    <h4 className="font-bold text-slate-800 text-sm">Gerando Chave de Homologação...</h4>
-                    <p className="text-xs text-slate-400">Verificando dados federativos de atirador desportivo G&G.</p>
+                    <h4 className="font-bold text-slate-800 text-sm">Redirecionando para o Mercado Pago...</h4>
+                    <p className="text-xs text-slate-400">Você vai concluir o pagamento no checkout seguro do Mercado Pago.</p>
                   </div>
-                </div>
-              )}
-
-              {paymentStep === 'done' && (
-                <div className="p-6 text-center space-y-4 flex-1 overflow-y-auto">
-                  <div className="bg-emerald-50 text-emerald-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto shadow-md">
-                    <CheckCircle className="w-6 h-6" />
-                  </div>
-                  
-                  <div className="space-y-1">
-                    <h4 className="font-bold text-slate-900 text-sm">Ficha Homologada com Sucesso!</h4>
-                    <p className="text-xs text-slate-500">Parabéns! Sua vaga foi reservada na modalidade oficial.</p>
-                  </div>
-
-                  {/* PIX instructions if selected */}
-                  {paymentMethod === 'pix' ? (
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-left space-y-2 text-xs font-mono">
-                      <span className="text-[10px] text-slate-400 font-sans block text-center uppercase font-bold">FAÇA O PIX DO VALOR DE R$ {registrationPrice.toFixed(2)}</span>
-                      
-                      {/* Dynamic Mock QR Code */}
-                      <div className="w-28 h-28 mx-auto bg-white border border-slate-200 p-1 rounded-lg">
-                        <svg viewBox="0 0 100 100" className="w-full h-full text-slate-900">
-                          <rect width="100" height="100" fill="white" />
-                          {/* Simulated QR Code patterns */}
-                          <rect x="10" y="10" width="20" height="20" fill="currentColor" />
-                          <rect x="70" y="10" width="20" height="20" fill="currentColor" />
-                          <rect x="10" y="70" width="20" height="20" fill="currentColor" />
-                          <rect x="40" y="40" width="20" height="20" fill="currentColor" />
-                          <rect x="15" y="15" width="10" height="10" fill="white" />
-                          <rect x="75" y="15" width="10" height="10" fill="white" />
-                          <rect x="15" y="75" width="10" height="10" fill="white" />
-                          <rect x="45" y="45" width="10" height="10" fill="white" />
-                          <rect x="18" y="18" width="4" height="4" fill="currentColor" />
-                          <rect x="78" y="18" width="4" height="4" fill="currentColor" />
-                          <rect x="18" y="78" width="4" height="4" fill="currentColor" />
-                          <rect x="48" y="48" width="4" height="4" fill="currentColor" />
-                          {/* Noise blocks */}
-                          <rect x="40" y="15" width="5" height="12" fill="currentColor" />
-                          <rect x="55" y="20" width="8" height="5" fill="currentColor" />
-                          <rect x="12" y="45" width="15" height="4" fill="currentColor" />
-                          <rect x="75" y="45" width="10" height="15" fill="currentColor" />
-                          <rect x="50" y="70" width="15" height="8" fill="currentColor" />
-                        </svg>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleCopyPix}
-                        className="w-full bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 py-2.5 rounded-lg transition text-xs font-semibold flex items-center justify-center gap-1.5 font-sans mb-1"
-                      >
-                        {pixCopied ? 'Chave Copiada!' : 'Copiar Código Pix Copia e Cola'}
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-400">Cartão de Crédito aprovado e transação confirmada na fatura.</p>
-                  )}
-
-                  <button
-                    onClick={closeRegModal}
-                    className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-semibold text-xs transition"
-                  >
-                    Fechar Ficha e Voltar
-                  </button>
                 </div>
               )}
             </motion.div>
@@ -1588,23 +1497,6 @@ export default function ChampionshipsView({
                 </button>
               </div>
 
-              {idscSuccessMsg ? (
-                <div className="p-6 text-center space-y-4 flex-1 overflow-y-auto">
-                  <div className="bg-emerald-50 text-emerald-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto shadow-md">
-                    <CheckCircle className="w-6 h-6" />
-                  </div>
-                  <div className="space-y-1">
-                    <h4 className="font-bold text-slate-900 text-sm">Inscrição confirmada!</h4>
-                    <p className="text-xs text-slate-500">{idscSuccessMsg}</p>
-                  </div>
-                  <button
-                    onClick={closeIdscRegModal}
-                    className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-semibold text-xs transition"
-                  >
-                    Fechar Ficha e Voltar
-                  </button>
-                </div>
-              ) : (
                 <form onSubmit={handleIdscRegisterSubmit} className="p-5 space-y-4 flex-1 overflow-y-auto">
                   <div className="bg-blue-50 p-3 rounded-lg flex flex-col gap-1 text-xs">
                     <div className="flex items-center justify-between text-blue-900">
@@ -1793,7 +1685,6 @@ export default function ChampionshipsView({
                     </button>
                   </div>
                 </form>
-              )}
             </motion.div>
           </div>
         )}
@@ -2130,20 +2021,7 @@ export default function ChampionshipsView({
               </button>
             </div>
 
-            {multiSuccessMsg ? (
-              <div className="bg-emerald-50 text-emerald-800 p-4 rounded-xl space-y-3 text-xs font-semibold text-center">
-                <CheckCircle className="w-8 h-8 text-emerald-600 mx-auto" />
-                <p className="text-sm font-bold">{multiSuccessMsg}</p>
-                <p className="text-slate-500 text-[11px]">Sua inscrição em todos os campeonatos deste pacote foi confirmada automaticamente.</p>
-                <button
-                  onClick={closeMultiRegModal}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl transition cursor-pointer"
-                >
-                  Concluir
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleRegisterMultiSubmit} className="space-y-4">
+            <form onSubmit={handleRegisterMultiSubmit} className="space-y-4">
                 {multiError && (
                   <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{multiError}</div>
                 )}
@@ -2425,7 +2303,6 @@ export default function ChampionshipsView({
                   </button>
                 </div>
               </form>
-            )}
           </motion.div>
         </div>
       )}

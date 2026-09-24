@@ -3,6 +3,7 @@ import { User, Post, Championship, ChampionshipInput, Registration, StageScore, 
 import FeedView from './components/FeedView';
 import CardValidationView from './components/CardValidationView';
 import CertificateValidationView from './components/CertificateValidationView';
+import PaymentReturnView from './components/PaymentReturnView';
 
 // Code-split: essas três telas não são a landing padrão (Feed é), então não
 // precisam entrar no bundle inicial — sobretudo o Painel Diretor (~10.500
@@ -295,6 +296,16 @@ export default function App() {
       const cleanPath = window.location.pathname.replace(/\/$/, '') || '/';
       if (cleanPath.startsWith('/validar/certificado/')) {
         return cleanPath.split('/validar/certificado/')[1] || null;
+      }
+    }
+    return null;
+  });
+
+  const [paymentReturnTxId, setPaymentReturnTxId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const cleanPath = window.location.pathname.replace(/\/$/, '') || '/';
+      if (cleanPath === '/pagamento/retorno') {
+        return new URLSearchParams(window.location.search).get('tx');
       }
     }
     return null;
@@ -1165,11 +1176,15 @@ export default function App() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        // A inscrição nasce 'pending' — só é aprovada quando o webhook do
+        // Mercado Pago confirmar o pagamento, então já reflete no estado
+        // local (a lista de inscrições mostra o status real).
         if (data.registration) {
           setRegistrations(prev => [...prev, data.registration]);
         } else {
           await refreshRegistrations();
         }
+        return { initPoint: data.initPoint as string | undefined };
       } else {
         throw new Error(data.error || 'Erro ao realizar inscrição.');
       }
@@ -1583,6 +1598,18 @@ export default function App() {
         certId={validationCertId}
         onGoHome={() => {
           setValidationCertId(null);
+          window.history.pushState(null, '', currentUser ? '/campeonatos' : '/');
+        }}
+      />
+    );
+  }
+
+  if (paymentReturnTxId) {
+    return (
+      <PaymentReturnView
+        txId={paymentReturnTxId}
+        onGoHome={() => {
+          setPaymentReturnTxId(null);
           window.history.pushState(null, '', currentUser ? '/campeonatos' : '/');
         }}
       />

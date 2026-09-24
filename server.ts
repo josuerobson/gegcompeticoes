@@ -9,6 +9,11 @@ import { User, Post, Championship, Registration, StageScore, Comment, Club, Moda
 import { pool, initDB } from './src/db.js';
 import { hashPassword, verifyPassword } from './src/auth.js';
 import { uploadDocument, getDocumentStream, storageEnabled } from './src/storage.js';
+import {
+  getMercadoPagoConfig, mercadoPagoEnvFromToken, maskAccessToken,
+  createPreference as mpCreatePreference, fetchPayment as mpFetchPayment,
+  fetchAccountInfo as mpFetchAccountInfo, verifyWebhookSignature as mpVerifyWebhookSignature,
+} from './src/mercadopago.js';
 import multer from 'multer';
 
 const app = express();
@@ -341,6 +346,9 @@ function mapRegistration(r: any): Registration {
     clubAmmoType: (r.club_ammo_type as 'nova' | 'recarga') || 'recarga',
     multiChampionshipId: r.multi_championship_id || undefined,
     legacyId: r.legacy_id ?? undefined,
+    paymentGateway: (r.payment_gateway as 'manual' | 'mercado_pago') || 'manual',
+    mpPreferenceId: r.mp_preference_id || undefined,
+    mpPaymentId: r.mp_payment_id || undefined,
   };
 }
 
@@ -426,6 +434,11 @@ function mapIdscRegistration(r: any): IdscRegistration {
     paymentMethod: r.payment_method || undefined,
     paymentStatus: r.payment_status || 'approved',
     registeredAt: r.registered_at,
+    approvedAt: r.approved_at || undefined,
+    txId: r.tx_id || undefined,
+    paymentGateway: (r.payment_gateway as 'manual' | 'mercado_pago') || 'manual',
+    mpPreferenceId: r.mp_preference_id || undefined,
+    mpPaymentId: r.mp_payment_id || undefined,
   };
 }
 
@@ -805,8 +818,14 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
     const dataPagamento = new Date().toISOString().split('T')[0];
     const txId = `tx_multi_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
+    const mpConfig = await getMercadoPagoConfig(pool);
+    if (!mpConfig.accessToken) {
+      return res.status(400).json({ error: 'Pagamentos via Mercado Pago ainda não foram configurados pelo clube. Avise a diretoria.' });
+    }
+
     const client = await pool.connect();
     const createdRegs: Registration[] = [];
+    const preferenceItems: { title: string; quantity: number; unitPrice: number }[] = [];
     try {
       await client.query('BEGIN');
 
@@ -819,7 +838,7 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
         // como 'reinscrição' para rastreamento, mas o valor cobrado é SEMPRE o do
         // multicampeonato — o pacote não tem um valor de reinscrição próprio.
         const existing = await client.query(
-          'SELECT 1 FROM registrations WHERE championship_id=$1 AND user_id=$2 AND stage_id=$3 AND modality_id=$4',
+          "SELECT 1 FROM registrations WHERE championship_id=$1 AND user_id=$2 AND stage_id=$3 AND modality_id=$4 AND payment_status = 'approved'",
           [item.championshipId, currentUser.id, item.stageId, modalityId]
         );
         const isReinscricao = existing.rows.length > 0;
@@ -828,10 +847,10 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
         await client.query(
           `INSERT INTO registrations (
             id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
-            payment_method, payment_status, completion_status, registered_at, approved_at, tx_id,
+            payment_method, payment_status, completion_status, registered_at, tx_id,
             disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento,
-            multi_championship_id
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'approved','pending',$10,$10,$11,false,0,$12,$13,$14,$15,$16)`,
+            multi_championship_id, payment_gateway
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending','pending',$10,$11,false,0,$12,$13,$14,$15,$16,'mercado_pago')`,
           [
             regId, item.championshipId, currentUser.id, currentUser.clubId || null, modalityId, item.stageId, weaponId, crNumber,
             paymentMethod, new Date().toISOString(), txId, currentUser.id,
@@ -839,6 +858,7 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
           ]
         );
         createdRegs.push({ id: regId, championshipId: item.championshipId } as Registration);
+        preferenceItems.push({ title: `Multicampeonato - ${champRow.rows[0].title}`, quantity: 1, unitPrice: Number(valorUnitario) });
       }
 
       await client.query(
@@ -853,15 +873,35 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
       client.release();
     }
 
+    if (preferenceItems.length === 0) {
+      return res.status(400).json({ error: 'Nenhum campeonato válido encontrado no pacote.' });
+    }
+
+    const baseUrl = getBaseUrl(req);
+    const preference = await mpCreatePreference({
+      accessToken: mpConfig.accessToken,
+      items: preferenceItems,
+      externalReference: txId,
+      payerEmail: currentUser.email,
+      backUrls: {
+        success: `${baseUrl}/pagamento/retorno?tx=${txId}`,
+        failure: `${baseUrl}/pagamento/retorno?tx=${txId}`,
+        pending: `${baseUrl}/pagamento/retorno?tx=${txId}`,
+      },
+      notificationUrl: `${baseUrl}/api/webhooks/mercadopago`,
+    });
+    await pool.query("UPDATE registrations SET mp_preference_id = $1 WHERE tx_id = $2", [preference.id, txId]);
+
     res.status(201).json({
       success: true,
       inscricoesGeradas: createdRegs.length,
       txId,
       registrations: createdRegs,
+      initPoint: preference.initPoint,
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error('Register multi-championship error:', err);
-    res.status(500).json({ error: 'Erro ao realizar inscrição no multicampeonato.' });
+    res.status(500).json({ error: err.message || 'Erro ao realizar inscrição no multicampeonato.' });
   }
 });
 
@@ -897,17 +937,25 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
     const valorUnitario = champCount > 0 ? Number((valorTotal / champCount).toFixed(2)) : valorTotal;
     const dataPagamento = new Date().toISOString().split('T')[0];
 
+    const mpConfig = await getMercadoPagoConfig(pool);
+    if (!mpConfig.accessToken) {
+      return res.status(400).json({ error: 'Pagamentos via Mercado Pago ainda não foram configurados pelo clube. Avise a diretoria.' });
+    }
+
+    // Um único lote = uma única preferência/pagamento no Mercado Pago, cobrindo
+    // todos os atletas e todos os campeonatos do pacote de uma vez.
+    const txId = `tx_multi_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const results: Array<{ userId: string; status: 'inscrito' | 'reinscrito' | 'erro'; message?: string }> = [];
+    const preferenceItems: { title: string; quantity: number; unitPrice: number }[] = [];
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       for (const athlete of athletes) {
         try {
-          const userRes = await client.query('SELECT club_id, sex FROM users WHERE id = $1', [athlete.userId]);
+          const userRes = await client.query('SELECT club_id, sex, full_name FROM users WHERE id = $1', [athlete.userId]);
           if (userRes.rows.length === 0) throw new Error('Atleta não encontrado.');
           const userSex = (userRes.rows[0].sex || '').toLowerCase();
           const clubId = userRes.rows[0].club_id || currentUser.clubId;
-          const txId = `tx_multi_${Date.now()}_${athlete.userId.slice(-4)}`;
 
           let anyReinscricao = false;
 
@@ -926,26 +974,33 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
             // cobrado é SEMPRE o do multicampeonato — o pacote não tem um valor de
             // reinscrição próprio, então nunca deve usar champ.valorReinscricao.
             const existing = await client.query(
-              'SELECT id FROM registrations WHERE championship_id=$1 AND user_id=$2 AND stage_id=$3 AND modality_id=$4',
+              "SELECT id FROM registrations WHERE championship_id=$1 AND user_id=$2 AND stage_id=$3 AND modality_id=$4 AND payment_status = 'approved'",
               [item.championshipId, athlete.userId, item.stageId, modalityId]
             );
             const isReinscricao = existing.rows.length > 0;
             if (isReinscricao) anyReinscricao = true;
 
+            const champRow = await client.query('SELECT title FROM championships WHERE id=$1', [item.championshipId]);
+
             const regId = `reg_multi_${Date.now()}_${item.championshipId.slice(-6)}_${Math.random().toString(36).substring(2, 5)}`;
             await client.query(
               `INSERT INTO registrations (
                 id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
-                payment_method, payment_status, completion_status, registered_at, approved_at, tx_id,
+                payment_method, payment_status, completion_status, registered_at, tx_id,
                 disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento,
-                multi_championship_id
-              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','approved','pending',$9,$9,$10,false,0,$11,$12,$13,$14,$15)`,
+                multi_championship_id, payment_gateway
+              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,false,0,$11,$12,$13,$14,$15,'mercado_pago')`,
               [
                 regId, item.championshipId, athlete.userId, clubId, modalityId, item.stageId, athlete.weaponId,
                 athlete.crNumber, new Date().toISOString(), txId, currentUser.id,
                 isReinscricao ? 'reinscrição' : 'normal', valorUnitario, dataPagamento, multiId
               ]
             );
+            preferenceItems.push({
+              title: `Multicampeonato - ${champRow.rows[0]?.title || item.championshipId} - ${userRes.rows[0].full_name || athlete.userId}`,
+              quantity: 1,
+              unitPrice: Number(valorUnitario),
+            });
           }
 
           await client.query('UPDATE users SET cr_number = COALESCE(cr_number, $1) WHERE id = $2', [athlete.crNumber, athlete.userId]);
@@ -960,16 +1015,36 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
         }
       }
       await client.query('COMMIT');
-      res.status(201).json({ success: true, results });
-    } catch (e) {
+
+      if (preferenceItems.length === 0) {
+        return res.status(400).json({ success: false, results, error: 'Nenhum atleta pôde ser inscrito.' });
+      }
+
+      const baseUrl = getBaseUrl(req);
+      const preference = await mpCreatePreference({
+        accessToken: mpConfig.accessToken,
+        items: preferenceItems,
+        externalReference: txId,
+        backUrls: {
+          success: `${baseUrl}/pagamento/retorno?tx=${txId}`,
+          failure: `${baseUrl}/pagamento/retorno?tx=${txId}`,
+          pending: `${baseUrl}/pagamento/retorno?tx=${txId}`,
+        },
+        notificationUrl: `${baseUrl}/api/webhooks/mercadopago`,
+      });
+      await pool.query("UPDATE registrations SET mp_preference_id = $1 WHERE tx_id = $2", [preference.id, txId]);
+
+      res.status(201).json({ success: true, results, initPoint: preference.initPoint, txId });
+    } catch (e: any) {
       await client.query('ROLLBACK');
-      throw e;
+      console.error('Register-bulk multi-championship error:', e);
+      res.status(500).json({ error: e.message || 'Erro ao realizar inscrição em lote no multicampeonato.' });
     } finally {
       client.release();
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error('Register-bulk multi-championship error:', err);
-    res.status(500).json({ error: 'Erro ao realizar inscrição em lote no multicampeonato.' });
+    res.status(500).json({ error: err.message || 'Erro ao realizar inscrição em lote no multicampeonato.' });
   }
 });
 
@@ -1210,20 +1285,42 @@ app.post('/api/idsc/courses/:id/register', requireAuth, async (req, res) => {
     const champRes = await pool.query('SELECT * FROM idsc_championships WHERE id = $1', [courseRes.rows[0].championship_id]);
     const champ = champRes.rows[0];
 
-    const existing = await pool.query('SELECT id FROM idsc_registrations WHERE course_id=$1 AND user_id=$2', [courseId, currentUser.id]);
+    const existing = await pool.query("SELECT id FROM idsc_registrations WHERE course_id=$1 AND user_id=$2 AND payment_status = 'approved'", [courseId, currentUser.id]);
     const isReinscricao = existing.rows.length > 0;
+
+    const mpConfig = await getMercadoPagoConfig(pool);
+    if (!mpConfig.accessToken) {
+      return res.status(400).json({ error: 'Pagamentos via Mercado Pago ainda não foram configurados pelo clube. Avise a diretoria.' });
+    }
 
     const id = `idsc_reg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const valorPago = champ ? Number(champ.individual_registration_fee) : 0;
+    const txId = `tx_idsc_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const result = await pool.query(
-      `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'approved') RETURNING *`,
-      [id, courseId, currentUser.id, currentUser.clubId || null, weaponId, crNumber || currentUser.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago, paymentMethod || 'pix']
+      `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status, tx_id, payment_gateway)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,'mercado_pago') RETURNING *`,
+      [id, courseId, currentUser.id, currentUser.clubId || null, weaponId, crNumber || currentUser.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago, paymentMethod || 'pix', txId]
     );
-    res.status(201).json({ idscRegistration: mapIdscRegistration(result.rows[0]) });
-  } catch (err) {
+
+    const baseUrl = getBaseUrl(req);
+    const preference = await mpCreatePreference({
+      accessToken: mpConfig.accessToken,
+      items: [{ title: `Inscrição IDSC - ${courseRes.rows[0].name}`, quantity: 1, unitPrice: valorPago }],
+      externalReference: txId,
+      payerEmail: currentUser.email,
+      backUrls: {
+        success: `${baseUrl}/pagamento/retorno?tx=${txId}`,
+        failure: `${baseUrl}/pagamento/retorno?tx=${txId}`,
+        pending: `${baseUrl}/pagamento/retorno?tx=${txId}`,
+      },
+      notificationUrl: `${baseUrl}/api/webhooks/mercadopago`,
+    });
+    await pool.query('UPDATE idsc_registrations SET mp_preference_id = $1 WHERE id = $2', [preference.id, id]);
+
+    res.status(201).json({ idscRegistration: mapIdscRegistration(result.rows[0]), initPoint: preference.initPoint });
+  } catch (err: any) {
     console.error('Register idsc course error:', err);
-    res.status(500).json({ error: 'Erro ao realizar inscrição IDSC.' });
+    res.status(500).json({ error: err.message || 'Erro ao realizar inscrição IDSC.' });
   }
 });
 
@@ -1241,31 +1338,62 @@ app.post('/api/idsc/courses/:id/register-bulk', requireAdmin, async (req, res) =
     const champ = champRes.rows[0];
     const valorPago = champ ? Number(champ.club_registration_fee) : 0;
 
+    const mpConfig = await getMercadoPagoConfig(pool);
+    if (!mpConfig.accessToken) {
+      return res.status(400).json({ error: 'Pagamentos via Mercado Pago ainda não foram configurados pelo clube. Avise a diretoria.' });
+    }
+
+    const txId = `tx_idsc_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const results: Array<{ userId: string; status: 'inscrito' | 'reinscrito' | 'erro'; message?: string }> = [];
+    const preferenceItems: { title: string; quantity: number; unitPrice: number }[] = [];
     for (const athlete of athletes) {
       try {
-        const userRes = await pool.query('SELECT club_id FROM users WHERE id = $1', [athlete.userId]);
+        const userRes = await pool.query('SELECT club_id, full_name FROM users WHERE id = $1', [athlete.userId]);
         if (userRes.rows.length === 0) throw new Error('Atleta não encontrado.');
         const clubId = userRes.rows[0].club_id || currentUser.clubId;
 
-        const existing = await pool.query('SELECT id FROM idsc_registrations WHERE course_id=$1 AND user_id=$2', [courseId, athlete.userId]);
+        const existing = await pool.query("SELECT id FROM idsc_registrations WHERE course_id=$1 AND user_id=$2 AND payment_status = 'approved'", [courseId, athlete.userId]);
         const isReinscricao = existing.rows.length > 0;
 
         const id = `idsc_reg_${Date.now()}_${athlete.userId.slice(-4)}`;
         await pool.query(
-          `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pix','approved')`,
-          [id, courseId, athlete.userId, clubId, athlete.weaponId, athlete.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago]
+          `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status, tx_id, payment_gateway)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pix','pending',$10,'mercado_pago')`,
+          [id, courseId, athlete.userId, clubId, athlete.weaponId, athlete.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago, txId]
         );
+        preferenceItems.push({
+          title: `Inscrição IDSC - ${courseRes.rows[0].name} - ${userRes.rows[0].full_name || athlete.userId}`,
+          quantity: 1,
+          unitPrice: valorPago,
+        });
         results.push({ userId: athlete.userId, status: isReinscricao ? 'reinscrito' : 'inscrito' });
       } catch (e: any) {
         results.push({ userId: athlete.userId, status: 'erro', message: e.message });
       }
     }
-    res.status(201).json({ success: true, results });
-  } catch (err) {
+
+    if (preferenceItems.length === 0) {
+      return res.status(400).json({ success: false, results, error: 'Nenhum atleta pôde ser inscrito.' });
+    }
+
+    const baseUrl = getBaseUrl(req);
+    const preference = await mpCreatePreference({
+      accessToken: mpConfig.accessToken,
+      items: preferenceItems,
+      externalReference: txId,
+      backUrls: {
+        success: `${baseUrl}/pagamento/retorno?tx=${txId}`,
+        failure: `${baseUrl}/pagamento/retorno?tx=${txId}`,
+        pending: `${baseUrl}/pagamento/retorno?tx=${txId}`,
+      },
+      notificationUrl: `${baseUrl}/api/webhooks/mercadopago`,
+    });
+    await pool.query("UPDATE idsc_registrations SET mp_preference_id = $1 WHERE tx_id = $2", [preference.id, txId]);
+
+    res.status(201).json({ success: true, results, initPoint: preference.initPoint, txId });
+  } catch (err: any) {
     console.error('Register-bulk idsc course error:', err);
-    res.status(500).json({ error: 'Erro ao realizar inscrição em lote IDSC.' });
+    res.status(500).json({ error: err.message || 'Erro ao realizar inscrição em lote IDSC.' });
   }
 });
 
@@ -3397,7 +3525,7 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
     }
 
     const alreadyRegisteredRes = await pool.query(
-      'SELECT 1 FROM registrations WHERE championship_id = $1 AND user_id = $2 AND modality_id = $3 AND stage_id = $4',
+      "SELECT 1 FROM registrations WHERE championship_id = $1 AND user_id = $2 AND modality_id = $3 AND stage_id = $4 AND payment_status = 'approved'",
       [championshipId, currentUser.id, modalityId, stageId]
     );
 
@@ -3407,6 +3535,11 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
       ? (champ.valorReinscricao ?? champ.registrationFee)
       : (champ.valorInscricaoIndividual ?? champ.registrationFee);
     const dataPagamento = new Date().toISOString().split('T')[0];
+
+    const mpConfig = await getMercadoPagoConfig(pool);
+    if (!mpConfig.accessToken) {
+      return res.status(400).json({ error: 'Pagamentos via Mercado Pago ainda não foram configurados pelo clube. Avise a diretoria.' });
+    }
 
     const newReg: Registration = {
       id: `reg_${Date.now()}`,
@@ -3418,17 +3551,17 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
       weaponId,
       crNumber,
       paymentMethod,
-      paymentStatus: 'approved', // Auto approved for responsive demonstration flow!
+      paymentStatus: 'pending',
       completionStatus: 'pending',
       registeredAt: new Date().toISOString(),
-      approvedAt: new Date().toISOString(),
       txId: `tx_gg_${Math.random().toString(36).substring(2, 12)}`,
       disqualified: false,
       penalty: 0,
       registeredByUserId: currentUser.id,
       registrationType,
       valorPago,
-      dataPagamento
+      dataPagamento,
+      paymentGateway: 'mercado_pago',
     };
 
     const client = await pool.connect();
@@ -3437,8 +3570,9 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
       await client.query(
         `INSERT INTO registrations (
           id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
-          payment_method, payment_status, completion_status, registered_at, approved_at, tx_id,
-          disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento
+          payment_method, payment_status, completion_status, registered_at, tx_id,
+          disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento,
+          payment_gateway
          )
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
         [
@@ -3454,14 +3588,14 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
           newReg.paymentStatus,
           newReg.completionStatus,
           newReg.registeredAt,
-          newReg.approvedAt || null,
           newReg.txId || null,
           newReg.disqualified,
           newReg.penalty,
           newReg.registeredByUserId,
           newReg.registrationType,
           newReg.valorPago,
-          newReg.dataPagamento
+          newReg.dataPagamento,
+          newReg.paymentGateway,
         ]
       );
 
@@ -3477,10 +3611,25 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
       client.release();
     }
 
-    res.status(201).json({ success: true, registration: newReg });
-  } catch (err) {
+    const baseUrl = getBaseUrl(req);
+    const preference = await mpCreatePreference({
+      accessToken: mpConfig.accessToken,
+      items: [{ title: `Inscrição - ${champ.title}`, quantity: 1, unitPrice: Number(valorPago) }],
+      externalReference: newReg.txId!,
+      payerEmail: currentUser.email,
+      backUrls: {
+        success: `${baseUrl}/pagamento/retorno?tx=${newReg.txId}`,
+        failure: `${baseUrl}/pagamento/retorno?tx=${newReg.txId}`,
+        pending: `${baseUrl}/pagamento/retorno?tx=${newReg.txId}`,
+      },
+      notificationUrl: `${baseUrl}/api/webhooks/mercadopago`,
+    });
+    await pool.query('UPDATE registrations SET mp_preference_id = $1 WHERE id = $2', [preference.id, newReg.id]);
+
+    res.status(201).json({ success: true, registration: newReg, initPoint: preference.initPoint });
+  } catch (err: any) {
     console.error('Register championship database error:', err);
-    res.status(500).json({ error: 'Erro ao realizar inscrição.' });
+    res.status(500).json({ error: err.message || 'Erro ao realizar inscrição.' });
   }
 });
 
@@ -4111,7 +4260,14 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
   if (champRes.rows.length === 0) return res.status(404).json({ error: 'Campeonato não encontrado.' });
   const champ = mapChampionship(champRes.rows[0]);
 
+  const mpConfig = await getMercadoPagoConfig(pool);
+  if (!mpConfig.accessToken) {
+    return res.status(400).json({ error: 'Pagamentos via Mercado Pago ainda não foram configurados pelo clube. Avise a diretoria.' });
+  }
+
+  const txId = `tx_gg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   const results: Array<{ userId: string; status: 'inscrito' | 'reinscrito' | 'erro'; message?: string }> = [];
+  const preferenceItems: { title: string; quantity: number; unitPrice: number }[] = [];
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -4119,7 +4275,7 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
       try {
         // Validar sexo do atleta com a etapa
         const stageRes = await client.query('SELECT sexo FROM stages WHERE id = $1', [stageId]);
-        const userSexRes = await client.query('SELECT sex FROM users WHERE id = $1', [athlete.userId]);
+        const userSexRes = await client.query('SELECT sex, full_name FROM users WHERE id = $1', [athlete.userId]);
         if (stageRes.rows.length > 0 && userSexRes.rows.length > 0) {
           const stageSex = (stageRes.rows[0].sexo || 'misto').toLowerCase();
           if (stageSex !== 'misto') {
@@ -4131,7 +4287,7 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
         }
 
         const existing = await client.query(
-          'SELECT id FROM registrations WHERE championship_id=$1 AND user_id=$2 AND modality_id=$3 AND stage_id=$4',
+          "SELECT id FROM registrations WHERE championship_id=$1 AND user_id=$2 AND modality_id=$3 AND stage_id=$4 AND payment_status = 'approved'",
           [championshipId, athlete.userId, modalityId, stageId]
         );
         const isReinscricao = existing.rows.length > 0;
@@ -4147,25 +4303,50 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
         await client.query(
           `INSERT INTO registrations
             (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
-             payment_method, payment_status, completion_status, registered_at, approved_at,
-             registered_by_user_id, registration_type, valor_pago, data_pagamento, disqualified, penalty)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','approved','pending',$9,$9,$10,$11,$12,$13,false,0)`,
+             payment_method, payment_status, completion_status, registered_at, tx_id,
+             registered_by_user_id, registration_type, valor_pago, data_pagamento, disqualified, penalty, payment_gateway)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,$11,$12,$13,$14,false,0,'mercado_pago')`,
           [
             `reg_${Date.now()}_${athlete.userId.slice(-4)}`,
             championshipId, athlete.userId, clubId, modalityId, stageId, athlete.weaponId,
-            athlete.crNumber, new Date().toISOString(), currentUser.id, regType, valorPago, dataPagamento
+            athlete.crNumber, new Date().toISOString(), txId, currentUser.id, regType, valorPago, dataPagamento
           ]
         );
+        preferenceItems.push({
+          title: `Inscrição - ${champ.title} - ${userSexRes.rows[0]?.full_name || athlete.userId}`,
+          quantity: 1,
+          unitPrice: Number(valorPago),
+        });
         results.push({ userId: athlete.userId, status: isReinscricao ? 'reinscrito' : 'inscrito' });
       } catch (e: any) {
         results.push({ userId: athlete.userId, status: 'erro', message: e.message });
       }
     }
     await client.query('COMMIT');
-    res.status(201).json({ success: true, results });
-  } catch (e) {
+
+    if (preferenceItems.length === 0) {
+      return res.status(400).json({ success: false, results, error: 'Nenhum atleta pôde ser inscrito.' });
+    }
+
+    const baseUrl = getBaseUrl(req);
+    const preference = await mpCreatePreference({
+      accessToken: mpConfig.accessToken,
+      items: preferenceItems,
+      externalReference: txId,
+      backUrls: {
+        success: `${baseUrl}/pagamento/retorno?tx=${txId}`,
+        failure: `${baseUrl}/pagamento/retorno?tx=${txId}`,
+        pending: `${baseUrl}/pagamento/retorno?tx=${txId}`,
+      },
+      notificationUrl: `${baseUrl}/api/webhooks/mercadopago`,
+    });
+    await pool.query("UPDATE registrations SET mp_preference_id = $1 WHERE tx_id = $2", [preference.id, txId]);
+
+    res.status(201).json({ success: true, results, initPoint: preference.initPoint, txId });
+  } catch (e: any) {
     await client.query('ROLLBACK');
-    throw e;
+    console.error('Register-bulk championship error:', e);
+    res.status(500).json({ error: e.message || 'Erro ao realizar inscrição em lote.' });
   } finally {
     client.release();
   }
@@ -6649,6 +6830,214 @@ app.post(['/api/webhooks/sicoob-pix', '/api/webhooks/sicoob-pix/:chave'], async 
     res.status(200).json({ status: 'received' });
   } catch (err: any) {
     console.error('Sicoob PIX Webhook error:', err);
+    res.status(200).json({ status: 'received_with_error' });
+  }
+});
+
+// ==========================================
+// MERCADO PAGO — INTEGRAÇÃO REAL DE COBRANÇA (Checkout Pro)
+// ==========================================
+// Diferente da integração Sicoob acima (que simula token/cobrança e nunca
+// chama a API real), esta é a primeira integração de pagamento do sistema
+// que efetivamente cobra: cria uma preferência de pagamento de verdade na
+// API do Mercado Pago, redireciona o pagador para o checkout hospedado do
+// MP, e só marca a inscrição como aprovada quando o webhook confirma o
+// pagamento — nunca no momento em que o formulário é enviado.
+
+// EasyPanel/Traefik termina TLS e repassa por HTTP internamente sem
+// "trust proxy" configurado no Express — req.protocol sozinho reportaria
+// "http" mesmo em produção. O Mercado Pago exige notification_url em HTTPS,
+// então preferimos os headers de proxy quando presentes.
+function getBaseUrl(req: express.Request): string {
+  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
+  const host = (req.headers['x-forwarded-host'] as string) || req.get('host');
+  return `${proto}://${host}`;
+}
+
+// Get Mercado Pago config (Access Token mascarado — nunca retorna o valor
+// completo, diferente do Sicoob; aqui é credencial que move dinheiro real).
+app.get('/api/admin/mercadopago/config', requireMasterAdmin, async (req, res) => {
+  try {
+    const config = await getMercadoPagoConfig(pool);
+    res.json({
+      config: {
+        mercadopago_access_token_masked: maskAccessToken(config.accessToken),
+        mercadopago_access_token_set: Boolean(config.accessToken),
+        mercadopago_public_key: config.publicKey,
+        mercadopago_webhook_secret_set: Boolean(config.webhookSecret),
+        env: mercadoPagoEnvFromToken(config.accessToken),
+      },
+    });
+  } catch (err: any) {
+    console.error('Fetch Mercado Pago config error:', err);
+    res.status(500).json({ error: 'Erro ao buscar configurações do Mercado Pago.' });
+  }
+});
+
+// Save Mercado Pago config. Campos em branco não sobrescrevem o valor salvo
+// (permite trocar só a Public Key sem precisar reenviar o Access Token, já
+// que o GET nunca devolve o valor completo para preencher de volta no form).
+app.post('/api/admin/mercadopago/config', requireMasterAdmin, async (req, res) => {
+  try {
+    const { mercadopago_access_token, mercadopago_public_key, mercadopago_webhook_secret } = req.body;
+    const entries: [string, string][] = [
+      ['mercadopago_access_token', mercadopago_access_token],
+      ['mercadopago_public_key', mercadopago_public_key],
+      ['mercadopago_webhook_secret', mercadopago_webhook_secret],
+    ].filter(([, v]) => typeof v === 'string' && v.trim() !== '') as [string, string][];
+
+    for (const [k, v] of entries) {
+      await pool.query(
+        `INSERT INTO settings (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+        [k, v]
+      );
+    }
+    res.json({ success: true, message: 'Configurações do Mercado Pago salvas com sucesso!' });
+  } catch (err: any) {
+    console.error('Save Mercado Pago config error:', err);
+    res.status(500).json({ error: err.message || 'Erro ao salvar configurações do Mercado Pago.' });
+  }
+});
+
+// Testa a conexão de verdade: chama GET /users/me na API do Mercado Pago com
+// o Access Token salvo. Diferente do "teste" falso do Sicoob, isto realmente
+// valida a credencial contra o servidor do Mercado Pago.
+app.post('/api/admin/mercadopago/test-connection', requireMasterAdmin, async (req, res) => {
+  try {
+    const config = await getMercadoPagoConfig(pool);
+    if (!config.accessToken) {
+      return res.status(400).json({ success: false, error: 'Configure e salve o Access Token antes de testar.' });
+    }
+    const account = await mpFetchAccountInfo(config.accessToken);
+    res.json({
+      success: true,
+      env: mercadoPagoEnvFromToken(config.accessToken),
+      accountId: account.id,
+      nickname: account.nickname,
+      email: account.email,
+      siteId: account.site_id,
+      message: `Conexão validada com sucesso (${mercadoPagoEnvFromToken(config.accessToken) === 'production' ? 'Produção' : 'Teste'})! Conta: ${account.nickname || account.email || account.id}.`,
+    });
+  } catch (err: any) {
+    console.error('Test Mercado Pago connection error:', err);
+    res.status(400).json({ success: false, error: err.message || 'Não foi possível validar as credenciais no Mercado Pago.' });
+  }
+});
+
+// GET de acompanhamento usado pela tela de retorno do checkout (back_urls) —
+// o front consulta por tx_id até o webhook confirmar o pagamento, já que o
+// redirecionamento do navegador não é a fonte da verdade.
+app.get('/api/registrations/by-tx/:txId', requireAuth, async (req, res) => {
+  try {
+    const { txId } = req.params;
+    const r = await pool.query(
+      `SELECT id, payment_status, championship_id FROM registrations WHERE tx_id = $1`,
+      [txId]
+    );
+    if (r.rows.length === 0) return res.status(404).json({ error: 'Inscrição não encontrada.' });
+    const anyApproved = r.rows.some(row => row.payment_status === 'approved');
+    res.json({
+      status: anyApproved ? 'approved' : r.rows[0].payment_status,
+      count: r.rows.length,
+    });
+  } catch (err) {
+    console.error('Fetch registration by tx error:', err);
+    res.status(500).json({ error: 'Erro ao consultar status do pagamento.' });
+  }
+});
+
+app.get('/api/idsc/registrations/by-tx/:txId', requireAuth, async (req, res) => {
+  try {
+    const { txId } = req.params;
+    const r = await pool.query(
+      `SELECT id, payment_status FROM idsc_registrations WHERE tx_id = $1`,
+      [txId]
+    );
+    if (r.rows.length === 0) return res.status(404).json({ error: 'Inscrição não encontrada.' });
+    const anyApproved = r.rows.some(row => row.payment_status === 'approved');
+    res.json({
+      status: anyApproved ? 'approved' : r.rows[0].payment_status,
+      count: r.rows.length,
+    });
+  } catch (err) {
+    console.error('Fetch idsc registration by tx error:', err);
+    res.status(500).json({ error: 'Erro ao consultar status do pagamento.' });
+  }
+});
+
+// Webhook público do Mercado Pago — sem requireAuth (o MP não manda o header
+// x-user-id da plataforma). A assinatura (x-signature) é o que garante que a
+// chamada realmente veio do Mercado Pago, não um POST forjado por terceiros.
+app.post('/api/webhooks/mercadopago', async (req, res) => {
+  try {
+    const config = await getMercadoPagoConfig(pool);
+    const dataId = (req.body?.data?.id as string) || (req.query['data.id'] as string) || (req.query.id as string);
+    const type = req.body?.type || req.query.type;
+
+    if (type && type !== 'payment') {
+      return res.status(200).json({ status: 'ignored' });
+    }
+    if (!dataId) {
+      return res.status(200).json({ status: 'ignored_no_id' });
+    }
+
+    const validSignature = mpVerifyWebhookSignature({
+      xSignature: req.headers['x-signature'] as string | undefined,
+      xRequestId: req.headers['x-request-id'] as string | undefined,
+      dataId,
+      webhookSecret: config.webhookSecret,
+    });
+    if (!validSignature) {
+      console.warn('Webhook Mercado Pago com assinatura inválida, ignorado. data.id=', dataId);
+      return res.status(200).json({ status: 'invalid_signature' });
+    }
+
+    // Nunca confia no corpo do webhook para status/valor — ele é só um aviso
+    // "algo mudou"; busca o pagamento direto na API do Mercado Pago, que é a
+    // fonte da verdade (recomendação oficial do próprio MP).
+    const payment = await mpFetchPayment(config.accessToken, dataId);
+    const txId = payment.external_reference;
+    if (!txId) {
+      return res.status(200).json({ status: 'no_external_reference' });
+    }
+
+    // payment_type_id real devolvido pelo Mercado Pago (ex.: 'pix',
+    // 'credit_card', 'debit_card', 'ticket', 'account_money') — substitui a
+    // intenção inicial pela forma de pagamento efetivamente usada.
+    const realPaymentMethod: string | null = payment.payment_type_id || null;
+
+    if (payment.status === 'approved') {
+      await pool.query(
+        `UPDATE registrations SET payment_status = 'approved', approved_at = NOW()::text, mp_payment_id = $1,
+           payment_method = COALESCE($3, payment_method)
+         WHERE tx_id = $2 AND payment_gateway = 'mercado_pago'`,
+        [String(payment.id), txId, realPaymentMethod]
+      );
+      await pool.query(
+        `UPDATE idsc_registrations SET payment_status = 'approved', approved_at = NOW(), mp_payment_id = $1,
+           payment_method = COALESCE($3, payment_method)
+         WHERE tx_id = $2 AND payment_gateway = 'mercado_pago'`,
+        [String(payment.id), txId, realPaymentMethod]
+      );
+    } else if (payment.status === 'rejected' || payment.status === 'cancelled') {
+      await pool.query(
+        `UPDATE registrations SET payment_status = 'rejected', mp_payment_id = $1
+         WHERE tx_id = $2 AND payment_gateway = 'mercado_pago' AND payment_status = 'pending'`,
+        [String(payment.id), txId]
+      );
+      await pool.query(
+        `UPDATE idsc_registrations SET payment_status = 'rejected', mp_payment_id = $1
+         WHERE tx_id = $2 AND payment_gateway = 'mercado_pago' AND payment_status = 'pending'`,
+        [String(payment.id), txId]
+      );
+    }
+
+    res.status(200).json({ status: 'received' });
+  } catch (err: any) {
+    console.error('Mercado Pago Webhook error:', err);
+    // Sempre 200 — o Mercado Pago reenvia agressivamente em erro, e um erro
+    // transitório nosso não deveria virar uma tempestade de retentativas.
     res.status(200).json({ status: 'received_with_error' });
   }
 });

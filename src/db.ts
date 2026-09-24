@@ -731,6 +731,20 @@ export async function initDB() {
     await client.query(`ALTER TABLE registrations DROP CONSTRAINT IF EXISTS registrations_completion_status_check`);
     await client.query(`ALTER TABLE registrations ADD CONSTRAINT registrations_completion_status_check CHECK (completion_status IN ('pending', 'completed', 'absent'))`);
 
+    // Relax payment_status CHECK to accept 'rejected' — necessário para a
+    // integração Mercado Pago: um pagamento recusado/cancelado no checkout
+    // precisa de um estado próprio (diferente de 'pending' parado para
+    // sempre) para permitir uma nova tentativa de pagamento.
+    await client.query(`ALTER TABLE registrations DROP CONSTRAINT IF EXISTS registrations_payment_status_check`);
+    await client.query(`ALTER TABLE registrations ADD CONSTRAINT registrations_payment_status_check CHECK (payment_status IN ('pending', 'approved', 'rejected'))`);
+
+    // Relax payment_method CHECK: o Checkout Pro do Mercado Pago aceita mais
+    // formas de pagamento do que só pix/cartão de crédito (débito, boleto,
+    // saldo em conta) — o webhook grava o payment_type_id real devolvido
+    // pelo Mercado Pago, então o valor final pode ser qualquer um desses.
+    await client.query(`ALTER TABLE registrations DROP CONSTRAINT IF EXISTS registrations_payment_method_check`);
+    await client.query(`ALTER TABLE registrations ADD CONSTRAINT registrations_payment_method_check CHECK (payment_method IN ('pix', 'credit_card', 'debit_card', 'ticket', 'account_money', 'bank_transfer'))`);
+
 
     // The legacy free-text `modality` column (unused by this app) may still exist with a
     // NOT NULL constraint from an earlier schema version, which would reject every new
@@ -1274,6 +1288,18 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS multi_championship_id TEXT;
     `);
 
+    // Integração Mercado Pago: cobrança real via Checkout Pro. payment_gateway
+    // distingue inscrições cobradas de verdade ('mercado_pago') das antigas
+    // ('manual', valor padrão — nada muda para registros existentes).
+    // mp_preference_id é gravado na criação da inscrição (pending); mp_payment_id
+    // só é preenchido quando o webhook confirma o pagamento.
+    await client.query(`
+      ALTER TABLE registrations
+        ADD COLUMN IF NOT EXISTS payment_gateway TEXT NOT NULL DEFAULT 'manual',
+        ADD COLUMN IF NOT EXISTS mp_preference_id TEXT,
+        ADD COLUMN IF NOT EXISTS mp_payment_id TEXT;
+    `);
+
     // ─── Módulo IDSC (tiro dinâmico por tempo + penalidades) ──────────────────
     // Estruturalmente distinto do Campeonato normal (sem modalidades, "pista"
     // em vez de modalidade/série, tipo Clubes/Individual, taxas mais simples),
@@ -1341,6 +1367,18 @@ export async function initDB() {
       );
       CREATE INDEX IF NOT EXISTS idx_idsc_registrations_course ON idsc_registrations(course_id);
       CREATE INDEX IF NOT EXISTS idx_idsc_registrations_user ON idsc_registrations(user_id);
+    `);
+
+    // Mesmo mecanismo de cobrança real via Mercado Pago usado em registrations
+    // (ver acima). idsc_registrations nunca teve tx_id — precisa dele para
+    // agrupar inscrições em lote sob uma única preferência/pagamento.
+    await client.query(`
+      ALTER TABLE idsc_registrations
+        ADD COLUMN IF NOT EXISTS tx_id TEXT,
+        ADD COLUMN IF NOT EXISTS payment_gateway TEXT NOT NULL DEFAULT 'manual',
+        ADD COLUMN IF NOT EXISTS mp_preference_id TEXT,
+        ADD COLUMN IF NOT EXISTS mp_payment_id TEXT,
+        ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
     `);
 
     await client.query(`

@@ -4,6 +4,7 @@ import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import { SicoobPixManager } from './SicoobPixManager';
+import { MercadoPagoManager } from './MercadoPagoManager';
 import { 
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
@@ -651,6 +652,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
   const [searchingWeapon, setSearchingWeapon] = React.useState<Record<string, boolean>>({});
   const [saving, setSaving] = React.useState(false);
   const [success, setSuccess] = React.useState<{ userId: string; status: string; message?: string }[] | null>(null);
+  const [paymentInitPoint, setPaymentInitPoint] = React.useState<string | null>(null);
   const [error, setError] = React.useState('');
 
   // No celular, marcar um atleta abre um popup para vincular a arma em vez de
@@ -850,6 +852,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
       if (!res.ok) throw new Error(data.error || 'Erro na inscrição em lote');
 
       setSuccess(data.results || []);
+      setPaymentInitPoint(data.initPoint || null);
       setSelectedAthletes({});
     } catch (err: any) {
       setError(err.message);
@@ -1153,7 +1156,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
               <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
                 <CheckCircle className="w-4 h-4 text-emerald-600" /> Resultados do Lote
               </h4>
-              <button onClick={() => setSuccess(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+              <button onClick={() => { setSuccess(null); setPaymentInitPoint(null); }} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1166,19 +1169,34 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
                     <span className={res.status === 'erro' ? 'text-red-600 font-semibold' : 'text-emerald-700 font-semibold'}>
                       {res.status === 'erro'
                         ? `Erro - ${res.message}`
-                        : `${res.status === 'inscrito' ? 'Inscrito com sucesso' : 'Reinscrição efetuada'}${res.message ? ` (${res.message})` : ''}`}
+                        : `${res.status === 'inscrito' ? 'Incluído no lote' : 'Reinscrição incluída no lote'}${res.message ? ` (${res.message})` : ''}`}
                     </span>
                   </li>
                 );
               })}
             </ul>
-            <button
-              type="button"
-              onClick={() => setSuccess(null)}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-2.5 rounded-xl font-bold transition cursor-pointer shrink-0"
-            >
-              Fechar
-            </button>
+            {paymentInitPoint ? (
+              <>
+                <p className="text-[11px] text-slate-500 shrink-0">
+                  As inscrições acima ficam pendentes até o pagamento único do lote ser confirmado no Mercado Pago.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { window.location.href = paymentInitPoint; }}
+                  className="w-full bg-[#00293d] hover:bg-[#001f2e] text-white text-xs py-2.5 rounded-xl font-bold transition cursor-pointer shrink-0"
+                >
+                  Ir para pagamento no Mercado Pago
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSuccess(null)}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-2.5 rounded-xl font-bold transition cursor-pointer shrink-0"
+              >
+                Fechar
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -3155,6 +3173,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
   const [searchingWeapon, setSearchingWeapon] = React.useState<Record<string, boolean>>({});
   const [saving, setSaving] = React.useState(false);
   const [success, setSuccess] = React.useState<{ userId: string; status: string; message?: string }[] | null>(null);
+  const [paymentInitPoint, setPaymentInitPoint] = React.useState<string | null>(null);
   const [error, setError] = React.useState('');
 
   const [athleteFilterQuery, setAthleteFilterQuery] = React.useState('');
@@ -3345,6 +3364,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro na inscrição em lote IDSC.');
       setSuccess(data.results || []);
+      setPaymentInitPoint(data.initPoint || null);
       setSelectedAthletes({});
     } catch (err: any) {
       setError(err.message);
@@ -3522,7 +3542,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
           <div className="bg-white rounded-2xl border border-slate-200 p-5 w-full max-w-sm shadow-2xl space-y-4 max-h-[80vh] flex flex-col">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100 shrink-0">
               <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-emerald-600" /> Resultados do Lote</h4>
-              <button onClick={() => setSuccess(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X className="w-4 h-4" /></button>
+              <button onClick={() => { setSuccess(null); setPaymentInitPoint(null); }} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
             <ul className="space-y-1.5 text-xs overflow-y-auto">
               {success.map((res, i) => {
@@ -3531,13 +3551,27 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
                   <li key={i} className="flex items-start gap-1.5">
                     <span className="font-bold text-slate-800 shrink-0">{athlete?.fullName}:</span>
                     <span className={res.status === 'erro' ? 'text-red-600 font-semibold' : 'text-emerald-700 font-semibold'}>
-                      {res.status === 'erro' ? `Erro - ${res.message}` : (res.status === 'inscrito' ? 'Inscrito com sucesso' : 'Reinscrição efetuada')}
+                      {res.status === 'erro' ? `Erro - ${res.message}` : (res.status === 'inscrito' ? 'Incluído no lote' : 'Reinscrição incluída no lote')}
                     </span>
                   </li>
                 );
               })}
             </ul>
-            <button onClick={() => setSuccess(null)} className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-2.5 rounded-xl font-bold transition cursor-pointer shrink-0">Fechar</button>
+            {paymentInitPoint ? (
+              <>
+                <p className="text-[11px] text-slate-500 shrink-0">
+                  As inscrições acima ficam pendentes até o pagamento único do lote ser confirmado no Mercado Pago.
+                </p>
+                <button
+                  onClick={() => { window.location.href = paymentInitPoint; }}
+                  className="w-full bg-[#00293d] hover:bg-[#001f2e] text-white text-xs py-2.5 rounded-xl font-bold transition cursor-pointer shrink-0"
+                >
+                  Ir para pagamento no Mercado Pago
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setSuccess(null)} className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-2.5 rounded-xl font-bold transition cursor-pointer shrink-0">Fechar</button>
+            )}
           </div>
         </div>
       )}
@@ -10293,6 +10327,9 @@ export default function AdminPanel({
       case 'integracoes_sicoob':
         return <SicoobPixManager currentUser={currentUser} />;
 
+      case 'integracoes_mercadopago':
+        return <MercadoPagoManager currentUser={currentUser} />;
+
       case 'idsc_campeonatos':
         return <IdscCampeonatosPanel currentUser={currentUser} />;
 
@@ -10844,6 +10881,7 @@ export default function AdminPanel({
                 {expandedSections.integracoes && (
                   <div className="pl-3 border-l border-slate-100 space-y-0.5 mt-1">
                     <button onClick={() => setPlataformaMenu('integracoes_sicoob')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'integracoes_sicoob' ? 'text-blue-600 bg-blue-50/50 font-bold' : 'text-slate-650 hover:bg-slate-50'}`}>Sicoob</button>
+                    <button onClick={() => setPlataformaMenu('integracoes_mercadopago')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'integracoes_mercadopago' ? 'text-blue-600 bg-blue-50/50 font-bold' : 'text-slate-650 hover:bg-slate-50'}`}>Mercado Pago</button>
                   </div>
                 )}
               </div>
