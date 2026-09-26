@@ -94,7 +94,7 @@ function mtlsRequest(config: SicoobConfig, opts: {
 
 // Cache em memória do access token (evita gerar um novo a cada chamada —
 // o Sicoob, como qualquer OAuth client_credentials, espera reuso até expirar).
-let cachedToken: { env: string; clientId: string; accessToken: string; expiresAt: number } | null = null;
+let cachedToken: { env: string; clientId: string; accessToken: string; expiresAt: number; expiresIn: number; scope: string } | null = null;
 
 export async function getSicoobAccessToken(config: SicoobConfig): Promise<string> {
   const now = Date.now();
@@ -134,6 +134,8 @@ export async function getSicoobAccessToken(config: SicoobConfig): Promise<string
     accessToken: json.access_token,
     // margem de 60s antes da expiração real informada
     expiresAt: now + (Number(json.expires_in || 3600) - 60) * 1000,
+    expiresIn: Number(json.expires_in || 3600),
+    scope: json.scope || '',
   };
   return json.access_token;
 }
@@ -234,7 +236,14 @@ export async function registerWebhook(config: SicoobConfig, webhookUrl: string):
 
 export async function fetchAccountInfo(config: SicoobConfig): Promise<{ accessToken: string; expiresIn: number; scope: string }> {
   const accessToken = await getSicoobAccessToken(config);
-  return { accessToken, expiresIn: 3600, scope: 'cob.read cob.write pix.read pix.write webhook.read webhook.write' };
+  // getSicoobAccessToken preenche cachedToken como efeito colateral — usamos
+  // os valores reais devolvidos pelo Sicoob (expires_in, scope), não um
+  // placeholder fixo, para o "Testar Conexão" refletir a resposta de verdade.
+  return {
+    accessToken,
+    expiresIn: cachedToken?.expiresIn ?? 3600,
+    scope: cachedToken?.scope || '',
+  };
 }
 
 // Gera um txid compatível com o padrão BACEN: 26-35 caracteres
