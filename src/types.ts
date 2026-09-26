@@ -326,9 +326,10 @@ export interface Registration {
   clubAmmoType?: 'nova' | 'recarga';
   multiChampionshipId?: string; // Presente quando a inscrição foi gerada por um multicampeonato
   legacyId?: number;
-  paymentGateway?: 'manual' | 'mercado_pago';
+  paymentGateway?: 'manual' | 'mercado_pago' | 'sicoob';
   mpPreferenceId?: string;
   mpPaymentId?: string;
+  pixCopiaECola?: string;
 }
 
 export interface StageScore {
@@ -488,9 +489,10 @@ export interface IdscRegistration {
   registeredAt: string;
   approvedAt?: string;
   txId?: string;
-  paymentGateway?: 'manual' | 'mercado_pago';
+  paymentGateway?: 'manual' | 'mercado_pago' | 'sicoob';
   mpPreferenceId?: string;
   mpPaymentId?: string;
+  pixCopiaECola?: string;
 }
 
 export interface IdscTargetResult {

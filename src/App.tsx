@@ -1177,14 +1177,14 @@ export default function App() {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         // A inscrição nasce 'pending' — só é aprovada quando o webhook do
-        // Mercado Pago confirmar o pagamento, então já reflete no estado
+        // Sicoob confirmar o pagamento PIX, então já reflete no estado
         // local (a lista de inscrições mostra o status real).
         if (data.registration) {
           setRegistrations(prev => [...prev, data.registration]);
         } else {
           await refreshRegistrations();
         }
-        return { initPoint: data.initPoint as string | undefined };
+        return { pixCopiaECola: data.pixCopiaECola as string | undefined, txId: data.registration?.txId as string | undefined };
       } else {
         throw new Error(data.error || 'Erro ao realizar inscrição.');
       }

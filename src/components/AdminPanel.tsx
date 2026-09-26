@@ -5,11 +5,12 @@ import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import { SicoobPixManager } from './SicoobPixManager';
 import { MercadoPagoManager } from './MercadoPagoManager';
-import { 
+import { PixPaymentModal } from './PixPaymentModal';
+import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn
+  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn, QrCode
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -652,7 +653,8 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
   const [searchingWeapon, setSearchingWeapon] = React.useState<Record<string, boolean>>({});
   const [saving, setSaving] = React.useState(false);
   const [success, setSuccess] = React.useState<{ userId: string; status: string; message?: string }[] | null>(null);
-  const [paymentInitPoint, setPaymentInitPoint] = React.useState<string | null>(null);
+  const [pixPayment, setPixPayment] = React.useState<{ pixCopiaECola: string; txId: string } | null>(null);
+  const [showPixModal, setShowPixModal] = React.useState(false);
   const [error, setError] = React.useState('');
 
   // No celular, marcar um atleta abre um popup para vincular a arma em vez de
@@ -852,7 +854,9 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
       if (!res.ok) throw new Error(data.error || 'Erro na inscrição em lote');
 
       setSuccess(data.results || []);
-      setPaymentInitPoint(data.initPoint || null);
+      const pix = data.pixCopiaECola && data.txId ? { pixCopiaECola: data.pixCopiaECola, txId: data.txId } : null;
+      setPixPayment(pix);
+      setShowPixModal(Boolean(pix));
       setSelectedAthletes({});
     } catch (err: any) {
       setError(err.message);
@@ -1156,7 +1160,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
               <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
                 <CheckCircle className="w-4 h-4 text-emerald-600" /> Resultados do Lote
               </h4>
-              <button onClick={() => { setSuccess(null); setPaymentInitPoint(null); }} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+              <button onClick={() => { setSuccess(null); setPixPayment(null); setShowPixModal(false); }} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1175,17 +1179,17 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
                 );
               })}
             </ul>
-            {paymentInitPoint ? (
+            {pixPayment ? (
               <>
                 <p className="text-[11px] text-slate-500 shrink-0">
-                  As inscrições acima ficam pendentes até o pagamento único do lote ser confirmado no Mercado Pago.
+                  As inscrições acima ficam pendentes até o pagamento único do lote ser confirmado via PIX.
                 </p>
                 <button
                   type="button"
-                  onClick={() => { window.location.href = paymentInitPoint; }}
-                  className="w-full bg-[#00293d] hover:bg-[#001f2e] text-white text-xs py-2.5 rounded-xl font-bold transition cursor-pointer shrink-0"
+                  onClick={() => setShowPixModal(true)}
+                  className="w-full bg-[#00293d] hover:bg-[#001f2e] text-white text-xs py-2.5 rounded-xl font-bold transition cursor-pointer shrink-0 flex items-center justify-center gap-1.5"
                 >
-                  Ir para pagamento no Mercado Pago
+                  <QrCode className="w-4 h-4" /> Ver QR Code PIX
                 </button>
               </>
             ) : (
@@ -1199,6 +1203,17 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
             )}
           </div>
         </div>
+      )}
+
+      {pixPayment && showPixModal && (
+        <PixPaymentModal
+          pixCopiaECola={pixPayment.pixCopiaECola}
+          pollEndpoint={`/api/registrations/by-tx/${pixPayment.txId}`}
+          authHeaders={currentUser ? { 'x-user-id': currentUser.id } : undefined}
+          title="PIX - Inscrição em lote"
+          onApproved={() => {}}
+          onClose={() => setShowPixModal(false)}
+        />
       )}
     </div>
   );
@@ -3173,7 +3188,8 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
   const [searchingWeapon, setSearchingWeapon] = React.useState<Record<string, boolean>>({});
   const [saving, setSaving] = React.useState(false);
   const [success, setSuccess] = React.useState<{ userId: string; status: string; message?: string }[] | null>(null);
-  const [paymentInitPoint, setPaymentInitPoint] = React.useState<string | null>(null);
+  const [pixPayment, setPixPayment] = React.useState<{ pixCopiaECola: string; txId: string } | null>(null);
+  const [showPixModal, setShowPixModal] = React.useState(false);
   const [error, setError] = React.useState('');
 
   const [athleteFilterQuery, setAthleteFilterQuery] = React.useState('');
@@ -3364,7 +3380,9 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro na inscrição em lote IDSC.');
       setSuccess(data.results || []);
-      setPaymentInitPoint(data.initPoint || null);
+      const pix = data.pixCopiaECola && data.txId ? { pixCopiaECola: data.pixCopiaECola, txId: data.txId } : null;
+      setPixPayment(pix);
+      setShowPixModal(Boolean(pix));
       setSelectedAthletes({});
     } catch (err: any) {
       setError(err.message);
@@ -3542,7 +3560,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
           <div className="bg-white rounded-2xl border border-slate-200 p-5 w-full max-w-sm shadow-2xl space-y-4 max-h-[80vh] flex flex-col">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100 shrink-0">
               <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-emerald-600" /> Resultados do Lote</h4>
-              <button onClick={() => { setSuccess(null); setPaymentInitPoint(null); }} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X className="w-4 h-4" /></button>
+              <button onClick={() => { setSuccess(null); setPixPayment(null); setShowPixModal(false); }} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
             <ul className="space-y-1.5 text-xs overflow-y-auto">
               {success.map((res, i) => {
@@ -3557,16 +3575,16 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
                 );
               })}
             </ul>
-            {paymentInitPoint ? (
+            {pixPayment ? (
               <>
                 <p className="text-[11px] text-slate-500 shrink-0">
-                  As inscrições acima ficam pendentes até o pagamento único do lote ser confirmado no Mercado Pago.
+                  As inscrições acima ficam pendentes até o pagamento único do lote ser confirmado via PIX.
                 </p>
                 <button
-                  onClick={() => { window.location.href = paymentInitPoint; }}
-                  className="w-full bg-[#00293d] hover:bg-[#001f2e] text-white text-xs py-2.5 rounded-xl font-bold transition cursor-pointer shrink-0"
+                  onClick={() => setShowPixModal(true)}
+                  className="w-full bg-[#00293d] hover:bg-[#001f2e] text-white text-xs py-2.5 rounded-xl font-bold transition cursor-pointer shrink-0 flex items-center justify-center gap-1.5"
                 >
-                  Ir para pagamento no Mercado Pago
+                  <QrCode className="w-4 h-4" /> Ver QR Code PIX
                 </button>
               </>
             ) : (
@@ -3574,6 +3592,17 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
             )}
           </div>
         </div>
+      )}
+
+      {pixPayment && showPixModal && (
+        <PixPaymentModal
+          pixCopiaECola={pixPayment.pixCopiaECola}
+          pollEndpoint={`/api/idsc/registrations/by-tx/${pixPayment.txId}`}
+          authHeaders={currentUser ? { 'x-user-id': currentUser.id } : undefined}
+          title="PIX - Inscrição IDSC em lote"
+          onApproved={() => {}}
+          onClose={() => setShowPixModal(false)}
+        />
       )}
     </div>
   );

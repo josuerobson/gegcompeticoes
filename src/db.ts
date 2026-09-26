@@ -1300,6 +1300,14 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS mp_payment_id TEXT;
     `);
 
+    // Integração Sicoob (PIX real, padrão BACEN): guarda o código Pix Copia
+    // e Cola retornado na criação da cobrança, para o front conseguir
+    // reabrir o mesmo QR (por tx_id) sem gerar uma cobrança duplicada.
+    await client.query(`
+      ALTER TABLE registrations
+        ADD COLUMN IF NOT EXISTS pix_copia_e_cola TEXT;
+    `);
+
     // ─── Módulo IDSC (tiro dinâmico por tempo + penalidades) ──────────────────
     // Estruturalmente distinto do Campeonato normal (sem modalidades, "pista"
     // em vez de modalidade/série, tipo Clubes/Individual, taxas mais simples),
@@ -1378,6 +1386,7 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS payment_gateway TEXT NOT NULL DEFAULT 'manual',
         ADD COLUMN IF NOT EXISTS mp_preference_id TEXT,
         ADD COLUMN IF NOT EXISTS mp_payment_id TEXT,
+        ADD COLUMN IF NOT EXISTS pix_copia_e_cola TEXT,
         ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
     `);
 

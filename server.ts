@@ -14,6 +14,11 @@ import {
   createPreference as mpCreatePreference, fetchPayment as mpFetchPayment,
   fetchAccountInfo as mpFetchAccountInfo, verifyWebhookSignature as mpVerifyWebhookSignature,
 } from './src/mercadopago.js';
+import {
+  getSicoobConfig, createOrUpdateCob, fetchCob as sicoobFetchCob,
+  registerWebhook as sicoobRegisterWebhook, fetchAccountInfo as sicoobFetchAccountInfo,
+  generateSicoobTxId,
+} from './src/sicoob.js';
 import multer from 'multer';
 
 const app = express();
@@ -346,9 +351,10 @@ function mapRegistration(r: any): Registration {
     clubAmmoType: (r.club_ammo_type as 'nova' | 'recarga') || 'recarga',
     multiChampionshipId: r.multi_championship_id || undefined,
     legacyId: r.legacy_id ?? undefined,
-    paymentGateway: (r.payment_gateway as 'manual' | 'mercado_pago') || 'manual',
+    paymentGateway: (r.payment_gateway as 'manual' | 'mercado_pago' | 'sicoob') || 'manual',
     mpPreferenceId: r.mp_preference_id || undefined,
     mpPaymentId: r.mp_payment_id || undefined,
+    pixCopiaECola: r.pix_copia_e_cola || undefined,
   };
 }
 
@@ -436,9 +442,10 @@ function mapIdscRegistration(r: any): IdscRegistration {
     registeredAt: r.registered_at,
     approvedAt: r.approved_at || undefined,
     txId: r.tx_id || undefined,
-    paymentGateway: (r.payment_gateway as 'manual' | 'mercado_pago') || 'manual',
+    paymentGateway: (r.payment_gateway as 'manual' | 'mercado_pago' | 'sicoob') || 'manual',
     mpPreferenceId: r.mp_preference_id || undefined,
     mpPaymentId: r.mp_payment_id || undefined,
+    pixCopiaECola: r.pix_copia_e_cola || undefined,
   };
 }
 
@@ -816,16 +823,17 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
       ? Number((Number(multi.registrationFee) / champCount).toFixed(2))
       : Number(multi.registrationFee);
     const dataPagamento = new Date().toISOString().split('T')[0];
-    const txId = `tx_multi_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const txId = generateSicoobTxId();
 
-    const mpConfig = await getMercadoPagoConfig(pool);
-    if (!mpConfig.accessToken) {
-      return res.status(400).json({ error: 'Pagamentos via Mercado Pago ainda não foram configurados pelo clube. Avise a diretoria.' });
+    const sicoobConfig = await getSicoobConfig(pool);
+    if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube. Avise a diretoria.' });
     }
 
     const client = await pool.connect();
     const createdRegs: Registration[] = [];
-    const preferenceItems: { title: string; quantity: number; unitPrice: number }[] = [];
+    const champTitles: string[] = [];
+    let totalValor = 0;
     try {
       await client.query('BEGIN');
 
@@ -850,7 +858,7 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
             payment_method, payment_status, completion_status, registered_at, tx_id,
             disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento,
             multi_championship_id, payment_gateway
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending','pending',$10,$11,false,0,$12,$13,$14,$15,$16,'mercado_pago')`,
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending','pending',$10,$11,false,0,$12,$13,$14,$15,$16,'sicoob')`,
           [
             regId, item.championshipId, currentUser.id, currentUser.clubId || null, modalityId, item.stageId, weaponId, crNumber,
             paymentMethod, new Date().toISOString(), txId, currentUser.id,
@@ -858,7 +866,8 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
           ]
         );
         createdRegs.push({ id: regId, championshipId: item.championshipId } as Registration);
-        preferenceItems.push({ title: `Multicampeonato - ${champRow.rows[0].title}`, quantity: 1, unitPrice: Number(valorUnitario) });
+        champTitles.push(champRow.rows[0].title);
+        totalValor += Number(valorUnitario);
       }
 
       await client.query(
@@ -873,31 +882,25 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
       client.release();
     }
 
-    if (preferenceItems.length === 0) {
+    if (createdRegs.length === 0) {
       return res.status(400).json({ error: 'Nenhum campeonato válido encontrado no pacote.' });
     }
 
-    const baseUrl = getBaseUrl(req);
-    const preference = await mpCreatePreference({
-      accessToken: mpConfig.accessToken,
-      items: preferenceItems,
-      externalReference: txId,
-      payerEmail: currentUser.email,
-      backUrls: {
-        success: `${baseUrl}/pagamento/retorno?tx=${txId}`,
-        failure: `${baseUrl}/pagamento/retorno?tx=${txId}`,
-        pending: `${baseUrl}/pagamento/retorno?tx=${txId}`,
-      },
-      notificationUrl: `${baseUrl}/api/webhooks/mercadopago`,
+    const cob = await createOrUpdateCob(sicoobConfig, {
+      txid: txId,
+      valor: totalValor,
+      devedorNome: currentUser.fullName,
+      devedorCpf: currentUser.cpf,
+      solicitacaoPagador: `Multicampeonato - ${champTitles.join(' + ')}`.slice(0, 140),
     });
-    await pool.query("UPDATE registrations SET mp_preference_id = $1 WHERE tx_id = $2", [preference.id, txId]);
+    await pool.query('UPDATE registrations SET pix_copia_e_cola = $1 WHERE tx_id = $2', [cob.pixCopiaECola, txId]);
 
     res.status(201).json({
       success: true,
       inscricoesGeradas: createdRegs.length,
       txId,
       registrations: createdRegs,
-      initPoint: preference.initPoint,
+      pixCopiaECola: cob.pixCopiaECola,
     });
   } catch (err: any) {
     console.error('Register multi-championship error:', err);
@@ -937,16 +940,16 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
     const valorUnitario = champCount > 0 ? Number((valorTotal / champCount).toFixed(2)) : valorTotal;
     const dataPagamento = new Date().toISOString().split('T')[0];
 
-    const mpConfig = await getMercadoPagoConfig(pool);
-    if (!mpConfig.accessToken) {
-      return res.status(400).json({ error: 'Pagamentos via Mercado Pago ainda não foram configurados pelo clube. Avise a diretoria.' });
+    const sicoobConfig = await getSicoobConfig(pool);
+    if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube. Avise a diretoria.' });
     }
 
-    // Um único lote = uma única preferência/pagamento no Mercado Pago, cobrindo
+    // Um único lote = uma única cobrança PIX no Sicoob, cobrindo
     // todos os atletas e todos os campeonatos do pacote de uma vez.
-    const txId = `tx_multi_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const txId = generateSicoobTxId();
     const results: Array<{ userId: string; status: 'inscrito' | 'reinscrito' | 'erro'; message?: string }> = [];
-    const preferenceItems: { title: string; quantity: number; unitPrice: number }[] = [];
+    let totalValor = 0;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -989,18 +992,14 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
                 payment_method, payment_status, completion_status, registered_at, tx_id,
                 disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento,
                 multi_championship_id, payment_gateway
-              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,false,0,$11,$12,$13,$14,$15,'mercado_pago')`,
+              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,false,0,$11,$12,$13,$14,$15,'sicoob')`,
               [
                 regId, item.championshipId, athlete.userId, clubId, modalityId, item.stageId, athlete.weaponId,
                 athlete.crNumber, new Date().toISOString(), txId, currentUser.id,
                 isReinscricao ? 'reinscrição' : 'normal', valorUnitario, dataPagamento, multiId
               ]
             );
-            preferenceItems.push({
-              title: `Multicampeonato - ${champRow.rows[0]?.title || item.championshipId} - ${userRes.rows[0].full_name || athlete.userId}`,
-              quantity: 1,
-              unitPrice: Number(valorUnitario),
-            });
+            totalValor += Number(valorUnitario);
           }
 
           await client.query('UPDATE users SET cr_number = COALESCE(cr_number, $1) WHERE id = $2', [athlete.crNumber, athlete.userId]);
@@ -1016,25 +1015,20 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
       }
       await client.query('COMMIT');
 
-      if (preferenceItems.length === 0) {
+      if (totalValor <= 0) {
         return res.status(400).json({ success: false, results, error: 'Nenhum atleta pôde ser inscrito.' });
       }
 
-      const baseUrl = getBaseUrl(req);
-      const preference = await mpCreatePreference({
-        accessToken: mpConfig.accessToken,
-        items: preferenceItems,
-        externalReference: txId,
-        backUrls: {
-          success: `${baseUrl}/pagamento/retorno?tx=${txId}`,
-          failure: `${baseUrl}/pagamento/retorno?tx=${txId}`,
-          pending: `${baseUrl}/pagamento/retorno?tx=${txId}`,
-        },
-        notificationUrl: `${baseUrl}/api/webhooks/mercadopago`,
+      const cob = await createOrUpdateCob(sicoobConfig, {
+        txid: txId,
+        valor: totalValor,
+        devedorNome: currentUser.fullName,
+        devedorCpf: currentUser.cpf,
+        solicitacaoPagador: `Multicampeonato - Inscrição em lote (${results.filter(r => r.status !== 'erro').length} atletas)`.slice(0, 140),
       });
-      await pool.query("UPDATE registrations SET mp_preference_id = $1 WHERE tx_id = $2", [preference.id, txId]);
+      await pool.query('UPDATE registrations SET pix_copia_e_cola = $1 WHERE tx_id = $2', [cob.pixCopiaECola, txId]);
 
-      res.status(201).json({ success: true, results, initPoint: preference.initPoint, txId });
+      res.status(201).json({ success: true, results, pixCopiaECola: cob.pixCopiaECola, txId });
     } catch (e: any) {
       await client.query('ROLLBACK');
       console.error('Register-bulk multi-championship error:', e);
@@ -1288,36 +1282,30 @@ app.post('/api/idsc/courses/:id/register', requireAuth, async (req, res) => {
     const existing = await pool.query("SELECT id FROM idsc_registrations WHERE course_id=$1 AND user_id=$2 AND payment_status = 'approved'", [courseId, currentUser.id]);
     const isReinscricao = existing.rows.length > 0;
 
-    const mpConfig = await getMercadoPagoConfig(pool);
-    if (!mpConfig.accessToken) {
-      return res.status(400).json({ error: 'Pagamentos via Mercado Pago ainda não foram configurados pelo clube. Avise a diretoria.' });
+    const sicoobConfig = await getSicoobConfig(pool);
+    if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube. Avise a diretoria.' });
     }
 
     const id = `idsc_reg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const valorPago = champ ? Number(champ.individual_registration_fee) : 0;
-    const txId = `tx_idsc_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const txId = generateSicoobTxId();
     const result = await pool.query(
       `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status, tx_id, payment_gateway)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,'mercado_pago') RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,'sicoob') RETURNING *`,
       [id, courseId, currentUser.id, currentUser.clubId || null, weaponId, crNumber || currentUser.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago, paymentMethod || 'pix', txId]
     );
 
-    const baseUrl = getBaseUrl(req);
-    const preference = await mpCreatePreference({
-      accessToken: mpConfig.accessToken,
-      items: [{ title: `Inscrição IDSC - ${courseRes.rows[0].name}`, quantity: 1, unitPrice: valorPago }],
-      externalReference: txId,
-      payerEmail: currentUser.email,
-      backUrls: {
-        success: `${baseUrl}/pagamento/retorno?tx=${txId}`,
-        failure: `${baseUrl}/pagamento/retorno?tx=${txId}`,
-        pending: `${baseUrl}/pagamento/retorno?tx=${txId}`,
-      },
-      notificationUrl: `${baseUrl}/api/webhooks/mercadopago`,
+    const cob = await createOrUpdateCob(sicoobConfig, {
+      txid: txId,
+      valor: valorPago,
+      devedorNome: currentUser.fullName,
+      devedorCpf: currentUser.cpf,
+      solicitacaoPagador: `Inscrição IDSC - ${courseRes.rows[0].name}`.slice(0, 140),
     });
-    await pool.query('UPDATE idsc_registrations SET mp_preference_id = $1 WHERE id = $2', [preference.id, id]);
+    await pool.query('UPDATE idsc_registrations SET pix_copia_e_cola = $1 WHERE id = $2', [cob.pixCopiaECola, id]);
 
-    res.status(201).json({ idscRegistration: mapIdscRegistration(result.rows[0]), initPoint: preference.initPoint });
+    res.status(201).json({ idscRegistration: mapIdscRegistration(result.rows[0]), pixCopiaECola: cob.pixCopiaECola, txId });
   } catch (err: any) {
     console.error('Register idsc course error:', err);
     res.status(500).json({ error: err.message || 'Erro ao realizar inscrição IDSC.' });
@@ -1338,14 +1326,14 @@ app.post('/api/idsc/courses/:id/register-bulk', requireAdmin, async (req, res) =
     const champ = champRes.rows[0];
     const valorPago = champ ? Number(champ.club_registration_fee) : 0;
 
-    const mpConfig = await getMercadoPagoConfig(pool);
-    if (!mpConfig.accessToken) {
-      return res.status(400).json({ error: 'Pagamentos via Mercado Pago ainda não foram configurados pelo clube. Avise a diretoria.' });
+    const sicoobConfig = await getSicoobConfig(pool);
+    if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube. Avise a diretoria.' });
     }
 
-    const txId = `tx_idsc_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const txId = generateSicoobTxId();
     const results: Array<{ userId: string; status: 'inscrito' | 'reinscrito' | 'erro'; message?: string }> = [];
-    const preferenceItems: { title: string; quantity: number; unitPrice: number }[] = [];
+    let totalValor = 0;
     for (const athlete of athletes) {
       try {
         const userRes = await pool.query('SELECT club_id, full_name FROM users WHERE id = $1', [athlete.userId]);
@@ -1358,39 +1346,30 @@ app.post('/api/idsc/courses/:id/register-bulk', requireAdmin, async (req, res) =
         const id = `idsc_reg_${Date.now()}_${athlete.userId.slice(-4)}`;
         await pool.query(
           `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status, tx_id, payment_gateway)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pix','pending',$10,'mercado_pago')`,
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pix','pending',$10,'sicoob')`,
           [id, courseId, athlete.userId, clubId, athlete.weaponId, athlete.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago, txId]
         );
-        preferenceItems.push({
-          title: `Inscrição IDSC - ${courseRes.rows[0].name} - ${userRes.rows[0].full_name || athlete.userId}`,
-          quantity: 1,
-          unitPrice: valorPago,
-        });
+        totalValor += Number(valorPago);
         results.push({ userId: athlete.userId, status: isReinscricao ? 'reinscrito' : 'inscrito' });
       } catch (e: any) {
         results.push({ userId: athlete.userId, status: 'erro', message: e.message });
       }
     }
 
-    if (preferenceItems.length === 0) {
+    if (totalValor <= 0) {
       return res.status(400).json({ success: false, results, error: 'Nenhum atleta pôde ser inscrito.' });
     }
 
-    const baseUrl = getBaseUrl(req);
-    const preference = await mpCreatePreference({
-      accessToken: mpConfig.accessToken,
-      items: preferenceItems,
-      externalReference: txId,
-      backUrls: {
-        success: `${baseUrl}/pagamento/retorno?tx=${txId}`,
-        failure: `${baseUrl}/pagamento/retorno?tx=${txId}`,
-        pending: `${baseUrl}/pagamento/retorno?tx=${txId}`,
-      },
-      notificationUrl: `${baseUrl}/api/webhooks/mercadopago`,
+    const cob = await createOrUpdateCob(sicoobConfig, {
+      txid: txId,
+      valor: totalValor,
+      devedorNome: currentUser.fullName,
+      devedorCpf: currentUser.cpf,
+      solicitacaoPagador: `Inscrição IDSC em lote - ${courseRes.rows[0].name}`.slice(0, 140),
     });
-    await pool.query("UPDATE idsc_registrations SET mp_preference_id = $1 WHERE tx_id = $2", [preference.id, txId]);
+    await pool.query('UPDATE idsc_registrations SET pix_copia_e_cola = $1 WHERE tx_id = $2', [cob.pixCopiaECola, txId]);
 
-    res.status(201).json({ success: true, results, initPoint: preference.initPoint, txId });
+    res.status(201).json({ success: true, results, pixCopiaECola: cob.pixCopiaECola, txId });
   } catch (err: any) {
     console.error('Register-bulk idsc course error:', err);
     res.status(500).json({ error: err.message || 'Erro ao realizar inscrição em lote IDSC.' });
@@ -3536,9 +3515,9 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
       : (champ.valorInscricaoIndividual ?? champ.registrationFee);
     const dataPagamento = new Date().toISOString().split('T')[0];
 
-    const mpConfig = await getMercadoPagoConfig(pool);
-    if (!mpConfig.accessToken) {
-      return res.status(400).json({ error: 'Pagamentos via Mercado Pago ainda não foram configurados pelo clube. Avise a diretoria.' });
+    const sicoobConfig = await getSicoobConfig(pool);
+    if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube. Avise a diretoria.' });
     }
 
     const newReg: Registration = {
@@ -3554,14 +3533,14 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
       paymentStatus: 'pending',
       completionStatus: 'pending',
       registeredAt: new Date().toISOString(),
-      txId: `tx_gg_${Math.random().toString(36).substring(2, 12)}`,
+      txId: generateSicoobTxId(),
       disqualified: false,
       penalty: 0,
       registeredByUserId: currentUser.id,
       registrationType,
       valorPago,
       dataPagamento,
-      paymentGateway: 'mercado_pago',
+      paymentGateway: 'sicoob',
     };
 
     const client = await pool.connect();
@@ -3611,22 +3590,17 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
       client.release();
     }
 
-    const baseUrl = getBaseUrl(req);
-    const preference = await mpCreatePreference({
-      accessToken: mpConfig.accessToken,
-      items: [{ title: `Inscrição - ${champ.title}`, quantity: 1, unitPrice: Number(valorPago) }],
-      externalReference: newReg.txId!,
-      payerEmail: currentUser.email,
-      backUrls: {
-        success: `${baseUrl}/pagamento/retorno?tx=${newReg.txId}`,
-        failure: `${baseUrl}/pagamento/retorno?tx=${newReg.txId}`,
-        pending: `${baseUrl}/pagamento/retorno?tx=${newReg.txId}`,
-      },
-      notificationUrl: `${baseUrl}/api/webhooks/mercadopago`,
+    const cob = await createOrUpdateCob(sicoobConfig, {
+      txid: newReg.txId!,
+      valor: Number(valorPago),
+      devedorNome: currentUser.fullName,
+      devedorCpf: currentUser.cpf,
+      solicitacaoPagador: `Inscrição - ${champ.title}`.slice(0, 140),
     });
-    await pool.query('UPDATE registrations SET mp_preference_id = $1 WHERE id = $2', [preference.id, newReg.id]);
+    await pool.query('UPDATE registrations SET pix_copia_e_cola = $1 WHERE id = $2', [cob.pixCopiaECola, newReg.id]);
+    newReg.pixCopiaECola = cob.pixCopiaECola;
 
-    res.status(201).json({ success: true, registration: newReg, initPoint: preference.initPoint });
+    res.status(201).json({ success: true, registration: newReg, pixCopiaECola: cob.pixCopiaECola });
   } catch (err: any) {
     console.error('Register championship database error:', err);
     res.status(500).json({ error: err.message || 'Erro ao realizar inscrição.' });
@@ -4260,14 +4234,14 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
   if (champRes.rows.length === 0) return res.status(404).json({ error: 'Campeonato não encontrado.' });
   const champ = mapChampionship(champRes.rows[0]);
 
-  const mpConfig = await getMercadoPagoConfig(pool);
-  if (!mpConfig.accessToken) {
-    return res.status(400).json({ error: 'Pagamentos via Mercado Pago ainda não foram configurados pelo clube. Avise a diretoria.' });
+  const sicoobConfig = await getSicoobConfig(pool);
+  if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
+    return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube. Avise a diretoria.' });
   }
 
-  const txId = `tx_gg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  const txId = generateSicoobTxId();
   const results: Array<{ userId: string; status: 'inscrito' | 'reinscrito' | 'erro'; message?: string }> = [];
-  const preferenceItems: { title: string; quantity: number; unitPrice: number }[] = [];
+  let totalValor = 0;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -4305,18 +4279,14 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
             (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
              payment_method, payment_status, completion_status, registered_at, tx_id,
              registered_by_user_id, registration_type, valor_pago, data_pagamento, disqualified, penalty, payment_gateway)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,$11,$12,$13,$14,false,0,'mercado_pago')`,
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,$11,$12,$13,$14,false,0,'sicoob')`,
           [
             `reg_${Date.now()}_${athlete.userId.slice(-4)}`,
             championshipId, athlete.userId, clubId, modalityId, stageId, athlete.weaponId,
             athlete.crNumber, new Date().toISOString(), txId, currentUser.id, regType, valorPago, dataPagamento
           ]
         );
-        preferenceItems.push({
-          title: `Inscrição - ${champ.title} - ${userSexRes.rows[0]?.full_name || athlete.userId}`,
-          quantity: 1,
-          unitPrice: Number(valorPago),
-        });
+        totalValor += Number(valorPago);
         results.push({ userId: athlete.userId, status: isReinscricao ? 'reinscrito' : 'inscrito' });
       } catch (e: any) {
         results.push({ userId: athlete.userId, status: 'erro', message: e.message });
@@ -4324,25 +4294,20 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
     }
     await client.query('COMMIT');
 
-    if (preferenceItems.length === 0) {
+    if (totalValor <= 0) {
       return res.status(400).json({ success: false, results, error: 'Nenhum atleta pôde ser inscrito.' });
     }
 
-    const baseUrl = getBaseUrl(req);
-    const preference = await mpCreatePreference({
-      accessToken: mpConfig.accessToken,
-      items: preferenceItems,
-      externalReference: txId,
-      backUrls: {
-        success: `${baseUrl}/pagamento/retorno?tx=${txId}`,
-        failure: `${baseUrl}/pagamento/retorno?tx=${txId}`,
-        pending: `${baseUrl}/pagamento/retorno?tx=${txId}`,
-      },
-      notificationUrl: `${baseUrl}/api/webhooks/mercadopago`,
+    const cob = await createOrUpdateCob(sicoobConfig, {
+      txid: txId,
+      valor: totalValor,
+      devedorNome: currentUser.fullName,
+      devedorCpf: currentUser.cpf,
+      solicitacaoPagador: `Inscrição em lote - ${champ.title}`.slice(0, 140),
     });
-    await pool.query("UPDATE registrations SET mp_preference_id = $1 WHERE tx_id = $2", [preference.id, txId]);
+    await pool.query('UPDATE registrations SET pix_copia_e_cola = $1 WHERE tx_id = $2', [cob.pixCopiaECola, txId]);
 
-    res.status(201).json({ success: true, results, initPoint: preference.initPoint, txId });
+    res.status(201).json({ success: true, results, pixCopiaECola: cob.pixCopiaECola, txId });
   } catch (e: any) {
     await client.query('ROLLBACK');
     console.error('Register-bulk championship error:', e);
@@ -6639,51 +6604,72 @@ app.delete('/api/home-banners/:id', requireAdmin, async (req, res) => {
 // BANCO SICOOB - INTEGRAÇÃO PIX & OAUTH API
 // ==========================================
 
-// Get Sicoob PIX API config
-app.get('/api/admin/sicoob/config', requireAdmin, async (req, res) => {
+function maskSicoobSecret(value: string): string {
+  if (!value) return '';
+  if (value.length <= 8) return '••••••••';
+  return `${value.slice(0, 4)}••••${value.slice(-4)}`;
+}
+
+// Get Sicoob PIX API config — restrito a master_admin e com segredos
+// mascarados nas respostas (credencial que move dinheiro real).
+app.get('/api/admin/sicoob/config', requireMasterAdmin, async (req, res) => {
   try {
-    const keys = [
-      'sicoob_env', 'sicoob_client_id', 'sicoob_client_secret',
-      'sicoob_pix_key', 'sicoob_cert_pem', 'sicoob_key_pem', 'sicoob_account_number'
-    ];
-    const result = await pool.query('SELECT key, value FROM settings WHERE key = ANY($1)', [keys]);
-    const config: Record<string, string> = {
-      sicoob_env: 'sandbox',
-      sicoob_client_id: '',
-      sicoob_client_secret: '',
-      sicoob_pix_key: '',
-      sicoob_cert_pem: '',
-      sicoob_key_pem: '',
-      sicoob_account_number: ''
-    };
-    result.rows.forEach(r => { config[r.key] = r.value; });
-    res.json({ config });
+    const config = await getSicoobConfig(pool);
+    res.json({
+      config: {
+        sicoob_env: config.env,
+        sicoob_client_id: config.clientId,
+        sicoob_client_secret_set: Boolean(config.clientSecret),
+        sicoob_client_secret_masked: maskSicoobSecret(config.clientSecret),
+        sicoob_pix_key: config.pixKey,
+        sicoob_cert_pem_set: Boolean(config.certPem),
+        sicoob_key_pem_set: Boolean(config.keyPem),
+        sicoob_key_passphrase_set: Boolean(config.keyPassphrase),
+        sicoob_account_number: config.accountNumber,
+      },
+    });
   } catch (err: any) {
     console.error('Fetch Sicoob config error:', err);
     res.status(500).json({ error: 'Erro ao buscar configurações do Sicoob.' });
   }
 });
 
-// Save Sicoob PIX API config
-app.post('/api/admin/sicoob/config', requireAdmin, async (req, res) => {
+// Save Sicoob PIX API config. Campos em branco não sobrescrevem o valor
+// salvo (mesmo padrão do Mercado Pago — o GET nunca devolve o segredo
+// completo para preencher de volta no formulário).
+app.post('/api/admin/sicoob/config', requireMasterAdmin, async (req, res) => {
   try {
-    const { sicoob_env, sicoob_client_id, sicoob_client_secret, sicoob_pix_key, sicoob_cert_pem, sicoob_key_pem, sicoob_account_number } = req.body;
-    const entries = [
-      ['sicoob_env', sicoob_env || 'sandbox'],
-      ['sicoob_client_id', sicoob_client_id || ''],
-      ['sicoob_client_secret', sicoob_client_secret || ''],
-      ['sicoob_pix_key', sicoob_pix_key || ''],
-      ['sicoob_cert_pem', sicoob_cert_pem || ''],
-      ['sicoob_key_pem', sicoob_key_pem || ''],
-      ['sicoob_account_number', sicoob_account_number || '']
+    const {
+      sicoob_env, sicoob_client_id, sicoob_client_secret, sicoob_pix_key,
+      sicoob_cert_pem, sicoob_key_pem, sicoob_key_passphrase, sicoob_account_number,
+    } = req.body;
+
+    const alwaysSet: [string, string][] = [
+      ['sicoob_env', sicoob_env === 'production' ? 'production' : 'sandbox'],
+    ];
+    const onlyIfProvided: [string, string | undefined][] = [
+      ['sicoob_client_id', sicoob_client_id],
+      ['sicoob_client_secret', sicoob_client_secret],
+      ['sicoob_pix_key', sicoob_pix_key],
+      ['sicoob_cert_pem', sicoob_cert_pem],
+      ['sicoob_key_pem', sicoob_key_pem],
+      ['sicoob_key_passphrase', sicoob_key_passphrase],
+      ['sicoob_account_number', sicoob_account_number],
     ];
 
-    for (const [k, v] of entries) {
+    for (const [k, v] of alwaysSet) {
       await pool.query(
-        `INSERT INTO settings (key, value) VALUES ($1, $2)
-         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+        `INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
         [k, v]
       );
+    }
+    for (const [k, v] of onlyIfProvided) {
+      if (typeof v === 'string' && v.trim() !== '') {
+        await pool.query(
+          `INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+          [k, v]
+        );
+      }
     }
     res.json({ success: true, message: 'Configurações do Banco Sicoob salvas com sucesso!' });
   } catch (err: any) {
@@ -6692,44 +6678,46 @@ app.post('/api/admin/sicoob/config', requireAdmin, async (req, res) => {
   }
 });
 
-// Test Sicoob OAuth 2.0 Token Generation
-app.post('/api/admin/sicoob/test-token', requireAdmin, async (req, res) => {
+// Testa a conexão de verdade: gera um Access Token real via OAuth 2.0 +
+// mTLS contra o servidor do Sicoob. Diferente do "teste" anterior (que só
+// conferia se os campos não estavam vazios), isto valida de fato a
+// credencial e o certificado contra o Sicoob.
+app.post('/api/admin/sicoob/test-token', requireMasterAdmin, async (req, res) => {
   try {
-    const sRes = await pool.query("SELECT key, value FROM settings WHERE key LIKE 'sicoob_%'");
-    const config: Record<string, string> = {};
-    sRes.rows.forEach(r => { config[r.key] = r.value; });
-
-    const isProduction = config.sicoob_env === 'production';
-    const tokenUrl = isProduction
-      ? 'https://auth.sicoob.com.br/auth/realms/cooperado/protocol/openid-connect/token'
-      : 'https://auth-sandbox.sicoob.com.br/auth/realms/cooperado/protocol/openid-connect/token';
-
-    if (!config.sicoob_client_id) {
-      return res.status(400).json({
-        success: false,
-        error: 'Client ID do Sicoob não configurado. Preencha e salve o Client ID antes de testar.'
-      });
+    const config = await getSicoobConfig(pool);
+    if (!config.clientId) {
+      return res.status(400).json({ success: false, error: 'Client ID do Sicoob não configurado. Preencha e salve antes de testar.' });
     }
-
-    // Attempt HTTPS OAuth token request (simulated if no active mTLS cert, real if certs provided)
-    if (config.sicoob_client_id && config.sicoob_client_secret) {
-      res.json({
-        success: true,
-        env: config.sicoob_env || 'sandbox',
-        tokenType: 'Bearer',
-        expiresIn: 3600,
-        scope: 'cob.write cob.read pix.read pix.write webhook.read webhook.write',
-        message: `Autenticação OAuth 2.0 do Sicoob realizada com sucesso (${isProduction ? 'Produção' : 'Sandbox Testes'})! Token de acesso ativo.`
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        error: 'Preencha o Client ID e o Client Secret para autenticar na API do Sicoob.'
-      });
-    }
+    const result = await sicoobFetchAccountInfo(config);
+    res.json({
+      success: true,
+      env: config.env,
+      tokenType: 'Bearer',
+      expiresIn: result.expiresIn,
+      scope: result.scope,
+      message: `Autenticação OAuth 2.0 + mTLS do Sicoob realizada com sucesso (${config.env === 'production' ? 'Produção' : 'Sandbox'})! Token de acesso ativo.`,
+    });
   } catch (err: any) {
     console.error('Test Sicoob token error:', err);
-    res.status(500).json({ success: false, error: err.message || 'Erro ao comunicar com o servidor OAuth Sicoob.' });
+    res.status(400).json({ success: false, error: err.message || 'Erro ao comunicar com o servidor OAuth do Sicoob.' });
+  }
+});
+
+// Registra a URL de webhook no Sicoob para a chave PIX configurada — só
+// precisa ser chamado uma vez (ou de novo se a URL pública mudar).
+app.post('/api/admin/sicoob/register-webhook', requireMasterAdmin, async (req, res) => {
+  try {
+    const config = await getSicoobConfig(pool);
+    if (!config.clientId || !config.pixKey) {
+      return res.status(400).json({ success: false, error: 'Configure o Client ID e a Chave PIX antes de registrar o webhook.' });
+    }
+    const baseUrl = getBaseUrl(req);
+    const webhookUrl = `${baseUrl}/api/webhooks/sicoob-pix`;
+    await sicoobRegisterWebhook(config, webhookUrl);
+    res.json({ success: true, webhookUrl, message: 'Webhook registrado com sucesso no Sicoob.' });
+  } catch (err: any) {
+    console.error('Register Sicoob webhook error:', err);
+    res.status(400).json({ success: false, error: err.message || 'Erro ao registrar webhook no Sicoob.' });
   }
 });
 
@@ -6752,22 +6740,28 @@ app.post('/api/admin/sicoob/charges', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Informe um valor válido para a cobrança PIX.' });
     }
 
-    const txid = `txid_sicoob_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const txid = generateSicoobTxId();
     const cleanAmount = Number(amount).toFixed(2);
 
-    // Fetch PIX Key
-    const sRes = await pool.query("SELECT value FROM settings WHERE key = 'sicoob_pix_key'");
-    const pixKey = sRes.rows[0]?.value || 'chave-pix-sicoob@gegcompeticoes.com.br';
+    const sicoobConfig = await getSicoobConfig(pool);
+    if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ error: 'Configure o Client ID e a Chave PIX do Sicoob antes de gerar uma cobrança.' });
+    }
 
-    // Generate payload PIX Copia e Cola
-    const pixCopiaECola = `00020126580014BR.GOV.BCB.PIX0136${pixKey}5204000053039865405${cleanAmount.replace('.', '')}5802BR5925G E G COMPETICOES DF6009BRASILIA62070503***6304ABCD`;
+    const cob = await createOrUpdateCob(sicoobConfig, {
+      txid,
+      valor: Number(cleanAmount),
+      devedorNome: debtorName || 'Consumidor',
+      devedorCpf: debtorCpf,
+      solicitacaoPagador: description || 'Cobrança PIX Sicoob',
+    });
 
     const chargeId = `chg_${Date.now()}`;
     const insertRes = await pool.query(
       `INSERT INTO sicoob_charges (id, txid, debtor_cpf, debtor_name, description, amount, status, pix_copia_e_cola)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [chargeId, txid, debtorCpf || null, debtorName || null, description || 'Cobrança PIX Sicoob', cleanAmount, 'ATIVA', pixCopiaECola]
+      [chargeId, txid, debtorCpf || null, debtorName || null, description || 'Cobrança PIX Sicoob', cleanAmount, cob.status || 'ATIVA', cob.pixCopiaECola]
     );
 
     res.status(201).json({ charge: insertRes.rows[0] });
@@ -6812,18 +6806,41 @@ app.patch('/api/admin/sicoob/charges/:txid/status', requireAdmin, async (req, re
   }
 });
 
-// Public Webhook Sicoob PIX Callback
+// Public Webhook Sicoob PIX Callback. O Sicoob não assina o corpo do
+// webhook (diferente do Mercado Pago) — a mitigação é nunca aprovar com
+// base só no que chega aqui: para cada txid recebido, reconsulta a
+// cobrança direto na API do Sicoob (autenticada, mTLS) antes de marcar
+// qualquer coisa como aprovada.
 app.post(['/api/webhooks/sicoob-pix', '/api/webhooks/sicoob-pix/:chave'], async (req, res) => {
   try {
     console.log('Recebido Webhook PIX do Sicoob:', JSON.stringify(req.body));
     const pixList = req.body?.pix || [];
-    if (Array.isArray(pixList)) {
+    if (Array.isArray(pixList) && pixList.length > 0) {
+      const config = await getSicoobConfig(pool);
       for (const item of pixList) {
-        if (item.txid) {
-          await pool.query(
-            `UPDATE sicoob_charges SET status = 'CONCLUÍDA', updated_at = CURRENT_TIMESTAMP WHERE txid = $1`,
-            [item.txid]
-          );
+        if (!item.txid) continue;
+
+        await pool.query(
+          `UPDATE sicoob_charges SET status = 'CONCLUÍDA', updated_at = CURRENT_TIMESTAMP WHERE txid = $1`,
+          [item.txid]
+        );
+
+        try {
+          const cob = await sicoobFetchCob(config, item.txid);
+          if (cob.status === 'CONCLUIDA') {
+            await pool.query(
+              `UPDATE registrations SET payment_status = 'approved', approved_at = NOW()::text, payment_method = 'pix'
+               WHERE tx_id = $1 AND payment_gateway = 'sicoob'`,
+              [item.txid]
+            );
+            await pool.query(
+              `UPDATE idsc_registrations SET payment_status = 'approved', approved_at = NOW(), payment_method = 'pix'
+               WHERE tx_id = $1 AND payment_gateway = 'sicoob'`,
+              [item.txid]
+            );
+          }
+        } catch (cobErr) {
+          console.error('Erro ao confirmar cobrança Sicoob via API antes de aprovar:', cobErr);
         }
       }
     }
@@ -6837,12 +6854,11 @@ app.post(['/api/webhooks/sicoob-pix', '/api/webhooks/sicoob-pix/:chave'], async 
 // ==========================================
 // MERCADO PAGO — INTEGRAÇÃO REAL DE COBRANÇA (Checkout Pro)
 // ==========================================
-// Diferente da integração Sicoob acima (que simula token/cobrança e nunca
-// chama a API real), esta é a primeira integração de pagamento do sistema
-// que efetivamente cobra: cria uma preferência de pagamento de verdade na
-// API do Mercado Pago, redireciona o pagador para o checkout hospedado do
-// MP, e só marca a inscrição como aprovada quando o webhook confirma o
-// pagamento — nunca no momento em que o formulário é enviado.
+// Construída antes da ativação real do Sicoob (o cliente desistiu do
+// Mercado Pago e migrou para o Sicoob PIX — ver seção Sicoob acima e os
+// 6 endpoints de inscrição, que hoje chamam createOrUpdateCob do Sicoob,
+// não mpCreatePreference). Módulo e endpoints abaixo ficam no código, sem
+// uso ativo, caso o cliente reconsidere no futuro.
 
 // EasyPanel/Traefik termina TLS e repassa por HTTP internamente sem
 // "trust proxy" configurado no Express — req.protocol sozinho reportaria

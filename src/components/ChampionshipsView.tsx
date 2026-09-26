@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Championship, User, Registration, StageScore, RankingItem, Modality, Stage, Weapon, WeaponLookupOption, MultiChampionship, ClubBulkRegistrationPrefill, IdscChampionship, IdscStage, IdscCourse } from '../types';
 import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, CreditCard, ChevronRight, Download, Medal, PlusCircle, X, Search, Layers, Zap, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { PixPaymentModal } from './PixPaymentModal';
 
 interface ChampionshipsProps {
   championships: Championship[];
@@ -12,7 +13,7 @@ interface ChampionshipsProps {
   stages: Stage[];
   weapons: Weapon[];
   weaponLookupOptions?: WeaponLookupOption[];
-  onRegister: (championshipId: string, modalityId: string, stageId: string, weaponId: string, crNumber: string, paymentMethod: 'pix' | 'credit_card') => Promise<{ initPoint?: string }>;
+  onRegister: (championshipId: string, modalityId: string, stageId: string, weaponId: string, crNumber: string, paymentMethod: 'pix' | 'credit_card') => Promise<{ pixCopiaECola?: string; txId?: string }>;
   onAddWeapon: (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; serialNumber?: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string; weaponType?: string }) => Promise<void>;
   globalRankings: RankingItem[];
   onSelectModalityRanking: (modality: string) => void;
@@ -50,6 +51,15 @@ export default function ChampionshipsView({
   const [viewingChampionship, setViewingChampionship] = useState<Championship | null>(null);
   const [selectedPremiacaoModal, setSelectedPremiacaoModal] = useState<{ champ: Championship; modality: Modality } | null>(null);
   const [selectedPremiacaoStageId, setSelectedPremiacaoStageId] = useState<string>('');
+
+  // Modal de pagamento PIX (Sicoob) — compartilhado pelos 3 fluxos de
+  // inscrição individual (campeonato normal, multicampeonato, IDSC).
+  const [pixModal, setPixModal] = useState<{
+    pixCopiaECola: string;
+    pollEndpoint: string;
+    valor?: number;
+    title?: string;
+  } | null>(null);
 
   // Multi-championship registration modal states
   const [selectedMultiReg, setSelectedMultiReg] = useState<MultiChampionship | null>(null);
@@ -99,11 +109,16 @@ export default function ChampionshipsView({
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao realizar inscrição no multicampeonato.');
-      if (!data.initPoint) throw new Error('Não foi possível gerar o link de pagamento.');
+      if (!data.pixCopiaECola || !data.txId) throw new Error('Não foi possível gerar a cobrança PIX.');
 
-      // A inscrição fica pendente até o pagamento ser confirmado — o
-      // checkout do Mercado Pago é a próxima etapa, não uma confirmação.
-      window.location.href = data.initPoint;
+      // A inscrição fica pendente até o webhook do Sicoob confirmar o
+      // pagamento PIX — o QR abre no próprio site, sem redirecionamento.
+      setPixModal({
+        pixCopiaECola: data.pixCopiaECola,
+        pollEndpoint: `/api/registrations/by-tx/${data.txId}`,
+        title: `PIX - ${selectedMultiReg.title}`,
+      });
+      closeMultiRegModal();
     } catch (err: any) {
       setMultiError(err.message);
       setMultiSubmitting(false);
@@ -367,8 +382,13 @@ export default function ChampionshipsView({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao realizar inscrição IDSC.');
-      if (!data.initPoint) throw new Error('Não foi possível gerar o link de pagamento.');
-      window.location.href = data.initPoint;
+      if (!data.pixCopiaECola || !data.txId) throw new Error('Não foi possível gerar a cobrança PIX.');
+      setPixModal({
+        pixCopiaECola: data.pixCopiaECola,
+        pollEndpoint: `/api/idsc/registrations/by-tx/${data.txId}`,
+        title: `PIX - Inscrição IDSC`,
+      });
+      closeIdscRegModal();
     } catch (err: any) {
       setIdscError(err.message);
       setIdscSubmitting(false);
@@ -392,9 +412,15 @@ export default function ChampionshipsView({
     setPaymentStep('processing');
 
     try {
-      const { initPoint } = await onRegister(selectedChampReg.id, selectedModalityId, selectedStageId, selectedWeaponId, finalCr, 'pix');
-      if (!initPoint) throw new Error('Não foi possível gerar o link de pagamento.');
-      window.location.href = initPoint;
+      const { pixCopiaECola, txId } = await onRegister(selectedChampReg.id, selectedModalityId, selectedStageId, selectedWeaponId, finalCr, 'pix');
+      if (!pixCopiaECola || !txId) throw new Error('Não foi possível gerar a cobrança PIX.');
+      setPixModal({
+        pixCopiaECola,
+        pollEndpoint: `/api/registrations/by-tx/${txId}`,
+        valor: Number(registrationPrice) || undefined,
+        title: `PIX - ${selectedChampReg.title}`,
+      });
+      closeRegModal();
     } catch (err) {
       setRegisterError(err instanceof Error ? err.message : 'Erro ao realizar inscrição.');
       setPaymentStep('form');
@@ -2305,6 +2331,18 @@ export default function ChampionshipsView({
               </form>
           </motion.div>
         </div>
+      )}
+
+      {pixModal && (
+        <PixPaymentModal
+          pixCopiaECola={pixModal.pixCopiaECola}
+          pollEndpoint={pixModal.pollEndpoint}
+          authHeaders={currentUser ? { 'x-user-id': currentUser.id } : undefined}
+          valor={pixModal.valor}
+          title={pixModal.title}
+          onApproved={() => { onRefreshData?.(); }}
+          onClose={() => setPixModal(null)}
+        />
       )}
 
     </div>

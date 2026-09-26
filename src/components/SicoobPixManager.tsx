@@ -8,10 +8,19 @@ import { QRCodeView } from './QRCodeView';
 interface SicoobConfig {
   sicoob_env: string;
   sicoob_client_id: string;
+  // Segredos: o backend nunca devolve o valor completo (só mascarado no
+  // GET), então estes campos ficam vazios até o usuário digitar um valor
+  // novo — só são enviados no POST se preenchidos (ver server.ts).
   sicoob_client_secret: string;
+  sicoob_client_secret_set: boolean;
+  sicoob_client_secret_masked: string;
   sicoob_pix_key: string;
   sicoob_cert_pem: string;
+  sicoob_cert_pem_set: boolean;
   sicoob_key_pem: string;
+  sicoob_key_pem_set: boolean;
+  sicoob_key_passphrase: string;
+  sicoob_key_passphrase_set: boolean;
   sicoob_account_number: string;
 }
 
@@ -33,9 +42,15 @@ export const SicoobPixManager: React.FC<{ currentUser?: any }> = ({ currentUser 
     sicoob_env: 'sandbox',
     sicoob_client_id: '',
     sicoob_client_secret: '',
+    sicoob_client_secret_set: false,
+    sicoob_client_secret_masked: '',
     sicoob_pix_key: '',
     sicoob_cert_pem: '',
+    sicoob_cert_pem_set: false,
     sicoob_key_pem: '',
+    sicoob_key_pem_set: false,
+    sicoob_key_passphrase: '',
+    sicoob_key_passphrase_set: false,
     sicoob_account_number: ''
   });
 
@@ -46,6 +61,10 @@ export const SicoobPixManager: React.FC<{ currentUser?: any }> = ({ currentUser 
   // OAuth token test state
   const [testingToken, setTestingToken] = useState(false);
   const [tokenResult, setTokenResult] = useState<any>(null);
+
+  // Webhook registration state
+  const [registeringWebhook, setRegisteringWebhook] = useState(false);
+  const [webhookResult, setWebhookResult] = useState<any>(null);
 
   // Charges state
   const [charges, setCharges] = useState<SicoobCharge[]>([]);
@@ -145,6 +164,23 @@ export const SicoobPixManager: React.FC<{ currentUser?: any }> = ({ currentUser 
       setTokenResult({ success: false, error: err.message || 'Erro ao testar conexão.' });
     } finally {
       setTestingToken(false);
+    }
+  };
+
+  const handleRegisterWebhook = async () => {
+    setRegisteringWebhook(true);
+    setWebhookResult(null);
+    try {
+      const res = await fetch('/api/admin/sicoob/register-webhook', {
+        method: 'POST',
+        headers: authHeaders
+      });
+      const data = await res.json();
+      setWebhookResult(data);
+    } catch (err: any) {
+      setWebhookResult({ success: false, error: err.message || 'Erro ao registrar webhook.' });
+    } finally {
+      setRegisteringWebhook(false);
     }
   };
 
@@ -340,14 +376,20 @@ export const SicoobPixManager: React.FC<{ currentUser?: any }> = ({ currentUser 
 
           {/* Client Secret */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">Client Secret *</label>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+              Client Secret (opcional)
+              {config.sicoob_client_secret_set && (
+                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-100">Configurado</span>
+              )}
+            </label>
             <input
               type="password"
               value={config.sicoob_client_secret}
               onChange={e => setConfig({ ...config, sicoob_client_secret: e.target.value })}
-              placeholder="••••••••••••••••••••••••••••••••"
+              placeholder={config.sicoob_client_secret_set ? config.sicoob_client_secret_masked : 'Deixe em branco — o Sicoob autentica via certificado mTLS'}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono font-medium outline-none focus:border-teal-500 focus:bg-white transition"
             />
+            <p className="text-[10px] text-slate-400 mt-1">O Sicoob informa que o Secret não é necessário para as APIs Pix — a autenticação forte é feita pelo certificado mTLS.</p>
           </div>
 
           {/* Chave PIX */}
@@ -377,25 +419,52 @@ export const SicoobPixManager: React.FC<{ currentUser?: any }> = ({ currentUser 
 
           {/* Certificado PEM */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">Certificado mTLS (.pem / .crt)</label>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+              Certificado mTLS (.pem / .crt)
+              {config.sicoob_cert_pem_set && (
+                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-100">Configurado</span>
+              )}
+            </label>
             <textarea
               rows={3}
               value={config.sicoob_cert_pem}
               onChange={e => setConfig({ ...config, sicoob_cert_pem: e.target.value })}
-              placeholder="-----BEGIN CERTIFICATE----- &#10;... &#10;-----END CERTIFICATE-----"
+              placeholder={config.sicoob_cert_pem_set ? 'Certificado já salvo — cole um novo para substituir' : '-----BEGIN CERTIFICATE----- \n... \n-----END CERTIFICATE-----'}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-mono outline-none focus:border-teal-500 focus:bg-white transition resize-none"
             />
           </div>
 
           {/* Chave Privada PEM */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">Chave Privada mTLS (.key / .pem)</label>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+              Chave Privada mTLS (.key / .pem)
+              {config.sicoob_key_pem_set && (
+                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-100">Configurado</span>
+              )}
+            </label>
             <textarea
               rows={3}
               value={config.sicoob_key_pem}
               onChange={e => setConfig({ ...config, sicoob_key_pem: e.target.value })}
-              placeholder="-----BEGIN RSA PRIVATE KEY----- &#10;... &#10;-----END RSA PRIVATE KEY-----"
+              placeholder={config.sicoob_key_pem_set ? 'Chave privada já salva — cole uma nova para substituir' : '-----BEGIN RSA PRIVATE KEY----- \n... \n-----END RSA PRIVATE KEY-----'}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] font-mono outline-none focus:border-teal-500 focus:bg-white transition resize-none"
+            />
+          </div>
+
+          {/* Senha da Chave Privada */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+              Senha da Chave Privada (se houver)
+              {config.sicoob_key_passphrase_set && (
+                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-100">Configurado</span>
+              )}
+            </label>
+            <input
+              type="password"
+              value={config.sicoob_key_passphrase}
+              onChange={e => setConfig({ ...config, sicoob_key_passphrase: e.target.value })}
+              placeholder={config.sicoob_key_passphrase_set ? '••••••••••••••••' : 'Deixe em branco se a chave não tiver senha'}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono font-medium outline-none focus:border-teal-500 focus:bg-white transition"
             />
           </div>
         </div>
@@ -441,12 +510,25 @@ export const SicoobPixManager: React.FC<{ currentUser?: any }> = ({ currentUser 
           </div>
           <button
             type="button"
-            onClick={() => alert(`Webhook configurado com sucesso para a URL: ${webhookUrl}`)}
-            className="w-full sm:w-auto bg-slate-900 hover:bg-black text-white text-xs px-5 py-3 rounded-xl font-bold transition shrink-0 cursor-pointer flex items-center justify-center gap-1.5"
+            onClick={handleRegisterWebhook}
+            disabled={registeringWebhook}
+            className="w-full sm:w-auto bg-slate-900 hover:bg-black text-white text-xs px-5 py-3 rounded-xl font-bold transition shrink-0 cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-60"
           >
-            Registrar Webhook no Sicoob
+            <RefreshCw className={`w-3.5 h-3.5 ${registeringWebhook ? 'animate-spin' : ''}`} />
+            {registeringWebhook ? 'Registrando...' : 'Registrar Webhook no Sicoob'}
           </button>
         </div>
+
+        {webhookResult && (
+          <div className={`p-3.5 rounded-xl border text-xs font-semibold flex items-center gap-2.5 ${
+            webhookResult.success
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-rose-50 border-rose-200 text-rose-800'
+          }`}>
+            {webhookResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />}
+            <span>{webhookResult.message || webhookResult.error}</span>
+          </div>
+        )}
       </div>
 
       {/* CARD 3: EMISSÃO E CONSULTA DE COBRANÇAS PIX */}
