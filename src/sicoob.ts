@@ -230,16 +230,16 @@ export async function createOrUpdateCob(config: SicoobConfig, params: CreateCobP
     throw new Error(`Erro ao criar cobrança PIX no Sicoob (HTTP ${status}): ${detail}`);
   }
 
-  if (!json?.pixCopiaECola) {
-    // Sicoob respondeu 2xx mas sem o código Copia e Cola — não deveria
-    // acontecer segundo a doc, mas melhor falhar com um erro claro (e
-    // logar a resposta completa pra diagnosticar) do que devolver sucesso
-    // com uma cobrança sem QR Code utilizável.
-    console.error(`Sicoob PUT /cob/${params.txid} retornou HTTP ${status} sem pixCopiaECola. Resposta:`, JSON.stringify(json));
+  // A API real do Sicoob devolve o código Copia e Cola no campo `brcode`
+  // (confirmado em produção) — não `pixCopiaECola` como a doc genérica do
+  // BACEN sugere para outros bancos. Aceita os dois nomes por segurança.
+  const pixCopiaECola = json?.brcode || json?.pixCopiaECola;
+  if (!pixCopiaECola) {
+    console.error(`Sicoob PUT /cob/${params.txid} retornou HTTP ${status} sem brcode/pixCopiaECola. Resposta:`, JSON.stringify(json));
     throw new Error('O Sicoob criou a cobrança mas não retornou o código PIX Copia e Cola. Tente novamente em instantes.');
   }
 
-  return { txid: json.txid || params.txid, status: json.status, pixCopiaECola: json.pixCopiaECola };
+  return { txid: json.txid || params.txid, status: json.status, pixCopiaECola };
 }
 
 export async function fetchCob(config: SicoobConfig, txid: string): Promise<CobResult> {
@@ -256,7 +256,7 @@ export async function fetchCob(config: SicoobConfig, txid: string): Promise<CobR
     const detail = json?.detail || json?.message || json?.mensagem || JSON.stringify(json);
     throw new Error(`Erro ao consultar cobrança PIX no Sicoob (HTTP ${status}): ${detail}`);
   }
-  return { txid: json.txid || txid, status: json.status, pixCopiaECola: json.pixCopiaECola };
+  return { txid: json.txid || txid, status: json.status, pixCopiaECola: json?.brcode || json?.pixCopiaECola };
 }
 
 export async function registerWebhook(config: SicoobConfig, webhookUrl: string): Promise<void> {
