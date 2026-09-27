@@ -6941,17 +6941,56 @@ app.post('/api/admin/mercadopago/test-connection', requireMasterAdmin, async (re
   }
 });
 
-// GET de acompanhamento usado pela tela de retorno do checkout (back_urls) —
-// o front consulta por tx_id até o webhook confirmar o pagamento, já que o
-// redirecionamento do navegador não é a fonte da verdade.
+// Reconsulta uma cobrança Sicoob pendente direto na API (GET /cob/{txid}) e
+// aprova no banco se já estiver CONCLUIDA — mesma lógica do webhook, usada
+// aqui como rede de segurança para quando o Sicoob não conseguir entregar a
+// notificação (o polling do front chama isto a cada poucos segundos, então
+// não depende só do webhook chegar).
+async function reconcileSicoobTx(txId: string): Promise<void> {
+  try {
+    const sicoobConfig = await getSicoobConfig(pool);
+    if (!sicoobConfig.clientId) return;
+    const cob = await sicoobFetchCob(sicoobConfig, txId);
+    if (cob.status === 'CONCLUIDA') {
+      await pool.query(
+        `UPDATE registrations SET payment_status = 'approved', approved_at = NOW()::text, payment_method = 'pix'
+         WHERE tx_id = $1 AND payment_gateway = 'sicoob' AND payment_status != 'approved'`,
+        [txId]
+      );
+      await pool.query(
+        `UPDATE idsc_registrations SET payment_status = 'approved', approved_at = NOW(), payment_method = 'pix'
+         WHERE tx_id = $1 AND payment_gateway = 'sicoob' AND payment_status != 'approved'`,
+        [txId]
+      );
+    }
+  } catch (err) {
+    // Falha na reconsulta não deve travar o polling do front — ele tenta de novo no próximo ciclo.
+    console.error(`Reconciliação Sicoob falhou para tx_id ${txId}:`, err);
+  }
+}
+
+// GET de acompanhamento usado pelo modal de PIX inline — o front consulta
+// por tx_id a cada poucos segundos. Se ainda estiver pending e for gateway
+// Sicoob, reconsulta a API do Sicoob antes de responder: assim a aprovação
+// aparece mesmo se o webhook do banco nunca chegar.
 app.get('/api/registrations/by-tx/:txId', requireAuth, async (req, res) => {
   try {
     const { txId } = req.params;
-    const r = await pool.query(
-      `SELECT id, payment_status, championship_id FROM registrations WHERE tx_id = $1`,
+    let r = await pool.query(
+      `SELECT id, payment_status, payment_gateway, championship_id FROM registrations WHERE tx_id = $1`,
       [txId]
     );
     if (r.rows.length === 0) return res.status(404).json({ error: 'Inscrição não encontrada.' });
+
+    const stillPending = !r.rows.some(row => row.payment_status === 'approved');
+    if (stillPending && r.rows[0].payment_gateway === 'sicoob') {
+      await reconcileSicoobTx(txId);
+      r = await pool.query(
+        `SELECT id, payment_status, payment_gateway, championship_id FROM registrations WHERE tx_id = $1`,
+        [txId]
+      );
+    }
+
     const anyApproved = r.rows.some(row => row.payment_status === 'approved');
     res.json({
       status: anyApproved ? 'approved' : r.rows[0].payment_status,
@@ -6966,11 +7005,21 @@ app.get('/api/registrations/by-tx/:txId', requireAuth, async (req, res) => {
 app.get('/api/idsc/registrations/by-tx/:txId', requireAuth, async (req, res) => {
   try {
     const { txId } = req.params;
-    const r = await pool.query(
-      `SELECT id, payment_status FROM idsc_registrations WHERE tx_id = $1`,
+    let r = await pool.query(
+      `SELECT id, payment_status, payment_gateway FROM idsc_registrations WHERE tx_id = $1`,
       [txId]
     );
     if (r.rows.length === 0) return res.status(404).json({ error: 'Inscrição não encontrada.' });
+
+    const stillPending = !r.rows.some(row => row.payment_status === 'approved');
+    if (stillPending && r.rows[0].payment_gateway === 'sicoob') {
+      await reconcileSicoobTx(txId);
+      r = await pool.query(
+        `SELECT id, payment_status, payment_gateway FROM idsc_registrations WHERE tx_id = $1`,
+        [txId]
+      );
+    }
+
     const anyApproved = r.rows.some(row => row.payment_status === 'approved');
     res.json({
       status: anyApproved ? 'approved' : r.rows[0].payment_status,
