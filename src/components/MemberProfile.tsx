@@ -3,6 +3,7 @@ import { User, Post, Registration, StageScore, Championship, Modality, Club, Sta
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import { QRCodeView } from './QRCodeView';
+import { PixPaymentModal } from './PixPaymentModal';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
@@ -433,12 +434,11 @@ export default function MemberProfile({
 
   // Batch payment state for pending registrations in Minhas Inscrições tab
   const [selectedPendingIds, setSelectedPendingIds] = useState<string[]>([]);
-  const [isBatchPayModalOpen, setIsBatchPayModalOpen] = useState(false);
   const [batchPaySaving, setBatchPaySaving] = useState(false);
   const [deletingRegistrationId, setDeletingRegistrationId] = useState<string | null>(null);
   const [batchPaySuccess, setBatchPaySuccess] = useState('');
   const [batchPayError, setBatchPayError] = useState('');
-  const [pixCopied, setPixCopied] = useState(false);
+  const [batchPixModal, setBatchPixModal] = useState<{ pixCopiaECola: string; txId: string } | null>(null);
 
   const isClubLogin = selectedUser.role === 'club_admin' || selectedUser.role === 'master_admin';
 
@@ -3061,14 +3061,37 @@ export default function MemberProfile({
                         </div>
 
                         <button
-                          disabled={selectedPendingIds.length === 0}
-                          onClick={() => { setPixCopied(false); setIsBatchPayModalOpen(true); }}
+                          disabled={selectedPendingIds.length === 0 || batchPaySaving}
+                          onClick={async () => {
+                            if (!currentUser) return;
+                            setBatchPaySaving(true);
+                            setBatchPayError('');
+                            try {
+                              const res = await fetch('/api/registrations/pay-batch', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+                                body: JSON.stringify({ registrationIds: selectedPendingIds, paymentMethod: 'pix' })
+                              });
+                              const data = await res.json();
+                              if (!res.ok || !data.pixCopiaECola || !data.txId) {
+                                throw new Error(data.error || 'Não foi possível gerar a cobrança PIX unificada.');
+                              }
+                              setBatchPixModal({ pixCopiaECola: data.pixCopiaECola, txId: data.txId });
+                            } catch (err: any) {
+                              setBatchPayError(err.message || 'Erro ao gerar cobrança PIX unificada.');
+                            } finally {
+                              setBatchPaySaving(false);
+                            }
+                          }}
                           className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-extrabold text-xs px-5 py-3 rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-xs"
                         >
                           <QrCode className="w-4 h-4" />
-                          Pagar Selecionadas via PIX
+                          {batchPaySaving ? 'Gerando cobrança PIX...' : 'Pagar Selecionadas via PIX'}
                         </button>
                       </div>
+                    )}
+                    {batchPayError && (
+                      <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold border border-red-200">{batchPayError}</div>
                     )}
                   </div>
                 )}
@@ -4460,155 +4483,20 @@ export default function MemberProfile({
       </AnimatePresence>
 
       {/* MODAL DE PAGAMENTO PIX EM LOTE */}
-      {isBatchPayModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-6 shadow-2xl relative my-8 text-slate-800">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-display font-bold text-slate-900 text-base">Pagamento Unificado via PIX</h3>
-                <p className="text-xs text-slate-400">Escaneie o QR Code ou copie a chave para pagar as inscrições selecionadas.</p>
-              </div>
-              <button
-                onClick={() => setIsBatchPayModalOpen(false)}
-                className="text-slate-400 hover:text-slate-650 transition cursor-pointer p-1 rounded-lg hover:bg-slate-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {batchPayError && (
-              <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold border border-red-200">{batchPayError}</div>
-            )}
-
-            {(() => {
-              const selectedRegs = pendingRegistrations.filter(r => selectedPendingIds.includes(r.id));
-              const totalVal = selectedRegs.reduce((sum, r) => sum + (r.valorPago != null ? Number(r.valorPago) : 100), 0);
-              const pixChaveStr = `00020126580014BR.GOV.BCB.PIX0136419974402555204000053039865405${totalVal.toFixed(2)}5802BR5915GG COMPETICOES6008BRASILIA62070503***6304`;
-
-              return (
-                <div className="space-y-5 text-xs">
-                  {/* Box com resumo do valor */}
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-center space-y-1">
-                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Valor Total a Pagar ({selectedRegs.length} inscrição/ões)</span>
-                    <div className="text-2xl font-extrabold text-emerald-700 font-mono">R$ {totalVal.toFixed(2)}</div>
-                  </div>
-
-                  {/* QR Code Simulado */}
-                  <div className="flex flex-col items-center justify-center p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                    <div className="w-40 h-40 bg-white p-2 border border-slate-300 rounded-xl shadow-xs flex items-center justify-center">
-                      <img
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(pixChaveStr)}`}
-                        alt="QR Code PIX"
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    <span className="text-[10px] text-slate-400 font-mono">Chave Pix Celular: (41) 99744-0255</span>
-                  </div>
-
-                  {/* Chave Copia e Cola */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase block">Chave PIX Copia e Cola</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        readOnly
-                        value={pixChaveStr}
-                        className="w-full bg-slate-100 border border-slate-200 p-2.5 rounded-xl font-mono text-[10px] text-slate-600 truncate outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(pixChaveStr);
-                          setPixCopied(true);
-                          setTimeout(() => setPixCopied(false), 3000);
-                        }}
-                        className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-3 py-2 rounded-xl transition text-[11px] flex-shrink-0 cursor-pointer flex items-center gap-1"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        {pixCopied ? 'Copiado!' : 'Copiar'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Lista resumida de itens inclusos */}
-                  <div className="space-y-1.5 pt-2 border-t border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase block">Inscrições Incluídas neste lote:</span>
-                    <div className="max-h-36 overflow-y-auto space-y-1 divide-y divide-slate-100 text-[11px] pr-1">
-                      {selectedRegs.map(reg => {
-                        const c = championships.find(ch => ch.id === reg.championshipId);
-                        const st = stages.find(s => s.id === reg.stageId);
-                        const m = modalityName(reg.modalityId);
-                        const u = users.find(usr => usr.id === reg.userId);
-                        const v = reg.valorPago != null ? Number(reg.valorPago) : 100;
-                        return (
-                          <div key={reg.id} className="pt-1 flex justify-between items-center text-slate-700">
-                            <div className="truncate max-w-[280px]">
-                              <span className="font-bold">{c?.title || 'Campeonato'}</span> &gt; {st?.title || `Etapa ${st?.stageNum || 1}`} &gt; {m}
-                              {isClubLogin && <span className="text-[10px] text-slate-400 block">Atleta: {u?.fullName}</span>}
-                            </div>
-                            <span className="font-mono font-bold text-amber-700 flex-shrink-0">R$ {v.toFixed(2)}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Botões de Ação */}
-                  <div className="flex gap-3 pt-3 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => setIsBatchPayModalOpen(false)}
-                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition text-xs cursor-pointer"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="button"
-                      disabled={batchPaySaving}
-                      onClick={async () => {
-                        setBatchPaySaving(true);
-                        setBatchPayError('');
-                        try {
-                          const res = await fetch('/api/registrations/pay-batch', {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json',
-                              'x-user-id': selectedUser.id
-                            },
-                            body: JSON.stringify({
-                              registrationIds: selectedPendingIds,
-                              paymentMethod: 'pix'
-                            })
-                          }).then(r => r.json());
-
-                          if (res.error) {
-                            setBatchPayError(res.error);
-                          } else {
-                            setIsBatchPayModalOpen(false);
-                            setBatchPaySuccess(`Pagamento de ${res.paidCount} inscrição(ões) aprovado com sucesso! (TxID: ${res.txId})`);
-                            if (onUpdateProfile) {
-                              onUpdateProfile({});
-                            }
-                            setTimeout(() => window.location.reload(), 1500);
-                          }
-                        } catch (err) {
-                          console.error(err);
-                          setBatchPayError('Erro de conexão ao processar pagamento.');
-                        } finally {
-                          setBatchPaySaving(false);
-                        }
-                      }}
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold py-2.5 rounded-xl transition text-xs cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      {batchPaySaving ? 'Confirmando...' : 'Confirmar Pagamento PIX'}
-                    </button>
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        </div>
+      {batchPixModal && (
+        <PixPaymentModal
+          pixCopiaECola={batchPixModal.pixCopiaECola}
+          pollEndpoint={`/api/registrations/by-tx/${batchPixModal.txId}`}
+          authHeaders={currentUser ? { 'x-user-id': currentUser.id } : undefined}
+          title="PIX - Pagamento Unificado"
+          onApproved={() => {
+            setBatchPaySuccess('Pagamento confirmado! As inscrições selecionadas foram aprovadas.');
+            setSelectedPendingIds([]);
+            if (onUpdateProfile) onUpdateProfile({});
+            setTimeout(() => window.location.reload(), 1500);
+          }}
+          onClose={() => setBatchPixModal(null)}
+        />
       )}
 
       {/* FULL SCREEN WEB PRINT VIEW OVERLAY */}

@@ -3400,27 +3400,72 @@ app.get('/api/registrations', requireAuth, async (req, res) => {
   }
 });
 
+// Une várias inscrições PENDENTES já existentes (de campeonatos distintos,
+// inclusive) num único PIX. Gera uma cobrança real no Sicoob — NUNCA aprova
+// direto: fica 'pending' com o novo tx_id compartilhado até o webhook (ou a
+// reconciliação de fallback) confirmar o pagamento de verdade.
 app.post('/api/registrations/pay-batch', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
   const { registrationIds, paymentMethod } = req.body;
   if (!Array.isArray(registrationIds) || registrationIds.length === 0) {
     return res.status(400).json({ error: 'Nenhuma inscrição selecionada para pagamento.' });
   }
 
   try {
+    const regsRes = await pool.query(
+      `SELECT r.*, c.club_id AS championship_club_id FROM registrations r
+       JOIN championships c ON c.id = r.championship_id
+       WHERE r.id = ANY($1::text[])`,
+      [registrationIds]
+    );
+    if (regsRes.rows.length !== registrationIds.length) {
+      return res.status(404).json({ error: 'Uma ou mais inscrições não foram encontradas.' });
+    }
+
+    const isAdminRole = ADMIN_ROLES.includes(currentUser.role);
+    for (const row of regsRes.rows) {
+      if (row.user_id !== currentUser.id && !isAdminRole) {
+        return res.status(403).json({ error: 'Você só pode pagar suas próprias inscrições.' });
+      }
+      if (row.payment_status === 'approved') {
+        return res.status(400).json({ error: 'Uma das inscrições selecionadas já está paga.' });
+      }
+    }
+
+    const clubIds = new Set(regsRes.rows.map(r => r.championship_club_id).filter(Boolean));
+    if (clubIds.size !== 1) {
+      return res.status(400).json({ error: 'Só é possível pagar em um único PIX inscrições de campeonatos do mesmo clube.' });
+    }
+    const clubId = [...clubIds][0] as string;
+
+    const sicoobConfig = await getSicoobConfig(pool, clubId);
+    if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por estes campeonatos.' });
+    }
+
+    const txId = generateSicoobTxId();
+    const totalValor = regsRes.rows.reduce((sum, r) => sum + Number(r.valor_pago || 0), 0);
     const today = new Date().toISOString().split('T')[0];
-    const txId = `tx_gg_${Math.random().toString(36).substring(2, 12)}`;
+
+    const cob = await createOrUpdateCob(sicoobConfig, {
+      txid: txId,
+      valor: totalValor,
+      devedorNome: currentUser.fullName,
+      devedorCpf: currentUser.cpf,
+      solicitacaoPagador: `Pagamento unificado - ${regsRes.rows.length} inscrição(ões)`.slice(0, 140),
+    });
 
     await pool.query(
       `UPDATE registrations
-       SET payment_status = 'approved', approved_at = NOW(), tx_id = $1, data_pagamento = $2, payment_method = $3
-       WHERE id = ANY($4::text[])`,
-      [txId, today, paymentMethod || 'pix', registrationIds]
+       SET tx_id = $1, data_pagamento = $2, payment_method = $3, payment_gateway = 'sicoob', pix_copia_e_cola = $4
+       WHERE id = ANY($5::text[])`,
+      [txId, today, paymentMethod || 'pix', cob.pixCopiaECola, registrationIds]
     );
 
-    res.json({ success: true, txId, paidCount: registrationIds.length });
-  } catch (err) {
+    res.json({ success: true, txId, pixCopiaECola: cob.pixCopiaECola, count: registrationIds.length });
+  } catch (err: any) {
     console.error('Batch payment error:', err);
-    res.status(500).json({ error: 'Erro ao processar pagamento das inscrições.' });
+    res.status(500).json({ error: err.message || 'Erro ao gerar cobrança PIX unificada.' });
   }
 });
 
