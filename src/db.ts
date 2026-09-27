@@ -878,6 +878,51 @@ export async function initDB() {
       );
     `);
 
+    // Integração de pagamento (Sicoob PIX) é uma configuração por clube/tenant
+    // — cada clube usa sua própria conta bancária/CNPJ, não uma credencial
+    // única da plataforma inteira. club_id como chave primária: um clube tem
+    // uma única configuração Sicoob (1:1), diferente de annuity_plans (N:1).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS club_sicoob_config (
+        club_id        TEXT PRIMARY KEY REFERENCES clubs(id) ON DELETE CASCADE,
+        env            TEXT NOT NULL DEFAULT 'sandbox',
+        client_id      TEXT,
+        client_secret  TEXT,
+        pix_key        TEXT,
+        cert_pem       TEXT,
+        key_pem        TEXT,
+        key_passphrase TEXT,
+        account_number TEXT,
+        updated_at     TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Migração única: a config Sicoob do Clube de Tiro Aranãs já foi validada
+    // de ponta a ponta (OAuth+mTLS reais, webhook registrado) quando ainda
+    // vivia como chaves globais em settings — copia para a linha do clube
+    // sem exigir reconfiguração. Idempotente (ON CONFLICT DO NOTHING), roda
+    // em todo boot mas só faz algo na primeira vez.
+    await client.query(`
+      INSERT INTO club_sicoob_config (club_id, env, client_id, client_secret, pix_key, cert_pem, key_pem, key_passphrase, account_number)
+      SELECT 'club_aranas',
+             COALESCE((SELECT value FROM settings WHERE key='sicoob_env'), 'sandbox'),
+             (SELECT value FROM settings WHERE key='sicoob_client_id'),
+             (SELECT value FROM settings WHERE key='sicoob_client_secret'),
+             (SELECT value FROM settings WHERE key='sicoob_pix_key'),
+             (SELECT value FROM settings WHERE key='sicoob_cert_pem'),
+             (SELECT value FROM settings WHERE key='sicoob_key_pem'),
+             (SELECT value FROM settings WHERE key='sicoob_key_passphrase'),
+             (SELECT value FROM settings WHERE key='sicoob_account_number')
+      WHERE EXISTS (SELECT 1 FROM settings WHERE key='sicoob_client_id')
+      ON CONFLICT (club_id) DO NOTHING;
+    `);
+
+    // Segurança: GET /api/settings não tem autenticação e expõe qualquer
+    // chave em texto puro — limpa os valores sensíveis do Sicoob agora que
+    // já foram copiados para club_sicoob_config, em vez de esperar um ciclo
+    // de deploy futuro (são credenciais bancárias reais de produção).
+    await client.query(`DELETE FROM settings WHERE key LIKE 'sicoob_%'`);
+
     // Drop and recreate weapon_concessions to fix UUID→TEXT type mismatch
     // (safe: table is new, no real data exists yet)
     await client.query(`DROP TABLE IF EXISTS weapon_concessions`);

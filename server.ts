@@ -15,7 +15,7 @@ import {
   fetchAccountInfo as mpFetchAccountInfo, verifyWebhookSignature as mpVerifyWebhookSignature,
 } from './src/mercadopago.js';
 import {
-  getSicoobConfig, createOrUpdateCob, fetchCob as sicoobFetchCob,
+  getSicoobConfig, saveSicoobConfig, createOrUpdateCob, fetchCob as sicoobFetchCob,
   registerWebhook as sicoobRegisterWebhook, fetchAccountInfo as sicoobFetchAccountInfo,
   generateSicoobTxId,
 } from './src/sicoob.js';
@@ -825,9 +825,13 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
     const dataPagamento = new Date().toISOString().split('T')[0];
     const txId = generateSicoobTxId();
 
-    const sicoobConfig = await getSicoobConfig(pool);
-    if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
-      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube. Avise a diretoria.' });
+    // multi_championships não tem club_id próprio — usa o clube dono do
+    // primeiro campeonato do pacote (na prática todos pertencem ao mesmo clube).
+    const ownerClubRes = await pool.query('SELECT club_id FROM championships WHERE id = $1', [targetItems[0].championshipId]);
+    const ownerClubId = ownerClubRes.rows[0]?.club_id || null;
+    const sicoobConfig = ownerClubId ? await getSicoobConfig(pool, ownerClubId) : null;
+    if (!sicoobConfig || !sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por este multicampeonato. Avise a diretoria.' });
     }
 
     const client = await pool.connect();
@@ -940,9 +944,11 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
     const valorUnitario = champCount > 0 ? Number((valorTotal / champCount).toFixed(2)) : valorTotal;
     const dataPagamento = new Date().toISOString().split('T')[0];
 
-    const sicoobConfig = await getSicoobConfig(pool);
-    if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
-      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube. Avise a diretoria.' });
+    const ownerClubRes = await pool.query('SELECT club_id FROM championships WHERE id = $1', [targetItems[0].championshipId]);
+    const ownerClubId = ownerClubRes.rows[0]?.club_id || null;
+    const sicoobConfig = ownerClubId ? await getSicoobConfig(pool, ownerClubId) : null;
+    if (!sicoobConfig || !sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por este multicampeonato. Avise a diretoria.' });
     }
 
     // Um único lote = uma única cobrança PIX no Sicoob, cobrindo
@@ -1282,9 +1288,9 @@ app.post('/api/idsc/courses/:id/register', requireAuth, async (req, res) => {
     const existing = await pool.query("SELECT id FROM idsc_registrations WHERE course_id=$1 AND user_id=$2 AND payment_status = 'approved'", [courseId, currentUser.id]);
     const isReinscricao = existing.rows.length > 0;
 
-    const sicoobConfig = await getSicoobConfig(pool);
-    if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
-      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube. Avise a diretoria.' });
+    const sicoobConfig = champ?.club_id ? await getSicoobConfig(pool, champ.club_id) : null;
+    if (!sicoobConfig || !sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por esta pista. Avise a diretoria.' });
     }
 
     const id = `idsc_reg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -1326,9 +1332,9 @@ app.post('/api/idsc/courses/:id/register-bulk', requireAdmin, async (req, res) =
     const champ = champRes.rows[0];
     const valorPago = champ ? Number(champ.club_registration_fee) : 0;
 
-    const sicoobConfig = await getSicoobConfig(pool);
-    if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
-      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube. Avise a diretoria.' });
+    const sicoobConfig = champ?.club_id ? await getSicoobConfig(pool, champ.club_id) : null;
+    if (!sicoobConfig || !sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por esta pista. Avise a diretoria.' });
     }
 
     const txId = generateSicoobTxId();
@@ -3515,9 +3521,9 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
       : (champ.valorInscricaoIndividual ?? champ.registrationFee);
     const dataPagamento = new Date().toISOString().split('T')[0];
 
-    const sicoobConfig = await getSicoobConfig(pool);
-    if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
-      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube. Avise a diretoria.' });
+    const sicoobConfig = champ.clubId ? await getSicoobConfig(pool, champ.clubId) : null;
+    if (!sicoobConfig || !sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por este campeonato. Avise a diretoria.' });
     }
 
     const newReg: Registration = {
@@ -4234,9 +4240,9 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
   if (champRes.rows.length === 0) return res.status(404).json({ error: 'Campeonato não encontrado.' });
   const champ = mapChampionship(champRes.rows[0]);
 
-  const sicoobConfig = await getSicoobConfig(pool);
-  if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
-    return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube. Avise a diretoria.' });
+  const sicoobConfig = champ.clubId ? await getSicoobConfig(pool, champ.clubId) : null;
+  if (!sicoobConfig || !sicoobConfig.clientId || !sicoobConfig.pixKey) {
+    return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por este campeonato. Avise a diretoria.' });
   }
 
   const txId = generateSicoobTxId();
@@ -6610,11 +6616,28 @@ function maskSicoobSecret(value: string): string {
   return `${value.slice(0, 4)}••••${value.slice(-4)}`;
 }
 
-// Get Sicoob PIX API config — restrito a master_admin e com segredos
-// mascarados nas respostas (credencial que move dinheiro real).
-app.get('/api/admin/sicoob/config', requireMasterAdmin, async (req, res) => {
+// A integração Sicoob é por clube/tenant (cada clube usa sua própria conta
+// bancária) — quem gerencia é o club_admin dono daquele clube, com o
+// master_admin mantendo acesso de suporte a qualquer clube (mesmo padrão já
+// usado em PATCH /api/clubs/:id). Sem seletor de clube na tela: o alvo é
+// sempre o próprio currentUser.clubId (mesmo padrão de annuity_plans).
+function resolveSicoobClubId(currentUser: User): { clubId: string | null; allowed: boolean } {
+  const isMaster = currentUser.role === 'master_admin';
+  const isOwnClubAdmin = currentUser.role === 'club_admin' && !!currentUser.clubId;
+  return { clubId: currentUser.clubId || null, allowed: isMaster || isOwnClubAdmin };
+}
+
+// Get Sicoob PIX API config — restrito ao club_admin do próprio clube (ou
+// master_admin, como suporte) e com segredos mascarados nas respostas
+// (credencial que move dinheiro real).
+app.get('/api/admin/sicoob/config', requireAuth, async (req, res) => {
   try {
-    const config = await getSicoobConfig(pool);
+    const currentUser = (req as any).user as User;
+    const { clubId, allowed } = resolveSicoobClubId(currentUser);
+    if (!allowed || !clubId) {
+      return res.status(403).json({ error: 'Apenas o administrador do clube ou o Administrador Master podem gerenciar esta integração.' });
+    }
+    const config = await getSicoobConfig(pool, clubId);
     res.json({
       config: {
         sicoob_env: config.env,
@@ -6637,40 +6660,28 @@ app.get('/api/admin/sicoob/config', requireMasterAdmin, async (req, res) => {
 // Save Sicoob PIX API config. Campos em branco não sobrescrevem o valor
 // salvo (mesmo padrão do Mercado Pago — o GET nunca devolve o segredo
 // completo para preencher de volta no formulário).
-app.post('/api/admin/sicoob/config', requireMasterAdmin, async (req, res) => {
+app.post('/api/admin/sicoob/config', requireAuth, async (req, res) => {
   try {
+    const currentUser = (req as any).user as User;
+    const { clubId, allowed } = resolveSicoobClubId(currentUser);
+    if (!allowed || !clubId) {
+      return res.status(403).json({ error: 'Apenas o administrador do clube ou o Administrador Master podem gerenciar esta integração.' });
+    }
     const {
       sicoob_env, sicoob_client_id, sicoob_client_secret, sicoob_pix_key,
       sicoob_cert_pem, sicoob_key_pem, sicoob_key_passphrase, sicoob_account_number,
     } = req.body;
 
-    const alwaysSet: [string, string][] = [
-      ['sicoob_env', sicoob_env === 'production' ? 'production' : 'sandbox'],
-    ];
-    const onlyIfProvided: [string, string | undefined][] = [
-      ['sicoob_client_id', sicoob_client_id],
-      ['sicoob_client_secret', sicoob_client_secret],
-      ['sicoob_pix_key', sicoob_pix_key],
-      ['sicoob_cert_pem', sicoob_cert_pem],
-      ['sicoob_key_pem', sicoob_key_pem],
-      ['sicoob_key_passphrase', sicoob_key_passphrase],
-      ['sicoob_account_number', sicoob_account_number],
-    ];
-
-    for (const [k, v] of alwaysSet) {
-      await pool.query(
-        `INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-        [k, v]
-      );
-    }
-    for (const [k, v] of onlyIfProvided) {
-      if (typeof v === 'string' && v.trim() !== '') {
-        await pool.query(
-          `INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-          [k, v]
-        );
-      }
-    }
+    await saveSicoobConfig(pool, clubId, {
+      env: sicoob_env,
+      clientId: sicoob_client_id,
+      clientSecret: sicoob_client_secret,
+      pixKey: sicoob_pix_key,
+      certPem: sicoob_cert_pem,
+      keyPem: sicoob_key_pem,
+      keyPassphrase: sicoob_key_passphrase,
+      accountNumber: sicoob_account_number,
+    });
     res.json({ success: true, message: 'Configurações do Banco Sicoob salvas com sucesso!' });
   } catch (err: any) {
     console.error('Save Sicoob config error:', err);
@@ -6682,9 +6693,14 @@ app.post('/api/admin/sicoob/config', requireMasterAdmin, async (req, res) => {
 // mTLS contra o servidor do Sicoob. Diferente do "teste" anterior (que só
 // conferia se os campos não estavam vazios), isto valida de fato a
 // credencial e o certificado contra o Sicoob.
-app.post('/api/admin/sicoob/test-token', requireMasterAdmin, async (req, res) => {
+app.post('/api/admin/sicoob/test-token', requireAuth, async (req, res) => {
   try {
-    const config = await getSicoobConfig(pool);
+    const currentUser = (req as any).user as User;
+    const { clubId, allowed } = resolveSicoobClubId(currentUser);
+    if (!allowed || !clubId) {
+      return res.status(403).json({ success: false, error: 'Apenas o administrador do clube ou o Administrador Master podem gerenciar esta integração.' });
+    }
+    const config = await getSicoobConfig(pool, clubId);
     if (!config.clientId) {
       return res.status(400).json({ success: false, error: 'Client ID do Sicoob não configurado. Preencha e salve antes de testar.' });
     }
@@ -6705,9 +6721,14 @@ app.post('/api/admin/sicoob/test-token', requireMasterAdmin, async (req, res) =>
 
 // Registra a URL de webhook no Sicoob para a chave PIX configurada — só
 // precisa ser chamado uma vez (ou de novo se a URL pública mudar).
-app.post('/api/admin/sicoob/register-webhook', requireMasterAdmin, async (req, res) => {
+app.post('/api/admin/sicoob/register-webhook', requireAuth, async (req, res) => {
   try {
-    const config = await getSicoobConfig(pool);
+    const currentUser = (req as any).user as User;
+    const { clubId, allowed } = resolveSicoobClubId(currentUser);
+    if (!allowed || !clubId) {
+      return res.status(403).json({ success: false, error: 'Apenas o administrador do clube ou o Administrador Master podem gerenciar esta integração.' });
+    }
+    const config = await getSicoobConfig(pool, clubId);
     if (!config.clientId || !config.pixKey) {
       return res.status(400).json({ success: false, error: 'Configure o Client ID e a Chave PIX antes de registrar o webhook.' });
     }
@@ -6735,15 +6756,19 @@ app.get('/api/admin/sicoob/charges', requireAdmin, async (req, res) => {
 // Create Sicoob PIX Charge (cob)
 app.post('/api/admin/sicoob/charges', requireAdmin, async (req, res) => {
   try {
+    const currentUser = (req as any).user as User;
     const { amount, debtorCpf, debtorName, description } = req.body;
     if (!amount || Number(amount) <= 0) {
       return res.status(400).json({ error: 'Informe um valor válido para a cobrança PIX.' });
+    }
+    if (!currentUser.clubId) {
+      return res.status(400).json({ error: 'Usuário sem clube associado.' });
     }
 
     const txid = generateSicoobTxId();
     const cleanAmount = Number(amount).toFixed(2);
 
-    const sicoobConfig = await getSicoobConfig(pool);
+    const sicoobConfig = await getSicoobConfig(pool, currentUser.clubId);
     if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
       return res.status(400).json({ error: 'Configure o Client ID e a Chave PIX do Sicoob antes de gerar uma cobrança.' });
     }
@@ -6816,7 +6841,6 @@ app.post(['/api/webhooks/sicoob-pix', '/api/webhooks/sicoob-pix/:chave'], async 
     console.log('Recebido Webhook PIX do Sicoob:', JSON.stringify(req.body));
     const pixList = req.body?.pix || [];
     if (Array.isArray(pixList) && pixList.length > 0) {
-      const config = await getSicoobConfig(pool);
       for (const item of pixList) {
         if (!item.txid) continue;
 
@@ -6826,6 +6850,9 @@ app.post(['/api/webhooks/sicoob-pix', '/api/webhooks/sicoob-pix/:chave'], async 
         );
 
         try {
+          const clubId = await getSicoobClubIdForTx(item.txid);
+          if (!clubId) continue;
+          const config = await getSicoobConfig(pool, clubId);
           const cob = await sicoobFetchCob(config, item.txid);
           if (cob.status === 'CONCLUIDA') {
             await pool.query(
@@ -6941,6 +6968,27 @@ app.post('/api/admin/mercadopago/test-connection', requireMasterAdmin, async (re
   }
 });
 
+// A config Sicoob é por clube — dado um tx_id (webhook ou polling não sabem
+// de antemão de qual clube é), descobre o clube dono via o campeonato/pista
+// que originou a inscrição, para reconsultar com as credenciais certas.
+async function getSicoobClubIdForTx(txId: string): Promise<string | null> {
+  const r1 = await pool.query(
+    `SELECT c.club_id FROM registrations r JOIN championships c ON c.id = r.championship_id WHERE r.tx_id = $1 LIMIT 1`,
+    [txId]
+  );
+  if (r1.rows[0]?.club_id) return r1.rows[0].club_id;
+
+  const r2 = await pool.query(
+    `SELECT ic.club_id FROM idsc_registrations ir
+     JOIN idsc_courses co ON co.id = ir.course_id
+     JOIN idsc_stages st ON st.id = co.stage_id
+     JOIN idsc_championships ic ON ic.id = st.championship_id
+     WHERE ir.tx_id = $1 LIMIT 1`,
+    [txId]
+  );
+  return r2.rows[0]?.club_id || null;
+}
+
 // Reconsulta uma cobrança Sicoob pendente direto na API (GET /cob/{txid}) e
 // aprova no banco se já estiver CONCLUIDA — mesma lógica do webhook, usada
 // aqui como rede de segurança para quando o Sicoob não conseguir entregar a
@@ -6948,7 +6996,9 @@ app.post('/api/admin/mercadopago/test-connection', requireMasterAdmin, async (re
 // não depende só do webhook chegar).
 async function reconcileSicoobTx(txId: string): Promise<void> {
   try {
-    const sicoobConfig = await getSicoobConfig(pool);
+    const clubId = await getSicoobClubIdForTx(txId);
+    if (!clubId) return;
+    const sicoobConfig = await getSicoobConfig(pool, clubId);
     if (!sicoobConfig.clientId) return;
     const cob = await sicoobFetchCob(sicoobConfig, txId);
     if (cob.status === 'CONCLUIDA') {

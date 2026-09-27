@@ -20,25 +20,64 @@ export interface SicoobConfig {
   accountNumber: string;
 }
 
-export async function getSicoobConfig(pool: Pool): Promise<SicoobConfig> {
-  const r = await pool.query(
-    `SELECT key, value FROM settings WHERE key IN (
-      'sicoob_env', 'sicoob_client_id', 'sicoob_client_secret', 'sicoob_pix_key',
-      'sicoob_cert_pem', 'sicoob_key_pem', 'sicoob_key_passphrase', 'sicoob_account_number'
-    )`
-  );
-  const map: Record<string, string> = {};
-  r.rows.forEach(row => { map[row.key] = row.value; });
+// Cada clube/tenant usa sua própria conta bancária/CNPJ no Sicoob — a config
+// é por club_id (club_sicoob_config), não uma credencial única da plataforma.
+export async function getSicoobConfig(pool: Pool, clubId: string): Promise<SicoobConfig> {
+  const r = await pool.query(`SELECT * FROM club_sicoob_config WHERE club_id = $1`, [clubId]);
+  const row = r.rows[0];
+  if (!row) {
+    return {
+      env: 'sandbox', clientId: '', clientSecret: '', pixKey: '',
+      certPem: '', keyPem: '', keyPassphrase: '', accountNumber: '',
+    };
+  }
   return {
-    env: (map.sicoob_env as 'sandbox' | 'production') || 'sandbox',
-    clientId: map.sicoob_client_id || '',
-    clientSecret: map.sicoob_client_secret || '',
-    pixKey: map.sicoob_pix_key || '',
-    certPem: map.sicoob_cert_pem || '',
-    keyPem: map.sicoob_key_pem || '',
-    keyPassphrase: map.sicoob_key_passphrase || '',
-    accountNumber: map.sicoob_account_number || '',
+    env: (row.env as 'sandbox' | 'production') || 'sandbox',
+    clientId: row.client_id || '',
+    clientSecret: row.client_secret || '',
+    pixKey: row.pix_key || '',
+    certPem: row.cert_pem || '',
+    keyPem: row.key_pem || '',
+    keyPassphrase: row.key_passphrase || '',
+    accountNumber: row.account_number || '',
   };
+}
+
+export interface SicoobConfigFields {
+  env?: string;
+  clientId?: string;
+  clientSecret?: string;
+  pixKey?: string;
+  certPem?: string;
+  keyPem?: string;
+  keyPassphrase?: string;
+  accountNumber?: string;
+}
+
+// Upsert único — campos em branco/ausentes não sobrescrevem o valor salvo
+// (mesmo padrão do Mercado Pago: o GET nunca devolve o segredo completo, só
+// mascarado, então o POST não pode limpar o que já está salvo sem querer).
+export async function saveSicoobConfig(pool: Pool, clubId: string, fields: SicoobConfigFields): Promise<void> {
+  const existing = await getSicoobConfig(pool, clubId);
+  const merged = {
+    env: fields.env === 'production' ? 'production' : (fields.env === 'sandbox' ? 'sandbox' : existing.env),
+    clientId: fields.clientId?.trim() || existing.clientId,
+    clientSecret: fields.clientSecret?.trim() || existing.clientSecret,
+    pixKey: fields.pixKey?.trim() || existing.pixKey,
+    certPem: fields.certPem?.trim() || existing.certPem,
+    keyPem: fields.keyPem?.trim() || existing.keyPem,
+    keyPassphrase: fields.keyPassphrase?.trim() || existing.keyPassphrase,
+    accountNumber: fields.accountNumber?.trim() || existing.accountNumber,
+  };
+  await pool.query(
+    `INSERT INTO club_sicoob_config (club_id, env, client_id, client_secret, pix_key, cert_pem, key_pem, key_passphrase, account_number, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+     ON CONFLICT (club_id) DO UPDATE SET
+       env = EXCLUDED.env, client_id = EXCLUDED.client_id, client_secret = EXCLUDED.client_secret,
+       pix_key = EXCLUDED.pix_key, cert_pem = EXCLUDED.cert_pem, key_pem = EXCLUDED.key_pem,
+       key_passphrase = EXCLUDED.key_passphrase, account_number = EXCLUDED.account_number, updated_at = NOW()`,
+    [clubId, merged.env, merged.clientId, merged.clientSecret, merged.pixKey, merged.certPem, merged.keyPem, merged.keyPassphrase, merged.accountNumber]
+  );
 }
 
 function authBaseUrl(env: string) {

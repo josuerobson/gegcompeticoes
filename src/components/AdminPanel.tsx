@@ -8206,6 +8206,9 @@ export default function AdminPanel({
           </div>
         );
 
+      case 'integracoes_sicoob':
+        return <SicoobPixManager currentUser={currentUser} />;
+
       default:
         return null;
     }
@@ -10353,9 +10356,6 @@ export default function AdminPanel({
           />
         );
 
-      case 'integracoes_sicoob':
-        return <SicoobPixManager currentUser={currentUser} />;
-
       case 'integracoes_mercadopago':
         return <MercadoPagoManager currentUser={currentUser} />;
 
@@ -10775,7 +10775,8 @@ export default function AdminPanel({
                 { id: 'inscricao_clube', label: 'Inscrição Clube', icon: FileCheck },
                 { id: 'certificados', label: 'Certificados', icon: Award },
                 { id: 'cadastrar_membros', label: 'Cadastrar Membros', icon: UserPlus },
-                { id: 'relatorios_declaracoes', label: 'Relatórios e Declarações', icon: FileText }
+                { id: 'relatorios_declaracoes', label: 'Relatórios e Declarações', icon: FileText },
+                { id: 'integracoes_sicoob', label: 'Integração Sicoob', icon: Landmark }
               ].map((item) => {
                 const Icon = item.icon;
                 const active = clubeMenu === item.id;
@@ -10909,7 +10910,6 @@ export default function AdminPanel({
                 </button>
                 {expandedSections.integracoes && (
                   <div className="pl-3 border-l border-slate-100 space-y-0.5 mt-1">
-                    <button onClick={() => setPlataformaMenu('integracoes_sicoob')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'integracoes_sicoob' ? 'text-blue-600 bg-blue-50/50 font-bold' : 'text-slate-650 hover:bg-slate-50'}`}>Sicoob</button>
                     <button onClick={() => setPlataformaMenu('integracoes_mercadopago')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'integracoes_mercadopago' ? 'text-blue-600 bg-blue-50/50 font-bold' : 'text-slate-650 hover:bg-slate-50'}`}>Mercado Pago</button>
                   </div>
                 )}
