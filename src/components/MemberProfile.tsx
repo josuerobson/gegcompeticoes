@@ -2944,13 +2944,16 @@ export default function MemberProfile({
                         const regUser = users.find(u => u.id === reg.userId);
                         const isSelected = selectedPendingIds.includes(reg.id);
                         
-                        // Check if this registration is a Reinscrição
-                        const isReinsc = reg.registrationType === 'reinscrição' || (() => {
-                          const sameContext = registrations
-                            .filter(r => r.userId === reg.userId && r.championshipId === reg.championshipId && r.stageId === reg.stageId && r.modalityId === reg.modalityId)
-                            .sort((a, b) => new Date(a.registeredAt).getTime() - new Date(b.registeredAt).getTime());
-                          return sameContext.length > 1 && sameContext[0].id !== reg.id;
-                        })();
+                        // Reinscrição só conta se já existir uma inscrição ANTERIOR e
+                        // APROVADA no mesmo contexto — múltiplas tentativas pendentes
+                        // (ex: retry após falha ao gerar o PIX) não devem virar
+                        // "reinscrição com tarifa promocional" antes de nenhuma pagar.
+                        const isReinsc = reg.registrationType === 'reinscrição' || registrations.some(
+                          r => r.userId === reg.userId && r.championshipId === reg.championshipId &&
+                               r.stageId === reg.stageId && r.modalityId === reg.modalityId &&
+                               r.paymentStatus === 'approved' &&
+                               new Date(r.registeredAt).getTime() < new Date(reg.registeredAt).getTime()
+                        );
 
                         const feeVal = reg.valorPago != null
                           ? Number(reg.valorPago)
@@ -3072,13 +3075,14 @@ export default function MemberProfile({
                       const modName = modalityName(reg.modalityId);
                       const regUser = users.find(u => u.id === reg.userId);
                       
-                      // Check if this registration is a Reinscrição
-                      const isReinsc = reg.registrationType === 'reinscrição' || (() => {
-                        const sameContext = registrations
-                          .filter(r => r.userId === reg.userId && r.championshipId === reg.championshipId && r.stageId === reg.stageId && r.modalityId === reg.modalityId)
-                          .sort((a, b) => new Date(a.registeredAt).getTime() - new Date(b.registeredAt).getTime());
-                        return sameContext.length > 1 && sameContext[0].id !== reg.id;
-                      })();
+                      // Reinscrição só conta se já existir uma inscrição ANTERIOR e
+                      // APROVADA no mesmo contexto (mesma regra da lista de pendentes acima).
+                      const isReinsc = reg.registrationType === 'reinscrição' || registrations.some(
+                        r => r.userId === reg.userId && r.championshipId === reg.championshipId &&
+                             r.stageId === reg.stageId && r.modalityId === reg.modalityId &&
+                             r.paymentStatus === 'approved' &&
+                             new Date(r.registeredAt).getTime() < new Date(reg.registeredAt).getTime()
+                      );
 
                       const feeVal = reg.valorPago != null
                         ? Number(reg.valorPago)
