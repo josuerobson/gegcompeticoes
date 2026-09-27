@@ -3424,7 +3424,7 @@ app.post('/api/registrations/pay-batch', requireAuth, async (req, res) => {
   }
 });
 
-app.delete('/api/registrations/:id', requireAdmin, async (req, res) => {
+app.delete('/api/registrations/:id', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
   const registrationId = req.params.id;
 
@@ -3435,7 +3435,15 @@ app.delete('/api/registrations/:id', requireAdmin, async (req, res) => {
     }
     const reg = mapRegistration(regRes.rows[0]);
 
-    if (currentUser.role === 'club_admin' && reg.clubId && reg.clubId !== currentUser.clubId) {
+    // Atleta individual pode excluir a própria inscrição, mas só antes de
+    // pagamento concluído e antes de qualquer resultado lançado — depois
+    // disso, só admin do clube/plataforma pode mexer.
+    const isAdminRole = ADMIN_ROLES.includes(currentUser.role);
+    const isSelfDeletable = reg.userId === currentUser.id && reg.paymentStatus !== 'approved' && reg.completionStatus === 'pending';
+    if (!isAdminRole && !isSelfDeletable) {
+      return res.status(403).json({ error: 'Você só pode excluir suas próprias inscrições pendentes, sem pagamento concluído e sem resultado lançado.' });
+    }
+    if (isAdminRole && currentUser.role === 'club_admin' && reg.clubId && reg.clubId !== currentUser.clubId) {
       return res.status(403).json({ error: 'Você não tem permissão para excluir inscrições de outro clube.' });
     }
 

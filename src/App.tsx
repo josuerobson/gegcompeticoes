@@ -1122,6 +1122,22 @@ export default function App() {
     }
   };
 
+  const handleDeleteRegistration = async (registrationId: string) => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`/api/registrations/${registrationId}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': currentUser.id }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erro ao excluir inscrição.');
+      setRegistrations(prev => prev.filter(r => r.id !== registrationId));
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
+
   const handleDeletePost = async (postId: string) => {
     if (!currentUser) return;
     const authHeaders: HeadersInit = {
@@ -2570,6 +2586,7 @@ export default function App() {
               onLikePost={handleLikePost}
               onCommentPost={handleCommentPost}
               onDeletePost={handleDeletePost}
+              onDeleteRegistration={handleDeleteRegistration}
               onViewProfile={(username) => {
                 const foundUser = users.find(u => u.username === username);
                 if (foundUser) {

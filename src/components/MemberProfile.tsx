@@ -36,6 +36,7 @@ interface MemberProfileProps {
   onLikePost?: (postId: string) => Promise<void>;
   onCommentPost?: (postId: string, content: string) => Promise<void>;
   onDeletePost?: (postId: string) => Promise<void>;
+  onDeleteRegistration?: (registrationId: string) => Promise<void>;
   onViewProfile?: (username: string) => void;
   onNavigateToChampionships: () => void;
   onUpdateProfile: (fields: Record<string, unknown>) => Promise<boolean>;
@@ -287,6 +288,7 @@ export default function MemberProfile({
   onLikePost,
   onCommentPost,
   onDeletePost,
+  onDeleteRegistration,
   onViewProfile,
   onNavigateToChampionships,
   onUpdateProfile,
@@ -433,6 +435,7 @@ export default function MemberProfile({
   const [selectedPendingIds, setSelectedPendingIds] = useState<string[]>([]);
   const [isBatchPayModalOpen, setIsBatchPayModalOpen] = useState(false);
   const [batchPaySaving, setBatchPaySaving] = useState(false);
+  const [deletingRegistrationId, setDeletingRegistrationId] = useState<string | null>(null);
   const [batchPaySuccess, setBatchPaySuccess] = useState('');
   const [batchPayError, setBatchPayError] = useState('');
   const [pixCopied, setPixCopied] = useState(false);
@@ -3016,8 +3019,26 @@ export default function MemberProfile({
                               </div>
                             </div>
 
-                            <div className="text-right font-mono flex-shrink-0">
+                            <div className="text-right font-mono flex-shrink-0 space-y-1.5">
                               <span className="text-xs font-extrabold text-amber-700 block">R$ {feeVal.toFixed(2)}</span>
+                              {!isClubLogin && reg.userId === currentUser?.id && reg.completionStatus === 'pending' && onDeleteRegistration && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!window.confirm('Excluir esta inscrição pendente? Essa ação não pode ser desfeita.')) return;
+                                    setDeletingRegistrationId(reg.id);
+                                    onDeleteRegistration(reg.id)
+                                      .catch((err: any) => alert(err.message || 'Erro ao excluir inscrição.'))
+                                      .finally(() => setDeletingRegistrationId(null));
+                                  }}
+                                  disabled={deletingRegistrationId === reg.id}
+                                  className="text-[10px] font-bold text-red-600 hover:text-red-800 disabled:opacity-50 flex items-center gap-1 cursor-pointer ml-auto"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  {deletingRegistrationId === reg.id ? 'Excluindo...' : 'Excluir'}
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
