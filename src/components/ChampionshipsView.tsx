@@ -1289,8 +1289,8 @@ export default function ChampionshipsView({
                     <div className="w-12 h-12 rounded-full border-4 border-slate-200 animate-spin border-t-blue-600"></div>
                   </div>
                   <div className="space-y-1">
-                    <h4 className="font-bold text-slate-800 text-sm">Redirecionando para o Mercado Pago...</h4>
-                    <p className="text-xs text-slate-400">Você vai concluir o pagamento no checkout seguro do Mercado Pago.</p>
+                    <h4 className="font-bold text-slate-800 text-sm">Gerando cobrança PIX...</h4>
+                    <p className="text-xs text-slate-400">Aguarde só um instante, o QR Code aparece a seguir.</p>
                   </div>
                 </div>
               )}

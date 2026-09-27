@@ -230,6 +230,15 @@ export async function createOrUpdateCob(config: SicoobConfig, params: CreateCobP
     throw new Error(`Erro ao criar cobrança PIX no Sicoob (HTTP ${status}): ${detail}`);
   }
 
+  if (!json?.pixCopiaECola) {
+    // Sicoob respondeu 2xx mas sem o código Copia e Cola — não deveria
+    // acontecer segundo a doc, mas melhor falhar com um erro claro (e
+    // logar a resposta completa pra diagnosticar) do que devolver sucesso
+    // com uma cobrança sem QR Code utilizável.
+    console.error(`Sicoob PUT /cob/${params.txid} retornou HTTP ${status} sem pixCopiaECola. Resposta:`, JSON.stringify(json));
+    throw new Error('O Sicoob criou a cobrança mas não retornou o código PIX Copia e Cola. Tente novamente em instantes.');
+  }
+
   return { txid: json.txid || params.txid, status: json.status, pixCopiaECola: json.pixCopiaECola };
 }
 
