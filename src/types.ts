@@ -326,10 +326,12 @@ export interface Registration {
   clubAmmoType?: 'nova' | 'recarga';
   multiChampionshipId?: string; // Presente quando a inscrição foi gerada por um multicampeonato
   legacyId?: number;
-  paymentGateway?: 'manual' | 'mercado_pago' | 'sicoob';
+  paymentGateway?: 'manual' | 'mercado_pago' | 'sicoob' | 'club_invoice';
   mpPreferenceId?: string;
   mpPaymentId?: string;
   pixCopiaECola?: string;
+  clubOwedAmount?: number; // Valor devido ao clube organizador (só quando o clube do atleta é filiado, diferente do organizador)
+  clubInvoiceId?: string; // NULL até entrar numa fatura gerada
 }
 
 export interface StageScore {
@@ -489,10 +491,12 @@ export interface IdscRegistration {
   registeredAt: string;
   approvedAt?: string;
   txId?: string;
-  paymentGateway?: 'manual' | 'mercado_pago' | 'sicoob';
+  paymentGateway?: 'manual' | 'mercado_pago' | 'sicoob' | 'club_invoice';
   mpPreferenceId?: string;
   mpPaymentId?: string;
   pixCopiaECola?: string;
+  clubOwedAmount?: number;
+  clubInvoiceId?: string;
 }
 
 export interface IdscTargetResult {

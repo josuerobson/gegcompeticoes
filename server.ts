@@ -351,10 +351,12 @@ function mapRegistration(r: any): Registration {
     clubAmmoType: (r.club_ammo_type as 'nova' | 'recarga') || 'recarga',
     multiChampionshipId: r.multi_championship_id || undefined,
     legacyId: r.legacy_id ?? undefined,
-    paymentGateway: (r.payment_gateway as 'manual' | 'mercado_pago' | 'sicoob') || 'manual',
+    paymentGateway: (r.payment_gateway as 'manual' | 'mercado_pago' | 'sicoob' | 'club_invoice') || 'manual',
     mpPreferenceId: r.mp_preference_id || undefined,
     mpPaymentId: r.mp_payment_id || undefined,
     pixCopiaECola: r.pix_copia_e_cola || undefined,
+    clubOwedAmount: r.club_owed_amount != null ? Number(r.club_owed_amount) : undefined,
+    clubInvoiceId: r.club_invoice_id || undefined,
   };
 }
 
@@ -442,10 +444,12 @@ function mapIdscRegistration(r: any): IdscRegistration {
     registeredAt: r.registered_at,
     approvedAt: r.approved_at || undefined,
     txId: r.tx_id || undefined,
-    paymentGateway: (r.payment_gateway as 'manual' | 'mercado_pago' | 'sicoob') || 'manual',
+    paymentGateway: (r.payment_gateway as 'manual' | 'mercado_pago' | 'sicoob' | 'club_invoice') || 'manual',
     mpPreferenceId: r.mp_preference_id || undefined,
     mpPaymentId: r.mp_payment_id || undefined,
     pixCopiaECola: r.pix_copia_e_cola || undefined,
+    clubOwedAmount: r.club_owed_amount != null ? Number(r.club_owed_amount) : undefined,
+    clubInvoiceId: r.club_invoice_id || undefined,
   };
 }
 
@@ -946,16 +950,13 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
 
     const ownerClubRes = await pool.query('SELECT club_id FROM championships WHERE id = $1', [targetItems[0].championshipId]);
     const ownerClubId = ownerClubRes.rows[0]?.club_id || null;
-    const sicoobConfig = ownerClubId ? await getSicoobConfig(pool, ownerClubId) : null;
-    if (!sicoobConfig || !sicoobConfig.clientId || !sicoobConfig.pixKey) {
-      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por este multicampeonato. Avise a diretoria.' });
-    }
 
     // Um único lote = uma única cobrança PIX no Sicoob, cobrindo
     // todos os atletas e todos os campeonatos do pacote de uma vez.
     const txId = generateSicoobTxId();
     const results: Array<{ userId: string; status: 'inscrito' | 'reinscrito' | 'erro'; message?: string }> = [];
-    let totalValor = 0;
+    let totalValor = 0; // subtotal "mesmo clube" (organizador do pacote)
+    let clubInvoiceCount = 0;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -965,6 +966,10 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
           if (userRes.rows.length === 0) throw new Error('Atleta não encontrado.');
           const userSex = (userRes.rows[0].sex || '').toLowerCase();
           const clubId = userRes.rows[0].club_id || currentUser.clubId;
+          // Clube filiado (diferente do organizador do PACOTE — consolida sob um
+          // único credor, mesmo que os campeonatos do pacote tenham organizadores
+          // técnicos distintos): aprova na hora, valor fica pendente de fatura.
+          const isAffiliateClub = Boolean(clubId) && Boolean(ownerClubId) && clubId !== ownerClubId;
 
           let anyReinscricao = false;
 
@@ -989,23 +994,42 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
             const isReinscricao = existing.rows.length > 0;
             if (isReinscricao) anyReinscricao = true;
 
-            const champRow = await client.query('SELECT title FROM championships WHERE id=$1', [item.championshipId]);
+            const champRow = await client.query('SELECT title, percentual_clube FROM championships WHERE id=$1', [item.championshipId]);
 
             const regId = `reg_multi_${Date.now()}_${item.championshipId.slice(-6)}_${Math.random().toString(36).substring(2, 5)}`;
-            await client.query(
-              `INSERT INTO registrations (
-                id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
-                payment_method, payment_status, completion_status, registered_at, tx_id,
-                disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento,
-                multi_championship_id, payment_gateway
-              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,false,0,$11,$12,$13,$14,$15,'sicoob')`,
-              [
-                regId, item.championshipId, athlete.userId, clubId, modalityId, item.stageId, athlete.weaponId,
-                athlete.crNumber, new Date().toISOString(), txId, currentUser.id,
-                isReinscricao ? 'reinscrição' : 'normal', valorUnitario, dataPagamento, multiId
-              ]
-            );
-            totalValor += Number(valorUnitario);
+            if (isAffiliateClub) {
+              const itemPercentual = Number(champRow.rows[0]?.percentual_clube) || 0;
+              const clubOwedAmount = Number(valorUnitario) * (1 - itemPercentual / 100);
+              await client.query(
+                `INSERT INTO registrations (
+                  id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
+                  payment_method, payment_status, completion_status, registered_at, approved_at,
+                  disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento,
+                  multi_championship_id, payment_gateway, club_owed_amount
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','approved','pending',$9,$9,false,0,$10,$11,$12,$13,$14,'club_invoice',$15)`,
+                [
+                  regId, item.championshipId, athlete.userId, clubId, modalityId, item.stageId, athlete.weaponId,
+                  athlete.crNumber, new Date().toISOString(), currentUser.id,
+                  isReinscricao ? 'reinscrição' : 'normal', valorUnitario, dataPagamento, multiId, clubOwedAmount.toFixed(2)
+                ]
+              );
+              clubInvoiceCount++;
+            } else {
+              await client.query(
+                `INSERT INTO registrations (
+                  id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
+                  payment_method, payment_status, completion_status, registered_at, tx_id,
+                  disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento,
+                  multi_championship_id, payment_gateway
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,false,0,$11,$12,$13,$14,$15,'sicoob')`,
+                [
+                  regId, item.championshipId, athlete.userId, clubId, modalityId, item.stageId, athlete.weaponId,
+                  athlete.crNumber, new Date().toISOString(), txId, currentUser.id,
+                  isReinscricao ? 'reinscrição' : 'normal', valorUnitario, dataPagamento, multiId
+                ]
+              );
+              totalValor += Number(valorUnitario);
+            }
           }
 
           await client.query('UPDATE users SET cr_number = COALESCE(cr_number, $1) WHERE id = $2', [athlete.crNumber, athlete.userId]);
@@ -1021,8 +1045,17 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
       }
       await client.query('COMMIT');
 
-      if (totalValor <= 0) {
+      if (totalValor <= 0 && clubInvoiceCount === 0) {
         return res.status(400).json({ success: false, results, error: 'Nenhum atleta pôde ser inscrito.' });
+      }
+
+      if (totalValor <= 0) {
+        return res.status(201).json({ success: true, results, clubInvoiceCount });
+      }
+
+      const sicoobConfig = ownerClubId ? await getSicoobConfig(pool, ownerClubId) : null;
+      if (!sicoobConfig || !sicoobConfig.clientId || !sicoobConfig.pixKey) {
+        return res.status(400).json({ success: false, results, error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por este multicampeonato. Avise a diretoria.' });
       }
 
       const cob = await createOrUpdateCob(sicoobConfig, {
@@ -1034,7 +1067,7 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
       });
       await pool.query('UPDATE registrations SET pix_copia_e_cola = $1 WHERE tx_id = $2', [cob.pixCopiaECola, txId]);
 
-      res.status(201).json({ success: true, results, pixCopiaECola: cob.pixCopiaECola, txId });
+      res.status(201).json({ success: true, results, pixCopiaECola: cob.pixCopiaECola, txId, clubInvoiceCount });
     } catch (e: any) {
       await client.query('ROLLBACK');
       console.error('Register-bulk multi-championship error:', e);
@@ -1332,14 +1365,10 @@ app.post('/api/idsc/courses/:id/register-bulk', requireAdmin, async (req, res) =
     const champ = champRes.rows[0];
     const valorPago = champ ? Number(champ.club_registration_fee) : 0;
 
-    const sicoobConfig = champ?.club_id ? await getSicoobConfig(pool, champ.club_id) : null;
-    if (!sicoobConfig || !sicoobConfig.clientId || !sicoobConfig.pixKey) {
-      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por esta pista. Avise a diretoria.' });
-    }
-
     const txId = generateSicoobTxId();
     const results: Array<{ userId: string; status: 'inscrito' | 'reinscrito' | 'erro'; message?: string }> = [];
     let totalValor = 0;
+    let clubInvoiceCount = 0;
     for (const athlete of athletes) {
       try {
         const userRes = await pool.query('SELECT club_id, full_name FROM users WHERE id = $1', [athlete.userId]);
@@ -1350,20 +1379,41 @@ app.post('/api/idsc/courses/:id/register-bulk', requireAdmin, async (req, res) =
         const isReinscricao = existing.rows.length > 0;
 
         const id = `idsc_reg_${Date.now()}_${athlete.userId.slice(-4)}`;
-        await pool.query(
-          `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status, tx_id, payment_gateway)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pix','pending',$10,'sicoob')`,
-          [id, courseId, athlete.userId, clubId, athlete.weaponId, athlete.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago, txId]
-        );
-        totalValor += Number(valorPago);
+        const isAffiliateClub = Boolean(clubId) && Boolean(champ?.club_id) && clubId !== champ.club_id;
+
+        if (isAffiliateClub) {
+          const clubOwedAmount = valorPago * (1 - (Number(champ.club_percentage) || 0) / 100);
+          await pool.query(
+            `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status, registered_at, approved_at, payment_gateway, club_owed_amount)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pix','approved',NOW(),NOW(),'club_invoice',$10)`,
+            [id, courseId, athlete.userId, clubId, athlete.weaponId, athlete.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago, clubOwedAmount.toFixed(2)]
+          );
+          clubInvoiceCount++;
+        } else {
+          await pool.query(
+            `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status, tx_id, payment_gateway)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pix','pending',$10,'sicoob')`,
+            [id, courseId, athlete.userId, clubId, athlete.weaponId, athlete.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago, txId]
+          );
+          totalValor += Number(valorPago);
+        }
         results.push({ userId: athlete.userId, status: isReinscricao ? 'reinscrito' : 'inscrito' });
       } catch (e: any) {
         results.push({ userId: athlete.userId, status: 'erro', message: e.message });
       }
     }
 
-    if (totalValor <= 0) {
+    if (totalValor <= 0 && clubInvoiceCount === 0) {
       return res.status(400).json({ success: false, results, error: 'Nenhum atleta pôde ser inscrito.' });
+    }
+
+    if (totalValor <= 0) {
+      return res.status(201).json({ success: true, results, clubInvoiceCount });
+    }
+
+    const sicoobConfig = champ?.club_id ? await getSicoobConfig(pool, champ.club_id) : null;
+    if (!sicoobConfig || !sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ success: false, results, error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por esta pista. Avise a diretoria.' });
     }
 
     const cob = await createOrUpdateCob(sicoobConfig, {
@@ -1375,7 +1425,7 @@ app.post('/api/idsc/courses/:id/register-bulk', requireAdmin, async (req, res) =
     });
     await pool.query('UPDATE idsc_registrations SET pix_copia_e_cola = $1 WHERE tx_id = $2', [cob.pixCopiaECola, txId]);
 
-    res.status(201).json({ success: true, results, pixCopiaECola: cob.pixCopiaECola, txId });
+    res.status(201).json({ success: true, results, pixCopiaECola: cob.pixCopiaECola, txId, clubInvoiceCount });
   } catch (err: any) {
     console.error('Register-bulk idsc course error:', err);
     res.status(500).json({ error: err.message || 'Erro ao realizar inscrição em lote IDSC.' });
@@ -4293,14 +4343,10 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
   if (champRes.rows.length === 0) return res.status(404).json({ error: 'Campeonato não encontrado.' });
   const champ = mapChampionship(champRes.rows[0]);
 
-  const sicoobConfig = champ.clubId ? await getSicoobConfig(pool, champ.clubId) : null;
-  if (!sicoobConfig || !sicoobConfig.clientId || !sicoobConfig.pixKey) {
-    return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por este campeonato. Avise a diretoria.' });
-  }
-
   const txId = generateSicoobTxId();
   const results: Array<{ userId: string; status: 'inscrito' | 'reinscrito' | 'erro'; message?: string }> = [];
-  let totalValor = 0;
+  let totalValor = 0; // só o subtotal "mesmo clube" (organizador), que gera PIX imediato
+  let clubInvoiceCount = 0; // quantos ficaram pendentes de fatura (clube filiado)
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -4332,29 +4378,64 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
           ? (champ.valorReinscricao ?? champ.registrationFee)
           : (champ.valorInscricaoClube ?? champ.registrationFee);
         const dataPagamento = new Date().toISOString().split('T')[0];
+        const regId = `reg_${Date.now()}_${athlete.userId.slice(-4)}`;
 
-        await client.query(
-          `INSERT INTO registrations
-            (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
-             payment_method, payment_status, completion_status, registered_at, tx_id,
-             registered_by_user_id, registration_type, valor_pago, data_pagamento, disqualified, penalty, payment_gateway)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,$11,$12,$13,$14,false,0,'sicoob')`,
-          [
-            `reg_${Date.now()}_${athlete.userId.slice(-4)}`,
-            championshipId, athlete.userId, clubId, modalityId, stageId, athlete.weaponId,
-            athlete.crNumber, new Date().toISOString(), txId, currentUser.id, regType, valorPago, dataPagamento
-          ]
-        );
-        totalValor += Number(valorPago);
-        results.push({ userId: athlete.userId, status: isReinscricao ? 'reinscrito' : 'inscrito' });
+        // Clube filiado (diferente do organizador do campeonato) inscrevendo
+        // seus próprios atletas: aprova na hora, valor devido ao organizador
+        // (percentual_clube define quanto o filiado FICA) fica pendente de
+        // fatura — não gera cobrança PIX agora.
+        const isAffiliateClub = Boolean(clubId) && Boolean(champ.clubId) && clubId !== champ.clubId;
+
+        if (isAffiliateClub) {
+          const clubOwedAmount = Number(valorPago) * (1 - (Number(champ.percentualClube) || 0) / 100);
+          await client.query(
+            `INSERT INTO registrations
+              (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
+               payment_method, payment_status, completion_status, registered_at, approved_at,
+               registered_by_user_id, registration_type, valor_pago, data_pagamento, disqualified, penalty,
+               payment_gateway, club_owed_amount)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','approved','pending',$9,$9,$10,$11,$12,$13,false,0,'club_invoice',$14)`,
+            [
+              regId, championshipId, athlete.userId, clubId, modalityId, stageId, athlete.weaponId,
+              athlete.crNumber, new Date().toISOString(), currentUser.id, regType, valorPago, dataPagamento,
+              clubOwedAmount.toFixed(2)
+            ]
+          );
+          clubInvoiceCount++;
+          results.push({ userId: athlete.userId, status: isReinscricao ? 'reinscrito' : 'inscrito' });
+        } else {
+          await client.query(
+            `INSERT INTO registrations
+              (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
+               payment_method, payment_status, completion_status, registered_at, tx_id,
+               registered_by_user_id, registration_type, valor_pago, data_pagamento, disqualified, penalty, payment_gateway)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,$11,$12,$13,$14,false,0,'sicoob')`,
+            [
+              regId, championshipId, athlete.userId, clubId, modalityId, stageId, athlete.weaponId,
+              athlete.crNumber, new Date().toISOString(), txId, currentUser.id, regType, valorPago, dataPagamento
+            ]
+          );
+          totalValor += Number(valorPago);
+          results.push({ userId: athlete.userId, status: isReinscricao ? 'reinscrito' : 'inscrito' });
+        }
       } catch (e: any) {
         results.push({ userId: athlete.userId, status: 'erro', message: e.message });
       }
     }
     await client.query('COMMIT');
 
-    if (totalValor <= 0) {
+    if (totalValor <= 0 && clubInvoiceCount === 0) {
       return res.status(400).json({ success: false, results, error: 'Nenhum atleta pôde ser inscrito.' });
+    }
+
+    if (totalValor <= 0) {
+      // Lote 100% de clubes filiados — nada a cobrar agora, tudo vai para fatura.
+      return res.status(201).json({ success: true, results, clubInvoiceCount });
+    }
+
+    const sicoobConfig = champ.clubId ? await getSicoobConfig(pool, champ.clubId) : null;
+    if (!sicoobConfig || !sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ success: false, results, error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por este campeonato. Avise a diretoria.' });
     }
 
     const cob = await createOrUpdateCob(sicoobConfig, {
@@ -4366,7 +4447,7 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
     });
     await pool.query('UPDATE registrations SET pix_copia_e_cola = $1 WHERE tx_id = $2', [cob.pixCopiaECola, txId]);
 
-    res.status(201).json({ success: true, results, pixCopiaECola: cob.pixCopiaECola, txId });
+    res.status(201).json({ success: true, results, pixCopiaECola: cob.pixCopiaECola, txId, clubInvoiceCount });
   } catch (e: any) {
     await client.query('ROLLBACK');
     console.error('Register-bulk championship error:', e);
@@ -6918,6 +6999,11 @@ app.post(['/api/webhooks/sicoob-pix', '/api/webhooks/sicoob-pix/:chave'], async 
                WHERE tx_id = $1 AND payment_gateway = 'sicoob'`,
               [item.txid]
             );
+            await pool.query(
+              `UPDATE club_invoices SET status = 'approved', approved_at = NOW()
+               WHERE tx_id = $1 AND payment_gateway = 'sicoob'`,
+              [item.txid]
+            );
           }
         } catch (cobErr) {
           console.error('Erro ao confirmar cobrança Sicoob via API antes de aprovar:', cobErr);
@@ -7039,7 +7125,11 @@ async function getSicoobClubIdForTx(txId: string): Promise<string | null> {
      WHERE ir.tx_id = $1 LIMIT 1`,
     [txId]
   );
-  return r2.rows[0]?.club_id || null;
+  if (r2.rows[0]?.club_id) return r2.rows[0].club_id;
+
+  // Fatura entre clubes: o credor já está gravado direto na linha.
+  const r3 = await pool.query(`SELECT creditor_club_id FROM club_invoices WHERE tx_id = $1 LIMIT 1`, [txId]);
+  return r3.rows[0]?.creditor_club_id || null;
 }
 
 // Reconsulta uma cobrança Sicoob pendente direto na API (GET /cob/{txid}) e
@@ -7063,6 +7153,11 @@ async function reconcileSicoobTx(txId: string): Promise<void> {
       await pool.query(
         `UPDATE idsc_registrations SET payment_status = 'approved', approved_at = NOW(), payment_method = 'pix'
          WHERE tx_id = $1 AND payment_gateway = 'sicoob' AND payment_status != 'approved'`,
+        [txId]
+      );
+      await pool.query(
+        `UPDATE club_invoices SET status = 'approved', approved_at = NOW()
+         WHERE tx_id = $1 AND payment_gateway = 'sicoob' AND status != 'approved'`,
         [txId]
       );
     }
@@ -7131,6 +7226,265 @@ app.get('/api/idsc/registrations/by-tx/:txId', requireAuth, async (req, res) => 
   } catch (err) {
     console.error('Fetch idsc registration by tx error:', err);
     res.status(500).json({ error: 'Erro ao consultar status do pagamento.' });
+  }
+});
+
+app.get('/api/club-invoices/by-tx/:txId', requireAuth, async (req, res) => {
+  try {
+    const { txId } = req.params;
+    let r = await pool.query(`SELECT id, status, payment_gateway FROM club_invoices WHERE tx_id = $1`, [txId]);
+    if (r.rows.length === 0) return res.status(404).json({ error: 'Fatura não encontrada.' });
+
+    if (r.rows[0].status !== 'approved' && r.rows[0].payment_gateway === 'sicoob') {
+      await reconcileSicoobTx(txId);
+      r = await pool.query(`SELECT id, status, payment_gateway FROM club_invoices WHERE tx_id = $1`, [txId]);
+    }
+
+    res.json({ status: r.rows[0].status, count: 1 });
+  } catch (err) {
+    console.error('Fetch club invoice by tx error:', err);
+    res.status(500).json({ error: 'Erro ao consultar status do pagamento.' });
+  }
+});
+
+// Permissão: club_admin só enxerga/opera o próprio clube; master_admin
+// (suporte) enxerga qualquer clube — mesmo padrão já usado na integração Sicoob.
+function resolveClubInvoiceAccess(currentUser: User, requestedClubId: string | undefined): { clubId: string | null; allowed: boolean } {
+  const isMaster = currentUser.role === 'master_admin';
+  if (isMaster) return { clubId: requestedClubId || currentUser.clubId || null, allowed: true };
+  const isOwnClubAdmin = currentUser.role === 'club_admin' && !!currentUser.clubId;
+  const clubId = currentUser.clubId || null;
+  const allowed = isOwnClubAdmin && (!requestedClubId || requestedClubId === clubId);
+  return { clubId, allowed };
+}
+
+// Resumo do saldo não faturado de um clube, agrupado por credor (o clube
+// organizador dos campeonatos/pistas onde os atletas foram inscritos em lote).
+// Sem clubId: só master_admin pode ver (visão "todos os clubes" usada em
+// Gestão de Cobranças). Com clubId: master vê qualquer um, club_admin só o
+// próprio.
+app.get('/api/club-invoices/unbilled-summary', requireAuth, async (req, res) => {
+  try {
+    const currentUser = (req as any).user as User;
+    const { clubId: requestedClubId } = req.query as { clubId?: string };
+    const isMaster = currentUser.role === 'master_admin';
+    const allClubs = isMaster && !requestedClubId;
+
+    if (!allClubs) {
+      const { clubId, allowed } = resolveClubInvoiceAccess(currentUser, requestedClubId);
+      if (!allowed || !clubId) {
+        return res.status(403).json({ error: 'Apenas o administrador do clube ou o Administrador Master podem ver este resumo.' });
+      }
+    } else if (!isMaster) {
+      return res.status(403).json({ error: 'Apenas o Administrador Master pode ver o resumo de todos os clubes.' });
+    }
+
+    const clubFilter = allClubs ? '' : 'AND r.club_id = $1';
+    const clubFilterIdsc = allClubs ? '' : 'AND ir.club_id = $1';
+    const params = allClubs ? [] : [requestedClubId || currentUser.clubId];
+
+    const champRows = await pool.query(
+      `SELECT r.id, r.valor_pago, r.club_owed_amount, r.registered_at, r.club_id AS debtor_club_id,
+              dcl.name AS debtor_club_name,
+              ch.title AS championship_title, ch.club_id AS creditor_club_id,
+              cl.name AS creditor_club_name, u.full_name AS athlete_name
+       FROM registrations r
+       JOIN championships ch ON ch.id = r.championship_id
+       LEFT JOIN clubs cl ON cl.id = ch.club_id
+       LEFT JOIN clubs dcl ON dcl.id = r.club_id
+       LEFT JOIN users u ON u.id = r.user_id
+       WHERE r.club_invoice_id IS NULL AND r.club_owed_amount IS NOT NULL ${clubFilter}`,
+      params
+    );
+    const idscRows = await pool.query(
+      `SELECT ir.id, ir.valor_pago, ir.club_owed_amount, ir.registered_at, ir.club_id AS debtor_club_id,
+              dcl.name AS debtor_club_name,
+              co.name AS championship_title, ic.club_id AS creditor_club_id,
+              cl.name AS creditor_club_name, u.full_name AS athlete_name
+       FROM idsc_registrations ir
+       JOIN idsc_courses co ON co.id = ir.course_id
+       JOIN idsc_stages st ON st.id = co.stage_id
+       JOIN idsc_championships ic ON ic.id = st.championship_id
+       LEFT JOIN clubs cl ON cl.id = ic.club_id
+       LEFT JOIN clubs dcl ON dcl.id = ir.club_id
+       LEFT JOIN users u ON u.id = ir.user_id
+       WHERE ir.club_invoice_id IS NULL AND ir.club_owed_amount IS NOT NULL ${clubFilterIdsc}`,
+      params
+    );
+
+    const bySource = [
+      ...champRows.rows.map(r => ({ ...r, source: 'championship' as const })),
+      ...idscRows.rows.map(r => ({ ...r, source: 'idsc' as const })),
+    ];
+
+    // Agrupado por par (clube devedor, clube credor) — no caso de um único
+    // clube (allClubs=false), o devedor é sempre o mesmo, então na prática
+    // vira "agrupado por credor".
+    const groupMap = new Map<string, {
+      clubId: string; clubName: string; creditorClubId: string; creditorClubName: string;
+      totalOwed: number; count: number; registrations: any[];
+    }>();
+    for (const row of bySource) {
+      if (!row.creditor_club_id || !row.debtor_club_id) continue;
+      const key = `${row.debtor_club_id}::${row.creditor_club_id}`;
+      if (!groupMap.has(key)) {
+        groupMap.set(key, {
+          clubId: row.debtor_club_id,
+          clubName: row.debtor_club_name || row.debtor_club_id,
+          creditorClubId: row.creditor_club_id,
+          creditorClubName: row.creditor_club_name || row.creditor_club_id,
+          totalOwed: 0,
+          count: 0,
+          registrations: [],
+        });
+      }
+      const entry = groupMap.get(key)!;
+      entry.totalOwed += Number(row.club_owed_amount);
+      entry.count += 1;
+      entry.registrations.push({
+        id: row.id,
+        source: row.source,
+        championshipTitle: row.championship_title,
+        athleteName: row.athlete_name,
+        valorPago: Number(row.valor_pago),
+        clubOwedAmount: Number(row.club_owed_amount),
+        registeredAt: row.registered_at,
+      });
+    }
+
+    res.json({ entries: Array.from(groupMap.values()) });
+  } catch (err) {
+    console.error('Fetch unbilled summary error:', err);
+    res.status(500).json({ error: 'Erro ao buscar resumo de fatura não emitida.' });
+  }
+});
+
+// Gera uma fatura real: soma tudo que está não-faturado para o par
+// (clube devedor, clube credor), cria a linha de fatura, marca as
+// inscrições envolvidas e gera uma cobrança PIX real no Sicoob do credor.
+app.post('/api/club-invoices/generate', requireAuth, async (req, res) => {
+  try {
+    const currentUser = (req as any).user as User;
+    const { clubId: requestedClubId, creditorClubId } = req.body as { clubId?: string; creditorClubId?: string };
+    const { clubId, allowed } = resolveClubInvoiceAccess(currentUser, requestedClubId);
+    if (!allowed || !clubId) {
+      return res.status(403).json({ error: 'Apenas o administrador do clube ou o Administrador Master podem gerar faturas.' });
+    }
+    if (!creditorClubId) {
+      return res.status(400).json({ error: 'creditorClubId é obrigatório.' });
+    }
+
+    const champRows = await pool.query(
+      `SELECT r.id, r.club_owed_amount FROM registrations r
+       JOIN championships ch ON ch.id = r.championship_id
+       WHERE r.club_id = $1 AND ch.club_id = $2 AND r.club_invoice_id IS NULL AND r.club_owed_amount IS NOT NULL`,
+      [clubId, creditorClubId]
+    );
+    const idscRows = await pool.query(
+      `SELECT ir.id, ir.club_owed_amount FROM idsc_registrations ir
+       JOIN idsc_courses co ON co.id = ir.course_id
+       JOIN idsc_stages st ON st.id = co.stage_id
+       JOIN idsc_championships ic ON ic.id = st.championship_id
+       WHERE ir.club_id = $1 AND ic.club_id = $2 AND ir.club_invoice_id IS NULL AND ir.club_owed_amount IS NOT NULL`,
+      [clubId, creditorClubId]
+    );
+
+    const totalAmount = [...champRows.rows, ...idscRows.rows].reduce((sum, r) => sum + Number(r.club_owed_amount), 0);
+    if (totalAmount <= 0) {
+      return res.status(400).json({ error: 'Nenhum valor pendente de fatura para este clube/credor.' });
+    }
+
+    const sicoobConfig = await getSicoobConfig(pool, creditorClubId);
+    if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube credor.' });
+    }
+
+    const debtorClubRes = await pool.query('SELECT name FROM clubs WHERE id = $1', [clubId]);
+    const debtorClubName = debtorClubRes.rows[0]?.name || 'Clube filiado';
+    const champIds = champRows.rows.map(r => r.id);
+    const idscIds = idscRows.rows.map(r => r.id);
+
+    // Cria a cobrança real ANTES de gravar qualquer coisa — se o Sicoob
+    // falhar aqui, nada fica marcado como faturado (sem isso, uma falha
+    // deixaria a fatura sem tx_id e as inscrições presas nela pra sempre,
+    // sumindo do resumo não-faturado sem gerar cobrança nenhuma).
+    const txId = generateSicoobTxId();
+    const cob = await createOrUpdateCob(sicoobConfig, {
+      txid: txId,
+      valor: totalAmount,
+      devedorNome: debtorClubName,
+      solicitacaoPagador: `Fatura ${debtorClubName} - ${champIds.length + idscIds.length} inscrição(ões)`.slice(0, 140),
+    });
+
+    const invoiceId = `inv_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    await pool.query(
+      `INSERT INTO club_invoices (id, club_id, creditor_club_id, total_amount, status, created_by_user_id, tx_id, pix_copia_e_cola)
+       VALUES ($1,$2,$3,$4,'pending',$5,$6,$7)`,
+      [invoiceId, clubId, creditorClubId, totalAmount.toFixed(2), currentUser.id, txId, cob.pixCopiaECola]
+    );
+    if (champIds.length > 0) {
+      await pool.query('UPDATE registrations SET club_invoice_id = $1 WHERE id = ANY($2::text[])', [invoiceId, champIds]);
+    }
+    if (idscIds.length > 0) {
+      await pool.query('UPDATE idsc_registrations SET club_invoice_id = $1 WHERE id = ANY($2::text[])', [invoiceId, idscIds]);
+    }
+
+    res.status(201).json({ success: true, invoiceId, totalAmount, pixCopiaECola: cob.pixCopiaECola, txId });
+  } catch (err: any) {
+    console.error('Generate club invoice error:', err);
+    res.status(500).json({ error: err.message || 'Erro ao gerar fatura.' });
+  }
+});
+
+// Histórico de faturas — club_admin só do próprio clube; master vê todas (ou filtra por clubId).
+app.get('/api/club-invoices', requireAuth, async (req, res) => {
+  try {
+    const currentUser = (req as any).user as User;
+    const { clubId: requestedClubId } = req.query as { clubId?: string };
+    const isMaster = currentUser.role === 'master_admin';
+    if (!isMaster && currentUser.role !== 'club_admin') {
+      return res.status(403).json({ error: 'Apenas administradores podem ver faturas.' });
+    }
+    const clubId = isMaster ? (requestedClubId || null) : currentUser.clubId;
+    if (!isMaster && (!clubId || (requestedClubId && requestedClubId !== clubId))) {
+      return res.status(403).json({ error: 'Você só pode ver as faturas do seu próprio clube.' });
+    }
+
+    const result = clubId
+      ? await pool.query(
+          `SELECT ci.*, dc.name AS club_name, cc.name AS creditor_club_name
+           FROM club_invoices ci
+           LEFT JOIN clubs dc ON dc.id = ci.club_id
+           LEFT JOIN clubs cc ON cc.id = ci.creditor_club_id
+           WHERE ci.club_id = $1 ORDER BY ci.created_at DESC`,
+          [clubId]
+        )
+      : await pool.query(
+          `SELECT ci.*, dc.name AS club_name, cc.name AS creditor_club_name
+           FROM club_invoices ci
+           LEFT JOIN clubs dc ON dc.id = ci.club_id
+           LEFT JOIN clubs cc ON cc.id = ci.creditor_club_id
+           ORDER BY ci.created_at DESC`
+        );
+
+    res.json({
+      invoices: result.rows.map(r => ({
+        id: r.id,
+        clubId: r.club_id,
+        clubName: r.club_name,
+        creditorClubId: r.creditor_club_id,
+        creditorClubName: r.creditor_club_name,
+        totalAmount: Number(r.total_amount),
+        status: r.status,
+        pixCopiaECola: r.pix_copia_e_cola,
+        txId: r.tx_id,
+        createdAt: r.created_at,
+        approvedAt: r.approved_at,
+      })),
+    });
+  } catch (err) {
+    console.error('Fetch club invoices error:', err);
+    res.status(500).json({ error: 'Erro ao buscar faturas.' });
   }
 });
 

@@ -1435,6 +1435,46 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
     `);
 
+    // Faturamento entre clube filiado e clube franqueador: quando um clube
+    // filiado inscreve seus atletas via lote num campeonato organizado por
+    // outro clube (ex: Clube de Tiro Aranãs), a inscrição é aprovada na hora
+    // mas o valor devido (championships.percentual_clube define quanto o
+    // filiado FICA — o resto é a diferença devida) fica pendente até virar
+    // uma fatura real (PIX via Sicoob), paga depois em lote. Par
+    // devedor/credor em vez de só devedor: um clube pode dever a mais de um
+    // organizador diferente no futuro.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS club_invoices (
+        id TEXT PRIMARY KEY,
+        club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL,
+        creditor_club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL,
+        total_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+        payment_gateway TEXT NOT NULL DEFAULT 'sicoob',
+        tx_id TEXT,
+        pix_copia_e_cola TEXT,
+        approved_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL
+      );
+    `);
+
+    // club_owed_amount: valor devido ao clube organizador nessa inscrição
+    // específica (só preenchido quando o clube do atleta é diferente do
+    // clube organizador do campeonato/pista). club_invoice_id: NULL = ainda
+    // não faturado; preenchido quando entra numa fatura gerada.
+    await client.query(`
+      ALTER TABLE registrations
+        ADD COLUMN IF NOT EXISTS club_owed_amount NUMERIC(10,2),
+        ADD COLUMN IF NOT EXISTS club_invoice_id TEXT REFERENCES club_invoices(id) ON DELETE SET NULL;
+    `);
+
+    await client.query(`
+      ALTER TABLE idsc_registrations
+        ADD COLUMN IF NOT EXISTS club_owed_amount NUMERIC(10,2),
+        ADD COLUMN IF NOT EXISTS club_invoice_id TEXT REFERENCES club_invoices(id) ON DELETE SET NULL;
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS idsc_results (
         id TEXT PRIMARY KEY,

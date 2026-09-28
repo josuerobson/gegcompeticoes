@@ -655,6 +655,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
   const [success, setSuccess] = React.useState<{ userId: string; status: string; message?: string }[] | null>(null);
   const [pixPayment, setPixPayment] = React.useState<{ pixCopiaECola: string; txId: string } | null>(null);
   const [showPixModal, setShowPixModal] = React.useState(false);
+  const [clubInvoiceCount, setClubInvoiceCount] = React.useState(0);
   const [error, setError] = React.useState('');
 
   // No celular, marcar um atleta abre um popup para vincular a arma em vez de
@@ -857,6 +858,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
       const pix = data.pixCopiaECola && data.txId ? { pixCopiaECola: data.pixCopiaECola, txId: data.txId } : null;
       setPixPayment(pix);
       setShowPixModal(Boolean(pix));
+      setClubInvoiceCount(data.clubInvoiceCount || 0);
       setSelectedAthletes({});
     } catch (err: any) {
       setError(err.message);
@@ -1015,6 +1017,12 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
       {!loadingMembers && members.length > 0 && filteredMembers.length === 0 && (
         <div className="text-center py-8 px-4 text-slate-500 text-xs font-semibold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
           Nenhum atleta do sexo <span className="text-slate-800 font-extrabold">{(mode === 'multi' ? multiSexConstraint : currentStage?.sexo) === 'feminino' ? 'Feminino 👩' : 'Masculino 👨'}</span> cadastrado no clube está elegível para esta etapa.
+        </div>
+      )}
+
+      {mode === 'individual' && selectedChamp && currentUser?.clubId && selectedChamp.clubId && currentUser.clubId !== selectedChamp.clubId && !selectedChamp.percentualClube && (
+        <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3 font-semibold">
+          ⚠️ Este campeonato não tem "Percentual Clube" configurado — as inscrições do seu clube serão aprovadas, mas o valor devido ao clube organizador será cobrado integralmente (0% de margem para o seu clube). Avise a diretoria do clube organizador.
         </div>
       )}
 
@@ -1179,10 +1187,15 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
                 );
               })}
             </ul>
+            {clubInvoiceCount > 0 && (
+              <p className="text-[11px] text-purple-700 bg-purple-50 border border-purple-200 rounded-xl p-2.5 shrink-0">
+                {clubInvoiceCount} inscrição(ões) de clube(s) filiado(s) foram aprovadas na hora — o valor devido ao clube organizador entra na fatura pendente (Gerenciamento Clube &gt; Financeiro).
+              </p>
+            )}
             {pixPayment ? (
               <>
                 <p className="text-[11px] text-slate-500 shrink-0">
-                  As inscrições acima ficam pendentes até o pagamento único do lote ser confirmado via PIX.
+                  As demais inscrições acima ficam pendentes até o pagamento único do lote ser confirmado via PIX.
                 </p>
                 <button
                   type="button"
@@ -3190,6 +3203,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
   const [success, setSuccess] = React.useState<{ userId: string; status: string; message?: string }[] | null>(null);
   const [pixPayment, setPixPayment] = React.useState<{ pixCopiaECola: string; txId: string } | null>(null);
   const [showPixModal, setShowPixModal] = React.useState(false);
+  const [clubInvoiceCount, setClubInvoiceCount] = React.useState(0);
   const [error, setError] = React.useState('');
 
   const [athleteFilterQuery, setAthleteFilterQuery] = React.useState('');
@@ -3383,6 +3397,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
       const pix = data.pixCopiaECola && data.txId ? { pixCopiaECola: data.pixCopiaECola, txId: data.txId } : null;
       setPixPayment(pix);
       setShowPixModal(Boolean(pix));
+      setClubInvoiceCount(data.clubInvoiceCount || 0);
       setSelectedAthletes({});
     } catch (err: any) {
       setError(err.message);
@@ -3575,10 +3590,15 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
                 );
               })}
             </ul>
+            {clubInvoiceCount > 0 && (
+              <p className="text-[11px] text-purple-700 bg-purple-50 border border-purple-200 rounded-xl p-2.5 shrink-0">
+                {clubInvoiceCount} inscrição(ões) de clube(s) filiado(s) foram aprovadas na hora — o valor devido ao clube organizador entra na fatura pendente (Gerenciamento Clube &gt; Financeiro).
+              </p>
+            )}
             {pixPayment ? (
               <>
                 <p className="text-[11px] text-slate-500 shrink-0">
-                  As inscrições acima ficam pendentes até o pagamento único do lote ser confirmado via PIX.
+                  As demais inscrições acima ficam pendentes até o pagamento único do lote ser confirmado via PIX.
                 </p>
                 <button
                   onClick={() => setShowPixModal(true)}
@@ -6360,15 +6380,11 @@ export default function AdminPanel({
     }
   }, [clubs, users]);
 
-  const [billingList, setBillingList] = useState([
-    { id: 'bill-1', target: 'G&G Sobradinho', type: 'Franquia (15%)', amount: 6765, dueDate: '2026-06-30', status: 'Pendente' },
-    { id: 'bill-2', target: 'G&G Taguatinga', type: 'Franquia (15%)', amount: 4875, dueDate: '2026-06-30', status: 'Pago' },
-    { id: 'bill-3', target: 'Ana Clara', type: 'Anuidade Atleta', amount: 350, dueDate: '2026-06-25', status: 'Pendente' },
-    { id: 'bill-4', target: 'Marcos Oliveira', type: 'Anuidade Atleta', amount: 350, dueDate: '2026-06-20', status: 'Pago' },
-    { id: 'bill-5', target: 'Estande Alvo Certo', type: 'Taxa Adesão Filiação', amount: 2500, dueDate: '2026-07-05', status: 'Pendente' },
-  ]);
-
   const [billingSuccessMsg, setBillingSuccessMsg] = useState('');
+  const sendBillingReminder = (msg: string) => {
+    setBillingSuccessMsg(msg);
+    setTimeout(() => setBillingSuccessMsg(''), 3000);
+  };
 
   const handleToggleClubStatus = (clubId: string) => {
     setMasterClubs(prev => prev.map(c => {
@@ -6387,11 +6403,6 @@ export default function AdminPanel({
       }
       return c;
     }));
-  };
-
-  const handleSendBillingReminder = (billId: string) => {
-    setBillingSuccessMsg(`Lembrete de cobrança enviado com sucesso para ${billingList.find(b => b.id === billId)?.target}!`);
-    setTimeout(() => setBillingSuccessMsg(''), 3000);
   };
 
   // Plataforma sidebar collapsible sections (accordions)
@@ -6518,6 +6529,70 @@ export default function AdminPanel({
   useEffect(() => {
     loadAnnuityPlans();
   }, []);
+
+  // Faturamento entre clube filiado e clube franqueador (Percentual Clube).
+  // Club_admin vê só o próprio clube; master_admin (sem clubId) vê todos —
+  // usado tanto no card "Financeiro" do clube quanto em "Gestão de Cobranças".
+  const [invoiceEntries, setInvoiceEntries] = useState<Array<{
+    clubId: string; clubName: string; creditorClubId: string; creditorClubName: string;
+    totalOwed: number; count: number; registrations: any[];
+  }>>([]);
+  const [invoiceHistory, setInvoiceHistory] = useState<Array<{
+    id: string; clubId: string; clubName: string; creditorClubId: string; creditorClubName: string;
+    totalAmount: number; status: string; pixCopiaECola?: string; txId?: string; createdAt: string; approvedAt?: string;
+  }>>([]);
+  const [generatingInvoiceKey, setGeneratingInvoiceKey] = useState<string | null>(null);
+  const [invoicePixModal, setInvoicePixModal] = useState<{ pixCopiaECola: string; txId: string } | null>(null);
+  const [invoiceError, setInvoiceError] = useState('');
+
+  const loadClubInvoiceData = async (allClubs: boolean) => {
+    if (!currentUser) return;
+    try {
+      const summaryUrl = allClubs ? '/api/club-invoices/unbilled-summary' : `/api/club-invoices/unbilled-summary?clubId=${currentUser.clubId}`;
+      const historyUrl = allClubs ? '/api/club-invoices' : `/api/club-invoices?clubId=${currentUser.clubId}`;
+      const [summaryRes, historyRes] = await Promise.all([
+        fetch(summaryUrl, { headers: { 'x-user-id': currentUser.id } }),
+        fetch(historyUrl, { headers: { 'x-user-id': currentUser.id } }),
+      ]);
+      const summaryData = await summaryRes.json();
+      const historyData = await historyRes.json();
+      if (summaryRes.ok) setInvoiceEntries(summaryData.entries || []);
+      if (historyRes.ok) setInvoiceHistory(historyData.invoices || []);
+    } catch (e) {
+      console.error('Error loading club invoice data:', e);
+    }
+  };
+
+  const handleGenerateInvoice = async (clubId: string, creditorClubId: string) => {
+    if (!currentUser) return;
+    const key = `${clubId}::${creditorClubId}`;
+    setGeneratingInvoiceKey(key);
+    setInvoiceError('');
+    try {
+      const res = await fetch('/api/club-invoices/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify({ clubId, creditorClubId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.pixCopiaECola || !data.txId) throw new Error(data.error || 'Erro ao gerar fatura.');
+      setInvoicePixModal({ pixCopiaECola: data.pixCopiaECola, txId: data.txId });
+      await loadClubInvoiceData(currentUser.role === 'master_admin');
+    } catch (err: any) {
+      setInvoiceError(err.message || 'Erro ao gerar fatura.');
+    } finally {
+      setGeneratingInvoiceKey(null);
+    }
+  };
+
+  useEffect(() => {
+    if (mainTab === 'clube' && clubeMenu === 'financeiro') {
+      loadClubInvoiceData(false);
+    } else if (mainTab === 'master' && masterMenu === 'gestao_cobrancas') {
+      loadClubInvoiceData(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubeMenu, mainTab, masterMenu, currentUser?.id]);
 
   const handleSaveAnnuityPlan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -7342,12 +7417,17 @@ export default function AdminPanel({
       case 'financeiro':
         const confirmedRegs = registrations.filter(r => r.paymentStatus === 'approved');
         const totalFees = confirmedRegs.reduce((sum, r) => {
+          // Inscrição de clube filiado (fatura): só a diferença devida entra
+          // como receita do organizador, não o valor cheio pago pelo atleta —
+          // senão a margem do filiado seria contada como receita do estande.
+          if (r.clubOwedAmount != null) return sum + r.clubOwedAmount;
           const fee = championships.find(c => c.id === r.championshipId)?.registrationFee || 0;
           return sum + fee;
         }, 0);
         const signedUsersCount = users.filter(u => u.hasPaidSignature).length;
 
         return (
+          <>
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
             <div className="flex justify-between items-center pb-3 border-b border-slate-100">
               <div>
@@ -7373,6 +7453,70 @@ export default function AdminPanel({
               </div>
             </div>
 
+            {/* Fatura com o Clube Franqueador (Percentual Clube) */}
+            {(invoiceEntries.length > 0 || invoiceHistory.length > 0) && (
+              <div className="space-y-3 pt-2 border-t border-slate-100">
+                <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wider">Fatura com o Clube Franqueador</h4>
+                {invoiceError && (
+                  <div className="bg-red-50 text-red-700 p-2.5 rounded-xl text-[11px] font-semibold border border-red-200">{invoiceError}</div>
+                )}
+                {invoiceEntries.length === 0 ? (
+                  <p className="text-[11px] text-slate-400">Nenhum valor pendente de fatura no momento.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {invoiceEntries.map(entry => {
+                      const key = `${entry.clubId}::${entry.creditorClubId}`;
+                      return (
+                        <div key={key} className="bg-purple-50 border border-purple-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] text-purple-700 font-semibold">Devido a {entry.creditorClubName} — {entry.count} inscrição(ões)</p>
+                            <p className="text-lg font-extrabold text-purple-900 font-mono">R$ {entry.totalOwed.toFixed(2)}</p>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={generatingInvoiceKey === key}
+                            onClick={() => handleGenerateInvoice(entry.clubId, entry.creditorClubId)}
+                            className="bg-purple-700 hover:bg-purple-800 disabled:opacity-60 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                          >
+                            <QrCode className="w-4 h-4" />
+                            {generatingInvoiceKey === key ? 'Gerando cobrança...' : 'Gerar Fatura e Pagar'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {invoiceHistory.length > 0 && (
+                  <div className="overflow-x-auto text-xs pt-1">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-[10px] text-slate-400 font-mono uppercase">
+                          <th className="py-2">Data</th>
+                          <th className="py-2">Credor</th>
+                          <th className="py-2">Status</th>
+                          <th className="py-2 text-right">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 text-slate-600">
+                        {invoiceHistory.slice(0, 5).map(inv => (
+                          <tr key={inv.id}>
+                            <td className="py-2 font-mono">{new Date(inv.createdAt).toLocaleDateString()}</td>
+                            <td className="py-2">{inv.creditorClubName}</td>
+                            <td className="py-2">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${inv.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                                {inv.status === 'approved' ? 'Paga' : 'Pendente'}
+                              </span>
+                            </td>
+                            <td className="py-2 text-right font-mono font-bold text-slate-800">R$ {inv.totalAmount.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Recent payments table */}
             <div className="space-y-3">
               <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wider">Histórico de Transações Recentes</h4>
@@ -7390,11 +7534,13 @@ export default function AdminPanel({
                   <tbody className="divide-y divide-slate-50 text-slate-600">
                     {confirmedRegs.slice(0, 5).map((reg) => {
                       const athleteName = users.find(u => u.id === reg.userId)?.fullName || 'Filiado G&G';
-                      const champFee = championships.find(c => c.id === reg.championshipId)?.registrationFee || 0;
+                      const champFee = reg.clubOwedAmount != null
+                        ? reg.clubOwedAmount
+                        : (championships.find(c => c.id === reg.championshipId)?.registrationFee || 0);
                       return (
                         <tr key={reg.id}>
                           <td className="py-2 font-mono">{new Date(reg.registeredAt).toLocaleDateString()}</td>
-                          <td className="py-2 font-semibold text-slate-800">Inscrição Campeonato</td>
+                          <td className="py-2 font-semibold text-slate-800">{reg.clubOwedAmount != null ? 'Fatura Clube Filiado' : 'Inscrição Campeonato'}</td>
                           <td className="py-2">{athleteName}</td>
                           <td className="py-2 font-mono uppercase">{reg.paymentMethod}</td>
                           <td className="py-2 text-right font-mono font-bold text-slate-800">R$ {champFee.toFixed(2)}</td>
@@ -7406,6 +7552,17 @@ export default function AdminPanel({
               </div>
             </div>
           </div>
+          {invoicePixModal && (
+            <PixPaymentModal
+              pixCopiaECola={invoicePixModal.pixCopiaECola}
+              pollEndpoint={`/api/club-invoices/by-tx/${invoicePixModal.txId}`}
+              authHeaders={currentUser ? { 'x-user-id': currentUser.id } : undefined}
+              title="PIX - Fatura Clube Franqueador"
+              onApproved={() => loadClubInvoiceData(false)}
+              onClose={() => setInvoicePixModal(null)}
+            />
+          )}
+          </>
         );
 
       case 'cadastrar_resultados':
@@ -8671,7 +8828,11 @@ export default function AdminPanel({
           
           let totalArrecadado = 0;
           champRegs.forEach(r => {
-            if (r.valorPago && Number(r.valorPago) > 0) {
+            // Inscrição de clube filiado (fatura): só a diferença devida ao
+            // organizador entra como arrecadação dele, não o valor cheio.
+            if (r.clubOwedAmount != null) {
+              totalArrecadado += Number(r.clubOwedAmount);
+            } else if (r.valorPago && Number(r.valorPago) > 0) {
               totalArrecadado += Number(r.valorPago);
             } else {
               const regType = (r.registrationType as string) || 'normal';
@@ -10537,13 +10698,16 @@ export default function AdminPanel({
           </div>
         );
 
-      case 'gestao_cobrancas':
+      case 'gestao_cobrancas': {
+        const totalUnbilled = invoiceEntries.reduce((sum, e) => sum + e.totalOwed, 0);
+        const totalPaid = invoiceHistory.filter(i => i.status === 'approved').reduce((sum, i) => sum + i.totalAmount, 0);
+        const totalPendingInvoices = invoiceHistory.filter(i => i.status === 'pending').reduce((sum, i) => sum + i.totalAmount, 0);
         return (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800 text-left">
             <div className="flex justify-between items-center pb-3 border-b border-slate-100">
               <div>
-                <h3 className="font-display font-bold text-slate-900 text-base">Gestão de Cobranças & Faturamento</h3>
-                <p className="text-xs text-slate-400">Controle financeiro de royalties de franquias e anuidades de assinaturas.</p>
+                <h3 className="font-display font-bold text-slate-900 text-base">Gestão de Cobranças — Fatura entre Clubes</h3>
+                <p className="text-xs text-slate-400">Saldo devido por cada clube filiado (Percentual Clube) ao clube organizador dos campeonatos.</p>
               </div>
               <DollarSign className="w-5 h-5 text-blue-600" />
             </div>
@@ -10554,76 +10718,110 @@ export default function AdminPanel({
                 {billingSuccessMsg}
               </div>
             )}
+            {invoiceError && (
+              <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold border border-red-200">{invoiceError}</div>
+            )}
 
             {/* Metrics */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <span className="text-[10px] text-slate-400 block uppercase font-sans font-bold">Faturamento Master</span>
-                <span className="text-lg font-bold text-slate-900 font-mono">R$ 11.640,00</span>
+              <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+                <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Saldo Não Faturado</span>
+                <span className="text-lg font-bold text-amber-700 font-mono">R$ {totalUnbilled.toFixed(2)}</span>
               </div>
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <span className="text-[10px] text-slate-400 block uppercase font-sans font-bold">Pendências em Aberto</span>
-                <span className="text-lg font-bold text-amber-600 font-mono">R$ 9.615,00</span>
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Faturas Pendentes de Pagamento</span>
+                <span className="text-lg font-bold text-blue-700 font-mono">R$ {totalPendingInvoices.toFixed(2)}</span>
               </div>
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <span className="text-[10px] text-slate-400 block uppercase font-sans font-bold">Taxa Adimplência</span>
-                <span className="text-lg font-bold text-emerald-600 font-mono">92.4%</span>
+              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+                <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Faturas Já Pagas</span>
+                <span className="text-lg font-bold text-emerald-700 font-mono">R$ {totalPaid.toFixed(2)}</span>
               </div>
             </div>
 
-            {/* Billing List */}
+            {/* Saldo não faturado, por clube */}
             <div className="space-y-3">
-              <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Faturas & Títulos a Receber</h4>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-700">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-[10px] text-slate-450 uppercase font-mono">
-                      <th className="py-2.5 px-2">Devedor</th>
-                      <th className="py-2.5 px-2">Tipo Cobrança</th>
-                      <th className="py-2.5 px-2 text-right">Valor</th>
-                      <th className="py-2.5 px-2">Vencimento</th>
-                      <th className="py-2.5 px-2 text-center">Status</th>
-                      <th className="py-2.5 px-2 text-right">Ação</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {billingList.map((bill) => {
-                      const isPending = bill.status === 'Pendente';
-                      return (
-                        <tr key={bill.id} className="hover:bg-slate-50/30 transition">
-                          <td className="py-3 px-2 font-bold text-slate-800">{bill.target}</td>
-                          <td className="py-3 px-2 text-slate-500">{bill.type}</td>
-                          <td className="py-3 px-2 text-right font-mono font-bold text-slate-900">R$ {bill.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                          <td className="py-3 px-2 font-mono text-slate-500">{new Date(bill.dueDate).toLocaleDateString('pt-BR')}</td>
-                          <td className="py-3 px-2 text-center">
-                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${
-                              isPending ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                            }`}>
-                              {bill.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-2 text-right">
-                            {isPending ? (
+              <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Saldo Não Faturado por Clube</h4>
+              {invoiceEntries.length === 0 ? (
+                <p className="text-xs text-slate-400">Nenhum saldo pendente de fatura no momento.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-700">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-[10px] text-slate-450 uppercase font-mono">
+                        <th className="py-2.5 px-2">Clube Devedor</th>
+                        <th className="py-2.5 px-2">Credor</th>
+                        <th className="py-2.5 px-2 text-center">Inscrições</th>
+                        <th className="py-2.5 px-2 text-right">Valor Devido</th>
+                        <th className="py-2.5 px-2 text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {invoiceEntries.map(entry => {
+                        const key = `${entry.clubId}::${entry.creditorClubId}`;
+                        return (
+                          <tr key={key} className="hover:bg-slate-50/30 transition">
+                            <td className="py-3 px-2 font-bold text-slate-800">{entry.clubName}</td>
+                            <td className="py-3 px-2 text-slate-500">{entry.creditorClubName}</td>
+                            <td className="py-3 px-2 text-center font-mono">{entry.count}</td>
+                            <td className="py-3 px-2 text-right font-mono font-bold text-amber-700">R$ {entry.totalOwed.toFixed(2)}</td>
+                            <td className="py-3 px-2 text-right">
                               <button
-                                onClick={() => handleSendBillingReminder(bill.id)}
+                                onClick={() => sendBillingReminder(`Lembrete de cobrança enviado para ${entry.clubName} (R$ ${entry.totalOwed.toFixed(2)} devidos a ${entry.creditorClubName}).`)}
                                 className="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-bold text-[9px] px-2 py-1 rounded transition cursor-pointer"
                               >
                                 Notificar
                               </button>
-                            ) : (
-                              <span className="text-[10px] text-slate-400">-</span>
-                            )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Histórico de faturas */}
+            <div className="space-y-3">
+              <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Histórico de Faturas</h4>
+              {invoiceHistory.length === 0 ? (
+                <p className="text-xs text-slate-400">Nenhuma fatura gerada ainda.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-700">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-[10px] text-slate-450 uppercase font-mono">
+                        <th className="py-2.5 px-2">Data</th>
+                        <th className="py-2.5 px-2">Devedor</th>
+                        <th className="py-2.5 px-2">Credor</th>
+                        <th className="py-2.5 px-2 text-right">Valor</th>
+                        <th className="py-2.5 px-2 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {invoiceHistory.map(inv => (
+                        <tr key={inv.id} className="hover:bg-slate-50/30 transition">
+                          <td className="py-3 px-2 font-mono text-slate-500">{new Date(inv.createdAt).toLocaleDateString('pt-BR')}</td>
+                          <td className="py-3 px-2 font-bold text-slate-800">{inv.clubName}</td>
+                          <td className="py-3 px-2 text-slate-500">{inv.creditorClubName}</td>
+                          <td className="py-3 px-2 text-right font-mono font-bold text-slate-900">R$ {inv.totalAmount.toFixed(2)}</td>
+                          <td className="py-3 px-2 text-center">
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${
+                              inv.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {inv.status === 'approved' ? 'Paga' : 'Pendente'}
+                            </span>
                           </td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         );
+      }
 
       case 'gerenciar_armas':
         return (
