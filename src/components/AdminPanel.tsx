@@ -6651,6 +6651,13 @@ export default function AdminPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainTab, plataformaMenu, currentUser?.id]);
 
+  // "Inscrições" (Gerenciamento Plataforma > Campeonatos): resumo de pagas x
+  // pendentes por campeonato, com drill-down por clube do atleta — valor
+  // sempre líquido pra franquia (club_owed_amount quando existir, senão o
+  // valorPago cheio), já que o propósito é a franquia saber quanto tem a
+  // receber de cada clube.
+  const [inscricoesDrillDown, setInscricoesDrillDown] = useState<{ championshipId: string; status: 'approved' | 'pending' } | null>(null);
+
   const handleSaveAnnuityPlan = async (e: React.FormEvent) => {
     e.preventDefault();
     setPlanError('');
@@ -10411,6 +10418,138 @@ export default function AdminPanel({
           />
         );
 
+      case 'inscricoes_resumo': {
+        // Valor líquido pra franquia: club_owed_amount quando a inscrição é
+        // de atleta de clube filiado diferente do organizador (já descontado
+        // o Percentual Clube); senão o valorPago cheio (organizador recebe
+        // 100%, não há repasse entre clubes).
+        const netValue = (r: Registration) => (r.clubOwedAmount != null ? r.clubOwedAmount : (r.valorPago || 0));
+
+        const drillChamp = inscricoesDrillDown ? championships.find(c => c.id === inscricoesDrillDown.championshipId) : null;
+        const drillRegs = inscricoesDrillDown
+          ? registrations.filter(r => r.championshipId === inscricoesDrillDown.championshipId && r.paymentStatus === inscricoesDrillDown.status)
+          : [];
+        const drillByClub = new Map<string, { clubName: string; count: number; total: number }>();
+        drillRegs.forEach(r => {
+          const key = r.clubId || '__sem_clube__';
+          const clubName = r.clubId ? (clubs.find(c => c.id === r.clubId)?.name || r.clubId) : 'Sem Clube';
+          if (!drillByClub.has(key)) drillByClub.set(key, { clubName, count: 0, total: 0 });
+          const entry = drillByClub.get(key)!;
+          entry.count += 1;
+          entry.total += netValue(r);
+        });
+        const drillRows = Array.from(drillByClub.values()).sort((a, b) => b.total - a.total);
+        const drillTotalCount = drillRows.reduce((sum, e) => sum + e.count, 0);
+        const drillTotalValue = drillRows.reduce((sum, e) => sum + e.total, 0);
+
+        return (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs text-left">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="font-display font-bold text-slate-900 text-base">Inscrições — Resumo por Campeonato</h3>
+                  <p className="text-xs text-slate-400">Clique em Pagas ou Pendentes para ver o detalhamento por clube (valor já líquido para a franquia).</p>
+                </div>
+                <FileCheck className="w-5 h-5 text-blue-600" />
+              </div>
+
+              {championships.length === 0 ? (
+                <p className="text-xs text-slate-400">Nenhum campeonato cadastrado ainda.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-700">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-[10px] text-slate-450 uppercase font-mono">
+                        <th className="py-2.5 px-2">Campeonato</th>
+                        <th className="py-2.5 px-2 text-center">Inscrições Pagas</th>
+                        <th className="py-2.5 px-2 text-center">Inscrições Pendentes</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {championships.map(champ => {
+                        const champRegs = registrations.filter(r => r.championshipId === champ.id);
+                        const pagas = champRegs.filter(r => r.paymentStatus === 'approved').length;
+                        const pendentes = champRegs.filter(r => r.paymentStatus === 'pending').length;
+                        return (
+                          <tr key={champ.id} className="hover:bg-slate-50/30 transition">
+                            <td className="py-3 px-2 font-bold text-slate-800">{champ.title}</td>
+                            <td className="py-3 px-2 text-center">
+                              <button
+                                onClick={() => setInscricoesDrillDown({ championshipId: champ.id, status: 'approved' })}
+                                disabled={pagas === 0}
+                                className="font-mono font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-600 hover:text-white disabled:opacity-40 disabled:hover:bg-emerald-50 disabled:hover:text-emerald-700 px-2.5 py-1 rounded transition cursor-pointer"
+                              >
+                                {pagas}
+                              </button>
+                            </td>
+                            <td className="py-3 px-2 text-center">
+                              <button
+                                onClick={() => setInscricoesDrillDown({ championshipId: champ.id, status: 'pending' })}
+                                disabled={pendentes === 0}
+                                className="font-mono font-bold text-amber-700 bg-amber-50 hover:bg-amber-600 hover:text-white disabled:opacity-40 disabled:hover:bg-amber-50 disabled:hover:text-amber-700 px-2.5 py-1 rounded transition cursor-pointer"
+                              >
+                                {pendentes}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {inscricoesDrillDown && (
+              <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-center justify-center p-4" onClick={() => setInscricoesDrillDown(null)}>
+                <div className="bg-white max-w-lg w-full rounded-2xl smooth-shadow overflow-hidden max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className={`p-4 flex justify-between items-center text-white ${inscricoesDrillDown.status === 'approved' ? 'bg-emerald-600' : 'bg-amber-600'}`}>
+                    <div>
+                      <span className="font-display font-semibold text-sm block">
+                        {inscricoesDrillDown.status === 'approved' ? 'Inscrições Pagas' : 'Inscrições Pendentes'} por Clube
+                      </span>
+                      <span className="text-[11px] text-white/80">{drillChamp?.title}</span>
+                    </div>
+                    <button onClick={() => setInscricoesDrillDown(null)} className="text-white/70 hover:text-white cursor-pointer">✕</button>
+                  </div>
+                  <div className="p-5 overflow-y-auto space-y-3 text-xs">
+                    {drillRows.length === 0 ? (
+                      <p className="text-slate-400">Nenhuma inscrição neste status.</p>
+                    ) : (
+                      <table className="w-full text-left text-slate-700">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-[10px] text-slate-450 uppercase font-mono">
+                            <th className="py-2">Clube</th>
+                            <th className="py-2 text-center">Inscrições</th>
+                            <th className="py-2 text-right">Total a Receber</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {drillRows.map(row => (
+                            <tr key={row.clubName}>
+                              <td className="py-2.5 font-bold text-slate-800">{row.clubName}</td>
+                              <td className="py-2.5 text-center font-mono">{row.count}</td>
+                              <td className="py-2.5 text-right font-mono font-bold text-slate-900">R$ {row.total.toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t border-slate-300 font-mono font-bold bg-slate-50">
+                            <td className="py-2.5 font-sans">Total Geral</td>
+                            <td className="py-2.5 text-center">{drillTotalCount}</td>
+                            <td className="py-2.5 text-right text-slate-900">R$ {drillTotalValue.toFixed(2)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
       case 'consulta_inscricoes':
         return (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
@@ -11233,6 +11372,7 @@ export default function AdminPanel({
                     <button onClick={() => setPlataformaMenu('cadastrar_resultados')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'cadastrar_resultados' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Cadastrar Resultados</button>
                     <button onClick={() => setPlataformaMenu('multi_campeonatos')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'multi_campeonatos' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Multi-campeonatos</button>
                     <button onClick={() => setPlataformaMenu('equipes_interclubes')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'equipes_interclubes' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Equipes Interclubes</button>
+                    <button onClick={() => setPlataformaMenu('inscricoes_resumo')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'inscricoes_resumo' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Inscrições</button>
                   </div>
                 )}
               </div>
