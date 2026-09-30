@@ -1475,6 +1475,28 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS club_invoice_id TEXT REFERENCES club_invoices(id) ON DELETE SET NULL;
     `);
 
+    // Anuidade real de atleta: rastreia uma cobrança PIX de anuidade pendente
+    // (limpa quando confirmada). A anuidade em si continua sendo
+    // has_paid_signature/signature_expiry — estas colunas só guardam a
+    // cobrança em aberto.
+    await client.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS annuity_tx_id TEXT,
+        ADD COLUMN IF NOT EXISTS annuity_pix_copia_e_cola TEXT;
+    `);
+
+    // Anuidade real de clube filiado: valor configurável pela franquia dona
+    // do tenant + rastreamento de cobrança. annuity_due_date (já existe)
+    // continua sendo a data de referência; ao confirmar pagamento, avança
+    // +1 ano (mesmo padrão do signature_expiry do atleta).
+    await client.query(`
+      ALTER TABLE clubs
+        ADD COLUMN IF NOT EXISTS annuity_price NUMERIC(10,2),
+        ADD COLUMN IF NOT EXISTS annuity_tx_id TEXT,
+        ADD COLUMN IF NOT EXISTS annuity_pix_copia_e_cola TEXT,
+        ADD COLUMN IF NOT EXISTS annuity_paid_at TIMESTAMPTZ;
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS idsc_results (
         id TEXT PRIMARY KEY,

@@ -31,7 +31,6 @@ interface MemberProfileProps {
   weaponLookupOptions?: WeaponLookupOption[];
   onAddWeapon?: (weapon: Partial<Weapon>) => Promise<any>;
   onToggleFollow: (userId: string) => Promise<void>;
-  onPaySignature: () => Promise<void>;
   onLogout: () => void;
   onAddPost: (content: string, imageUrl?: string, targetScore?: any, imageUrls?: string[], sharedPost?: SharedPostInfo) => Promise<void>;
   onLikePost?: (postId: string) => Promise<void>;
@@ -283,7 +282,6 @@ export default function MemberProfile({
   weaponLookupOptions = [],
   onAddWeapon,
   onToggleFollow,
-  onPaySignature,
   onLogout,
   onAddPost,
   onLikePost,
@@ -585,9 +583,10 @@ export default function MemberProfile({
   };
 
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
+  const [annuityPixModal, setAnnuityPixModal] = useState<{ pixCopiaECola: string; txId: string } | null>(null);
+  const [annuityChargeError, setAnnuityChargeError] = useState('');
   const [followListModal, setFollowListModal] = useState<null | 'followers' | 'following'>(null);
   const [payingSign, setPayingSign] = useState(false);
-  const [paidSignDone, setPaidSignDone] = useState(false);
   const [selectedExpandPost, setSelectedExpandPost] = useState<Post | null>(null);
 
   // Local receipt states
@@ -1376,22 +1375,26 @@ export default function MemberProfile({
     localStorage.setItem(`gg_ammo_${selectedUser.id}`, JSON.stringify(newAmmo));
   };
 
-  const handlePaySignatureSubmit = () => {
+  const handlePaySignatureSubmit = async () => {
+    if (!currentUser) return;
     setPayingSign(true);
-    setTimeout(async () => {
-      try {
-        await onPaySignature();
-        setPayingSign(false);
-        setPaidSignDone(true);
-        setTimeout(() => {
-          setPaidSignDone(false);
-          setIsSignModalOpen(false);
-        }, 2200);
-      } catch (err) {
-        console.error(err);
-        setPayingSign(false);
+    setAnnuityChargeError('');
+    try {
+      const res = await fetch('/api/users/annuity/charge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.pixCopiaECola || !data.txId) {
+        throw new Error(data.error || 'Não foi possível gerar a cobrança PIX da anuidade.');
       }
-    }, 1800);
+      setIsSignModalOpen(false);
+      setAnnuityPixModal({ pixCopiaECola: data.pixCopiaECola, txId: data.txId });
+    } catch (err: any) {
+      setAnnuityChargeError(err.message || 'Erro ao gerar cobrança PIX da anuidade.');
+    } finally {
+      setPayingSign(false);
+    }
   };
 
   // Real Training Submission Handler
@@ -4429,54 +4432,34 @@ export default function MemberProfile({
                 <button onClick={() => setIsSignModalOpen(false)} className="text-white/70 hover:text-white cursor-pointer">✕</button>
               </div>
 
-              {!paidSignDone ? (
-                <div className="p-5 space-y-4 text-xs select-none">
-                  <div className="bg-blue-50 p-4 rounded-xl text-blue-900 leading-relaxed">
-                    <h4 className="font-bold font-display text-sm text-blue-950 mb-1">Anuidade Federal G&G Competições</h4>
-                    <p className="text-[11px]">Associe-se anualmente para poder concorrer no ranking das etapas oficiais do clube e emitir certificados homologados.</p>
-                  </div>
-
-                  <div className="flex justify-between items-center font-bold font-mono border-b border-t border-slate-50 py-3 text-slate-700">
-                    <span className="font-sans font-semibold">Valor Anuidade</span>
-                    <span className="text-blue-600 text-sm">R$ 290,00 /ano</span>
-                  </div>
-
-                  <p className="text-[10px] text-slate-400">Ao assinar, você recebe o selo REGULAR de atirador desportivo nas consultas cadastrais internas de campeonatos.</p>
-
-                  <div className="bg-slate-50 p-3 rounded-lg space-y-2 font-mono">
-                    <span className="text-[9px] text-slate-400 block uppercase font-bold text-center">PIX CNPJ DE AFILIAÇÃO</span>
-                    <div className="bg-white p-2 text-center rounded border border-slate-200 truncate">
-                      anuidade.gegpistol.online.producao445582
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3 pt-3">
-                    <button
-                      onClick={() => setIsSignModalOpen(false)}
-                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-semibold transition cursor-pointer"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      onClick={handlePaySignatureSubmit}
-                      disabled={payingSign}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold shadow-md shadow-blue-150 transition flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      {payingSign ? 'Processando...' : 'Fazer Homologação'}
-                    </button>
-                  </div>
+              <div className="p-5 space-y-4 text-xs select-none">
+                <div className="bg-blue-50 p-4 rounded-xl text-blue-900 leading-relaxed">
+                  <h4 className="font-bold font-display text-sm text-blue-950 mb-1">Anuidade Federal G&G Competições</h4>
+                  <p className="text-[11px]">Associe-se anualmente para poder concorrer no ranking das etapas oficiais do clube e emitir certificados homologados.</p>
                 </div>
-              ) : (
-                <div className="p-8 text-center space-y-4">
-                  <div className="bg-emerald-50 text-emerald-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto shadow-md">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <div className="space-y-1">
-                    <h4 className="font-bold text-slate-900 text-sm">Filiação Ativada com Sucesso!</h4>
-                    <p className="text-xs text-slate-500">Sua anuidade está regular perante o clube G&G Competições pelos próximos 12 meses.</p>
-                  </div>
+
+                <p className="text-[10px] text-slate-400">Ao gerar a cobrança, um QR Code PIX real será exibido. O valor considera o plano de anuidade vinculado ao seu cadastro (ou o padrão, se nenhum plano estiver vinculado).</p>
+
+                {annuityChargeError && (
+                  <div className="bg-red-50 text-red-700 p-3 rounded-xl text-[11px] font-semibold border border-red-200">{annuityChargeError}</div>
+                )}
+
+                <div className="flex gap-3 pt-3">
+                  <button
+                    onClick={() => setIsSignModalOpen(false)}
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-semibold transition cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handlePaySignatureSubmit}
+                    disabled={payingSign}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold shadow-md shadow-blue-150 transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {payingSign ? 'Gerando cobrança PIX...' : 'Gerar Cobrança PIX'}
+                  </button>
                 </div>
-              )}
+              </div>
             </motion.div>
           </div>
         )}
@@ -4496,6 +4479,21 @@ export default function MemberProfile({
             setTimeout(() => window.location.reload(), 1500);
           }}
           onClose={() => setBatchPixModal(null)}
+        />
+      )}
+
+      {/* MODAL DE PAGAMENTO PIX DA ANUIDADE */}
+      {annuityPixModal && (
+        <PixPaymentModal
+          pixCopiaECola={annuityPixModal.pixCopiaECola}
+          pollEndpoint={`/api/users/annuity/by-tx/${annuityPixModal.txId}`}
+          authHeaders={currentUser ? { 'x-user-id': currentUser.id } : undefined}
+          title="PIX - Anuidade"
+          onApproved={() => {
+            if (onUpdateProfile) onUpdateProfile({});
+            setTimeout(() => window.location.reload(), 1500);
+          }}
+          onClose={() => setAnnuityPixModal(null)}
         />
       )}
 

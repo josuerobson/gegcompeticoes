@@ -887,7 +887,7 @@ export default function App() {
     }
   };
 
-  const handleCreateClub = async (fields: { name: string; cnpj: string; responsibleName: string; email: string; password: string; phone?: string; crNumber?: string; crValidity?: string; annuityDueDate?: string; city?: string; state?: string; cep?: string; address?: string; addressNumber?: string; complement?: string; neighborhood?: string }): Promise<{ club?: Club; error?: string }> => {
+  const handleCreateClub = async (fields: { name: string; cnpj: string; responsibleName: string; email: string; password: string; phone?: string; crNumber?: string; crValidity?: string; annuityDueDate?: string; annuityPrice?: string; city?: string; state?: string; cep?: string; address?: string; addressNumber?: string; complement?: string; neighborhood?: string }): Promise<{ club?: Club; error?: string }> => {
     if (!currentUser) return { error: 'Não autenticado.' };
     try {
       const res = await fetch('/api/admin/clubs', {
@@ -1555,25 +1555,6 @@ export default function App() {
       });
       if (res.ok) {
         await refreshScores();
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handlePaySignature = async () => {
-    if (!currentUser) return;
-    try {
-      const res = await fetch('/api/users/signature', {
-        method: 'POST',
-        headers: buildAuthHeaders()
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.user) {
-          setCurrentUser(data.user);
-          setUsers(prev => prev.map(u => u.id === data.user.id ? data.user : u));
-        }
       }
     } catch (err) {
       console.error(err);
@@ -2580,7 +2561,6 @@ export default function App() {
               weaponLookupOptions={weaponLookupOptions}
               onAddWeapon={handleAddWeapon}
               onToggleFollow={handleToggleFollow}
-              onPaySignature={handlePaySignature}
               onLogout={handleLogout}
               onAddPost={handleAddPost}
               onLikePost={handleLikePost}

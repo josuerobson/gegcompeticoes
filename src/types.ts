@@ -83,6 +83,8 @@ export interface Club {
   cellPhone?: string;
   crValidity?: string;
   annuityDueDate?: string;
+  annuityPrice?: number;
+  annuityPaidAt?: string;
   isBlocked?: boolean;
 }
 

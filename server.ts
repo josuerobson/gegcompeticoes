@@ -164,6 +164,8 @@ function mapClub(c: any): Club {
     cellPhone: c.cell_phone || undefined,
     crValidity: c.cr_validity || undefined,
     annuityDueDate: c.annuity_due_date || undefined,
+    annuityPrice: c.annuity_price != null ? Number(c.annuity_price) : undefined,
+    annuityPaidAt: c.annuity_paid_at || undefined,
     isBlocked: c.is_blocked ?? undefined,
   };
 }
@@ -680,6 +682,25 @@ async function getVisibleClubIds(tenant: Club): Promise<string[]> {
     [tenant.id]
   );
   return [tenant.id, ...r.rows.map((row) => row.id as string)];
+}
+
+// Resolve a franquia dona do tenant de um clube: sobe parent_club_id até
+// achar um clube raiz (is_premium = true ou sem parent_club_id). Usado pelo
+// financeiro da franquia — faturas de inscrição e anuidades (de atleta e de
+// clube filiado) sempre caem na conta Sicoob da franquia, nunca na de um
+// clube filiado individual, já que só o nível de franquia/tenant tem conta
+// bancária de verdade. Limite de 5 saltos é só uma trava de segurança contra
+// ciclo de dados (parent_club_id nunca deveria formar um ciclo).
+async function getFranchiseClubId(clubId: string): Promise<string> {
+  let current = clubId;
+  for (let i = 0; i < 5; i++) {
+    const r = await pool.query('SELECT id, parent_club_id, is_premium FROM clubs WHERE id = $1', [current]);
+    if (r.rows.length === 0) return current;
+    const club = r.rows[0];
+    if (club.is_premium || !club.parent_club_id) return club.id;
+    current = club.parent_club_id;
+  }
+  return current;
 }
 
 // Resolve o tenant a partir do Host/override em toda requisição de API e
@@ -1760,7 +1781,7 @@ app.post('/api/admin/members', requireAdmin, async (req, res) => {
 // the club's profile (endereço, documentos) is completed afterwards through
 // PATCH /api/clubs/:id, same as a club editing its own data.
 app.post('/api/admin/clubs', requireAdmin, async (req, res) => {
-  const { name, cnpj, responsibleName, email, password, phone, crNumber, crValidity, annuityDueDate, city, state, cep, address, addressNumber, complement, neighborhood } = req.body;
+  const { name, cnpj, responsibleName, email, password, phone, crNumber, crValidity, annuityDueDate, annuityPrice, city, state, cep, address, addressNumber, complement, neighborhood } = req.body;
   const currentUser = (req as any).user as User;
 
   if (!name || !cnpj || !responsibleName || !email || !password) {
@@ -1781,11 +1802,11 @@ app.post('/api/admin/clubs', requireAdmin, async (req, res) => {
     await client.query('BEGIN');
     const clubId = `club_${Date.now()}`;
     await client.query(
-      `INSERT INTO clubs (id, name, cnpj, phone, is_premium, created_at, cr_number, cr_validity, annuity_due_date, responsible_name, email, city, state, cep, address, address_number, complement, neighborhood, parent_club_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+      `INSERT INTO clubs (id, name, cnpj, phone, is_premium, created_at, cr_number, cr_validity, annuity_due_date, annuity_price, responsible_name, email, city, state, cep, address, address_number, complement, neighborhood, parent_club_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
       [
         clubId, name, cnpj, phone || null, false, new Date().toISOString().split('T')[0],
-        crNumber || null, crValidity || null, annuityDueDate || null, responsibleName, email, city || null, state || null,
+        crNumber || null, crValidity || null, annuityDueDate || null, annuityPrice || null, responsibleName, email, city || null, state || null,
         cep || null, address || null, addressNumber || null, complement || null, neighborhood || null,
         currentUser.clubId || DEFAULT_TENANT_ID
       ]
@@ -2616,6 +2637,21 @@ app.patch('/api/clubs/:id', requireAuth, async (req, res) => {
       updates.push(`${column} = $${updates.length + 1}`);
       values.push(req.body[key] || null);
     }
+  }
+
+  // annuityPrice (valor da anuidade que a franquia cobra do clube filiado)
+  // fica fora do CLUB_PROFILE_COLUMNS genérico de propósito: quem define o
+  // valor é a franquia, nunca o próprio clube filiado editando seu próprio
+  // cadastro — isClubAdminOfThisClub sozinho não é permissão suficiente aqui.
+  if (Object.prototype.hasOwnProperty.call(req.body, 'annuityPrice')) {
+    const isParentFranchiseAdmin = currentUser.role === 'club_admin'
+      && (await getFranchiseClubId(clubId)) === currentUser.clubId
+      && currentUser.clubId !== clubId;
+    if (!isAdmin && !isParentFranchiseAdmin) {
+      return res.status(403).json({ error: 'Apenas a franquia dona do tenant pode definir o valor da anuidade de um clube filiado.' });
+    }
+    updates.push(`annuity_price = $${updates.length + 1}`);
+    values.push(req.body.annuityPrice || null);
   }
 
   if (updates.length === 0) {
@@ -5091,38 +5127,6 @@ app.post('/api/ranking-highlights/comments', requireAuth, async (req, res) => {
   }
 });
 
-// 8. Sign / Affiliation fee payment simulation
-app.post('/api/users/signature', requireAuth, async (req, res) => {
-  const currentUser = (req as any).user as User;
-
-  try {
-    const expDate = new Date();
-    expDate.setFullYear(expDate.getFullYear() + 1); // 1 year expiry
-    const signatureExpiry = expDate.toISOString().split('T')[0];
-
-    const userRes = await pool.query(
-      `UPDATE users SET has_paid_signature = true, signature_expiry = $1 WHERE id = $2 RETURNING *`,
-      [signatureExpiry, currentUser.id]
-    );
-
-    if (userRes.rows.length > 0) {
-      const fullUserRes = await pool.query(
-        `SELECT u.*,
-          COALESCE((SELECT json_agg(follower_id) FROM follows WHERE following_id = u.id), '[]'::json) as followers,
-          COALESCE((SELECT json_agg(following_id) FROM follows WHERE follower_id = u.id), '[]'::json) as following
-        FROM users u WHERE u.id = $1`,
-        [currentUser.id]
-      );
-      res.json({ success: true, user: mapUser(fullUserRes.rows[0]) });
-    } else {
-      res.status(404).json({ error: 'Atleta não encontrado.' });
-    }
-  } catch (err) {
-    console.error('Signature database error:', err);
-    res.status(500).json({ error: 'Erro ao atualizar assinatura.' });
-  }
-});
-
 // 9. Site Settings
 app.get('/api/settings', async (req, res) => {
   try {
@@ -7004,6 +7008,7 @@ app.post(['/api/webhooks/sicoob-pix', '/api/webhooks/sicoob-pix/:chave'], async 
                WHERE tx_id = $1 AND payment_gateway = 'sicoob'`,
               [item.txid]
             );
+            await confirmAnnuityForTx(item.txid);
           }
         } catch (cobErr) {
           console.error('Erro ao confirmar cobrança Sicoob via API antes de aprovar:', cobErr);
@@ -7129,7 +7134,45 @@ async function getSicoobClubIdForTx(txId: string): Promise<string | null> {
 
   // Fatura entre clubes: o credor já está gravado direto na linha.
   const r3 = await pool.query(`SELECT creditor_club_id FROM club_invoices WHERE tx_id = $1 LIMIT 1`, [txId]);
-  return r3.rows[0]?.creditor_club_id || null;
+  if (r3.rows[0]?.creditor_club_id) return r3.rows[0].creditor_club_id;
+
+  // Anuidade de atleta: sempre cobrada contra o Sicoob da franquia dona do
+  // tenant do clube do atleta, nunca do clube filiado (que não tem conta).
+  const r4 = await pool.query(`SELECT club_id FROM users WHERE annuity_tx_id = $1 LIMIT 1`, [txId]);
+  if (r4.rows[0]?.club_id) return getFranchiseClubId(r4.rows[0].club_id);
+
+  // Anuidade de clube filiado: mesma regra — cai na franquia, não no filiado.
+  const r5 = await pool.query(`SELECT id FROM clubs WHERE annuity_tx_id = $1 LIMIT 1`, [txId]);
+  if (r5.rows[0]?.id) return getFranchiseClubId(r5.rows[0].id);
+
+  return null;
+}
+
+// Data de expiração/vencimento usada ao confirmar anuidade (atleta ou clube
+// filiado): sempre +1 ano a partir de hoje, mesmo padrão do fluxo manual
+// já existente (admin editando signatureExpiry direto no cadastro).
+function oneYearFromNowDateString(): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 1);
+  return d.toISOString().split('T')[0];
+}
+
+// Confirma anuidade (de atleta ou de clube filiado) pendente para este
+// tx_id, se houver — chamado ao lado das mesmas atualizações de
+// registrations/idsc_registrations/club_invoices, tanto pelo webhook quanto
+// pela reconciliação por polling. UPDATE sem match não falha (0 linhas).
+async function confirmAnnuityForTx(txId: string): Promise<void> {
+  const expiry = oneYearFromNowDateString();
+  await pool.query(
+    `UPDATE users SET has_paid_signature = true, signature_expiry = $2, annuity_tx_id = NULL, annuity_pix_copia_e_cola = NULL
+     WHERE annuity_tx_id = $1`,
+    [txId, expiry]
+  );
+  await pool.query(
+    `UPDATE clubs SET annuity_paid_at = NOW(), annuity_due_date = $2, annuity_tx_id = NULL, annuity_pix_copia_e_cola = NULL
+     WHERE annuity_tx_id = $1`,
+    [txId, expiry]
+  );
 }
 
 // Reconsulta uma cobrança Sicoob pendente direto na API (GET /cob/{txid}) e
@@ -7160,6 +7203,7 @@ async function reconcileSicoobTx(txId: string): Promise<void> {
          WHERE tx_id = $1 AND payment_gateway = 'sicoob' AND status != 'approved'`,
         [txId]
       );
+      await confirmAnnuityForTx(txId);
     }
   } catch (err) {
     // Falha na reconsulta não deve travar o polling do front — ele tenta de novo no próximo ciclo.
@@ -7266,8 +7310,85 @@ function resolveClubInvoiceAccess(currentUser: User, requestedClubId: string | u
 app.get('/api/club-invoices/unbilled-summary', requireAuth, async (req, res) => {
   try {
     const currentUser = (req as any).user as User;
-    const { clubId: requestedClubId } = req.query as { clubId?: string };
+    const { clubId: requestedClubId, creditorClubId: requestedCreditorClubId } = req.query as { clubId?: string; creditorClubId?: string };
     const isMaster = currentUser.role === 'master_admin';
+
+    // Modo credor: "o que os filiados devem a mim" — usado pela franquia em
+    // Financeiro da Franquia. Filtra por creditor_club_id em vez de club_id
+    // (devedor), então abrange todos os clubes filiados de uma vez.
+    if (requestedCreditorClubId) {
+      const isOwnFranchiseAdmin = currentUser.role === 'club_admin' && currentUser.clubId === requestedCreditorClubId;
+      if (!isMaster && !isOwnFranchiseAdmin) {
+        return res.status(403).json({ error: 'Apenas o administrador da franquia ou o Administrador Master podem ver este resumo.' });
+      }
+
+      const champRows = await pool.query(
+        `SELECT r.id, r.valor_pago, r.club_owed_amount, r.registered_at, r.club_id AS debtor_club_id,
+                dcl.name AS debtor_club_name,
+                ch.title AS championship_title, ch.club_id AS creditor_club_id,
+                cl.name AS creditor_club_name, u.full_name AS athlete_name
+         FROM registrations r
+         JOIN championships ch ON ch.id = r.championship_id
+         LEFT JOIN clubs cl ON cl.id = ch.club_id
+         LEFT JOIN clubs dcl ON dcl.id = r.club_id
+         LEFT JOIN users u ON u.id = r.user_id
+         WHERE r.club_invoice_id IS NULL AND r.club_owed_amount IS NOT NULL AND ch.club_id = $1`,
+        [requestedCreditorClubId]
+      );
+      const idscRows = await pool.query(
+        `SELECT ir.id, ir.valor_pago, ir.club_owed_amount, ir.registered_at, ir.club_id AS debtor_club_id,
+                dcl.name AS debtor_club_name,
+                co.name AS championship_title, ic.club_id AS creditor_club_id,
+                cl.name AS creditor_club_name, u.full_name AS athlete_name
+         FROM idsc_registrations ir
+         JOIN idsc_courses co ON co.id = ir.course_id
+         JOIN idsc_stages st ON st.id = co.stage_id
+         JOIN idsc_championships ic ON ic.id = st.championship_id
+         LEFT JOIN clubs cl ON cl.id = ic.club_id
+         LEFT JOIN clubs dcl ON dcl.id = ir.club_id
+         LEFT JOIN users u ON u.id = ir.user_id
+         WHERE ir.club_invoice_id IS NULL AND ir.club_owed_amount IS NOT NULL AND ic.club_id = $1`,
+        [requestedCreditorClubId]
+      );
+
+      const bySource = [
+        ...champRows.rows.map(r => ({ ...r, source: 'championship' as const })),
+        ...idscRows.rows.map(r => ({ ...r, source: 'idsc' as const })),
+      ];
+      const groupMap = new Map<string, {
+        clubId: string; clubName: string; creditorClubId: string; creditorClubName: string;
+        totalOwed: number; count: number; registrations: any[];
+      }>();
+      for (const row of bySource) {
+        if (!row.creditor_club_id || !row.debtor_club_id) continue;
+        const key = `${row.debtor_club_id}::${row.creditor_club_id}`;
+        if (!groupMap.has(key)) {
+          groupMap.set(key, {
+            clubId: row.debtor_club_id,
+            clubName: row.debtor_club_name || row.debtor_club_id,
+            creditorClubId: row.creditor_club_id,
+            creditorClubName: row.creditor_club_name || row.creditor_club_id,
+            totalOwed: 0,
+            count: 0,
+            registrations: [],
+          });
+        }
+        const entry = groupMap.get(key)!;
+        entry.totalOwed += Number(row.club_owed_amount);
+        entry.count += 1;
+        entry.registrations.push({
+          id: row.id,
+          source: row.source,
+          championshipTitle: row.championship_title,
+          athleteName: row.athlete_name,
+          valorPago: Number(row.valor_pago),
+          clubOwedAmount: Number(row.club_owed_amount),
+          registeredAt: row.registered_at,
+        });
+      }
+      return res.json({ entries: Array.from(groupMap.values()) });
+    }
+
     const allClubs = isMaster && !requestedClubId;
 
     if (!allClubs) {
@@ -7440,11 +7561,45 @@ app.post('/api/club-invoices/generate', requireAuth, async (req, res) => {
 app.get('/api/club-invoices', requireAuth, async (req, res) => {
   try {
     const currentUser = (req as any).user as User;
-    const { clubId: requestedClubId } = req.query as { clubId?: string };
+    const { clubId: requestedClubId, creditorClubId: requestedCreditorClubId } = req.query as { clubId?: string; creditorClubId?: string };
     const isMaster = currentUser.role === 'master_admin';
     if (!isMaster && currentUser.role !== 'club_admin') {
       return res.status(403).json({ error: 'Apenas administradores podem ver faturas.' });
     }
+
+    // Histórico de faturas recebidas pela franquia (credor) — usado em
+    // Financeiro da Franquia. Mesma regra de acesso do modo credor de
+    // unbilled-summary: master ou o próprio club_admin daquele credor.
+    if (requestedCreditorClubId) {
+      const isOwnFranchiseAdmin = currentUser.role === 'club_admin' && currentUser.clubId === requestedCreditorClubId;
+      if (!isMaster && !isOwnFranchiseAdmin) {
+        return res.status(403).json({ error: 'Apenas o administrador da franquia ou o Administrador Master podem ver este histórico.' });
+      }
+      const result = await pool.query(
+        `SELECT ci.*, dc.name AS club_name, cc.name AS creditor_club_name
+         FROM club_invoices ci
+         LEFT JOIN clubs dc ON dc.id = ci.club_id
+         LEFT JOIN clubs cc ON cc.id = ci.creditor_club_id
+         WHERE ci.creditor_club_id = $1 ORDER BY ci.created_at DESC`,
+        [requestedCreditorClubId]
+      );
+      return res.json({
+        invoices: result.rows.map(r => ({
+          id: r.id,
+          clubId: r.club_id,
+          clubName: r.club_name,
+          creditorClubId: r.creditor_club_id,
+          creditorClubName: r.creditor_club_name,
+          totalAmount: Number(r.total_amount),
+          status: r.status,
+          pixCopiaECola: r.pix_copia_e_cola,
+          txId: r.tx_id,
+          createdAt: r.created_at,
+          approvedAt: r.approved_at,
+        })),
+      });
+    }
+
     const clubId = isMaster ? (requestedClubId || null) : currentUser.clubId;
     if (!isMaster && (!clubId || (requestedClubId && requestedClubId !== clubId))) {
       return res.status(403).json({ error: 'Você só pode ver as faturas do seu próprio clube.' });
@@ -7485,6 +7640,146 @@ app.get('/api/club-invoices', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Fetch club invoices error:', err);
     res.status(500).json({ error: 'Erro ao buscar faturas.' });
+  }
+});
+
+// ==========================================
+// ANUIDADE REAL (ATLETA E CLUBE FILIADO) — Financeiro da Franquia
+// ==========================================
+// Sempre cobrada contra o Sicoob da franquia dona do tenant (getFranchiseClubId),
+// nunca do clube filiado individual (que não tem conta própria). Mantém o
+// fluxo manual existente (admin edita signatureExpiry direto no cadastro)
+// intacto — este é só o caminho de autoatendimento com PIX real.
+
+// Gera a cobrança PIX de anuidade do próprio atleta logado. Preço: o do seu
+// annuity_plan_id se houver um vinculado, senão o padrão R$360 (mesmo valor
+// já usado como projeção nos relatórios financeiros).
+app.post('/api/users/annuity/charge', requireAuth, async (req, res) => {
+  try {
+    const currentUser = (req as any).user as User;
+    const franchiseClubId = await getFranchiseClubId(currentUser.clubId || DEFAULT_TENANT_ID);
+
+    const sicoobConfig = await getSicoobConfig(pool, franchiseClubId);
+    if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pela franquia.' });
+    }
+
+    let price = 360;
+    if (currentUser.annuityPlanId) {
+      const planRes = await pool.query('SELECT price FROM annuity_plans WHERE id = $1', [currentUser.annuityPlanId]);
+      if (planRes.rows[0]?.price) price = Number(planRes.rows[0].price);
+    }
+
+    const txId = generateSicoobTxId();
+    const cob = await createOrUpdateCob(sicoobConfig, {
+      txid: txId,
+      valor: price,
+      devedorNome: currentUser.fullName,
+      devedorCpf: currentUser.cpf,
+      solicitacaoPagador: `Anuidade - ${currentUser.fullName}`.slice(0, 140),
+    });
+
+    await pool.query(
+      `UPDATE users SET annuity_tx_id = $1, annuity_pix_copia_e_cola = $2 WHERE id = $3`,
+      [txId, cob.pixCopiaECola, currentUser.id]
+    );
+
+    res.status(201).json({ pixCopiaECola: cob.pixCopiaECola, txId, valor: price });
+  } catch (err: any) {
+    console.error('Charge user annuity error:', err);
+    res.status(500).json({ error: err.message || 'Erro ao gerar cobrança de anuidade.' });
+  }
+});
+
+// GET de acompanhamento (polling) — mesmo padrão de /api/registrations/by-tx/:txId.
+app.get('/api/users/annuity/by-tx/:txId', requireAuth, async (req, res) => {
+  try {
+    const { txId } = req.params;
+    let r = await pool.query(`SELECT id, has_paid_signature, annuity_tx_id FROM users WHERE annuity_tx_id = $1`, [txId]);
+    if (r.rows.length === 0) {
+      // Já foi confirmada e limpa (annuity_tx_id volta a NULL) — trata como aprovada.
+      return res.json({ status: 'approved' });
+    }
+
+    await reconcileSicoobTx(txId);
+    r = await pool.query(`SELECT id, has_paid_signature, annuity_tx_id FROM users WHERE annuity_tx_id = $1`, [txId]);
+    res.json({ status: r.rows.length === 0 ? 'approved' : 'pending' });
+  } catch (err) {
+    console.error('Fetch user annuity by tx error:', err);
+    res.status(500).json({ error: 'Erro ao consultar status do pagamento.' });
+  }
+});
+
+// Gera a cobrança PIX de anuidade de um clube filiado — só o próprio
+// club_admin daquele clube ou o master_admin. Bloqueia se o clube já for a
+// própria raiz da franquia (nada a cobrar dele mesmo) ou se a franquia ainda
+// não configurou um valor de anuidade para filiados.
+app.post('/api/clubs/:id/annuity/charge', requireAuth, async (req, res) => {
+  try {
+    const currentUser = (req as any).user as User;
+    const { id: clubId } = req.params;
+
+    const clubRes = await pool.query('SELECT id, name, annuity_price FROM clubs WHERE id = $1', [clubId]);
+    if (clubRes.rows.length === 0) return res.status(404).json({ error: 'Clube não encontrado.' });
+    const club = clubRes.rows[0];
+
+    const franchiseClubId = await getFranchiseClubId(clubId);
+    if (franchiseClubId === clubId) {
+      return res.status(400).json({ error: 'Este clube é a própria franquia — não há anuidade a cobrar dele mesmo.' });
+    }
+
+    // Permitido: o próprio filiado (autoatendimento), a franquia dona do
+    // tenant (disparando a cobrança pelo filiado) ou o master_admin.
+    const isMaster = currentUser.role === 'master_admin';
+    const isOwnClubAdmin = currentUser.role === 'club_admin' && currentUser.clubId === clubId;
+    const isFranchiseAdmin = currentUser.role === 'club_admin' && currentUser.clubId === franchiseClubId;
+    if (!isMaster && !isOwnClubAdmin && !isFranchiseAdmin) {
+      return res.status(403).json({ error: 'Apenas o administrador do clube filiado, a franquia ou o Administrador Master podem gerar esta cobrança.' });
+    }
+    if (!club.annuity_price) {
+      return res.status(400).json({ error: 'A franquia ainda não configurou o valor da anuidade para clubes filiados.' });
+    }
+
+    const sicoobConfig = await getSicoobConfig(pool, franchiseClubId);
+    if (!sicoobConfig.clientId || !sicoobConfig.pixKey) {
+      return res.status(400).json({ error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pela franquia.' });
+    }
+
+    const txId = generateSicoobTxId();
+    const cob = await createOrUpdateCob(sicoobConfig, {
+      txid: txId,
+      valor: Number(club.annuity_price),
+      devedorNome: club.name,
+      solicitacaoPagador: `Anuidade de clube filiado - ${club.name}`.slice(0, 140),
+    });
+
+    await pool.query(
+      `UPDATE clubs SET annuity_tx_id = $1, annuity_pix_copia_e_cola = $2 WHERE id = $3`,
+      [txId, cob.pixCopiaECola, clubId]
+    );
+
+    res.status(201).json({ pixCopiaECola: cob.pixCopiaECola, txId, valor: Number(club.annuity_price) });
+  } catch (err: any) {
+    console.error('Charge club annuity error:', err);
+    res.status(500).json({ error: err.message || 'Erro ao gerar cobrança de anuidade do clube.' });
+  }
+});
+
+// GET de acompanhamento (polling) — mesmo padrão de /api/club-invoices/by-tx/:txId.
+app.get('/api/clubs/annuity/by-tx/:txId', requireAuth, async (req, res) => {
+  try {
+    const { txId } = req.params;
+    let r = await pool.query(`SELECT id, annuity_paid_at FROM clubs WHERE annuity_tx_id = $1`, [txId]);
+    if (r.rows.length === 0) {
+      return res.json({ status: 'approved' });
+    }
+
+    await reconcileSicoobTx(txId);
+    r = await pool.query(`SELECT id, annuity_paid_at FROM clubs WHERE annuity_tx_id = $1`, [txId]);
+    res.json({ status: r.rows.length === 0 ? 'approved' : 'pending' });
+  } catch (err) {
+    console.error('Fetch club annuity by tx error:', err);
+    res.status(500).json({ error: 'Erro ao consultar status do pagamento.' });
   }
 });
 

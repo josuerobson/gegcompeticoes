@@ -6588,11 +6588,68 @@ export default function AdminPanel({
   useEffect(() => {
     if (mainTab === 'clube' && clubeMenu === 'financeiro') {
       loadClubInvoiceData(false);
-    } else if (mainTab === 'master' && masterMenu === 'gestao_cobrancas') {
-      loadClubInvoiceData(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clubeMenu, mainTab, masterMenu, currentUser?.id]);
+  }, [clubeMenu, mainTab, currentUser?.id]);
+
+  // Financeiro da Franquia (Gerenciamento Plataforma): visão de CREDOR — o
+  // que os clubes filiados devem à franquia, além do status de anuidade de
+  // atletas e de clubes filiados. Endereço certo per arquitetura de dois
+  // níveis (franquia vs master) — antes ficava (errado) em "Gestão de
+  // Cobranças" do Administrador Master.
+  const [franchiseInvoiceEntries, setFranchiseInvoiceEntries] = useState<Array<{
+    clubId: string; clubName: string; creditorClubId: string; creditorClubName: string;
+    totalOwed: number; count: number; registrations: any[];
+  }>>([]);
+  const [franchiseInvoiceHistory, setFranchiseInvoiceHistory] = useState<Array<{
+    id: string; clubId: string; clubName: string; creditorClubId: string; creditorClubName: string;
+    totalAmount: number; status: string; pixCopiaECola?: string; txId?: string; createdAt: string; approvedAt?: string;
+  }>>([]);
+  const [chargingClubAnnuityId, setChargingClubAnnuityId] = useState<string | null>(null);
+  const [clubAnnuityPixModal, setClubAnnuityPixModal] = useState<{ pixCopiaECola: string; txId: string } | null>(null);
+  const [franchiseFinanceError, setFranchiseFinanceError] = useState('');
+
+  const loadFranchiseFinanceData = async () => {
+    if (!currentUser?.clubId) return;
+    try {
+      const [summaryRes, historyRes] = await Promise.all([
+        fetch(`/api/club-invoices/unbilled-summary?creditorClubId=${currentUser.clubId}`, { headers: { 'x-user-id': currentUser.id } }),
+        fetch(`/api/club-invoices?creditorClubId=${currentUser.clubId}`, { headers: { 'x-user-id': currentUser.id } }),
+      ]);
+      const summaryData = await summaryRes.json();
+      const historyData = await historyRes.json();
+      if (summaryRes.ok) setFranchiseInvoiceEntries(summaryData.entries || []);
+      if (historyRes.ok) setFranchiseInvoiceHistory(historyData.invoices || []);
+    } catch (e) {
+      console.error('Error loading franchise finance data:', e);
+    }
+  };
+
+  const handleChargeClubAnnuity = async (clubId: string) => {
+    if (!currentUser) return;
+    setChargingClubAnnuityId(clubId);
+    setFranchiseFinanceError('');
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/annuity/charge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.pixCopiaECola || !data.txId) throw new Error(data.error || 'Erro ao gerar cobrança de anuidade.');
+      setClubAnnuityPixModal({ pixCopiaECola: data.pixCopiaECola, txId: data.txId });
+    } catch (err: any) {
+      setFranchiseFinanceError(err.message || 'Erro ao gerar cobrança de anuidade.');
+    } finally {
+      setChargingClubAnnuityId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (mainTab === 'plataforma' && plataformaMenu === 'financeiro_franquia') {
+      loadFranchiseFinanceData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainTab, plataformaMenu, currentUser?.id]);
 
   const handleSaveAnnuityPlan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -6753,7 +6810,7 @@ export default function AdminPanel({
   const [novoClubeListSearchQuery, setNovoClubeListSearchQuery] = useState('');
   const [createClubForm, setCreateClubForm] = useState({
     name: '', cnpj: '', responsibleName: '', email: '', password: '', phone: '', crNumber: '',
-    crValidity: '', annuityDueDate: '',
+    crValidity: '', annuityDueDate: '', annuityPrice: '',
     cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
   });
   const [creatingClub, setCreatingClub] = useState(false);
@@ -6762,7 +6819,7 @@ export default function AdminPanel({
 
   const [editingClub, setEditingClub] = useState<Club | null>(null);
   const [editingClubForm, setEditingClubForm] = useState({
-    name: '', cnpj: '', crNumber: '', crValidity: '', annuityDueDate: '', responsibleName: '', email: '', phone: '',
+    name: '', cnpj: '', crNumber: '', crValidity: '', annuityDueDate: '', annuityPrice: '', responsibleName: '', email: '', phone: '',
     cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
   });
   const [savingEditClub, setSavingEditClub] = useState(false);
@@ -6776,7 +6833,7 @@ export default function AdminPanel({
     const result = await onCreateClub(createClubForm);
     setCreatingClub(false);
     if (result.club) {
-      setCreateClubForm({ name: '', cnpj: '', responsibleName: '', email: '', password: '', phone: '', crNumber: '', crValidity: '', annuityDueDate: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '' });
+      setCreateClubForm({ name: '', cnpj: '', responsibleName: '', email: '', password: '', phone: '', crNumber: '', crValidity: '', annuityDueDate: '', annuityPrice: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '' });
       setCreateClubSuccess(true);
       setTimeout(() => setCreateClubSuccess(false), 2500);
       if (onRefreshData) await onRefreshData();
@@ -6863,6 +6920,7 @@ export default function AdminPanel({
       crNumber: club.crNumber || '',
       crValidity: club.crValidity || '',
       annuityDueDate: club.annuityDueDate || '',
+      annuityPrice: club.annuityPrice != null ? String(club.annuityPrice) : '',
       responsibleName: club.responsibleName || '',
       email: club.email || '',
       phone: club.phone || '',
@@ -6882,7 +6940,14 @@ export default function AdminPanel({
     setSavingEditClub(true);
     setEditClubError('');
     setEditClubSuccess(false);
-    const ok = await onUpdateClub(editingClub.id, editingClubForm);
+    // annuityPrice é quem-a-franquia-cobra-do-filiado — nunca envia esse
+    // campo ao editar o próprio clube (evita 403 do backend, que só aceita
+    // essa alteração vinda da franquia editando um filiado, nunca self-edit).
+    const fieldsToSend: Record<string, unknown> = { ...editingClubForm };
+    if (editingClub.id === currentUser?.clubId) {
+      delete fieldsToSend.annuityPrice;
+    }
+    const ok = await onUpdateClub(editingClub.id, fieldsToSend);
     setSavingEditClub(false);
     if (ok) {
       setEditClubSuccess(true);
@@ -8412,6 +8477,7 @@ export default function AdminPanel({
                   <MemberField label="CR do Clube" value={createClubForm.crNumber} onChange={v => setCreateClubForm({ ...createClubForm, crNumber: v })} placeholder="Opcional" />
                   <MemberField label="Validade do CR" type="date" value={createClubForm.crValidity} onChange={v => setCreateClubForm({ ...createClubForm, crValidity: v })} />
                   <MemberField label="Vencimento Anuidade" type="date" value={createClubForm.annuityDueDate} onChange={v => setCreateClubForm({ ...createClubForm, annuityDueDate: v })} />
+                  <MemberField label="Valor Anuidade do Filiado (R$)" type="number" value={createClubForm.annuityPrice} onChange={v => setCreateClubForm({ ...createClubForm, annuityPrice: v })} placeholder="Ex: 300.00" />
                 </div>
 
                 <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 pt-2">Endereço da Unidade (Opcional)</h4>
@@ -8573,6 +8639,9 @@ export default function AdminPanel({
                       <MemberField label="CR do Clube" value={editingClubForm.crNumber} onChange={v => setEditingClubForm({ ...editingClubForm, crNumber: v })} />
                       <MemberField label="Validade do CR" type="date" value={editingClubForm.crValidity} onChange={v => setEditingClubForm({ ...editingClubForm, crValidity: v })} />
                       <MemberField label="Vencimento Anuidade" type="date" value={editingClubForm.annuityDueDate} onChange={v => setEditingClubForm({ ...editingClubForm, annuityDueDate: v })} />
+                      {editingClub && editingClub.id !== currentUser?.clubId && (
+                        <MemberField label="Valor Anuidade do Filiado (R$)" type="number" value={editingClubForm.annuityPrice} onChange={v => setEditingClubForm({ ...editingClubForm, annuityPrice: v })} placeholder="Ex: 300.00" />
+                      )}
                       <MemberField label="Diretor Presidente Responsável" value={editingClubForm.responsibleName} onChange={v => setEditingClubForm({ ...editingClubForm, responsibleName: v })} />
                       <MemberField label="E-mail de Contato" type="email" value={editingClubForm.email} onChange={v => setEditingClubForm({ ...editingClubForm, email: v })} />
                       <MemberField label="Telefone" value={editingClubForm.phone} onChange={v => setEditingClubForm({ ...editingClubForm, phone: v })} />
@@ -9135,6 +9204,238 @@ export default function AdminPanel({
                 </table>
               </div>
             </div>
+          </div>
+        );
+      }
+
+      case 'financeiro_franquia': {
+        // Tudo que pertence ao tenant desta franquia — clubes filiados e
+        // atletas vinculados. getVisibleClubIds já escopa `clubs`/`users`
+        // no backend, então qualquer clube que não seja o próprio
+        // currentUser.clubId, dentro dessas listas, é um filiado.
+        const filiadoClubs = clubs.filter(c => c.id !== currentUser?.clubId);
+        const tenantMembers = users.filter(u => u.role === 'member');
+        const regularMembers = tenantMembers.filter(u => u.hasPaidSignature);
+        const pendingMembers = tenantMembers.filter(u => !u.hasPaidSignature);
+
+        const totalUnbilled = franchiseInvoiceEntries.reduce((sum, e) => sum + e.totalOwed, 0);
+        const totalPaidInvoices = franchiseInvoiceHistory.filter(i => i.status === 'approved').reduce((sum, i) => sum + i.totalAmount, 0);
+        const totalPendingInvoices = franchiseInvoiceHistory.filter(i => i.status === 'pending').reduce((sum, i) => sum + i.totalAmount, 0);
+
+        return (
+          <div className="space-y-6 text-left">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-1 shadow-xs">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="font-display font-bold text-slate-900 text-base">Financeiro da Franquia</h3>
+                  <p className="text-xs text-slate-400">Inscrições e anuidades de todos os clubes filiados e atletas vinculados a este tenant.</p>
+                </div>
+                <DollarSign className="w-5 h-5 text-blue-600" />
+              </div>
+            </div>
+
+            {billingSuccessMsg && (
+              <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
+                <CheckCircle className="w-5 h-5 text-emerald-600" />
+                {billingSuccessMsg}
+              </div>
+            )}
+            {franchiseFinanceError && (
+              <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold border border-red-200">{franchiseFinanceError}</div>
+            )}
+
+            {/* Bloco 1: Faturas de inscrição (visão de credor) */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div>
+                  <h4 className="font-display font-bold text-slate-900 text-sm">Faturas de Inscrição — Clubes Filiados</h4>
+                  <p className="text-xs text-slate-400">Percentual Clube: valor devido a esta franquia pelas inscrições feitas em lote pelos filiados.</p>
+                </div>
+                <CreditCard className="w-4 h-4 text-blue-600" />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+                  <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Saldo Não Faturado</span>
+                  <span className="text-lg font-bold text-amber-700 font-mono">R$ {totalUnbilled.toFixed(2)}</span>
+                </div>
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                  <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Faturas Pendentes de Pagamento</span>
+                  <span className="text-lg font-bold text-blue-700 font-mono">R$ {totalPendingInvoices.toFixed(2)}</span>
+                </div>
+                <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+                  <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Faturas Já Pagas</span>
+                  <span className="text-lg font-bold text-emerald-700 font-mono">R$ {totalPaidInvoices.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h5 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Saldo Não Faturado por Filiado</h5>
+                {franchiseInvoiceEntries.length === 0 ? (
+                  <p className="text-xs text-slate-400">Nenhum saldo pendente de fatura no momento.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-slate-700">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-[10px] text-slate-450 uppercase font-mono">
+                          <th className="py-2.5 px-2">Clube Filiado</th>
+                          <th className="py-2.5 px-2 text-center">Inscrições</th>
+                          <th className="py-2.5 px-2 text-right">Valor Devido</th>
+                          <th className="py-2.5 px-2 text-right">Ação</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {franchiseInvoiceEntries.map(entry => (
+                          <tr key={`${entry.clubId}::${entry.creditorClubId}`} className="hover:bg-slate-50/30 transition">
+                            <td className="py-3 px-2 font-bold text-slate-800">{entry.clubName}</td>
+                            <td className="py-3 px-2 text-center font-mono">{entry.count}</td>
+                            <td className="py-3 px-2 text-right font-mono font-bold text-amber-700">R$ {entry.totalOwed.toFixed(2)}</td>
+                            <td className="py-3 px-2 text-right">
+                              <button
+                                onClick={() => sendBillingReminder(`Lembrete de cobrança enviado para ${entry.clubName} (R$ ${entry.totalOwed.toFixed(2)} devidos).`)}
+                                className="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-bold text-[9px] px-2 py-1 rounded transition cursor-pointer"
+                              >
+                                Notificar
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <h5 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Histórico de Faturas</h5>
+                {franchiseInvoiceHistory.length === 0 ? (
+                  <p className="text-xs text-slate-400">Nenhuma fatura gerada ainda.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-slate-700">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-[10px] text-slate-450 uppercase font-mono">
+                          <th className="py-2.5 px-2">Data</th>
+                          <th className="py-2.5 px-2">Filiado</th>
+                          <th className="py-2.5 px-2 text-right">Valor</th>
+                          <th className="py-2.5 px-2 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {franchiseInvoiceHistory.map(inv => (
+                          <tr key={inv.id} className="hover:bg-slate-50/30 transition">
+                            <td className="py-3 px-2 font-mono text-slate-500">{new Date(inv.createdAt).toLocaleDateString('pt-BR')}</td>
+                            <td className="py-3 px-2 font-bold text-slate-800">{inv.clubName}</td>
+                            <td className="py-3 px-2 text-right font-mono font-bold text-slate-900">R$ {inv.totalAmount.toFixed(2)}</td>
+                            <td className="py-3 px-2 text-center">
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${
+                                inv.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                              }`}>
+                                {inv.status === 'approved' ? 'Paga' : 'Pendente'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bloco 2: Anuidades de atletas */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div>
+                  <h4 className="font-display font-bold text-slate-900 text-sm">Anuidades de Atletas</h4>
+                  <p className="text-xs text-slate-400">Status real de anuidade (cobrança PIX via Sicoob desta franquia) entre todos os atletas do tenant.</p>
+                </div>
+                <Users className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Total de Atletas</span>
+                  <span className="text-lg font-bold text-slate-900 font-mono">{tenantMembers.length}</span>
+                </div>
+                <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+                  <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Anuidade Regular</span>
+                  <span className="text-lg font-bold text-emerald-700 font-mono">{regularMembers.length}</span>
+                </div>
+                <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+                  <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Anuidade Pendente</span>
+                  <span className="text-lg font-bold text-amber-700 font-mono">{pendingMembers.length}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Bloco 3: Anuidades de clubes filiados */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div>
+                  <h4 className="font-display font-bold text-slate-900 text-sm">Anuidades de Clubes Filiados</h4>
+                  <p className="text-xs text-slate-400">Valor configurável por clube (defina em Gerenciamento Plataforma → Novo Clube). Cobrança PIX real contra o Sicoob desta franquia.</p>
+                </div>
+                <Landmark className="w-4 h-4 text-blue-600" />
+              </div>
+              {filiadoClubs.length === 0 ? (
+                <p className="text-xs text-slate-400">Nenhum clube filiado neste tenant ainda.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-700">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-[10px] text-slate-450 uppercase font-mono">
+                        <th className="py-2.5 px-2">Clube Filiado</th>
+                        <th className="py-2.5 px-2 text-right">Valor Anuidade</th>
+                        <th className="py-2.5 px-2">Vencimento</th>
+                        <th className="py-2.5 px-2 text-center">Status</th>
+                        <th className="py-2.5 px-2 text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filiadoClubs.map(club => {
+                        const isRegular = club.annuityDueDate ? new Date(club.annuityDueDate) >= new Date() : false;
+                        return (
+                          <tr key={club.id} className="hover:bg-slate-50/30 transition">
+                            <td className="py-3 px-2 font-bold text-slate-800">{club.name}</td>
+                            <td className="py-3 px-2 text-right font-mono">
+                              {club.annuityPrice ? `R$ ${club.annuityPrice.toFixed(2)}` : <span className="text-slate-400">Não configurado</span>}
+                            </td>
+                            <td className="py-3 px-2 font-mono text-slate-500">
+                              {club.annuityDueDate ? new Date(club.annuityDueDate).toLocaleDateString('pt-BR') : '—'}
+                            </td>
+                            <td className="py-3 px-2 text-center">
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${isRegular ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                                {isRegular ? 'Regular' : 'Pendente'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-2 text-right">
+                              <button
+                                onClick={() => handleChargeClubAnnuity(club.id)}
+                                disabled={!club.annuityPrice || chargingClubAnnuityId === club.id}
+                                className="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white disabled:opacity-40 disabled:hover:bg-blue-50 disabled:hover:text-blue-600 font-bold text-[9px] px-2 py-1 rounded transition cursor-pointer"
+                              >
+                                {chargingClubAnnuityId === club.id ? 'Gerando...' : 'Cobrar Anuidade'}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {clubAnnuityPixModal && (
+              <PixPaymentModal
+                pixCopiaECola={clubAnnuityPixModal.pixCopiaECola}
+                pollEndpoint={`/api/clubs/annuity/by-tx/${clubAnnuityPixModal.txId}`}
+                authHeaders={currentUser ? { 'x-user-id': currentUser.id } : undefined}
+                title="PIX - Anuidade de Clube Filiado"
+                onApproved={() => loadFranchiseFinanceData()}
+                onClose={() => setClubAnnuityPixModal(null)}
+              />
+            )}
           </div>
         );
       }
@@ -10699,125 +11000,22 @@ export default function AdminPanel({
         );
 
       case 'gestao_cobrancas': {
-        const totalUnbilled = invoiceEntries.reduce((sum, e) => sum + e.totalOwed, 0);
-        const totalPaid = invoiceHistory.filter(i => i.status === 'approved').reduce((sum, i) => sum + i.totalAmount, 0);
-        const totalPendingInvoices = invoiceHistory.filter(i => i.status === 'pending').reduce((sum, i) => sum + i.totalAmount, 0);
+        // Faturamento entre clube filiado e franqueador, e anuidades, são
+        // sempre de UMA franquia/tenant específica — por isso vivem em
+        // "Gerenciamento Plataforma > Financeiro da Franquia" (o menu que o
+        // dono da franquia e o master enxergam), não aqui em Administrador
+        // Master, que é nível acima (franquia↔plataforma GEG Competições).
         return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800 text-left">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs text-slate-800 text-left">
             <div className="flex justify-between items-center pb-3 border-b border-slate-100">
               <div>
-                <h3 className="font-display font-bold text-slate-900 text-base">Gestão de Cobranças — Fatura entre Clubes</h3>
-                <p className="text-xs text-slate-400">Saldo devido por cada clube filiado (Percentual Clube) ao clube organizador dos campeonatos.</p>
+                <h3 className="font-display font-bold text-slate-900 text-base">Gestão de Cobranças</h3>
+                <p className="text-xs text-slate-400">Mensalidade/anuidade das franquias perante a plataforma GEG Competições.</p>
               </div>
               <DollarSign className="w-5 h-5 text-blue-600" />
             </div>
-
-            {billingSuccessMsg && (
-              <div className="bg-emerald-50 text-emerald-805 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
-                {billingSuccessMsg}
-              </div>
-            )}
-            {invoiceError && (
-              <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold border border-red-200">{invoiceError}</div>
-            )}
-
-            {/* Metrics */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
-                <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Saldo Não Faturado</span>
-                <span className="text-lg font-bold text-amber-700 font-mono">R$ {totalUnbilled.toFixed(2)}</span>
-              </div>
-              <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
-                <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Faturas Pendentes de Pagamento</span>
-                <span className="text-lg font-bold text-blue-700 font-mono">R$ {totalPendingInvoices.toFixed(2)}</span>
-              </div>
-              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
-                <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Faturas Já Pagas</span>
-                <span className="text-lg font-bold text-emerald-700 font-mono">R$ {totalPaid.toFixed(2)}</span>
-              </div>
-            </div>
-
-            {/* Saldo não faturado, por clube */}
-            <div className="space-y-3">
-              <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Saldo Não Faturado por Clube</h4>
-              {invoiceEntries.length === 0 ? (
-                <p className="text-xs text-slate-400">Nenhum saldo pendente de fatura no momento.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-slate-700">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-[10px] text-slate-450 uppercase font-mono">
-                        <th className="py-2.5 px-2">Clube Devedor</th>
-                        <th className="py-2.5 px-2">Credor</th>
-                        <th className="py-2.5 px-2 text-center">Inscrições</th>
-                        <th className="py-2.5 px-2 text-right">Valor Devido</th>
-                        <th className="py-2.5 px-2 text-right">Ação</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {invoiceEntries.map(entry => {
-                        const key = `${entry.clubId}::${entry.creditorClubId}`;
-                        return (
-                          <tr key={key} className="hover:bg-slate-50/30 transition">
-                            <td className="py-3 px-2 font-bold text-slate-800">{entry.clubName}</td>
-                            <td className="py-3 px-2 text-slate-500">{entry.creditorClubName}</td>
-                            <td className="py-3 px-2 text-center font-mono">{entry.count}</td>
-                            <td className="py-3 px-2 text-right font-mono font-bold text-amber-700">R$ {entry.totalOwed.toFixed(2)}</td>
-                            <td className="py-3 px-2 text-right">
-                              <button
-                                onClick={() => sendBillingReminder(`Lembrete de cobrança enviado para ${entry.clubName} (R$ ${entry.totalOwed.toFixed(2)} devidos a ${entry.creditorClubName}).`)}
-                                className="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-bold text-[9px] px-2 py-1 rounded transition cursor-pointer"
-                              >
-                                Notificar
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Histórico de faturas */}
-            <div className="space-y-3">
-              <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Histórico de Faturas</h4>
-              {invoiceHistory.length === 0 ? (
-                <p className="text-xs text-slate-400">Nenhuma fatura gerada ainda.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-slate-700">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-[10px] text-slate-450 uppercase font-mono">
-                        <th className="py-2.5 px-2">Data</th>
-                        <th className="py-2.5 px-2">Devedor</th>
-                        <th className="py-2.5 px-2">Credor</th>
-                        <th className="py-2.5 px-2 text-right">Valor</th>
-                        <th className="py-2.5 px-2 text-center">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {invoiceHistory.map(inv => (
-                        <tr key={inv.id} className="hover:bg-slate-50/30 transition">
-                          <td className="py-3 px-2 font-mono text-slate-500">{new Date(inv.createdAt).toLocaleDateString('pt-BR')}</td>
-                          <td className="py-3 px-2 font-bold text-slate-800">{inv.clubName}</td>
-                          <td className="py-3 px-2 text-slate-500">{inv.creditorClubName}</td>
-                          <td className="py-3 px-2 text-right font-mono font-bold text-slate-900">R$ {inv.totalAmount.toFixed(2)}</td>
-                          <td className="py-3 px-2 text-center">
-                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${
-                              inv.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                            }`}>
-                              {inv.status === 'approved' ? 'Paga' : 'Pendente'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+            <div className="bg-blue-50 border border-blue-200 text-blue-900 p-4 rounded-xl text-xs leading-relaxed">
+              O faturamento de inscrições entre clube filiado e clube franqueador, e as anuidades de atletas e clubes filiados, agora ficam em <strong>Gerenciamento Plataforma → Financeiro da Franquia</strong> — cada franquia enxerga só o seu próprio tenant. Esta tela fica reservada para o financeiro entre a franquia e a plataforma GEG Competições, ainda não implementado.
             </div>
           </div>
         );
@@ -11013,6 +11211,7 @@ export default function AdminPanel({
                     <button onClick={() => setPlataformaMenu('novo_clube')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'novo_clube' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Novo Clube</button>
                     <button onClick={() => setPlataformaMenu('novo_atleta')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'novo_atleta' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Novo Atleta</button>
                     <button onClick={() => setPlataformaMenu('relatorio_financeiro')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'relatorio_financeiro' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Relatorio Financeiro</button>
+                    <button onClick={() => setPlataformaMenu('financeiro_franquia')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'financeiro_franquia' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Financeiro da Franquia</button>
                   </div>
                 )}
               </div>
