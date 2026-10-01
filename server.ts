@@ -2940,7 +2940,12 @@ app.post('/api/admin/clubs/:id/reset-competition-data', requireMasterAdmin, asyn
 // tenant — necessário porque, uma vez que um clube vira tenant isolado, seu
 // gestor deixa de aparecer no GET /api/users do master (isolamento correto),
 // mas o master ainda precisa localizá-lo para gerenciar o acesso.
-app.get('/api/admin/clubs/:id/admin', requireMasterAdmin, async (req, res) => {
+// "Entrar como Clube" e "Gerenciar Acesso" são usados a partir de "Novo
+// Clube" em Gerenciamento Plataforma — tela acessível tanto ao master_admin
+// quanto ao próprio dono da franquia (canSeePlataforma). Restringir só a
+// master_admin fazia a franquia, logada como clube, sempre receber 403 aqui
+// e a tela mostrar "sem administrador configurado" mesmo quando existia.
+app.get('/api/admin/clubs/:id/admin', requireFranchiseAdmin, async (req, res) => {
   try {
     const adminRes = await pool.query(
       `SELECT u.*,
@@ -2956,7 +2961,7 @@ app.get('/api/admin/clubs/:id/admin', requireMasterAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/clubs/:id/admin-credentials', requireMasterAdmin, async (req, res) => {
+app.post('/api/admin/clubs/:id/admin-credentials', requireFranchiseAdmin, async (req, res) => {
   const clubId = req.params.id;
   const { fullName, email, password } = req.body;
 
