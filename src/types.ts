@@ -56,6 +56,20 @@ export interface AnnuityPlan {
   createdAt: string;
 }
 
+export interface LegacyMultiDiscount {
+  id: string;
+  title: string;
+  clubId?: string;
+  principalChampionshipId: string;
+  principalDiscountPercent: number;
+  champ2ChampionshipId?: string;
+  champ2DiscountPercent?: number;
+  champ3ChampionshipId?: string;
+  champ3DiscountWithPrincipalPercent?: number;
+  champ3DiscountWithPrincipalAnd2Percent?: number;
+  createdAt: string;
+}
+
 export interface Club {
   id: string;
   name: string;

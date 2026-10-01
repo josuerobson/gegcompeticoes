@@ -3,6 +3,7 @@ import { Championship, User, Registration, StageScore, RankingItem, Modality, St
 import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, CreditCard, ChevronRight, Download, Medal, PlusCircle, X, Search, Layers, Zap, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PixPaymentModal } from './PixPaymentModal';
+import { normalizeSearchText } from '../utils/textSearch';
 
 interface ChampionshipsProps {
   championships: Championship[];
@@ -187,17 +188,17 @@ export default function ChampionshipsView({
       }
       if (results.length === 0) {
         const all = weapons || [];
-        const term = q.trim().toLowerCase();
-        results = all.filter(w => 
-          `${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`.toLowerCase().includes(term)
+        const term = normalizeSearchText(q.trim());
+        results = all.filter(w =>
+          normalizeSearchText(`${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`).includes(term)
         );
       }
       setWeaponSearchResults(results);
     } catch {
       const all = weapons || [];
-      const term = q.trim().toLowerCase();
-      const matches = all.filter(w => 
-        `${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`.toLowerCase().includes(term)
+      const term = normalizeSearchText(q.trim());
+      const matches = all.filter(w =>
+        normalizeSearchText(`${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`).includes(term)
       );
       setWeaponSearchResults(matches);
     } finally {

@@ -4,6 +4,7 @@ import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import { QRCodeView } from './QRCodeView';
 import { PixPaymentModal } from './PixPaymentModal';
+import { normalizeSearchText } from '../utils/textSearch';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
@@ -1268,11 +1269,11 @@ export default function MemberProfile({
 
   // Weapon live search (minimum 3 characters)
   const searchFilteredWeapons = useMemo(() => {
-    const q = trainingForm.weaponSearchQuery.trim().toLowerCase();
+    const q = normalizeSearchText(trainingForm.weaponSearchQuery.trim());
     if (q.length < 3) return [];
     const allWeapons = weapons || [];
     return allWeapons.filter(w => {
-      const fullText = `${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.sigmaNumber || ''} ${w.weaponNumber || ''} ${w.weaponClass || ''}`.toLowerCase();
+      const fullText = normalizeSearchText(`${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.sigmaNumber || ''} ${w.weaponNumber || ''} ${w.weaponClass || ''}`);
       return fullText.includes(q);
     });
   }, [trainingForm.weaponSearchQuery, weapons]);

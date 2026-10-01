@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, MultiChampionshipItem, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession, AnnuityPlan, ClubBulkRegistrationPrefill, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult } from '../types';
+import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, MultiChampionshipItem, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession, AnnuityPlan, ClubBulkRegistrationPrefill, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult, LegacyMultiDiscount } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import { SicoobPixManager } from './SicoobPixManager';
 import { MercadoPagoManager } from './MercadoPagoManager';
 import { PixPaymentModal } from './PixPaymentModal';
+import { normalizeSearchText } from '../utils/textSearch';
 import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
@@ -156,8 +157,8 @@ function SearchableSelect({ label, value, onChange, options, placeholder = 'Sele
   }, []);
 
   const selected = options.find(o => o.value === value);
-  const q = query.trim().toLowerCase();
-  const filtered = q ? options.filter(o => o.label.toLowerCase().includes(q)) : options;
+  const q = normalizeSearchText(query.trim());
+  const filtered = q ? options.filter(o => normalizeSearchText(o.label).includes(q)) : options;
 
   return (
     <div className="space-y-1 relative" ref={containerRef}>
@@ -711,11 +712,11 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
 
   const [athleteFilterQuery, setAthleteFilterQuery] = React.useState('');
   const displayedMembers = React.useMemo(() => {
-    const q = athleteFilterQuery.trim().toLowerCase();
+    const q = normalizeSearchText(athleteFilterQuery.trim());
     if (!q) return filteredMembers;
     const qDigits = q.replace(/\D/g, '');
     return filteredMembers.filter(m => {
-      if ((m.fullName || '').toLowerCase().includes(q)) return true;
+      if (normalizeSearchText(m.fullName).includes(q)) return true;
       if (qDigits && (m.cpf || '').replace(/\D/g, '').includes(qDigits)) return true;
       if (qDigits && (m.crNumber || '').replace(/\D/g, '').includes(qDigits)) return true;
       return false;
@@ -870,9 +871,9 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
   // Compartilhado entre a célula inline (desktop) e o popup de arma (mobile)
   const renderWeaponFields = (member: User, state: { weaponId: string; checked: boolean }, athleteWeapons: Weapon[], searchInput: string, results: Weapon[], searching: boolean) => {
     const isOpen = openWeaponFieldId === member.id;
-    const query = (searchInput || '').trim().toLowerCase();
+    const query = normalizeSearchText((searchInput || '').trim());
     const filteredOwn = athleteWeapons.filter(w =>
-      !query || `${w.model} ${w.caliber} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`.toLowerCase().includes(query)
+      !query || normalizeSearchText(`${w.model} ${w.caliber} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`).includes(query)
     );
     const extraResults = results.filter(w => !filteredOwn.some(fw => fw.id === w.id));
 
@@ -1339,13 +1340,13 @@ function TreinamentosCompeticoesAdminPanel({
 
   // Filtered Athletes
   const searchFilteredAthletes = React.useMemo(() => {
-    const q = athleteSearchQuery.trim().toLowerCase();
+    const q = normalizeSearchText(athleteSearchQuery.trim());
     if (q.length < 2) return [];
     return users.filter(u =>
-      (u.fullName || '').toLowerCase().includes(q) ||
+      normalizeSearchText(u.fullName).includes(q) ||
       (u.cpf || '').includes(q) ||
-      (u.crNumber || '').toLowerCase().includes(q) ||
-      (u.username || '').toLowerCase().includes(q)
+      normalizeSearchText(u.crNumber).includes(q) ||
+      normalizeSearchText(u.username).includes(q)
     );
   }, [users, athleteSearchQuery]);
 
@@ -1361,14 +1362,14 @@ function TreinamentosCompeticoesAdminPanel({
 
   // Filtered weapons for autocomplete search
   const searchFilteredWeapons = React.useMemo(() => {
-    const q = trainingForm.weaponSearchQuery.trim().toLowerCase();
+    const q = normalizeSearchText(trainingForm.weaponSearchQuery.trim());
     if (!q) return availableWeapons;
     return availableWeapons.filter(w =>
-      (w.manufacturer || '').toLowerCase().includes(q) ||
-      (w.model || '').toLowerCase().includes(q) ||
-      (w.caliber || '').toLowerCase().includes(q) ||
-      (w.sigmaNumber || '').toLowerCase().includes(q) ||
-      (w.weaponNumber || '').toLowerCase().includes(q)
+      normalizeSearchText(w.manufacturer).includes(q) ||
+      normalizeSearchText(w.model).includes(q) ||
+      normalizeSearchText(w.caliber).includes(q) ||
+      normalizeSearchText(w.sigmaNumber).includes(q) ||
+      normalizeSearchText(w.weaponNumber).includes(q)
     );
   }, [availableWeapons, trainingForm.weaponSearchQuery]);
 
@@ -1512,14 +1513,14 @@ function TreinamentosCompeticoesAdminPanel({
 
   // Filtered trainings for history
   const filteredTrainingsList = React.useMemo(() => {
-    const q = tableSearchQuery.trim().toLowerCase();
+    const q = normalizeSearchText(tableSearchQuery.trim());
     if (!q) return trainingsList;
     return trainingsList.filter(t =>
-      (t.athleteName || '').toLowerCase().includes(q) ||
-      (t.athleteCr || '').toLowerCase().includes(q) ||
-      (t.weaponName || '').toLowerCase().includes(q) ||
-      (t.modality || '').toLowerCase().includes(q) ||
-      (t.notes || '').toLowerCase().includes(q)
+      normalizeSearchText(t.athleteName).includes(q) ||
+      normalizeSearchText(t.athleteCr).includes(q) ||
+      normalizeSearchText(t.weaponName).includes(q) ||
+      normalizeSearchText(t.modality).includes(q) ||
+      normalizeSearchText(t.notes).includes(q)
     );
   }, [trainingsList, tableSearchQuery]);
 
@@ -2232,12 +2233,12 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
 
   const filteredRegs = React.useMemo(() => {
     if (!searchAthlete.trim()) return registrations;
-    const q = searchAthlete.toLowerCase();
-    return registrations.filter(r => 
-      (r.athleteName && r.athleteName.toLowerCase().includes(q)) ||
-      (r.modalityName && r.modalityName.toLowerCase().includes(q)) ||
-      (r.weaponModel && r.weaponModel.toLowerCase().includes(q)) ||
-      (r.weaponCaliber && r.weaponCaliber.toLowerCase().includes(q))
+    const q = normalizeSearchText(searchAthlete);
+    return registrations.filter(r =>
+      normalizeSearchText(r.athleteName).includes(q) ||
+      normalizeSearchText(r.modalityName).includes(q) ||
+      normalizeSearchText(r.weaponModel).includes(q) ||
+      normalizeSearchText(r.weaponCaliber).includes(q)
     );
   }, [registrations, searchAthlete]);
 
@@ -3208,11 +3209,11 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
 
   const [athleteFilterQuery, setAthleteFilterQuery] = React.useState('');
   const displayedMembers = React.useMemo(() => {
-    const q = athleteFilterQuery.trim().toLowerCase();
+    const q = normalizeSearchText(athleteFilterQuery.trim());
     if (!q) return members;
     const qDigits = q.replace(/\D/g, '');
     return members.filter(m => {
-      if ((m.fullName || '').toLowerCase().includes(q)) return true;
+      if (normalizeSearchText(m.fullName).includes(q)) return true;
       if (qDigits && (m.cpf || '').replace(/\D/g, '').includes(qDigits)) return true;
       if (qDigits && (m.crNumber || '').replace(/\D/g, '').includes(qDigits)) return true;
       return false;
@@ -3314,9 +3315,9 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
   // Compartilhado entre a célula inline (desktop) e o popup de arma (mobile)
   const renderWeaponFields = (member: User, state: { weaponId: string; checked: boolean }, athleteWeapons: Weapon[], searchInput: string, results: Weapon[], searching: boolean) => {
     const isOpen = openWeaponFieldId === member.id;
-    const query = (searchInput || '').trim().toLowerCase();
+    const query = normalizeSearchText((searchInput || '').trim());
     const filteredOwn = athleteWeapons.filter(w =>
-      !query || `${w.model} ${w.caliber} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`.toLowerCase().includes(query)
+      !query || normalizeSearchText(`${w.model} ${w.caliber} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`).includes(query)
     );
     const extraResults = results.filter(w => !filteredOwn.some(fw => fw.id === w.id));
 
@@ -5972,6 +5973,245 @@ function MultiChampionshipsManager({ championships, stages, multiChampionships =
   );
 }
 
+// =============================================================================
+// LegacyMultiDiscountManager — "Multi-Campeonato Legado": desconto de
+// fidelidade por pacote de até 3 campeonatos, aplicado automaticamente em
+// cada inscrição separada (ver computeLegacyMultiDiscountPercent no
+// server.ts) — diferente do MultiChampionshipsManager acima, que é um
+// pacote com inscrição única e valor combinado.
+// =============================================================================
+interface LegacyMultiDiscountManagerProps {
+  championships: Championship[];
+  currentUser: User | null;
+  onRefreshData?: () => Promise<void>;
+}
+
+function LegacyMultiDiscountManager({ championships, currentUser, onRefreshData }: LegacyMultiDiscountManagerProps) {
+  const [legacyMultiDiscounts, setLegacyMultiDiscounts] = useState<LegacyMultiDiscount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [title, setTitle] = useState('');
+  const [principalChampionshipId, setPrincipalChampionshipId] = useState('');
+  const [principalDiscountPercent, setPrincipalDiscountPercent] = useState('');
+  const [champ2ChampionshipId, setChamp2ChampionshipId] = useState('');
+  const [champ2DiscountPercent, setChamp2DiscountPercent] = useState('');
+  const [champ3ChampionshipId, setChamp3ChampionshipId] = useState('');
+  const [champ3DiscountWithPrincipalPercent, setChamp3DiscountWithPrincipalPercent] = useState('');
+  const [champ3DiscountWithPrincipalAnd2Percent, setChamp3DiscountWithPrincipalAnd2Percent] = useState('');
+
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/legacy-multi-discounts', { headers: { 'x-user-id': currentUser?.id || '' } });
+      const data = await res.json();
+      setLegacyMultiDiscounts(data.legacyMultiDiscounts || []);
+    } catch (err) {
+      console.error('Error loading legacy multi discounts:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  const getChamp = (id?: string) => championships.find(c => c.id === id);
+
+  const resetForm = () => {
+    setTitle('');
+    setPrincipalChampionshipId('');
+    setPrincipalDiscountPercent('');
+    setChamp2ChampionshipId('');
+    setChamp2DiscountPercent('');
+    setChamp3ChampionshipId('');
+    setChamp3DiscountWithPrincipalPercent('');
+    setChamp3DiscountWithPrincipalAnd2Percent('');
+    setEditingId(null);
+    setShowForm(false);
+    setError('');
+  };
+
+  const handleEdit = (d: LegacyMultiDiscount) => {
+    setEditingId(d.id);
+    setTitle(d.title);
+    setPrincipalChampionshipId(d.principalChampionshipId);
+    setPrincipalDiscountPercent(String(d.principalDiscountPercent ?? ''));
+    setChamp2ChampionshipId(d.champ2ChampionshipId || '');
+    setChamp2DiscountPercent(d.champ2DiscountPercent != null ? String(d.champ2DiscountPercent) : '');
+    setChamp3ChampionshipId(d.champ3ChampionshipId || '');
+    setChamp3DiscountWithPrincipalPercent(d.champ3DiscountWithPrincipalPercent != null ? String(d.champ3DiscountWithPrincipalPercent) : '');
+    setChamp3DiscountWithPrincipalAnd2Percent(d.champ3DiscountWithPrincipalAnd2Percent != null ? String(d.champ3DiscountWithPrincipalAnd2Percent) : '');
+    setShowForm(true);
+    setError('');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) { setError('Título do pacote é obrigatório.'); return; }
+    if (!principalChampionshipId) { setError('Selecione o Campeonato Principal.'); return; }
+
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      const url = editingId ? `/api/legacy-multi-discounts/${editingId}` : '/api/legacy-multi-discounts';
+      const method = editingId ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
+        body: JSON.stringify({
+          title,
+          principalChampionshipId,
+          principalDiscountPercent: Number(principalDiscountPercent) || 0,
+          champ2ChampionshipId: champ2ChampionshipId || undefined,
+          champ2DiscountPercent: champ2DiscountPercent || undefined,
+          champ3ChampionshipId: champ3ChampionshipId || undefined,
+          champ3DiscountWithPrincipalPercent: champ3DiscountWithPrincipalPercent || undefined,
+          champ3DiscountWithPrincipalAnd2Percent: champ3DiscountWithPrincipalAnd2Percent || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar pacote de desconto.');
+      setSuccess(editingId ? 'Pacote atualizado!' : 'Pacote criado com sucesso!');
+      resetForm();
+      await loadData();
+      if (onRefreshData) await onRefreshData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Deseja realmente remover este pacote de desconto?')) return;
+    try {
+      const res = await fetch(`/api/legacy-multi-discounts/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': currentUser?.id || '' },
+      });
+      if (!res.ok) throw new Error('Erro ao remover pacote de desconto.');
+      await loadData();
+      if (onRefreshData) await onRefreshData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  return (
+    <div className="space-y-6 text-slate-800">
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
+        <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+          <div>
+            <h3 className="font-display font-bold text-slate-900 text-base">Multi-Campeonato Legado</h3>
+            <p className="text-xs text-slate-400">Desconto de fidelidade: inscrever-se em cada campeonato do pacote separadamente já aplica o desconto conforme os campeonatos anteriores em que o atleta já estiver inscrito.</p>
+          </div>
+          <button
+            onClick={() => { if (showForm) resetForm(); else setShowForm(true); }}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+          >
+            {showForm ? <X className="w-4 h-4" /> : <PlusCircle className="w-4 h-4" />}
+            {showForm ? 'Cancelar' : 'Novo Pacote'}
+          </button>
+        </div>
+
+        {success && <div className="bg-emerald-50 text-emerald-700 p-3 rounded-xl text-xs font-semibold flex items-center gap-1.5"><CheckCircle className="w-4 h-4" />{success}</div>}
+        {error && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{error}</div>}
+
+        {showForm && (
+          <form onSubmit={handleSubmit} className="space-y-4 border border-slate-200 rounded-xl p-4 bg-slate-50/50">
+            <ChampField label="Título do Pacote" value={title} onChange={setTitle} placeholder="Ex: Circuito Verão 2026" />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-200">
+              <ChampSelect
+                label="Campeonato Principal"
+                value={principalChampionshipId}
+                onChange={setPrincipalChampionshipId}
+                options={championships.map(c => ({ value: c.id, label: c.title }))}
+              />
+              <ChampField label="Desconto % (Principal)" type="number" value={principalDiscountPercent} onChange={setPrincipalDiscountPercent} placeholder="Ex: 10" />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-200">
+              <ChampSelect
+                label="Campeonato 2 (opcional)"
+                value={champ2ChampionshipId}
+                onChange={setChamp2ChampionshipId}
+                options={championships.map(c => ({ value: c.id, label: c.title }))}
+              />
+              <ChampField label="Desconto % (Campeonato 2, se já tem o Principal)" type="number" value={champ2DiscountPercent} onChange={setChamp2DiscountPercent} placeholder="Ex: 15" />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-200">
+              <ChampSelect
+                label="Campeonato 3 (opcional)"
+                value={champ3ChampionshipId}
+                onChange={setChamp3ChampionshipId}
+                options={championships.map(c => ({ value: c.id, label: c.title }))}
+              />
+              <div className="space-y-4">
+                <ChampField label="Desconto % (se já tem o Principal)" type="number" value={champ3DiscountWithPrincipalPercent} onChange={setChamp3DiscountWithPrincipalPercent} placeholder="Ex: 20" />
+                <ChampField label="Desconto % (se já tem Principal e 2)" type="number" value={champ3DiscountWithPrincipalAnd2Percent} onChange={setChamp3DiscountWithPrincipalAnd2Percent} placeholder="Ex: 25" />
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-slate-200">
+              <button
+                type="submit"
+                disabled={saving}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-6 py-3 rounded-xl font-bold transition cursor-pointer"
+              >
+                {saving ? 'Salvando...' : editingId ? 'Atualizar Pacote' : 'Cadastrar Pacote'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div className="space-y-3">
+          <h4 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider">Pacotes Cadastrados ({legacyMultiDiscounts.length})</h4>
+          {loading ? (
+            <p className="text-xs text-slate-400">Carregando...</p>
+          ) : legacyMultiDiscounts.length === 0 ? (
+            <p className="text-xs text-slate-400">Nenhum pacote de desconto cadastrado ainda.</p>
+          ) : (
+            <div className="space-y-2">
+              {legacyMultiDiscounts.map(d => (
+                <div key={d.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-2">
+                  <div className="flex justify-between items-start gap-2">
+                    <h5 className="font-bold text-slate-900 text-xs">{d.title}</h5>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => handleEdit(d)} className="p-1 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded transition cursor-pointer" title="Editar">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => handleDelete(d.id)} className="p-1 text-slate-500 hover:text-rose-600 hover:bg-slate-100 rounded transition cursor-pointer" title="Excluir">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-slate-600 space-y-1 font-mono">
+                    <div><strong className="font-sans text-slate-800">Principal:</strong> {getChamp(d.principalChampionshipId)?.title || d.principalChampionshipId} — {d.principalDiscountPercent}%</div>
+                    {d.champ2ChampionshipId && (
+                      <div><strong className="font-sans text-slate-800">Campeonato 2:</strong> {getChamp(d.champ2ChampionshipId)?.title || d.champ2ChampionshipId} — {d.champ2DiscountPercent ?? 0}% (precisa já ter o Principal)</div>
+                    )}
+                    {d.champ3ChampionshipId && (
+                      <div><strong className="font-sans text-slate-800">Campeonato 3:</strong> {getChamp(d.champ3ChampionshipId)?.title || d.champ3ChampionshipId} — {d.champ3DiscountWithPrincipalPercent ?? 0}% (só Principal) / {d.champ3DiscountWithPrincipalAnd2Percent ?? 0}% (Principal + 2)</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPanel({
   currentUser,
   championships,
@@ -6739,12 +6979,12 @@ export default function AdminPanel({
     return baseClubMembers.filter(m => {
       // 1. Text Search (name, CPF, email, CR, RG)
       if (memberSearchQuery.trim()) {
-        const q = memberSearchQuery.toLowerCase().trim();
-        const matchName = m.fullName?.toLowerCase().includes(q);
-        const matchCpf = m.cpf?.toLowerCase().includes(q);
-        const matchEmail = m.email?.toLowerCase().includes(q);
-        const matchCr = m.crNumber?.toLowerCase().includes(q);
-        const matchRg = m.rg?.toLowerCase().includes(q);
+        const q = normalizeSearchText(memberSearchQuery.trim());
+        const matchName = normalizeSearchText(m.fullName).includes(q);
+        const matchCpf = normalizeSearchText(m.cpf).includes(q);
+        const matchEmail = normalizeSearchText(m.email).includes(q);
+        const matchCr = normalizeSearchText(m.crNumber).includes(q);
+        const matchRg = normalizeSearchText(m.rg).includes(q);
         if (!matchName && !matchCpf && !matchEmail && !matchCr && !matchRg) return false;
       }
 
@@ -7372,7 +7612,7 @@ export default function AdminPanel({
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {championships
-                    .filter(champ => champ.title.toLowerCase().includes(clubeChampListSearchQuery.trim().toLowerCase()))
+                    .filter(champ => normalizeSearchText(champ.title).includes(normalizeSearchText(clubeChampListSearchQuery.trim())))
                     .map((champ) => {
                     const champRegs = registrations.filter(r => r.championshipId === champ.id);
                     const totalArrecadacao = champRegs.reduce((acc, r) => {
@@ -8435,9 +8675,6 @@ export default function AdminPanel({
           </div>
         );
 
-      case 'integracoes_sicoob':
-        return <SicoobPixManager currentUser={currentUser} />;
-
       default:
         return null;
     }
@@ -8540,9 +8777,9 @@ export default function AdminPanel({
               {clubs.length === 0 ? (
                 <p className="text-xs text-slate-400">Nenhum clube filiado cadastrado ainda.</p>
               ) : (() => {
-                const q = novoClubeListSearchQuery.trim().toLowerCase();
+                const q = normalizeSearchText(novoClubeListSearchQuery.trim());
                 const filteredClubs = q
-                  ? clubs.filter(c => c.name.toLowerCase().includes(q) || (c.cnpj || '').toLowerCase().includes(q))
+                  ? clubs.filter(c => normalizeSearchText(c.name).includes(q) || normalizeSearchText(c.cnpj).includes(q))
                   : clubs;
                 if (filteredClubs.length === 0) {
                   return <p className="text-xs text-slate-400">Nenhum clube encontrado para "{novoClubeListSearchQuery}".</p>;
@@ -8692,12 +8929,12 @@ export default function AdminPanel({
 
       case 'novo_atleta': {
         const filteredAthletes = (() => {
-          const q = athleteSearchQuery.trim().toLowerCase();
+          const q = normalizeSearchText(athleteSearchQuery.trim());
           const allMembers = users.filter(u => u.role === 'member');
           if (!q) return allMembers.slice(0, 30);
           const qDigits = q.replace(/\D/g, '');
           return allMembers.filter(u =>
-            u.fullName.toLowerCase().includes(q) ||
+            normalizeSearchText(u.fullName).includes(q) ||
             (qDigits && (u.cpf || '').replace(/\D/g, '').includes(qDigits))
           ).slice(0, 100);
         })();
@@ -9970,7 +10207,7 @@ export default function AdminPanel({
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     {championships
-                      .filter(champ => champ.title.toLowerCase().includes(champListSearchQuery.trim().toLowerCase()))
+                      .filter(champ => normalizeSearchText(champ.title).includes(normalizeSearchText(champListSearchQuery.trim())))
                       .map((champ) => {
                       const champRegs = registrations.filter(r => r.championshipId === champ.id);
                       const totalArrecadacao = champRegs.reduce((acc, r) => {
@@ -10221,11 +10458,11 @@ export default function AdminPanel({
                 </div>
 
                 {(() => {
-                  const q = stageListSearchQuery.trim().toLowerCase();
+                  const q = normalizeSearchText(stageListSearchQuery.trim());
                   const filteredStages = q
                     ? stages.filter(s =>
-                        s.title.toLowerCase().includes(q) ||
-                        (championships.find(c => c.id === s.championshipId)?.title || '').toLowerCase().includes(q)
+                        normalizeSearchText(s.title).includes(q) ||
+                        normalizeSearchText(championships.find(c => c.id === s.championshipId)?.title).includes(q)
                       )
                     : stages;
 
@@ -10549,6 +10786,9 @@ export default function AdminPanel({
           </div>
         );
       }
+
+      case 'multi_campeonato_legado':
+        return <LegacyMultiDiscountManager championships={championships} currentUser={currentUser} onRefreshData={onRefreshData} />;
 
       case 'consulta_inscricoes':
         return (
@@ -10960,6 +11200,9 @@ export default function AdminPanel({
       case 'integracoes_mercadopago':
         return <MercadoPagoManager currentUser={currentUser} />;
 
+      case 'integracoes_sicoob':
+        return <SicoobPixManager currentUser={currentUser} />;
+
       case 'idsc_campeonatos':
         return <IdscCampeonatosPanel currentUser={currentUser} />;
 
@@ -11027,10 +11270,10 @@ export default function AdminPanel({
               </div>
 
               {(() => {
-                const q = masterClubSearchQuery.trim().toLowerCase();
+                const q = normalizeSearchText(masterClubSearchQuery.trim());
                 const pendingClubs = clubs.filter(c => c.parentClubId === currentUser?.clubId && !c.isPremium);
                 const filteredPendingClubs = q
-                  ? pendingClubs.filter(c => c.name.toLowerCase().includes(q) || (c.cnpj || '').toLowerCase().includes(q))
+                  ? pendingClubs.filter(c => normalizeSearchText(c.name).includes(q) || normalizeSearchText(c.cnpj).includes(q))
                   : pendingClubs;
 
                 if (pendingClubs.length === 0) {
@@ -11310,8 +11553,7 @@ export default function AdminPanel({
                 { id: 'inscricao_clube', label: 'Inscrição Clube', icon: FileCheck },
                 { id: 'certificados', label: 'Certificados', icon: Award },
                 { id: 'cadastrar_membros', label: 'Cadastrar Membros', icon: UserPlus },
-                { id: 'relatorios_declaracoes', label: 'Relatórios e Declarações', icon: FileText },
-                { id: 'integracoes_sicoob', label: 'Integração Sicoob', icon: Landmark }
+                { id: 'relatorios_declaracoes', label: 'Relatórios e Declarações', icon: FileText }
               ].map((item) => {
                 const Icon = item.icon;
                 const active = clubeMenu === item.id;
@@ -11373,6 +11615,7 @@ export default function AdminPanel({
                     <button onClick={() => setPlataformaMenu('multi_campeonatos')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'multi_campeonatos' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Multi-campeonatos</button>
                     <button onClick={() => setPlataformaMenu('equipes_interclubes')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'equipes_interclubes' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Equipes Interclubes</button>
                     <button onClick={() => setPlataformaMenu('inscricoes_resumo')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'inscricoes_resumo' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Inscrições</button>
+                    <button onClick={() => setPlataformaMenu('multi_campeonato_legado')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'multi_campeonato_legado' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Multi-Campeonato Legado</button>
                   </div>
                 )}
               </div>
@@ -11447,6 +11690,7 @@ export default function AdminPanel({
                 </button>
                 {expandedSections.integracoes && (
                   <div className="pl-3 border-l border-slate-100 space-y-0.5 mt-1">
+                    <button onClick={() => setPlataformaMenu('integracoes_sicoob')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'integracoes_sicoob' ? 'text-blue-600 bg-blue-50/50 font-bold' : 'text-slate-650 hover:bg-slate-50'}`}>Sicoob</button>
                     <button onClick={() => setPlataformaMenu('integracoes_mercadopago')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'integracoes_mercadopago' ? 'text-blue-600 bg-blue-50/50 font-bold' : 'text-slate-650 hover:bg-slate-50'}`}>Mercado Pago</button>
                   </div>
                 )}
@@ -11688,13 +11932,13 @@ export default function AdminPanel({
                   });
 
                 const filteredRegs = modalRegs.filter(r => {
-                  const query = inscritosSearchQuery.toLowerCase();
+                  const query = normalizeSearchText(inscritosSearchQuery);
                   const isClub = Boolean(r.registeredByUserId && r.registeredByUserId !== r.userId);
                   const origemStr = isClub ? 'clube' : 'atleta';
                   return (
-                    r.athleteName.toLowerCase().includes(query) ||
-                    r.stageTitle.toLowerCase().includes(query) ||
-                    r.modalityName.toLowerCase().includes(query) ||
+                    normalizeSearchText(r.athleteName).includes(query) ||
+                    normalizeSearchText(r.stageTitle).includes(query) ||
+                    normalizeSearchText(r.modalityName).includes(query) ||
                     r.athleteCpf.includes(query) ||
                     origemStr.includes(query)
                   );

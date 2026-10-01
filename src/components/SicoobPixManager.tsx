@@ -4,6 +4,7 @@ import {
   Lock, Server, Key, Plus, QrCode, Check, X, Eye, FileText, Zap, Search
 } from 'lucide-react';
 import { QRCodeView } from './QRCodeView';
+import { normalizeSearchText } from '../utils/textSearch';
 
 interface SicoobConfig {
   sicoob_env: string;
@@ -244,13 +245,13 @@ export const SicoobPixManager: React.FC<{ currentUser?: any }> = ({ currentUser 
   const webhookUrl = `${window.location.origin}/api/webhooks/sicoob-pix`;
 
   const filteredCharges = charges.filter(c => {
-    const q = searchQuery.toLowerCase();
+    const q = normalizeSearchText(searchQuery);
     return (
-      c.txid.toLowerCase().includes(q) ||
-      (c.debtor_name && c.debtor_name.toLowerCase().includes(q)) ||
+      normalizeSearchText(c.txid).includes(q) ||
+      normalizeSearchText(c.debtor_name).includes(q) ||
       (c.debtor_cpf && c.debtor_cpf.includes(q)) ||
       c.amount.includes(q) ||
-      c.status.toLowerCase().includes(q)
+      normalizeSearchText(c.status).includes(q)
     );
   });
 

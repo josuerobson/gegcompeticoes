@@ -3,6 +3,7 @@ import { User, Club, Registration, Championship, StageScore, Stage, Modality } f
 import { Award, Search, Printer, CheckCircle2, QrCode, FileText, X, Filter } from 'lucide-react';
 import { TextElement } from './ClubTemplatesManager';
 import { QRCodeView } from './QRCodeView';
+import { normalizeSearchText } from '../utils/textSearch';
 
 interface ClubCertificatesViewerProps {
   currentUser: User | null;
@@ -454,13 +455,13 @@ export function ClubCertificatesViewer({
     }
 
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+      const q = normalizeSearchText(searchQuery);
       const athlete = users.find(u => u.id === r.userId);
-      const nameMatch = athlete?.fullName?.toLowerCase().includes(q);
-      const cpfMatch = athlete?.cpf?.toLowerCase().includes(q);
-      const crMatch = r.crNumber?.toLowerCase().includes(q) || athlete?.crNumber?.toLowerCase().includes(q);
-      const champMatch = getChampTitle(r.championshipId).toLowerCase().includes(q);
-      const modMatch = getModalityName(r.modalityId).toLowerCase().includes(q);
+      const nameMatch = normalizeSearchText(athlete?.fullName).includes(q);
+      const cpfMatch = normalizeSearchText(athlete?.cpf).includes(q);
+      const crMatch = normalizeSearchText(r.crNumber).includes(q) || normalizeSearchText(athlete?.crNumber).includes(q);
+      const champMatch = normalizeSearchText(getChampTitle(r.championshipId)).includes(q);
+      const modMatch = normalizeSearchText(getModalityName(r.modalityId)).includes(q);
 
       if (!nameMatch && !cpfMatch && !crMatch && !champMatch && !modMatch) {
         return false;

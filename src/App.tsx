@@ -4,6 +4,7 @@ import FeedView from './components/FeedView';
 import CardValidationView from './components/CardValidationView';
 import CertificateValidationView from './components/CertificateValidationView';
 import PaymentReturnView from './components/PaymentReturnView';
+import { normalizeSearchText } from './utils/textSearch';
 
 // Code-split: essas três telas não são a landing padrão (Feed é), então não
 // precisam entrar no bundle inicial — sobretudo o Painel Diretor (~10.500
@@ -2301,20 +2302,20 @@ export default function App() {
   // Filter posts or championships based on search string
   const filteredPostsForFeed = posts.filter(post => {
     if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    const matchesUser = post.username.toLowerCase().includes(query);
-    const matchesContent = post.content.toLowerCase().includes(query);
-    const matchesDiscipline = post.targetScore?.discipline.toLowerCase().includes(query) || false;
-    const matchesGun = post.targetScore?.gunModel.toLowerCase().includes(query) || false;
+    const query = normalizeSearchText(searchQuery);
+    const matchesUser = normalizeSearchText(post.username).includes(query);
+    const matchesContent = normalizeSearchText(post.content).includes(query);
+    const matchesDiscipline = normalizeSearchText(post.targetScore?.discipline).includes(query);
+    const matchesGun = normalizeSearchText(post.targetScore?.gunModel).includes(query);
     return matchesUser || matchesContent || matchesDiscipline || matchesGun;
   });
 
   const filteredChampionshipsList = sortedChampionshipsList.filter(champ => {
     if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    const matchesTitle = champ.title.toLowerCase().includes(query);
-    const matchesDesc = champ.description.toLowerCase().includes(query);
-    const matchesModalities = champ.modalities.some(m => m.toLowerCase().includes(query));
+    const query = normalizeSearchText(searchQuery);
+    const matchesTitle = normalizeSearchText(champ.title).includes(query);
+    const matchesDesc = normalizeSearchText(champ.description).includes(query);
+    const matchesModalities = champ.modalities.some(m => normalizeSearchText(m).includes(query));
     return matchesTitle || matchesDesc || matchesModalities;
   });
 

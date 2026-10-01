@@ -25,6 +25,21 @@ export async function initDB() {
   try {
     await client.query('BEGIN');
 
+    // Função auxiliar pra busca/filtro acento-insensível (minúsculas + sem
+    // acentos), usada nas buscas ILIKE do servidor (armas, membros). Evita
+    // depender da extensão `unaccent` (pode não estar disponível/permitida
+    // no Postgres gerenciado) — só translate()/lower(), funciona em
+    // qualquer instalação padrão. CREATE OR REPLACE é idempotente/aditivo.
+    await client.query(`
+      CREATE OR REPLACE FUNCTION unaccent_lower(text) RETURNS text AS $$
+        SELECT translate(
+          lower($1),
+          'áàâãäåéèêëíìîïóòôõöúùûüçñýÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑÝ',
+          'aaaaaaeeeeiiiiooooouuuucnyAAAAAAEEEEIIIIOOOOOUUUUCNY'
+        )
+      $$ LANGUAGE SQL IMMUTABLE;
+    `);
+
     // Create Tables
     await client.query(`
       CREATE TABLE IF NOT EXISTS clubs (
@@ -1495,6 +1510,31 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS annuity_tx_id TEXT,
         ADD COLUMN IF NOT EXISTS annuity_pix_copia_e_cola TEXT,
         ADD COLUMN IF NOT EXISTS annuity_paid_at TIMESTAMPTZ;
+    `);
+
+    // "Multi-Campeonato Legado": desconto progressivo por fidelidade dentro
+    // de um pacote de até 3 campeonatos (réplica de uma tela do sistema
+    // legado). Diferente de multi_championships (que é um pacote com
+    // inscrição única e valor combinado) — aqui cada campeonato é
+    // inscrito separadamente, e o desconto de cada um depende de o atleta
+    // já estar inscrito (basta estar inscrito, não precisa estar pago) nos
+    // campeonatos anteriores do mesmo pacote. Um campeonato pode aparecer
+    // em mais de um pacote (sem UNIQUE/FK de exclusividade).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS legacy_multi_discounts (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        club_id TEXT REFERENCES clubs(id) ON DELETE CASCADE,
+        principal_championship_id TEXT NOT NULL REFERENCES championships(id) ON DELETE CASCADE,
+        principal_discount_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
+        champ2_championship_id TEXT REFERENCES championships(id) ON DELETE CASCADE,
+        champ2_discount_percent NUMERIC(5,2),
+        champ3_championship_id TEXT REFERENCES championships(id) ON DELETE CASCADE,
+        champ3_discount_with_principal_percent NUMERIC(5,2),
+        champ3_discount_with_principal_and_2_percent NUMERIC(5,2),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL
+      );
     `);
 
     await client.query(`

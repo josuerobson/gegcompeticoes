@@ -5,7 +5,7 @@ import fs from 'fs';
 import compression from 'compression';
 import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
-import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, MultiChampionshipItem, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan, RankingHighlight, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult } from './src/types.js';
+import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, MultiChampionshipItem, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan, RankingHighlight, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult, LegacyMultiDiscount } from './src/types.js';
 import { pool, initDB } from './src/db.js';
 import { hashPassword, verifyPassword } from './src/auth.js';
 import { uploadDocument, getDocumentStream, storageEnabled } from './src/storage.js';
@@ -385,6 +385,22 @@ function mapMultiChampionship(m: any): MultiChampionship {
     whatsapp: m.whatsapp || undefined,
     status: (m.status as 'active' | 'inactive') || 'active',
     createdAt: m.created_at,
+  };
+}
+
+function mapLegacyMultiDiscount(d: any): LegacyMultiDiscount {
+  return {
+    id: d.id,
+    title: d.title,
+    clubId: d.club_id || undefined,
+    principalChampionshipId: d.principal_championship_id,
+    principalDiscountPercent: Number(d.principal_discount_percent) || 0,
+    champ2ChampionshipId: d.champ2_championship_id || undefined,
+    champ2DiscountPercent: d.champ2_discount_percent != null ? Number(d.champ2_discount_percent) : undefined,
+    champ3ChampionshipId: d.champ3_championship_id || undefined,
+    champ3DiscountWithPrincipalPercent: d.champ3_discount_with_principal_percent != null ? Number(d.champ3_discount_with_principal_percent) : undefined,
+    champ3DiscountWithPrincipalAnd2Percent: d.champ3_discount_with_principal_and_2_percent != null ? Number(d.champ3_discount_with_principal_and_2_percent) : undefined,
+    createdAt: d.created_at,
   };
 }
 
@@ -793,6 +809,107 @@ app.delete('/api/multi-championships/:id', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('Delete multi-championship error:', err);
     res.status(500).json({ error: 'Erro ao remover multicampeonato.' });
+  }
+});
+
+// ==========================================
+// MULTI-CAMPEONATO LEGADO — desconto progressivo por pacote (ver
+// computeLegacyMultiDiscountPercent, usado nas duas rotas de inscrição)
+// ==========================================
+app.get('/api/legacy-multi-discounts', async (req, res) => {
+  try {
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
+    const result = await pool.query(
+      'SELECT * FROM legacy_multi_discounts WHERE club_id = ANY($1) ORDER BY created_at DESC',
+      [visibleClubIds]
+    );
+    res.json({ legacyMultiDiscounts: result.rows.map(mapLegacyMultiDiscount) });
+  } catch (err) {
+    console.error('Fetch legacy multi discounts error:', err);
+    res.status(500).json({ error: 'Erro ao buscar pacotes de desconto.' });
+  }
+});
+
+app.post('/api/legacy-multi-discounts', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const {
+    title, principalChampionshipId, principalDiscountPercent,
+    champ2ChampionshipId, champ2DiscountPercent,
+    champ3ChampionshipId, champ3DiscountWithPrincipalPercent, champ3DiscountWithPrincipalAnd2Percent,
+  } = req.body;
+
+  if (!title || !principalChampionshipId) {
+    return res.status(400).json({ error: 'Título e Campeonato Principal são obrigatórios.' });
+  }
+  try {
+    const id = `lmd_${Date.now()}`;
+    const result = await pool.query(
+      `INSERT INTO legacy_multi_discounts (
+        id, title, club_id, principal_championship_id, principal_discount_percent,
+        champ2_championship_id, champ2_discount_percent,
+        champ3_championship_id, champ3_discount_with_principal_percent, champ3_discount_with_principal_and_2_percent,
+        created_by_user_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [
+        id, title, currentUser.clubId || DEFAULT_TENANT_ID, principalChampionshipId, Number(principalDiscountPercent) || 0,
+        champ2ChampionshipId || null, champ2DiscountPercent != null && champ2DiscountPercent !== '' ? Number(champ2DiscountPercent) : null,
+        champ3ChampionshipId || null,
+        champ3DiscountWithPrincipalPercent != null && champ3DiscountWithPrincipalPercent !== '' ? Number(champ3DiscountWithPrincipalPercent) : null,
+        champ3DiscountWithPrincipalAnd2Percent != null && champ3DiscountWithPrincipalAnd2Percent !== '' ? Number(champ3DiscountWithPrincipalAnd2Percent) : null,
+        currentUser.id,
+      ]
+    );
+    res.status(201).json({ legacyMultiDiscount: mapLegacyMultiDiscount(result.rows[0]) });
+  } catch (err) {
+    console.error('Create legacy multi discount error:', err);
+    res.status(500).json({ error: 'Erro ao cadastrar pacote de desconto.' });
+  }
+});
+
+app.put('/api/legacy-multi-discounts/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const {
+    title, principalChampionshipId, principalDiscountPercent,
+    champ2ChampionshipId, champ2DiscountPercent,
+    champ3ChampionshipId, champ3DiscountWithPrincipalPercent, champ3DiscountWithPrincipalAnd2Percent,
+  } = req.body;
+
+  if (!title || !principalChampionshipId) {
+    return res.status(400).json({ error: 'Título e Campeonato Principal são obrigatórios.' });
+  }
+  try {
+    const result = await pool.query(
+      `UPDATE legacy_multi_discounts SET
+        title=$1, principal_championship_id=$2, principal_discount_percent=$3,
+        champ2_championship_id=$4, champ2_discount_percent=$5,
+        champ3_championship_id=$6, champ3_discount_with_principal_percent=$7, champ3_discount_with_principal_and_2_percent=$8
+       WHERE id=$9 RETURNING *`,
+      [
+        title, principalChampionshipId, Number(principalDiscountPercent) || 0,
+        champ2ChampionshipId || null, champ2DiscountPercent != null && champ2DiscountPercent !== '' ? Number(champ2DiscountPercent) : null,
+        champ3ChampionshipId || null,
+        champ3DiscountWithPrincipalPercent != null && champ3DiscountWithPrincipalPercent !== '' ? Number(champ3DiscountWithPrincipalPercent) : null,
+        champ3DiscountWithPrincipalAnd2Percent != null && champ3DiscountWithPrincipalAnd2Percent !== '' ? Number(champ3DiscountWithPrincipalAnd2Percent) : null,
+        id,
+      ]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Pacote de desconto não encontrado.' });
+    res.json({ legacyMultiDiscount: mapLegacyMultiDiscount(result.rows[0]) });
+  } catch (err) {
+    console.error('Update legacy multi discount error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar pacote de desconto.' });
+  }
+});
+
+app.delete('/api/legacy-multi-discounts/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM legacy_multi_discounts WHERE id=$1', [id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete legacy multi discount error:', err);
+    res.status(500).json({ error: 'Erro ao remover pacote de desconto.' });
   }
 });
 
@@ -3616,6 +3733,49 @@ app.delete('/api/registrations/:id', requireAuth, async (req, res) => {
   }
 });
 
+// "Multi-Campeonato Legado": desconto de fidelidade aplicado no momento da
+// inscrição — não é uma inscrição combinada, é um % sobre o valor normal de
+// CADA inscrição separada, conforme o atleta já esteja inscrito (qualquer
+// payment_status, não precisa estar pago) nos campeonatos anteriores do
+// mesmo pacote. Um campeonato pode valer como "principal"/"2"/"3" em mais
+// de um pacote ao mesmo tempo — quando isso acontece, usamos o maior
+// desconto entre os pacotes aplicáveis.
+async function computeLegacyMultiDiscountPercent(userId: string, championshipId: string): Promise<number> {
+  const pkgRes = await pool.query(
+    `SELECT * FROM legacy_multi_discounts
+     WHERE principal_championship_id = $1 OR champ2_championship_id = $1 OR champ3_championship_id = $1`,
+    [championshipId]
+  );
+  if (pkgRes.rows.length === 0) return 0;
+
+  const relevantChampIds = new Set<string>();
+  pkgRes.rows.forEach(p => {
+    if (p.principal_championship_id) relevantChampIds.add(p.principal_championship_id);
+    if (p.champ2_championship_id) relevantChampIds.add(p.champ2_championship_id);
+  });
+  const existingRes = await pool.query(
+    `SELECT DISTINCT championship_id FROM registrations WHERE user_id = $1 AND championship_id = ANY($2::text[])`,
+    [userId, Array.from(relevantChampIds)]
+  );
+  const alreadyRegistered = new Set(existingRes.rows.map(r => r.championship_id));
+
+  let best = 0;
+  for (const pkg of pkgRes.rows) {
+    if (pkg.principal_championship_id === championshipId) {
+      best = Math.max(best, Number(pkg.principal_discount_percent) || 0);
+    }
+    if (pkg.champ2_championship_id === championshipId && alreadyRegistered.has(pkg.principal_championship_id)) {
+      best = Math.max(best, Number(pkg.champ2_discount_percent) || 0);
+    }
+    if (pkg.champ3_championship_id === championshipId && alreadyRegistered.has(pkg.principal_championship_id)) {
+      const hasChamp2 = pkg.champ2_championship_id && alreadyRegistered.has(pkg.champ2_championship_id);
+      const discount = hasChamp2 ? pkg.champ3_discount_with_principal_and_2_percent : pkg.champ3_discount_with_principal_percent;
+      best = Math.max(best, Number(discount) || 0);
+    }
+  }
+  return best;
+}
+
 app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
   const championshipId = req.params.id;
   const { modalityId, stageId, weaponId, crNumber, paymentMethod } = req.body;
@@ -3655,9 +3815,13 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
 
     const isReinscricao = alreadyRegisteredRes.rows.length > 0;
     const registrationType = isReinscricao ? 'reinscrição' : 'normal';
-    const valorPago = isReinscricao
+    const baseValorPago = isReinscricao
       ? (champ.valorReinscricao ?? champ.registrationFee)
       : (champ.valorInscricaoIndividual ?? champ.registrationFee);
+    const legacyDiscountPercent = await computeLegacyMultiDiscountPercent(currentUser.id, championshipId);
+    const valorPago = legacyDiscountPercent > 0
+      ? Number((Number(baseValorPago) * (1 - legacyDiscountPercent / 100)).toFixed(2))
+      : baseValorPago;
     const dataPagamento = new Date().toISOString().split('T')[0];
 
     const sicoobConfig = champ.clubId ? await getSicoobConfig(pool, champ.clubId) : null;
@@ -4250,7 +4414,9 @@ app.get('/api/weapons/search', requireAuth, async (req, res) => {
         `SELECT w.*, u.full_name as owner_name, c.name as club_name FROM weapons w
          LEFT JOIN users u ON u.id = w.owner_id
          LEFT JOIN clubs c ON c.id = u.club_id OR c.id = w.owner_id
-         WHERE w.sigma_number ILIKE $1 OR w.weapon_number ILIKE $1 OR w.model ILIKE $1 OR w.manufacturer ILIKE $1 OR w.caliber ILIKE $1 OR w.class ILIKE $1 OR u.full_name ILIKE $1
+         WHERE unaccent_lower(w.sigma_number) LIKE unaccent_lower($1) OR unaccent_lower(w.weapon_number) LIKE unaccent_lower($1)
+           OR unaccent_lower(w.model) LIKE unaccent_lower($1) OR unaccent_lower(w.manufacturer) LIKE unaccent_lower($1)
+           OR unaccent_lower(w.caliber) LIKE unaccent_lower($1) OR unaccent_lower(w.class) LIKE unaccent_lower($1) OR unaccent_lower(u.full_name) LIKE unaccent_lower($1)
          ORDER BY w.model, w.manufacturer LIMIT 30`,
         [searchPattern]
       );
@@ -4263,7 +4429,9 @@ app.get('/api/weapons/search', requireAuth, async (req, res) => {
          LEFT JOIN users u ON u.id = w.owner_id
          LEFT JOIN clubs c ON c.id = u.club_id OR c.id = w.owner_id
          WHERE (w.owner_id = $1 OR w.owner_id = $2 OR u.club_id = $2 OR $2 = '') AND (
-           w.sigma_number ILIKE $3 OR w.weapon_number ILIKE $3 OR w.model ILIKE $3 OR w.manufacturer ILIKE $3 OR w.caliber ILIKE $3 OR w.class ILIKE $3 OR u.full_name ILIKE $3
+           unaccent_lower(w.sigma_number) LIKE unaccent_lower($3) OR unaccent_lower(w.weapon_number) LIKE unaccent_lower($3)
+           OR unaccent_lower(w.model) LIKE unaccent_lower($3) OR unaccent_lower(w.manufacturer) LIKE unaccent_lower($3)
+           OR unaccent_lower(w.caliber) LIKE unaccent_lower($3) OR unaccent_lower(w.class) LIKE unaccent_lower($3) OR unaccent_lower(u.full_name) LIKE unaccent_lower($3)
          )
          ORDER BY w.model, w.manufacturer LIMIT 30`,
         [currentUser.id, targetClubId, searchPattern]
@@ -4410,9 +4578,13 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
         const userRes = await client.query('SELECT club_id FROM users WHERE id = $1', [athlete.userId]);
         const clubId = userRes.rows[0]?.club_id || currentUser.clubId;
 
-        const valorPago = isReinscricao
+        const baseValorPago = isReinscricao
           ? (champ.valorReinscricao ?? champ.registrationFee)
           : (champ.valorInscricaoClube ?? champ.registrationFee);
+        const legacyDiscountPercent = await computeLegacyMultiDiscountPercent(athlete.userId, championshipId);
+        const valorPago = legacyDiscountPercent > 0
+          ? Number((Number(baseValorPago) * (1 - legacyDiscountPercent / 100)).toFixed(2))
+          : baseValorPago;
         const dataPagamento = new Date().toISOString().split('T')[0];
         const regId = `reg_${Date.now()}_${athlete.userId.slice(-4)}`;
 
@@ -5178,7 +5350,7 @@ app.get('/api/members/search', requireAdmin, async (req, res) => {
       const r = await pool.query(
         `SELECT id, full_name, cpf, cr_number FROM users
          WHERE role = 'member'
-           AND (regexp_replace(cpf, '[^0-9]', '', 'g') ILIKE $1 OR full_name ILIKE $2)
+           AND (regexp_replace(cpf, '[^0-9]', '', 'g') ILIKE $1 OR unaccent_lower(full_name) LIKE unaccent_lower($2))
          ORDER BY full_name LIMIT 8`,
         [term, nameTerm]
       );
@@ -5187,7 +5359,7 @@ app.get('/api/members/search', requireAdmin, async (req, res) => {
       const r = await pool.query(
         `SELECT id, full_name, cpf, cr_number FROM users
          WHERE role = 'member' AND club_id = $1
-           AND (regexp_replace(cpf, '[^0-9]', '', 'g') ILIKE $2 OR full_name ILIKE $3)
+           AND (regexp_replace(cpf, '[^0-9]', '', 'g') ILIKE $2 OR unaccent_lower(full_name) LIKE unaccent_lower($3))
          ORDER BY full_name LIMIT 8`,
         [currentUser.clubId, term, nameTerm]
       );
@@ -6754,15 +6926,21 @@ function maskSicoobSecret(value: string): string {
   return `${value.slice(0, 4)}••••${value.slice(-4)}`;
 }
 
-// A integração Sicoob é por clube/tenant (cada clube usa sua própria conta
-// bancária) — quem gerencia é o club_admin dono daquele clube, com o
-// master_admin mantendo acesso de suporte a qualquer clube (mesmo padrão já
-// usado em PATCH /api/clubs/:id). Sem seletor de clube na tela: o alvo é
-// sempre o próprio currentUser.clubId (mesmo padrão de annuity_plans).
-function resolveSicoobClubId(currentUser: User): { clubId: string | null; allowed: boolean } {
+// A integração Sicoob é por franquia/tenant — só a franquia dona do tenant
+// tem conta bancária de verdade (clubes filiados nunca têm conta própria,
+// confirmado na arquitetura do Financeiro da Franquia: faturas e anuidades
+// sempre cobram contra o Sicoob da franquia via getFranchiseClubId, nunca
+// do filiado). Por isso só o club_admin da própria raiz da franquia (ou
+// master_admin, como suporte) pode ver/editar essa integração — um filiado
+// configurar a própria não teria efeito nenhum no sistema, e geraria
+// confusão. Sem seletor de clube na tela: o alvo é sempre o próprio
+// currentUser.clubId.
+async function resolveSicoobClubId(currentUser: User): Promise<{ clubId: string | null; allowed: boolean }> {
   const isMaster = currentUser.role === 'master_admin';
-  const isOwnClubAdmin = currentUser.role === 'club_admin' && !!currentUser.clubId;
-  return { clubId: currentUser.clubId || null, allowed: isMaster || isOwnClubAdmin };
+  if (isMaster) return { clubId: currentUser.clubId || null, allowed: true };
+  const isFranchiseRootAdmin = currentUser.role === 'club_admin' && !!currentUser.clubId
+    && (await getFranchiseClubId(currentUser.clubId)) === currentUser.clubId;
+  return { clubId: currentUser.clubId || null, allowed: isFranchiseRootAdmin };
 }
 
 // Get Sicoob PIX API config — restrito ao club_admin do próprio clube (ou
@@ -6771,7 +6949,7 @@ function resolveSicoobClubId(currentUser: User): { clubId: string | null; allowe
 app.get('/api/admin/sicoob/config', requireAuth, async (req, res) => {
   try {
     const currentUser = (req as any).user as User;
-    const { clubId, allowed } = resolveSicoobClubId(currentUser);
+    const { clubId, allowed } = await resolveSicoobClubId(currentUser);
     if (!allowed || !clubId) {
       return res.status(403).json({ error: 'Apenas o administrador do clube ou o Administrador Master podem gerenciar esta integração.' });
     }
@@ -6801,7 +6979,7 @@ app.get('/api/admin/sicoob/config', requireAuth, async (req, res) => {
 app.post('/api/admin/sicoob/config', requireAuth, async (req, res) => {
   try {
     const currentUser = (req as any).user as User;
-    const { clubId, allowed } = resolveSicoobClubId(currentUser);
+    const { clubId, allowed } = await resolveSicoobClubId(currentUser);
     if (!allowed || !clubId) {
       return res.status(403).json({ error: 'Apenas o administrador do clube ou o Administrador Master podem gerenciar esta integração.' });
     }
@@ -6834,7 +7012,7 @@ app.post('/api/admin/sicoob/config', requireAuth, async (req, res) => {
 app.post('/api/admin/sicoob/test-token', requireAuth, async (req, res) => {
   try {
     const currentUser = (req as any).user as User;
-    const { clubId, allowed } = resolveSicoobClubId(currentUser);
+    const { clubId, allowed } = await resolveSicoobClubId(currentUser);
     if (!allowed || !clubId) {
       return res.status(403).json({ success: false, error: 'Apenas o administrador do clube ou o Administrador Master podem gerenciar esta integração.' });
     }
@@ -6862,7 +7040,7 @@ app.post('/api/admin/sicoob/test-token', requireAuth, async (req, res) => {
 app.post('/api/admin/sicoob/register-webhook', requireAuth, async (req, res) => {
   try {
     const currentUser = (req as any).user as User;
-    const { clubId, allowed } = resolveSicoobClubId(currentUser);
+    const { clubId, allowed } = await resolveSicoobClubId(currentUser);
     if (!allowed || !clubId) {
       return res.status(403).json({ success: false, error: 'Apenas o administrador do clube ou o Administrador Master podem gerenciar esta integração.' });
     }
