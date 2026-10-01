@@ -658,6 +658,27 @@ const requireMasterAdmin = (req: express.Request, res: express.Response, next: e
   next();
 };
 
+// Estrutura de competições (campeonatos, etapas, modalidades, multicampeonatos)
+// e planos de anuidade só podem ser criados/editados pela franquia dona do
+// tenant (ou master_admin) — nunca por um clube filiado, mesmo sobre o que
+// seria "seus próprios" dados. Filiados só inscrevem atletas e consultam;
+// quem desenha a estrutura é sempre quem está em Gerenciamento Plataforma.
+// getFranchiseClubId está definida mais abaixo no arquivo, mas como esta é
+// uma function declaration (hoisted) e só é chamada em tempo de requisição
+// (bem depois do módulo terminar de carregar), a ordem aqui não importa.
+const requireFranchiseAdmin = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const currentUser = (req as any).user as User | undefined;
+  if (!currentUser) {
+    return res.status(401).json({ error: 'Acesso não autorizado. Por favor entre com sua conta.' });
+  }
+  if (currentUser.role === 'master_admin') return next();
+  if (currentUser.role === 'club_admin' && currentUser.clubId) {
+    const franchiseId = await getFranchiseClubId(currentUser.clubId);
+    if (franchiseId === currentUser.clubId) return next();
+  }
+  return res.status(403).json({ error: 'Apenas a franquia dona do tenant ou o Administrador Master podem gerenciar campeonatos, etapas, modalidades, multicampeonatos e planos de anuidade.' });
+};
+
 // ─── Multi-tenancy: resolução de tenant por subdomínio ─────────────────────
 // Cada clube "premium" (ativado) é isolado: nada de campeonatos, modalidades,
 // atletas, feed ou catálogo de armas é compartilhado entre tenants. Clubes
@@ -751,7 +772,7 @@ app.get('/api/multi-championships', async (req, res) => {
 });
 
 // POST /api/multi-championships — cria (admin only)
-app.post('/api/multi-championships', requireAdmin, async (req, res) => {
+app.post('/api/multi-championships', requireFranchiseAdmin, async (req, res) => {
   const { title, description, items, championshipIds: rawChampionshipIds, registrationFee, clubRegistrationFee, pixKey, pixType, pixName, whatsapp, status } = req.body;
   
   const validItems: MultiChampionshipItem[] = Array.isArray(items) ? items.filter(it => it && it.championshipId && it.stageId) : [];
@@ -777,7 +798,7 @@ app.post('/api/multi-championships', requireAdmin, async (req, res) => {
 });
 
 // PUT /api/multi-championships/:id — atualiza (admin only)
-app.put('/api/multi-championships/:id', requireAdmin, async (req, res) => {
+app.put('/api/multi-championships/:id', requireFranchiseAdmin, async (req, res) => {
   const { id } = req.params;
   const { title, description, items, championshipIds: rawChampionshipIds, registrationFee, clubRegistrationFee, pixKey, pixType, pixName, whatsapp, status } = req.body;
   const validItems: MultiChampionshipItem[] = Array.isArray(items) ? items.filter(it => it && it.championshipId && it.stageId) : [];
@@ -801,7 +822,7 @@ app.put('/api/multi-championships/:id', requireAdmin, async (req, res) => {
 });
 
 // DELETE /api/multi-championships/:id — remove (admin only)
-app.delete('/api/multi-championships/:id', requireAdmin, async (req, res) => {
+app.delete('/api/multi-championships/:id', requireFranchiseAdmin, async (req, res) => {
   const { id } = req.params;
   try {
     await pool.query('DELETE FROM multi_championships WHERE id=$1', [id]);
@@ -3430,7 +3451,7 @@ const CHAMPIONSHIP_EXTRA_COLUMNS: Record<string, string> = {
   rankingPositions: 'ranking_positions',
 };
 
-app.post('/api/championships', requireAdmin, async (req, res) => {
+app.post('/api/championships', requireFranchiseAdmin, async (req, res) => {
   const { title, description, startDate, endDate, registrationFee, modalities, stagesCount, bannerUrl, clubId, type } = req.body;
   const currentUser = (req as any).user as User;
 
@@ -3445,7 +3466,7 @@ app.post('/api/championships', requireAdmin, async (req, res) => {
     JSON.stringify(Array.isArray(modalities) ? modalities : [modalities]),
     Number(stagesCount), 'open',
     bannerUrl || 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80',
-    clubId || currentUser.clubId || DEFAULT_TENANT_ID, type === 'clube' ? 'clube' : 'individual'
+    (currentUser.role === 'master_admin' && clubId) || currentUser.clubId || DEFAULT_TENANT_ID, type === 'clube' ? 'clube' : 'individual'
   ];
 
   for (const [key, column] of Object.entries(CHAMPIONSHIP_EXTRA_COLUMNS)) {
@@ -3466,7 +3487,7 @@ app.post('/api/championships', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/championships/:id/status', requireAdmin, async (req, res) => {
+app.post('/api/championships/:id/status', requireFranchiseAdmin, async (req, res) => {
   const { status } = req.body;
   const champId = req.params.id;
 
@@ -3494,7 +3515,7 @@ app.post('/api/championships/:id/status', requireAdmin, async (req, res) => {
 
 // Lightweight toggle for the feed's ranking highlight card — doesn't require resending
 // the whole championship form, just whether it's on and which placements to show.
-app.post('/api/championships/:id/ranking', requireAdmin, async (req, res) => {
+app.post('/api/championships/:id/ranking', requireFranchiseAdmin, async (req, res) => {
   const { rankingEnabled, rankingPositions } = req.body;
   const champId = req.params.id;
 
@@ -3516,7 +3537,7 @@ app.post('/api/championships/:id/ranking', requireAdmin, async (req, res) => {
   }
 });
 
-app.put('/api/championships/:id', requireAdmin, async (req, res) => {
+app.put('/api/championships/:id', requireFranchiseAdmin, async (req, res) => {
   const champId = req.params.id;
   const { title, description, startDate, endDate, registrationFee, modalities, stagesCount, bannerUrl } = req.body;
 
@@ -3559,7 +3580,7 @@ app.put('/api/championships/:id', requireAdmin, async (req, res) => {
   }
 });
 
-app.delete('/api/championships/:id', requireAdmin, async (req, res) => {
+app.delete('/api/championships/:id', requireFranchiseAdmin, async (req, res) => {
   const championshipId = req.params.id;
   try {
     const regsCheck = await pool.query('SELECT COUNT(*) FROM registrations WHERE championship_id = $1', [championshipId]);
@@ -3973,7 +3994,7 @@ app.get('/api/modalities', async (req, res) => {
   }
 });
 
-app.post('/api/modalities', requireAdmin, async (req, res) => {
+app.post('/api/modalities', requireFranchiseAdmin, async (req, res) => {
   const { name, seriesCount, shotsPerSeries, timePerSeriesMinutes, evaluationType } = req.body;
   const currentUser = (req as any).user as User;
   if (!name) {
@@ -3994,7 +4015,7 @@ app.post('/api/modalities', requireAdmin, async (req, res) => {
   }
 });
 
-app.delete('/api/modalities/:id', requireAdmin, async (req, res) => {
+app.delete('/api/modalities/:id', requireFranchiseAdmin, async (req, res) => {
   try {
     const result = await pool.query('DELETE FROM modalities WHERE id = $1 RETURNING id', [req.params.id]);
     if (result.rows.length === 0) {
@@ -4050,7 +4071,7 @@ const STAGE_EXTRA_COLUMNS: Record<string, string> = {
   rankingPositions: 'ranking_positions',
 };
 
-app.post('/api/stages', requireAdmin, async (req, res) => {
+app.post('/api/stages', requireFranchiseAdmin, async (req, res) => {
   const { championshipId, title, date } = req.body;
   if (!championshipId || !title || !date) {
     return res.status(400).json({ error: 'Selecione o campeonato, título e data de início.' });
@@ -4088,7 +4109,7 @@ app.post('/api/stages', requireAdmin, async (req, res) => {
 
 // Lightweight toggle for the feed's ranking highlight card — see the equivalent
 // championship endpoint above for why this is separate from the full PUT.
-app.post('/api/stages/:id/ranking', requireAdmin, async (req, res) => {
+app.post('/api/stages/:id/ranking', requireFranchiseAdmin, async (req, res) => {
   const { rankingEnabled, rankingPositions } = req.body;
   const stageId = req.params.id;
 
@@ -4110,7 +4131,7 @@ app.post('/api/stages/:id/ranking', requireAdmin, async (req, res) => {
   }
 });
 
-app.put('/api/stages/:id', requireAdmin, async (req, res) => {
+app.put('/api/stages/:id', requireFranchiseAdmin, async (req, res) => {
   const stageId = req.params.id;
   const { title, date } = req.body;
   if (!title || !date) {
@@ -4145,7 +4166,7 @@ app.put('/api/stages/:id', requireAdmin, async (req, res) => {
   }
 });
 
-app.delete('/api/stages/:id', requireAdmin, async (req, res) => {
+app.delete('/api/stages/:id', requireFranchiseAdmin, async (req, res) => {
   try {
     const result = await pool.query('DELETE FROM stages WHERE id = $1 RETURNING id', [req.params.id]);
     if (result.rows.length === 0) {
@@ -6586,10 +6607,17 @@ app.get('/api/ammo/athlete-balances/:userId', requireAuth, async (req, res) => {
 // ANNUITY PLANS (Planos de Anuidade)
 // ==========================================
 
-// GET /api/annuity-plans — Lista todos os planos de anuidade
+// GET /api/annuity-plans — Lista os planos de anuidade do tenant (um
+// filiado precisa ler a lista pra vincular um plano a um atleta em
+// Cadastrar Membros, mesmo não podendo criar/editar planos).
 app.get('/api/annuity-plans', async (req, res) => {
   try {
-    const r = await pool.query('SELECT * FROM annuity_plans ORDER BY price ASC, name ASC');
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
+    const r = await pool.query(
+      'SELECT * FROM annuity_plans WHERE club_id = ANY($1) OR club_id IS NULL ORDER BY price ASC, name ASC',
+      [visibleClubIds]
+    );
     const plans: AnnuityPlan[] = r.rows.map(mapAnnuityPlan);
     res.json({ plans });
   } catch (err) {
@@ -6599,7 +6627,7 @@ app.get('/api/annuity-plans', async (req, res) => {
 });
 
 // POST /api/annuity-plans — Cria novo plano de anuidade
-app.post('/api/annuity-plans', requireAdmin, async (req, res) => {
+app.post('/api/annuity-plans', requireFranchiseAdmin, async (req, res) => {
   const currentUser = (req as any).user as User;
   const { name, price, description } = req.body;
   if (!name || price === undefined || price === null || Number(price) < 0) {
@@ -6624,7 +6652,7 @@ app.post('/api/annuity-plans', requireAdmin, async (req, res) => {
 });
 
 // PUT /api/annuity-plans/:id — Atualiza plano de anuidade
-app.put('/api/annuity-plans/:id', requireAdmin, async (req, res) => {
+app.put('/api/annuity-plans/:id', requireFranchiseAdmin, async (req, res) => {
   const { id } = req.params;
   const { name, price, description } = req.body;
 
@@ -6648,7 +6676,7 @@ app.put('/api/annuity-plans/:id', requireAdmin, async (req, res) => {
 });
 
 // DELETE /api/annuity-plans/:id — Exclui plano de anuidade
-app.delete('/api/annuity-plans/:id', requireAdmin, async (req, res) => {
+app.delete('/api/annuity-plans/:id', requireFranchiseAdmin, async (req, res) => {
   const { id } = req.params;
   try {
     await pool.query('UPDATE users SET annuity_plan_id = NULL WHERE annuity_plan_id = $1', [id]);

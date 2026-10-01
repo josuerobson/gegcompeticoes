@@ -5495,9 +5495,14 @@ interface MultiChampionshipsManagerProps {
   multiChampionships?: MultiChampionship[];
   currentUser: User | null;
   onRefreshData?: () => Promise<void>;
+  // Só a franquia (Gerenciamento Plataforma) pode criar/editar/excluir —
+  // em Gerenciamento Clube (qualquer clube, inclusive filiado) a mesma
+  // lista aparece só para consulta. Backend já bloqueia via
+  // requireFranchiseAdmin; isto evita mostrar botões que dariam 403.
+  readOnly?: boolean;
 }
 
-function MultiChampionshipsManager({ championships, stages, multiChampionships = [], currentUser, onRefreshData }: MultiChampionshipsManagerProps) {
+function MultiChampionshipsManager({ championships, stages, multiChampionships = [], currentUser, onRefreshData, readOnly = false }: MultiChampionshipsManagerProps) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -5665,21 +5670,27 @@ function MultiChampionshipsManager({ championships, stages, multiChampionships =
         <div className="flex justify-between items-center pb-3 border-b border-slate-100">
           <div>
             <h3 className="font-display font-bold text-slate-900 text-base">Gerenciamento de Multi-campeonatos</h3>
-            <p className="text-xs text-slate-400">Crie ofertas e pacotes de campeonatos vinculando etapas específicas com valor único de inscrição.</p>
+            <p className="text-xs text-slate-400">
+              {readOnly
+                ? 'Consulta das ofertas de multicampeonato vigentes. Criar, editar ou excluir é feito só pela franquia em Gerenciamento Plataforma.'
+                : 'Crie ofertas e pacotes de campeonatos vinculando etapas específicas com valor único de inscrição.'}
+            </p>
           </div>
-          <button
-            onClick={() => { if (showForm) resetForm(); else setShowForm(true); }}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
-          >
-            {showForm ? <X className="w-4 h-4" /> : <PlusCircle className="w-4 h-4" />}
-            {showForm ? 'Cancelar' : 'Novo Multi-campeonato'}
-          </button>
+          {!readOnly && (
+            <button
+              onClick={() => { if (showForm) resetForm(); else setShowForm(true); }}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+            >
+              {showForm ? <X className="w-4 h-4" /> : <PlusCircle className="w-4 h-4" />}
+              {showForm ? 'Cancelar' : 'Novo Multi-campeonato'}
+            </button>
+          )}
         </div>
 
         {success && <div className="bg-emerald-50 text-emerald-700 p-3 rounded-xl text-xs font-semibold flex items-center gap-1.5"><CheckCircle className="w-4 h-4" />{success}</div>}
         {error && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{error}</div>}
 
-        {showForm && (
+        {!readOnly && showForm && (
           <form onSubmit={handleSubmit} className="bg-slate-50/70 p-5 border border-slate-200 rounded-2xl space-y-4">
             <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wider">
               {editingId ? 'Editar Oferta de Multi-campeonato' : 'Cadastrar Nova Oferta de Multi-campeonato'}
@@ -5895,7 +5906,7 @@ function MultiChampionshipsManager({ championships, stages, multiChampionships =
           <h4 className="font-bold text-xs text-slate-700 uppercase tracking-wider">Multicampeonatos Cadastrados ({multiChampionships.length})</h4>
           {multiChampionships.length === 0 ? (
             <div className="text-center py-8 text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
-              Nenhum multicampeonato cadastrado ainda. Crie a primeira oferta clicando no botão acima.
+              {readOnly ? 'Nenhum multicampeonato cadastrado ainda.' : 'Nenhum multicampeonato cadastrado ainda. Crie a primeira oferta clicando no botão acima.'}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3">
@@ -5915,22 +5926,24 @@ function MultiChampionshipsManager({ championships, stages, multiChampionships =
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="font-extrabold text-blue-700 text-sm">R$ {Number(m.registrationFee).toFixed(2)}</span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => handleEdit(m)}
-                            className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
-                            title="Editar"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(m.id)}
-                            className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                            title="Excluir"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                        {!readOnly && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleEdit(m)}
+                              className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                              title="Editar"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(m.id)}
+                              className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                              title="Excluir"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -7607,7 +7620,6 @@ export default function AdminPanel({
                     <th className="py-3 px-2 text-center">Etapas</th>
                     <th className="py-3 px-2 text-center">Inscritos</th>
                     <th className="py-3 px-2 text-center">Arrecadação</th>
-                    <th className="py-3 px-2 text-center">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -7651,27 +7663,6 @@ export default function AdminPanel({
                         <td className="py-3 px-2 text-center font-bold font-mono text-emerald-600">
                           R$ {totalArrecadacao.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td className="py-3 px-2 text-center">
-                          <div className="flex justify-center items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                if (confirm(`Deseja realmente excluir o campeonato "${champ.title}"?\nEsta ação é irreversível e excluirá as etapas vazias vinculadas.`)) {
-                                  try {
-                                    await onRemoveChampionship(champ.id);
-                                    alert('Campeonato excluído com sucesso!');
-                                  } catch (err: any) {
-                                    alert(err.message || 'Erro ao excluir campeonato.');
-                                  }
-                                }
-                              }}
-                              className="text-red-500 hover:text-red-700 transition p-1.5 hover:bg-red-50 rounded-lg cursor-pointer inline-flex items-center justify-center"
-                              title="Excluir Campeonato"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
                       </tr>
                     );
                   })}
@@ -7689,6 +7680,7 @@ export default function AdminPanel({
             multiChampionships={multiChampionships}
             currentUser={currentUser}
             onRefreshData={onRefreshData}
+            readOnly
           />
         );
 
