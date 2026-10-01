@@ -2149,6 +2149,106 @@ app.post('/api/admin/import/legacy', requireMasterAdmin, async (req, res) => {
   }
 });
 
+// Endpoint avulso (remover depois de usar, mesmo padrão já usado neste
+// arquivo pra outras importações pontuais do legado): backfill de senha
+// pra clubes e membros já importados em 29/08, que vieram sem login
+// (login de clube só era criado se o CNPJ já estivesse presente na hora
+// da importação original — e a senha do legado nunca foi migrada pros
+// membros). Só mexe em password_hash — nada mais do cadastro é tocado.
+// Senha chega em texto puro (vinda do campo info31 do legado, que não usa
+// criptografia nenhuma) e é hasheada aqui mesmo (hashPassword, scrypt),
+// nunca persistida nem logada em texto puro.
+app.post('/api/admin/import/legacy-passwords', requireMasterAdmin, async (req, res) => {
+  const { clubs, members } = req.body as {
+    clubs?: Array<{ legacyId: number; password: string }>;
+    members?: Array<{ legacyId: number; password: string }>;
+  };
+
+  if (!Array.isArray(clubs) && !Array.isArray(members)) {
+    return res.status(400).json({ error: 'Payload deve conter ao menos um array "clubs" ou "members".' });
+  }
+
+  // Trava de segurança redundante: nunca mexe nessas duas contas mesmo que
+  // apareçam no payload por engano.
+  const EXCLUDED_CLUB_LEGACY_ID = 1001;
+  const EXCLUDED_MEMBER_LEGACY_ID = 1017;
+
+  const clubResults: Array<{ legacyId: number; status: string }> = [];
+  const memberResults: Array<{ legacyId: number; status: string }> = [];
+
+  for (const c of clubs || []) {
+    if (c.legacyId === EXCLUDED_CLUB_LEGACY_ID) {
+      clubResults.push({ legacyId: c.legacyId, status: 'skipped_excluded' });
+      continue;
+    }
+    if (!c.password) {
+      clubResults.push({ legacyId: c.legacyId, status: 'skipped_no_password' });
+      continue;
+    }
+    try {
+      const clubRes = await pool.query('SELECT id, cnpj, name FROM clubs WHERE legacy_id = $1', [c.legacyId]);
+      if (clubRes.rows.length === 0) {
+        clubResults.push({ legacyId: c.legacyId, status: 'club_not_found' });
+        continue;
+      }
+      const club = clubRes.rows[0];
+      const passwordHash = hashPassword(c.password);
+
+      const adminRes = await pool.query(`SELECT id FROM users WHERE club_id = $1 AND role = 'club_admin' LIMIT 1`, [club.id]);
+      if (adminRes.rows.length > 0) {
+        await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, adminRes.rows[0].id]);
+        clubResults.push({ legacyId: c.legacyId, status: 'password_updated' });
+      } else {
+        if (!club.cnpj) {
+          clubResults.push({ legacyId: c.legacyId, status: 'club_missing_cnpj' });
+          continue;
+        }
+        const adminUserId = `user_legacy_club_${c.legacyId}`;
+        const username = await uniqueUsername(pool, slugify(club.name));
+        await pool.query(
+          `INSERT INTO users (id, email, username, full_name, avatar_url, bio, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, cpf, password_hash)
+           VALUES ($1,$2,$3,$4,$5,$6,true,$7,'club_admin',false,$8,true,$9,$10)
+           ON CONFLICT (id) DO UPDATE SET password_hash = EXCLUDED.password_hash`,
+          [adminUserId, `${club.id}@club.gegcompeticoes.com.br`, username, club.name, DEFAULT_AVATAR,
+           `Administrador do clube ${club.name}.`, new Date().toISOString().split('T')[0], club.id, club.cnpj, passwordHash]
+        );
+        clubResults.push({ legacyId: c.legacyId, status: 'admin_created' });
+      }
+    } catch (err: any) {
+      clubResults.push({ legacyId: c.legacyId, status: `error: ${err.message}` });
+    }
+  }
+
+  for (const m of members || []) {
+    if (m.legacyId === EXCLUDED_MEMBER_LEGACY_ID) {
+      memberResults.push({ legacyId: m.legacyId, status: 'skipped_excluded' });
+      continue;
+    }
+    if (!m.password) {
+      memberResults.push({ legacyId: m.legacyId, status: 'skipped_no_password' });
+      continue;
+    }
+    try {
+      const passwordHash = hashPassword(m.password);
+      const result = await pool.query(
+        `UPDATE users SET password_hash = $1 WHERE legacy_id = $2 RETURNING id`,
+        [passwordHash, m.legacyId]
+      );
+      memberResults.push({ legacyId: m.legacyId, status: result.rows.length > 0 ? 'password_updated' : 'member_not_found' });
+    } catch (err: any) {
+      memberResults.push({ legacyId: m.legacyId, status: `error: ${err.message}` });
+    }
+  }
+
+  res.json({
+    success: true,
+    clubsProcessed: clubResults.length,
+    membersProcessed: memberResults.length,
+    clubResults,
+    memberResults,
+  });
+});
+
 // Importação de armas/modalidades/campeonatos/etapas/inscrições+resultados do
 // legado (ArmasClube, Modalidades, Campeonato, etapa, inscricao_modalidades +
 // Inscricao_dados_adicionais). Roda depois da importação de clubes/atletas —
