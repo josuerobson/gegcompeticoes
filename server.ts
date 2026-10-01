@@ -1013,7 +1013,7 @@ app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) 
         // como 'reinscrição' para rastreamento, mas o valor cobrado é SEMPRE o do
         // multicampeonato — o pacote não tem um valor de reinscrição próprio.
         const existing = await client.query(
-          "SELECT 1 FROM registrations WHERE championship_id=$1 AND user_id=$2 AND stage_id=$3 AND modality_id=$4 AND payment_status = 'approved'",
+          "SELECT 1 FROM registrations WHERE championship_id=$1 AND user_id=$2 AND stage_id=$3 AND modality_id=$4",
           [item.championshipId, currentUser.id, item.stageId, modalityId]
         );
         const isReinscricao = existing.rows.length > 0;
@@ -1147,7 +1147,7 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
             // cobrado é SEMPRE o do multicampeonato — o pacote não tem um valor de
             // reinscrição próprio, então nunca deve usar champ.valorReinscricao.
             const existing = await client.query(
-              "SELECT id FROM registrations WHERE championship_id=$1 AND user_id=$2 AND stage_id=$3 AND modality_id=$4 AND payment_status = 'approved'",
+              "SELECT id FROM registrations WHERE championship_id=$1 AND user_id=$2 AND stage_id=$3 AND modality_id=$4",
               [item.championshipId, athlete.userId, item.stageId, modalityId]
             );
             const isReinscricao = existing.rows.length > 0;
@@ -1162,10 +1162,10 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
               await client.query(
                 `INSERT INTO registrations (
                   id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
-                  payment_method, payment_status, completion_status, registered_at, approved_at,
+                  payment_method, payment_status, completion_status, registered_at,
                   disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento,
                   multi_championship_id, payment_gateway, club_owed_amount
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','approved','pending',$9,$9,false,0,$10,$11,$12,$13,$14,'club_invoice',$15)`,
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,false,0,$10,$11,$12,$13,$14,'club_invoice',$15)`,
                 [
                   regId, item.championshipId, athlete.userId, clubId, modalityId, item.stageId, athlete.weaponId,
                   athlete.crNumber, new Date().toISOString(), currentUser.id,
@@ -1477,7 +1477,7 @@ app.post('/api/idsc/courses/:id/register', requireAuth, async (req, res) => {
     const champRes = await pool.query('SELECT * FROM idsc_championships WHERE id = $1', [courseRes.rows[0].championship_id]);
     const champ = champRes.rows[0];
 
-    const existing = await pool.query("SELECT id FROM idsc_registrations WHERE course_id=$1 AND user_id=$2 AND payment_status = 'approved'", [courseId, currentUser.id]);
+    const existing = await pool.query("SELECT id FROM idsc_registrations WHERE course_id=$1 AND user_id=$2", [courseId, currentUser.id]);
     const isReinscricao = existing.rows.length > 0;
 
     const sicoobConfig = champ?.club_id ? await getSicoobConfig(pool, champ.club_id) : null;
@@ -1534,7 +1534,7 @@ app.post('/api/idsc/courses/:id/register-bulk', requireAdmin, async (req, res) =
         if (userRes.rows.length === 0) throw new Error('Atleta não encontrado.');
         const clubId = userRes.rows[0].club_id || currentUser.clubId;
 
-        const existing = await pool.query("SELECT id FROM idsc_registrations WHERE course_id=$1 AND user_id=$2 AND payment_status = 'approved'", [courseId, athlete.userId]);
+        const existing = await pool.query("SELECT id FROM idsc_registrations WHERE course_id=$1 AND user_id=$2", [courseId, athlete.userId]);
         const isReinscricao = existing.rows.length > 0;
 
         const id = `idsc_reg_${Date.now()}_${athlete.userId.slice(-4)}`;
@@ -1543,8 +1543,8 @@ app.post('/api/idsc/courses/:id/register-bulk', requireAdmin, async (req, res) =
         if (isAffiliateClub) {
           const clubOwedAmount = valorPago * (1 - (Number(champ.club_percentage) || 0) / 100);
           await pool.query(
-            `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status, registered_at, approved_at, payment_gateway, club_owed_amount)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pix','approved',NOW(),NOW(),'club_invoice',$10)`,
+            `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status, registered_at, payment_gateway, club_owed_amount)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pix','pending',NOW(),'club_invoice',$10)`,
             [id, courseId, athlete.userId, clubId, athlete.weaponId, athlete.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago, clubOwedAmount.toFixed(2)]
           );
           clubInvoiceCount++;
@@ -3835,7 +3835,7 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
     }
 
     const alreadyRegisteredRes = await pool.query(
-      "SELECT 1 FROM registrations WHERE championship_id = $1 AND user_id = $2 AND modality_id = $3 AND stage_id = $4 AND payment_status = 'approved'",
+      "SELECT 1 FROM registrations WHERE championship_id = $1 AND user_id = $2 AND modality_id = $3 AND stage_id = $4",
       [championshipId, currentUser.id, modalityId, stageId]
     );
 
@@ -4596,7 +4596,7 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
         }
 
         const existing = await client.query(
-          "SELECT id FROM registrations WHERE championship_id=$1 AND user_id=$2 AND modality_id=$3 AND stage_id=$4 AND payment_status = 'approved'",
+          "SELECT id FROM registrations WHERE championship_id=$1 AND user_id=$2 AND modality_id=$3 AND stage_id=$4",
           [championshipId, athlete.userId, modalityId, stageId]
         );
         const isReinscricao = existing.rows.length > 0;
@@ -4615,9 +4615,11 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
         const regId = `reg_${Date.now()}_${athlete.userId.slice(-4)}`;
 
         // Clube filiado (diferente do organizador do campeonato) inscrevendo
-        // seus próprios atletas: aprova na hora, valor devido ao organizador
-        // (percentual_clube define quanto o filiado FICA) fica pendente de
-        // fatura — não gera cobrança PIX agora.
+        // seus próprios atletas: libera pra participação imediata (resultado
+        // pode ser lançado normalmente), mas o pagamento fica pendente —
+        // o clube filiado quita depois, em lote, nesta mesma tela de
+        // Financeiro (que já aplica o desconto do Percentual Clube via
+        // club_owed_amount). Não gera cobrança PIX agora.
         const isAffiliateClub = Boolean(clubId) && Boolean(champ.clubId) && clubId !== champ.clubId;
 
         if (isAffiliateClub) {
@@ -4625,10 +4627,10 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
           await client.query(
             `INSERT INTO registrations
               (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
-               payment_method, payment_status, completion_status, registered_at, approved_at,
+               payment_method, payment_status, completion_status, registered_at,
                registered_by_user_id, registration_type, valor_pago, data_pagamento, disqualified, penalty,
                payment_gateway, club_owed_amount)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','approved','pending',$9,$9,$10,$11,$12,$13,false,0,'club_invoice',$14)`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,$11,$12,$13,false,0,'club_invoice',$14)`,
             [
               regId, championshipId, athlete.userId, clubId, modalityId, stageId, athlete.weaponId,
               athlete.crNumber, new Date().toISOString(), currentUser.id, regType, valorPago, dataPagamento,
@@ -7219,6 +7221,7 @@ app.post(['/api/webhooks/sicoob-pix', '/api/webhooks/sicoob-pix/:chave'], async 
                WHERE tx_id = $1 AND payment_gateway = 'sicoob'`,
               [item.txid]
             );
+            await confirmClubInvoiceRegistrations(item.txid);
             await confirmAnnuityForTx(item.txid);
           }
         } catch (cobErr) {
@@ -7386,6 +7389,28 @@ async function confirmAnnuityForTx(txId: string): Promise<void> {
   );
 }
 
+// Inscrições de clube filiado nascem com payment_status='pending' (o atleta
+// já compete e tem resultado lançado normalmente — só o pagamento fica em
+// aberto até o clube quitar a fatura consolidada). Quando a fatura
+// (club_invoices) é confirmada paga, as inscrições que ela cobre também
+// precisam virar 'approved' — senão ficariam pendentes pra sempre mesmo
+// após o pagamento.
+async function confirmClubInvoiceRegistrations(txId: string): Promise<void> {
+  const invoiceRes = await pool.query(`SELECT id FROM club_invoices WHERE tx_id = $1`, [txId]);
+  const invoiceId = invoiceRes.rows[0]?.id;
+  if (!invoiceId) return;
+  await pool.query(
+    `UPDATE registrations SET payment_status = 'approved', approved_at = NOW()::text
+     WHERE club_invoice_id = $1 AND payment_status != 'approved'`,
+    [invoiceId]
+  );
+  await pool.query(
+    `UPDATE idsc_registrations SET payment_status = 'approved', approved_at = NOW()
+     WHERE club_invoice_id = $1 AND payment_status != 'approved'`,
+    [invoiceId]
+  );
+}
+
 // Reconsulta uma cobrança Sicoob pendente direto na API (GET /cob/{txid}) e
 // aprova no banco se já estiver CONCLUIDA — mesma lógica do webhook, usada
 // aqui como rede de segurança para quando o Sicoob não conseguir entregar a
@@ -7414,6 +7439,7 @@ async function reconcileSicoobTx(txId: string): Promise<void> {
          WHERE tx_id = $1 AND payment_gateway = 'sicoob' AND status != 'approved'`,
         [txId]
       );
+      await confirmClubInvoiceRegistrations(txId);
       await confirmAnnuityForTx(txId);
     }
   } catch (err) {

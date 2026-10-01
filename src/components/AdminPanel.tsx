@@ -7718,17 +7718,41 @@ export default function AdminPanel({
           </div>
         );
 
-      case 'financeiro':
-        const confirmedRegs = registrations.filter(r => r.paymentStatus === 'approved');
-        const totalFees = confirmedRegs.reduce((sum, r) => {
-          // Inscrição de clube filiado (fatura): só a diferença devida entra
-          // como receita do organizador, não o valor cheio pago pelo atleta —
-          // senão a margem do filiado seria contada como receita do estande.
-          if (r.clubOwedAmount != null) return sum + r.clubOwedAmount;
-          const fee = championships.find(c => c.id === r.championshipId)?.registrationFee || 0;
-          return sum + fee;
-        }, 0);
-        const signedUsersCount = users.filter(u => u.hasPaidSignature).length;
+      case 'financeiro': {
+        // Só as inscrições que o PRÓPRIO clube logado fez (registrations.clubId
+        // é o clube do atleta no momento da inscrição) — antes isto usava as
+        // listas inteiras do tenant (todos os clubes da franquia), por isso
+        // qualquer clube via os mesmos números. Valor líquido pra franquia:
+        // club_owed_amount quando a inscrição é de atleta deste clube filiado
+        // num campeonato de outro organizador (já descontado o Percentual
+        // Clube); senão valorPago cheio (inscrição direta no próprio campeonato).
+        const netValue = (r: Registration) => (r.clubOwedAmount != null ? r.clubOwedAmount : (r.valorPago || 0));
+        const ownClubRegs = registrations.filter(r => r.clubId === currentUser?.clubId);
+        const confirmedRegs = ownClubRegs.filter(r => r.paymentStatus === 'approved');
+        const totalFees = confirmedRegs.reduce((sum, r) => sum + netValue(r), 0);
+        const signedUsersCount = users.filter(u => u.hasPaidSignature && u.clubId === currentUser?.clubId).length;
+
+        // Agrupado por campeonato do Aranãs: quantas/quanto já pago (fatura
+        // quitada) x pendente de pagamento (ainda não entrou em fatura, ou
+        // entrou mas a fatura ainda não foi paga) — pra o clube filiado
+        // acompanhar e decidir quando gerar a fatura e pagar.
+        const byChampionship = new Map<string, { title: string; paidCount: number; paidValue: number; pendingCount: number; pendingValue: number }>();
+        for (const r of ownClubRegs) {
+          const champ = championships.find(c => c.id === r.championshipId);
+          const key = r.championshipId;
+          if (!byChampionship.has(key)) {
+            byChampionship.set(key, { title: champ?.title || key, paidCount: 0, paidValue: 0, pendingCount: 0, pendingValue: 0 });
+          }
+          const entry = byChampionship.get(key)!;
+          if (r.paymentStatus === 'approved') {
+            entry.paidCount += 1;
+            entry.paidValue += netValue(r);
+          } else {
+            entry.pendingCount += 1;
+            entry.pendingValue += netValue(r);
+          }
+        }
+        const championshipRows = Array.from(byChampionship.values());
 
         return (
           <>
@@ -7821,39 +7845,40 @@ export default function AdminPanel({
               </div>
             )}
 
-            {/* Recent payments table */}
+            {/* Relatório de inscrições do clube, por campeonato do Aranãs —
+                pagas (já faturado e quitado) x pendentes (ainda não pagas,
+                mesmo já tendo competido e lançado resultado) */}
             <div className="space-y-3">
-              <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wider">Histórico de Transações Recentes</h4>
-              <div className="overflow-x-auto text-xs">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-[10px] text-slate-400 font-mono uppercase">
-                      <th className="py-2">Data</th>
-                      <th className="py-2">Referência</th>
-                      <th className="py-2">Atleta</th>
-                      <th className="py-2">Meio</th>
-                      <th className="py-2 text-right">Valor</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50 text-slate-600">
-                    {confirmedRegs.slice(0, 5).map((reg) => {
-                      const athleteName = users.find(u => u.id === reg.userId)?.fullName || 'Filiado G&G';
-                      const champFee = reg.clubOwedAmount != null
-                        ? reg.clubOwedAmount
-                        : (championships.find(c => c.id === reg.championshipId)?.registrationFee || 0);
-                      return (
-                        <tr key={reg.id}>
-                          <td className="py-2 font-mono">{new Date(reg.registeredAt).toLocaleDateString()}</td>
-                          <td className="py-2 font-semibold text-slate-800">{reg.clubOwedAmount != null ? 'Fatura Clube Filiado' : 'Inscrição Campeonato'}</td>
-                          <td className="py-2">{athleteName}</td>
-                          <td className="py-2 font-mono uppercase">{reg.paymentMethod}</td>
-                          <td className="py-2 text-right font-mono font-bold text-slate-800">R$ {champFee.toFixed(2)}</td>
+              <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wider">Inscrições do Clube por Campeonato</h4>
+              {championshipRows.length === 0 ? (
+                <p className="text-xs text-slate-400">Nenhuma inscrição feita por este clube ainda.</p>
+              ) : (
+                <div className="overflow-x-auto text-xs">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-[10px] text-slate-400 font-mono uppercase">
+                        <th className="py-2">Campeonato</th>
+                        <th className="py-2 text-center">Pagas</th>
+                        <th className="py-2 text-right">Valor Pago</th>
+                        <th className="py-2 text-center">Pendentes</th>
+                        <th className="py-2 text-right">Valor Pendente</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 text-slate-600">
+                      {championshipRows.map((row) => (
+                        <tr key={row.title}>
+                          <td className="py-2.5 font-semibold text-slate-800">{row.title}</td>
+                          <td className="py-2.5 text-center font-mono text-emerald-700 font-bold">{row.paidCount}</td>
+                          <td className="py-2.5 text-right font-mono text-emerald-700">R$ {row.paidValue.toFixed(2)}</td>
+                          <td className="py-2.5 text-center font-mono text-amber-700 font-bold">{row.pendingCount}</td>
+                          <td className="py-2.5 text-right font-mono text-amber-700">R$ {row.pendingValue.toFixed(2)}</td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className="text-[10px] text-slate-400">Pendente = inscrição já liberada para participação, mas ainda não incluída numa fatura paga. Use "Fatura com o Clube Franqueador" acima para gerar o PIX e quitar.</p>
             </div>
           </div>
           {invoicePixModal && (
@@ -7868,6 +7893,7 @@ export default function AdminPanel({
           )}
           </>
         );
+      }
 
       case 'cadastrar_resultados':
         return (
