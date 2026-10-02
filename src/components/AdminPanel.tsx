@@ -7,6 +7,8 @@ import { SicoobPixManager } from './SicoobPixManager';
 import { MercadoPagoManager } from './MercadoPagoManager';
 import { PixPaymentModal } from './PixPaymentModal';
 import { normalizeSearchText } from '../utils/textSearch';
+import { RevenueReport, AnnuityRoster } from './FranchiseReports';
+import { annuityStatus, parseExpiry, ANNUITY_STATUS_LABELS } from '../utils/financeReports';
 import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
@@ -9152,46 +9154,6 @@ export default function AdminPanel({
           totalAnnuityRevenue += count * plan.price;
         });
 
-        // Calculations for Championship revenue
-        const champRevenueList = championships.map(champ => {
-          const champRegs = registrations.filter(r => r.championshipId === champ.id);
-          const totalInscricoes = champRegs.length;
-          
-          let totalArrecadado = 0;
-          champRegs.forEach(r => {
-            // Inscrição de clube filiado (fatura): só a diferença devida ao
-            // organizador entra como arrecadação dele, não o valor cheio.
-            if (r.clubOwedAmount != null) {
-              totalArrecadado += Number(r.clubOwedAmount);
-            } else if (r.valorPago && Number(r.valorPago) > 0) {
-              totalArrecadado += Number(r.valorPago);
-            } else {
-              const regType = (r.registrationType as string) || 'normal';
-              if (regType === 'clube' && champ.valorInscricaoClube) {
-                totalArrecadado += champ.valorInscricaoClube;
-              } else if ((regType === 'reinscrição' || regType === 'reentry') && champ.valorReinscricao) {
-                totalArrecadado += champ.valorReinscricao;
-              } else if (champ.valorInscricaoIndividual) {
-                totalArrecadado += champ.valorInscricaoIndividual;
-              } else if (champ.registrationFee) {
-                totalArrecadado += champ.registrationFee;
-              }
-            }
-          });
-
-          return {
-            id: champ.id,
-            title: champ.title,
-            startDate: champ.startDate,
-            endDate: champ.endDate,
-            totalInscricoes,
-            totalArrecadado
-          };
-        });
-
-        const totalChampionshipRevenue = champRevenueList.reduce((acc, curr) => acc + curr.totalArrecadado, 0);
-        const totalGrandRevenue = totalAnnuityRevenue + totalChampionshipRevenue;
-
         return (
           <div className="space-y-6 text-left">
             {/* Header & High Level Summary Cards */}
@@ -9199,44 +9161,22 @@ export default function AdminPanel({
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100">
                 <div>
                   <h3 className="font-display font-bold text-slate-900 text-base">Relatório Financeiro & Planos de Anuidade</h3>
-                  <p className="text-xs text-slate-400">Gestão de planos de anuidade do clube e resumos consolidados de arrecadação por anuidade e campeonatos.</p>
+                  <p className="text-xs text-slate-400">Receita de inscrições por período, origem, campeonato e clube, e gestão dos planos de anuidade.</p>
                 </div>
                 <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
                   <DollarSign className="w-6 h-6" />
                 </div>
               </div>
 
-              {/* Top Level Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
-                <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-4 space-y-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Arrecadação com Anuidades</p>
-                  <p className="text-xl font-display font-bold text-emerald-950 font-mono">
-                    R$ {totalAnnuityRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </p>
-                  <p className="text-[10px] text-emerald-700">
-                    Calculado com base em {users.filter(u => u.role === 'member').length} membros cadastrados
-                  </p>
-                </div>
-
-                <div className="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-4 space-y-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700">Arrecadação com Campeonatos</p>
-                  <p className="text-xl font-display font-bold text-blue-950 font-mono">
-                    R$ {totalChampionshipRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </p>
-                  <p className="text-[10px] text-blue-700">
-                    Total em {championships.length} campeonatos ({registrations.length} inscrições)
-                  </p>
-                </div>
-
-                <div className="bg-slate-900 text-white rounded-2xl p-4 space-y-1 shadow-md">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Faturamento Consolidado Geral</p>
-                  <p className="text-xl font-display font-bold text-white font-mono">
-                    R$ {totalGrandRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </p>
-                  <p className="text-[10px] text-slate-400">Total geral de arrecadação do clube</p>
-                </div>
-              </div>
             </div>
+
+            {/* Receita de inscrições: período, origem, campeonato, clube, evolução */}
+            <RevenueReport
+              registrations={registrations}
+              championships={championships}
+              clubs={clubs}
+              franchiseClubId={currentUser?.clubId}
+            />
 
             {/* Cadastro & Gerenciamento de Planos de Anuidade */}
             <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
@@ -9363,8 +9303,8 @@ export default function AdminPanel({
             <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
               <div className="flex justify-between items-center pb-3 border-b border-slate-100">
                 <div>
-                  <h4 className="font-display font-bold text-slate-900 text-sm">Resumo de Arrecadação por Anuidade</h4>
-                  <p className="text-xs text-slate-400">Detalhamento dos valores arrecadados por plano de anuidade filiado.</p>
+                  <h4 className="font-display font-bold text-slate-900 text-sm">Previsão de Anuidades por Plano (projeção)</h4>
+                  <p className="text-xs text-slate-400">Base de atletas × valor do plano — é uma projeção do potencial anual, não o valor efetivamente recebido. A situação real (regular, a vencer, vencida) está em Financeiro da Franquia.</p>
                 </div>
                 <Users className="w-4 h-4 text-emerald-600" />
               </div>
@@ -9418,54 +9358,6 @@ export default function AdminPanel({
               </div>
             </div>
 
-            {/* Resumo de Arrecadação por Campeonatos */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
-              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-                <div>
-                  <h4 className="font-display font-bold text-slate-900 text-sm">Resumo de Arrecadação por Campeonatos</h4>
-                  <p className="text-xs text-slate-400">Detalhamento dos valores arrecadados em inscrições e reinscrições de campeonatos.</p>
-                </div>
-                <Trophy className="w-4 h-4 text-blue-600" />
-              </div>
-
-              <div className="overflow-x-auto text-xs text-slate-700">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-slate-200 font-mono text-[10px] text-slate-400 uppercase">
-                      <th className="py-2.5 px-3">Campeonato / Circuito</th>
-                      <th className="py-2.5 px-3 text-center">Inscrições Confirmadas</th>
-                      <th className="py-2.5 px-3 text-right">Arrecadação Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-mono">
-                    {champRevenueList.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="py-4 px-3 text-center text-slate-400 font-sans">Nenhum campeonato cadastrado ainda.</td>
-                      </tr>
-                    ) : (
-                      champRevenueList.map(c => (
-                        <tr key={c.id} className="hover:bg-slate-50/80">
-                          <td className="py-3 px-3 font-sans font-bold text-slate-800">{c.title}</td>
-                          <td className="py-3 px-3 text-center font-bold text-blue-600">{c.totalInscricoes}</td>
-                          <td className="py-3 px-3 text-right font-bold text-slate-900">
-                            R$ {c.totalArrecadado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t border-slate-300 font-mono font-bold bg-slate-50">
-                      <td className="py-3 px-3 font-sans text-slate-900">Total Consolidado de Campeonatos</td>
-                      <td className="py-3 px-3 text-center text-slate-900">{registrations.length} inscrições</td>
-                      <td className="py-3 px-3 text-right text-blue-700 text-sm">
-                        R$ {totalChampionshipRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
           </div>
         );
       }
@@ -9476,9 +9368,6 @@ export default function AdminPanel({
         // no backend, então qualquer clube que não seja o próprio
         // currentUser.clubId, dentro dessas listas, é um filiado.
         const filiadoClubs = clubs.filter(c => c.id !== currentUser?.clubId);
-        const tenantMembers = users.filter(u => u.role === 'member');
-        const regularMembers = tenantMembers.filter(u => u.hasPaidSignature);
-        const pendingMembers = tenantMembers.filter(u => !u.hasPaidSignature);
 
         const totalUnbilled = franchiseInvoiceEntries.reduce((sum, e) => sum + e.totalOwed, 0);
         const totalPaidInvoices = franchiseInvoiceHistory.filter(i => i.status === 'approved').reduce((sum, i) => sum + i.totalAmount, 0);
@@ -9605,30 +9494,8 @@ export default function AdminPanel({
               </div>
             </div>
 
-            {/* Bloco 2: Anuidades de atletas */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
-              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-                <div>
-                  <h4 className="font-display font-bold text-slate-900 text-sm">Anuidades de Atletas</h4>
-                  <p className="text-xs text-slate-400">Status real de anuidade (cobrança PIX via Sicoob desta franquia) entre todos os atletas do tenant.</p>
-                </div>
-                <Users className="w-4 h-4 text-emerald-600" />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Total de Atletas</span>
-                  <span className="text-lg font-bold text-slate-900 font-mono">{tenantMembers.length}</span>
-                </div>
-                <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
-                  <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Anuidade Regular</span>
-                  <span className="text-lg font-bold text-emerald-700 font-mono">{regularMembers.length}</span>
-                </div>
-                <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
-                  <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Anuidade Pendente</span>
-                  <span className="text-lg font-bold text-amber-700 font-mono">{pendingMembers.length}</span>
-                </div>
-              </div>
-            </div>
+            {/* Bloco 2: Anuidades de atletas (relação nominal, filtros e exportação) */}
+            <AnnuityRoster users={users} clubs={clubs} annuityPlans={annuityPlans} />
 
             {/* Bloco 3: Anuidades de clubes filiados */}
             <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
@@ -9655,7 +9522,12 @@ export default function AdminPanel({
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {filiadoClubs.map(club => {
-                        const isRegular = club.annuityDueDate ? new Date(club.annuityDueDate) >= new Date() : false;
+                        const clubStatus = annuityStatus(false, club.annuityDueDate);
+                        const dueIso = parseExpiry(club.annuityDueDate);
+                        const clubStatusStyle = clubStatus === 'regular' ? 'bg-emerald-100 text-emerald-800'
+                          : clubStatus === 'a_vencer' ? 'bg-sky-100 text-sky-800'
+                          : clubStatus === 'vencida' ? 'bg-rose-100 text-rose-800'
+                          : 'bg-amber-100 text-amber-800';
                         return (
                           <tr key={club.id} className="hover:bg-slate-50/30 transition">
                             <td className="py-3 px-2 font-bold text-slate-800">{club.name}</td>
@@ -9663,11 +9535,12 @@ export default function AdminPanel({
                               {club.annuityPrice ? `R$ ${club.annuityPrice.toFixed(2)}` : <span className="text-slate-400">Não configurado</span>}
                             </td>
                             <td className="py-3 px-2 font-mono text-slate-500">
-                              {club.annuityDueDate ? new Date(club.annuityDueDate).toLocaleDateString('pt-BR') : '—'}
+                              {dueIso ? dueIso.split('-').reverse().join('/') : '—'}
+                              {club.annuityPaidAt && <span className="block text-[9px] text-slate-400">último pgto. {new Date(club.annuityPaidAt).toLocaleDateString('pt-BR')}</span>}
                             </td>
                             <td className="py-3 px-2 text-center">
-                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${isRegular ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                                {isRegular ? 'Regular' : 'Pendente'}
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${clubStatusStyle}`}>
+                                {ANNUITY_STATUS_LABELS[clubStatus]}
                               </span>
                             </td>
                             <td className="py-3 px-2 text-right">
