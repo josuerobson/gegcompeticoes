@@ -8,10 +8,10 @@ import {
   emptyBucket, franchiseChampionshipIds, inRange, isPaid, isViaClub, netValue, parseExpiry, periodRange,
 } from '../utils/financeReports';
 
-const th = 'py-2.5 px-3 text-[10px] font-mono uppercase text-slate-400';
-const td = 'py-2.5 px-3';
+export const th = 'py-2.5 px-3 text-[10px] font-mono uppercase text-slate-400';
+export const td = 'py-2.5 px-3';
 
-function ExportButton({ onClick }: { onClick: () => void }) {
+export function ExportButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
@@ -23,7 +23,7 @@ function ExportButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function Card({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone: 'emerald' | 'amber' | 'blue' | 'slate' }) {
+export function Card({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone: 'emerald' | 'amber' | 'blue' | 'slate' }) {
   const tones = {
     emerald: 'bg-emerald-50/70 border-emerald-200/80 text-emerald-950',
     amber: 'bg-amber-50/70 border-amber-200/80 text-amber-950',

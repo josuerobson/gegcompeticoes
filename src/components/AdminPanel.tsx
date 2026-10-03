@@ -8,6 +8,7 @@ import { MercadoPagoManager } from './MercadoPagoManager';
 import { PixPaymentModal } from './PixPaymentModal';
 import { normalizeSearchText } from '../utils/textSearch';
 import { RevenueReport, AnnuityRoster, ReceiptsStatement } from './FranchiseReports';
+import { PixReconciliation } from './PixReconciliation';
 import { annuityStatus, parseExpiry, ANNUITY_STATUS_LABELS } from '../utils/financeReports';
 import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
@@ -8968,9 +8969,11 @@ export default function AdminPanel({
           const allMembers = users.filter(u => u.role === 'member');
           if (!q) return allMembers.slice(0, 30);
           const qDigits = q.replace(/\D/g, '');
+          const clubNameById = new Map(clubs.map(c => [c.id, normalizeSearchText(c.name)]));
           return allMembers.filter(u =>
             normalizeSearchText(u.fullName).includes(q) ||
-            (qDigits && (u.cpf || '').replace(/\D/g, '').includes(qDigits))
+            (qDigits && (u.cpf || '').replace(/\D/g, '').includes(qDigits)) ||
+            (u.clubId && (clubNameById.get(u.clubId) || '').includes(q))
           ).slice(0, 100);
         })();
         const totalAthletes = users.filter(u => u.role === 'member').length;
@@ -9035,7 +9038,7 @@ export default function AdminPanel({
                   type="text"
                   value={athleteSearchQuery}
                   onChange={e => setAthleteSearchQuery(e.target.value)}
-                  placeholder="Buscar por nome ou CPF..."
+                  placeholder="Buscar por nome, CPF ou clube..."
                   className="bg-slate-50 border border-slate-200 outline-none px-3 py-2 rounded-xl focus:border-blue-500 text-xs text-slate-700 w-full sm:w-64"
                 />
               </div>
@@ -9481,13 +9484,39 @@ export default function AdminPanel({
                             <td className="py-3 px-2 text-right font-mono text-amber-700">R$ {aging[1].toFixed(2)}</td>
                             <td className={`py-3 px-2 text-right font-mono ${aging[2] > 0 ? 'text-rose-700 font-bold' : 'text-slate-400'}`}>R$ {aging[2].toFixed(2)}</td>
                             <td className="py-3 px-2 text-right font-mono font-bold text-amber-700">R$ {entry.totalOwed.toFixed(2)}</td>
-                            <td className="py-3 px-2 text-right">
-                              <button
-                                onClick={() => sendBillingReminder(`Lembrete de cobrança enviado para ${entry.clubName} (R$ ${entry.totalOwed.toFixed(2)} devidos).`)}
-                                className="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-bold text-[9px] px-2 py-1 rounded transition cursor-pointer"
-                              >
-                                Notificar
-                              </button>
+                            <td className="py-3 px-2 text-right whitespace-nowrap">
+                              {(() => {
+                                const debtorClub = clubs.find(c => c.id === entry.clubId);
+                                const phoneDigits = (debtorClub?.cellPhone || debtorClub?.phone || '').replace(/\D/g, '');
+                                const message = `Olá, ${entry.clubName}! Há R$ ${entry.totalOwed.toFixed(2).replace('.', ',')} em aberto referente a ${entry.count} inscrição(ões) feita(s) pelo clube nos campeonatos da franquia. Você pode gerar a fatura e pagar via PIX em Gerenciamento Clube > Financeiro.`;
+                                return (
+                                  <>
+                                    {phoneDigits.length >= 10 && (
+                                      <a
+                                        href={`https://wa.me/${phoneDigits.startsWith('55') ? phoneDigits : `55${phoneDigits}`}?text=${encodeURIComponent(message)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-block bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white font-bold text-[9px] px-2 py-1 rounded transition mr-1"
+                                      >
+                                        WhatsApp
+                                      </a>
+                                    )}
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          await navigator.clipboard.writeText(message);
+                                          sendBillingReminder(`Mensagem de cobrança de ${entry.clubName} copiada.`);
+                                        } catch {
+                                          sendBillingReminder('Não foi possível copiar a mensagem neste navegador.');
+                                        }
+                                      }}
+                                      className="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-bold text-[9px] px-2 py-1 rounded transition cursor-pointer"
+                                    >
+                                      Copiar mensagem
+                                    </button>
+                                  </>
+                                );
+                              })()}
                             </td>
                           </tr>
                           );
@@ -9537,6 +9566,9 @@ export default function AdminPanel({
 
             {/* Bloco 2: Anuidades de atletas (relação nominal, filtros e exportação) */}
             <AnnuityRoster users={users} clubs={clubs} annuityPlans={annuityPlans} />
+
+            {/* Bloco 2b: Conciliação PIX (cobranças geradas x confirmadas) */}
+            {currentUser && <PixReconciliation authHeaders={{ 'x-user-id': currentUser.id }} />}
 
             {/* Bloco 3: Anuidades de clubes filiados */}
             <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">

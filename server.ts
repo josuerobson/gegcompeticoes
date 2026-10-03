@@ -7413,6 +7413,122 @@ async function confirmAnnuityForTx(txId: string): Promise<void> {
   }
 }
 
+// Conciliação PIX: todas as cobranças reais (Sicoob) do tenant da franquia —
+// inscrições, faturas de clube filiado e anuidades —, cada uma com o status
+// que o sistema tem hoje. Derivado direto das tabelas de origem (cada uma já
+// guarda tx_id + status), sem tabela de conciliação à parte.
+type PixChargeRow = {
+  kind: 'inscricao' | 'fatura' | 'anuidade_atleta' | 'anuidade_clube';
+  txId: string; subject: string; clubName: string; amount: number;
+  status: 'pending' | 'approved'; createdAt: string | null; paidAt: string | null;
+};
+
+async function collectPixCharges(currentUser: User): Promise<PixChargeRow[]> {
+  const isMaster = currentUser.role === 'master_admin';
+  const franchiseId = await getFranchiseClubId(currentUser.clubId || DEFAULT_TENANT_ID);
+  const franchiseRow = await pool.query('SELECT * FROM clubs WHERE id = $1', [franchiseId]);
+  const visibleClubIds = franchiseRow.rows[0] ? await getVisibleClubIds(mapClub(franchiseRow.rows[0])) : [franchiseId];
+  const out: PixChargeRow[] = [];
+
+  const regs = await pool.query(
+    `SELECT r.tx_id, r.payment_status, r.valor_pago, r.registered_at, r.approved_at,
+            u.full_name AS athlete, cl.name AS club_name, ch.title
+     FROM registrations r
+     JOIN championships ch ON ch.id = r.championship_id
+     LEFT JOIN users u ON u.id = r.user_id
+     LEFT JOIN clubs cl ON cl.id = r.club_id
+     WHERE r.payment_gateway = 'sicoob' AND r.tx_id IS NOT NULL
+       AND ($1::boolean OR ch.club_id = $2 OR ch.club_id IS NULL)`,
+    [isMaster, franchiseId]
+  );
+  for (const r of regs.rows) {
+    out.push({
+      kind: 'inscricao', txId: r.tx_id, subject: `${r.athlete || '—'} · ${r.title}`, clubName: r.club_name || '—',
+      amount: Number(r.valor_pago || 0), status: r.payment_status === 'approved' ? 'approved' : 'pending',
+      createdAt: r.registered_at || null, paidAt: r.approved_at || null,
+    });
+  }
+
+  const invs = await pool.query(
+    `SELECT i.tx_id, i.status, i.total_amount, i.created_at, i.approved_at, cl.name AS club_name
+     FROM club_invoices i LEFT JOIN clubs cl ON cl.id = i.club_id
+     WHERE i.payment_gateway = 'sicoob' AND i.tx_id IS NOT NULL AND ($1::boolean OR i.creditor_club_id = $2)`,
+    [isMaster, franchiseId]
+  );
+  for (const i of invs.rows) {
+    out.push({
+      kind: 'fatura', txId: i.tx_id, subject: 'Fatura de inscrições', clubName: i.club_name || '—',
+      amount: Number(i.total_amount || 0), status: i.status === 'approved' ? 'approved' : 'pending',
+      createdAt: i.created_at ? new Date(i.created_at).toISOString() : null,
+      paidAt: i.approved_at ? new Date(i.approved_at).toISOString() : null,
+    });
+  }
+
+  const pendingAthletes = await pool.query(
+    `SELECT u.annuity_tx_id AS tx_id, u.full_name, cl.name AS club_name
+     FROM users u LEFT JOIN clubs cl ON cl.id = u.club_id
+     WHERE u.annuity_tx_id IS NOT NULL AND ($1::boolean OR u.club_id = ANY($2::text[]))`,
+    [isMaster, visibleClubIds]
+  );
+  for (const u of pendingAthletes.rows) {
+    out.push({ kind: 'anuidade_atleta', txId: u.tx_id, subject: u.full_name, clubName: u.club_name || '—', amount: 0, status: 'pending', createdAt: null, paidAt: null });
+  }
+  const pendingClubs = await pool.query(
+    `SELECT annuity_tx_id AS tx_id, name, annuity_price FROM clubs
+     WHERE annuity_tx_id IS NOT NULL AND ($1::boolean OR id = ANY($2::text[]))`,
+    [isMaster, visibleClubIds]
+  );
+  for (const c of pendingClubs.rows) {
+    out.push({ kind: 'anuidade_clube', txId: c.tx_id, subject: c.name, clubName: c.name, amount: Number(c.annuity_price || 0), status: 'pending', createdAt: null, paidAt: null });
+  }
+
+  const paidAnn = await pool.query(
+    `SELECT kind, tx_id, subject_name, amount, paid_at, club_id FROM annuity_payments
+     WHERE tx_id IS NOT NULL AND ($1::boolean OR franchise_club_id = $2)`,
+    [isMaster, franchiseId]
+  );
+  const clubNames = new Map<string, string>((await pool.query('SELECT id, name FROM clubs')).rows.map(r => [r.id as string, r.name as string]));
+  for (const p of paidAnn.rows) {
+    out.push({
+      kind: p.kind === 'club' ? 'anuidade_clube' : 'anuidade_atleta', txId: p.tx_id, subject: p.subject_name || '—',
+      clubName: (p.club_id && clubNames.get(p.club_id)) || '—', amount: Number(p.amount || 0), status: 'approved',
+      createdAt: null, paidAt: new Date(p.paid_at).toISOString(),
+    });
+  }
+  return out;
+}
+
+app.get('/api/finance/pix-charges', requireFranchiseAdmin, async (req, res) => {
+  try {
+    res.json(await collectPixCharges((req as any).user as User));
+  } catch (err) {
+    console.error('Fetch pix charges error:', err);
+    res.status(500).json({ error: 'Erro ao buscar cobranças PIX.' });
+  }
+});
+
+// Reconsulta no banco (Sicoob) as cobranças ainda pendentes do tenant e
+// aprova as que já foram pagas — mesma rotina do polling do modal de PIX.
+// Limitado para não estourar o rate limit do banco numa única chamada.
+app.post('/api/finance/pix-reconcile', requireFranchiseAdmin, async (req, res) => {
+  try {
+    const currentUser = (req as any).user as User;
+    const pendingBefore = (await collectPixCharges(currentUser)).filter(c => c.status === 'pending');
+    const toCheck = pendingBefore.slice(0, 40);
+    for (const c of toCheck) await reconcileSicoobTx(c.txId);
+    const pendingAfter = (await collectPixCharges(currentUser)).filter(c => c.status === 'pending');
+    res.json({
+      checked: toCheck.length,
+      confirmed: Math.max(pendingBefore.length - pendingAfter.length, 0),
+      stillPending: pendingAfter.length,
+      truncated: pendingBefore.length > toCheck.length,
+    });
+  } catch (err) {
+    console.error('Reconcile pix charges error:', err);
+    res.status(500).json({ error: 'Erro ao reconciliar cobranças PIX.' });
+  }
+});
+
 // Extrato de anuidades recebidas via PIX — franquia vê só as do seu tenant;
 // master vê todas.
 app.get('/api/finance/annuity-payments', requireFranchiseAdmin, async (req, res) => {
