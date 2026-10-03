@@ -1474,6 +1474,22 @@ export async function initDB() {
       );
     `);
 
+    // Histórico de anuidades pagas via PIX (atleta ou clube filiado). Só o
+    // último vencimento fica em users/clubs; aqui cada pagamento vira uma linha.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS annuity_payments (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('athlete','club')),
+        user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL,
+        franchise_club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL,
+        subject_name TEXT,
+        amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+        tx_id TEXT UNIQUE,
+        paid_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
     // club_owed_amount: valor devido ao clube organizador nessa inscrição
     // específica (só preenchido quando o clube do atleta é diferente do
     // clube organizador do campeonato/pista). club_invoice_id: NULL = ainda

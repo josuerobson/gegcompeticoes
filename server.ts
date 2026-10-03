@@ -7377,17 +7377,71 @@ function oneYearFromNowDateString(): string {
 // pela reconciliação por polling. UPDATE sem match não falha (0 linhas).
 async function confirmAnnuityForTx(txId: string): Promise<void> {
   const expiry = oneYearFromNowDateString();
-  await pool.query(
+  const userRes = await pool.query(
     `UPDATE users SET has_paid_signature = true, signature_expiry = $2, annuity_tx_id = NULL, annuity_pix_copia_e_cola = NULL
-     WHERE annuity_tx_id = $1`,
+     WHERE annuity_tx_id = $1
+     RETURNING id, full_name, club_id, annuity_plan_id`,
     [txId, expiry]
   );
-  await pool.query(
+  // Histórico de pagamento (tx_id UNIQUE: webhook + polling nunca duplicam).
+  for (const u of userRes.rows) {
+    let amount = 360;
+    if (u.annuity_plan_id) {
+      const planRes = await pool.query('SELECT price FROM annuity_plans WHERE id = $1', [u.annuity_plan_id]);
+      if (planRes.rows[0]?.price) amount = Number(planRes.rows[0].price);
+    }
+    const franchiseId = await getFranchiseClubId(u.club_id || DEFAULT_TENANT_ID);
+    await pool.query(
+      `INSERT INTO annuity_payments (id, kind, user_id, club_id, franchise_club_id, subject_name, amount, tx_id)
+       VALUES ($1, 'athlete', $2, $3, $4, $5, $6, $7) ON CONFLICT (tx_id) DO NOTHING`,
+      [`annpay_${txId}`, u.id, u.club_id, franchiseId, u.full_name, amount, txId]
+    );
+  }
+  const clubRes = await pool.query(
     `UPDATE clubs SET annuity_paid_at = NOW(), annuity_due_date = $2, annuity_tx_id = NULL, annuity_pix_copia_e_cola = NULL
-     WHERE annuity_tx_id = $1`,
+     WHERE annuity_tx_id = $1
+     RETURNING id, name, annuity_price`,
     [txId, expiry]
   );
+  for (const c of clubRes.rows) {
+    const franchiseId = await getFranchiseClubId(c.id);
+    await pool.query(
+      `INSERT INTO annuity_payments (id, kind, club_id, franchise_club_id, subject_name, amount, tx_id)
+       VALUES ($1, 'club', $2, $3, $4, $5, $6) ON CONFLICT (tx_id) DO NOTHING`,
+      [`annpay_${txId}`, c.id, franchiseId, c.name, Number(c.annuity_price || 0), txId]
+    );
+  }
 }
+
+// Extrato de anuidades recebidas via PIX — franquia vê só as do seu tenant;
+// master vê todas.
+app.get('/api/finance/annuity-payments', requireFranchiseAdmin, async (req, res) => {
+  try {
+    const currentUser = (req as any).user as User;
+    const params: any[] = [];
+    let where = '';
+    if (currentUser.role !== 'master_admin') {
+      params.push(await getFranchiseClubId(currentUser.clubId || DEFAULT_TENANT_ID));
+      where = 'WHERE franchise_club_id = $1';
+    }
+    const result = await pool.query(
+      `SELECT id, kind, user_id, club_id, subject_name, amount, paid_at FROM annuity_payments ${where} ORDER BY paid_at DESC`,
+      params
+    );
+    res.json(result.rows.map(r => ({
+      id: r.id,
+      kind: r.kind,
+      userId: r.user_id || undefined,
+      clubId: r.club_id || undefined,
+      subjectName: r.subject_name || '',
+      amount: Number(r.amount),
+      paidAt: r.paid_at,
+    })));
+  } catch (err) {
+    console.error('Fetch annuity payments error:', err);
+    res.status(500).json({ error: 'Erro ao buscar anuidades recebidas.' });
+  }
+});
 
 // Inscrições de clube filiado nascem com payment_status='pending' (o atleta
 // já compete e tem resultado lançado normalmente — só o pagamento fica em

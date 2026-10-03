@@ -47,6 +47,16 @@ export interface User {
   isBlocked?: boolean;
 }
 
+export interface AnnuityPayment {
+  id: string;
+  kind: 'athlete' | 'club';
+  userId?: string;
+  clubId?: string;
+  subjectName: string;
+  amount: number;
+  paidAt: string;
+}
+
 export interface AnnuityPlan {
   id: string;
   clubId?: string;

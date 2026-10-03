@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, MultiChampionshipItem, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession, AnnuityPlan, ClubBulkRegistrationPrefill, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult, LegacyMultiDiscount } from '../types';
+import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, MultiChampionshipItem, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession, AnnuityPlan, AnnuityPayment, ClubBulkRegistrationPrefill, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult, LegacyMultiDiscount } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
@@ -7,7 +7,7 @@ import { SicoobPixManager } from './SicoobPixManager';
 import { MercadoPagoManager } from './MercadoPagoManager';
 import { PixPaymentModal } from './PixPaymentModal';
 import { normalizeSearchText } from '../utils/textSearch';
-import { RevenueReport, AnnuityRoster } from './FranchiseReports';
+import { RevenueReport, AnnuityRoster, ReceiptsStatement } from './FranchiseReports';
 import { annuityStatus, parseExpiry, ANNUITY_STATUS_LABELS } from '../utils/financeReports';
 import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
@@ -6864,8 +6864,20 @@ export default function AdminPanel({
   const [clubAnnuityPixModal, setClubAnnuityPixModal] = useState<{ pixCopiaECola: string; txId: string } | null>(null);
   const [franchiseFinanceError, setFranchiseFinanceError] = useState('');
 
+  const [annuityPayments, setAnnuityPayments] = useState<AnnuityPayment[]>([]);
+  const loadAnnuityPayments = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch('/api/finance/annuity-payments', { headers: { 'x-user-id': currentUser.id } });
+      if (res.ok) setAnnuityPayments(await res.json());
+    } catch (e) {
+      console.error('Error loading annuity payments:', e);
+    }
+  };
+
   const loadFranchiseFinanceData = async () => {
     if (!currentUser?.clubId) return;
+    loadAnnuityPayments();
     try {
       const [summaryRes, historyRes] = await Promise.all([
         fetch(`/api/club-invoices/unbilled-summary?creditorClubId=${currentUser.clubId}`, { headers: { 'x-user-id': currentUser.id } }),
@@ -6902,6 +6914,9 @@ export default function AdminPanel({
   useEffect(() => {
     if (mainTab === 'plataforma' && plataformaMenu === 'financeiro_franquia') {
       loadFranchiseFinanceData();
+    }
+    if (mainTab === 'plataforma' && plataformaMenu === 'relatorio_financeiro') {
+      loadAnnuityPayments();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainTab, plataformaMenu, currentUser?.id]);
@@ -9176,6 +9191,17 @@ export default function AdminPanel({
               championships={championships}
               clubs={clubs}
               franchiseClubId={currentUser?.clubId}
+              annuityPayments={annuityPayments}
+            />
+
+            {/* Extrato cronológico de recebimentos (inscrições + anuidades) */}
+            <ReceiptsStatement
+              users={users}
+              registrations={registrations}
+              championships={championships}
+              clubs={clubs}
+              franchiseClubId={currentUser?.clubId}
+              annuityPayments={annuityPayments}
             />
 
             {/* Cadastro & Gerenciamento de Planos de Anuidade */}
@@ -9431,15 +9457,29 @@ export default function AdminPanel({
                         <tr className="border-b border-slate-200 text-[10px] text-slate-450 uppercase font-mono">
                           <th className="py-2.5 px-2">Clube Filiado</th>
                           <th className="py-2.5 px-2 text-center">Inscrições</th>
+                          <th className="py-2.5 px-2 text-right">0–30 dias</th>
+                          <th className="py-2.5 px-2 text-right">31–60 dias</th>
+                          <th className="py-2.5 px-2 text-right">61+ dias</th>
                           <th className="py-2.5 px-2 text-right">Valor Devido</th>
                           <th className="py-2.5 px-2 text-right">Ação</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {franchiseInvoiceEntries.map(entry => (
+                        {franchiseInvoiceEntries.map(entry => {
+                          // Idade da dívida = dias desde a inscrição (fatura é sob demanda, sem vencimento).
+                          const aging = [0, 0, 0];
+                          const nowMs = Date.now();
+                          for (const reg of entry.registrations) {
+                            const days = Math.floor((nowMs - new Date(reg.registeredAt).getTime()) / 86400000);
+                            aging[days <= 30 ? 0 : days <= 60 ? 1 : 2] += Number(reg.clubOwedAmount) || 0;
+                          }
+                          return (
                           <tr key={`${entry.clubId}::${entry.creditorClubId}`} className="hover:bg-slate-50/30 transition">
                             <td className="py-3 px-2 font-bold text-slate-800">{entry.clubName}</td>
                             <td className="py-3 px-2 text-center font-mono">{entry.count}</td>
+                            <td className="py-3 px-2 text-right font-mono text-slate-600">R$ {aging[0].toFixed(2)}</td>
+                            <td className="py-3 px-2 text-right font-mono text-amber-700">R$ {aging[1].toFixed(2)}</td>
+                            <td className={`py-3 px-2 text-right font-mono ${aging[2] > 0 ? 'text-rose-700 font-bold' : 'text-slate-400'}`}>R$ {aging[2].toFixed(2)}</td>
                             <td className="py-3 px-2 text-right font-mono font-bold text-amber-700">R$ {entry.totalOwed.toFixed(2)}</td>
                             <td className="py-3 px-2 text-right">
                               <button
@@ -9450,7 +9490,8 @@ export default function AdminPanel({
                               </button>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

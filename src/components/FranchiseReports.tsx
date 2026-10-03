@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Download, Trophy, Users, X } from 'lucide-react';
-import { Registration, Championship, Club, User, AnnuityPlan } from '../types';
+import { Registration, Championship, Club, User, AnnuityPlan, AnnuityPayment } from '../types';
 import { normalizeSearchText } from '../utils/textSearch';
 import {
   Bucket, PeriodPreset, PERIOD_LABELS, ANNUITY_STATUS_LABELS, AnnuityStatus,
@@ -48,9 +48,10 @@ interface RevenueReportProps {
   championships: Championship[];
   clubs: Club[];
   franchiseClubId?: string | null;
+  annuityPayments?: AnnuityPayment[];
 }
 
-export function RevenueReport({ registrations, championships, clubs, franchiseClubId }: RevenueReportProps) {
+export function RevenueReport({ registrations, championships, clubs, franchiseClubId, annuityPayments = [] }: RevenueReportProps) {
   const [preset, setPreset] = useState<PeriodPreset>('ano');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -123,6 +124,10 @@ export function RevenueReport({ registrations, championships, clubs, franchiseCl
   }, [registrations, championships, clubs, franchiseClubId, from, to]);
 
   const { total, direct, viaClub, champRows, clubRows, months, openAll } = data;
+  const annuityInPeriod = useMemo(() => {
+    const inPeriod = annuityPayments.filter(p => inRange(p.paidAt.slice(0, 10), from, to));
+    return { total: inPeriod.reduce((s, p) => s + p.amount, 0), count: inPeriod.length };
+  }, [annuityPayments, from, to]);
   const ticket = total.paidCount > 0 ? total.received / total.paidCount : 0;
   const maxMonth = Math.max(...months.map(m => m.value), 1);
   const periodLabel = preset === 'tudo' ? 'todo o período' : `${from || '…'} a ${to || '…'}`;
@@ -222,6 +227,9 @@ export function RevenueReport({ registrations, championships, clubs, franchiseCl
             </tfoot>
           </table>
         </div>
+        <p className="text-[11px] text-slate-500">
+          Anuidades recebidas via PIX no período (fora dos totais acima): <strong className="font-mono text-emerald-700">{brl(annuityInPeriod.total)}</strong> em {annuityInPeriod.count} pagamento(s). O histórico de anuidades começa a partir da cobrança PIX integrada; pagamentos lançados manualmente não entram.
+        </p>
       </div>
 
       {/* Por campeonato */}
@@ -511,6 +519,179 @@ export function AnnuityRoster({ users, clubs, annuityPlans }: AnnuityRosterProps
               </tr>
             ))}
           </tbody>
+        </table>
+      </div>
+      <div className="flex justify-between items-center text-[11px] text-slate-500">
+        <span>Mostrando {Math.min(limit, filtered.length)} de {filtered.length}</span>
+        {filtered.length > limit && (
+          <button type="button" onClick={() => setLimit(l => l + PAGE)} className="font-bold text-blue-600 hover:underline cursor-pointer">Mostrar mais</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Extrato de recebimentos: lista cronológica do que efetivamente entrou
+// (inscrições pagas + anuidades PIX), filtrável por período, origem e clube.
+// =============================================================================
+interface ReceiptsStatementProps {
+  registrations: Registration[];
+  championships: Championship[];
+  clubs: Club[];
+  users: User[];
+  franchiseClubId?: string | null;
+  annuityPayments: AnnuityPayment[];
+}
+
+type ReceiptOrigin = 'inscricao_direta' | 'inscricao_clube' | 'anuidade_atleta' | 'anuidade_clube';
+
+const ORIGIN_LABELS: Record<ReceiptOrigin, string> = {
+  inscricao_direta: 'Inscrição direta',
+  inscricao_clube: 'Inscrição via clube',
+  anuidade_atleta: 'Anuidade de atleta',
+  anuidade_clube: 'Anuidade de clube',
+};
+
+export function ReceiptsStatement({ registrations, championships, clubs, users, franchiseClubId, annuityPayments }: ReceiptsStatementProps) {
+  const [preset, setPreset] = useState<PeriodPreset>('mes_atual');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [origin, setOrigin] = useState<'' | ReceiptOrigin>('');
+  const [clubFilter, setClubFilter] = useState('');
+  const [limit, setLimit] = useState(PAGE);
+
+  const { from, to } = periodRange(preset, customFrom, customTo);
+
+  const rows = useMemo(() => {
+    const champIds = franchiseChampionshipIds(championships, franchiseClubId);
+    const champTitle = new Map(championships.map(c => [c.id, c.title]));
+    const clubName = new Map(clubs.map(c => [c.id, c.name]));
+    const userName = new Map(users.map(u => [u.id, u.fullName]));
+    const out: Array<{ key: string; date: string; origin: ReceiptOrigin; description: string; subject: string; clubId: string; clubLabel: string; value: number }> = [];
+
+    for (const r of registrations) {
+      if (!champIds.has(r.championshipId) || !isPaid(r)) continue;
+      out.push({
+        key: `r_${r.id}`,
+        date: effectiveDate(r),
+        origin: isViaClub(r) ? 'inscricao_clube' : 'inscricao_direta',
+        description: champTitle.get(r.championshipId) || r.championshipId,
+        subject: userName.get(r.userId) || r.userId,
+        clubId: r.clubId || '',
+        clubLabel: r.clubId ? clubName.get(r.clubId) || r.clubId : 'Sem clube',
+        value: netValue(r),
+      });
+    }
+    for (const p of annuityPayments) {
+      out.push({
+        key: `a_${p.id}`,
+        date: p.paidAt.slice(0, 10),
+        origin: p.kind === 'club' ? 'anuidade_clube' : 'anuidade_atleta',
+        description: p.kind === 'club' ? 'Anuidade de clube filiado' : 'Anuidade de atleta',
+        subject: p.subjectName,
+        clubId: p.clubId || '',
+        clubLabel: p.clubId ? clubName.get(p.clubId) || p.clubId : 'Sem clube',
+        value: p.amount,
+      });
+    }
+    return out.sort((a, b) => b.date.localeCompare(a.date));
+  }, [registrations, championships, clubs, users, franchiseClubId, annuityPayments]);
+
+  const filtered = useMemo(
+    () => rows.filter(r => inRange(r.date, from, to) && (!origin || r.origin === origin) && (!clubFilter || r.clubId === clubFilter)),
+    [rows, from, to, origin, clubFilter]
+  );
+  const total = filtered.reduce((s, r) => s + r.value, 0);
+  const clubOptions = useMemo(
+    () => {
+      const m = new Map<string, string>();
+      for (const r of rows) if (r.clubId) m.set(r.clubId, r.clubLabel);
+      return Array.from(m.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+    },
+    [rows]
+  );
+
+  const exportCsv = () => downloadCsv(
+    `extrato-recebimentos-${from || 'inicio'}_${to || 'hoje'}.csv`,
+    ['Data', 'Origem', 'Descrição', 'Atleta/Clube', 'Clube', 'Valor (líquido)'],
+    filtered.map(r => [r.date.split('-').reverse().join('/'), ORIGIN_LABELS[r.origin], r.description, r.subject, r.clubLabel, csvNum(r.value)])
+  );
+
+  const field = 'bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs text-slate-700';
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3 pb-3 border-b border-slate-100">
+        <div>
+          <h4 className="font-display font-bold text-slate-900 text-sm">Extrato de Recebimentos</h4>
+          <p className="text-xs text-slate-400">Tudo que efetivamente entrou, em ordem cronológica: inscrições pagas (valor líquido) e anuidades pagas via PIX.</p>
+        </div>
+        <ExportButton onClick={exportCsv} />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {(Object.keys(PERIOD_LABELS) as PeriodPreset[]).map(p => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => { setPreset(p); setLimit(PAGE); }}
+            className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition cursor-pointer ${preset === p ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+          >
+            {PERIOD_LABELS[p]}
+          </button>
+        ))}
+        {preset === 'custom' && (
+          <>
+            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className={field} />
+            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className={field} />
+          </>
+        )}
+        <select value={origin} onChange={e => { setOrigin(e.target.value as '' | ReceiptOrigin); setLimit(PAGE); }} className={field}>
+          <option value="">Todas as origens</option>
+          {(Object.keys(ORIGIN_LABELS) as ReceiptOrigin[]).map(o => <option key={o} value={o}>{ORIGIN_LABELS[o]}</option>)}
+        </select>
+        <select value={clubFilter} onChange={e => { setClubFilter(e.target.value); setLimit(PAGE); }} className={field}>
+          <option value="">Todos os clubes</option>
+          {clubOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+        </select>
+      </div>
+
+      <div className="overflow-x-auto text-xs text-slate-700">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="border-b border-slate-200">
+              <th className={th}>Data</th>
+              <th className={th}>Origem</th>
+              <th className={th}>Descrição</th>
+              <th className={th}>Atleta / Clube</th>
+              <th className={th}>Clube</th>
+              <th className={`${th} text-right`}>Valor</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filtered.length === 0 && (
+              <tr><td colSpan={6} className={`${td} text-center text-slate-400`}>Nenhum recebimento no filtro selecionado.</td></tr>
+            )}
+            {filtered.slice(0, limit).map(r => (
+              <tr key={r.key} className="hover:bg-slate-50/30 transition">
+                <td className={`${td} font-mono text-slate-500`}>{r.date ? r.date.split('-').reverse().join('/') : '—'}</td>
+                <td className={td}>{ORIGIN_LABELS[r.origin]}</td>
+                <td className={`${td} text-slate-500`}>{r.description}</td>
+                <td className={`${td} font-semibold text-slate-800`}>{r.subject}</td>
+                <td className={`${td} text-slate-500`}>{r.clubLabel}</td>
+                <td className={`${td} text-right font-mono font-bold text-emerald-700`}>{brl(r.value)}</td>
+              </tr>
+            ))}
+          </tbody>
+          {filtered.length > 0 && (
+            <tfoot>
+              <tr className="border-t border-slate-300 font-mono font-bold bg-slate-50">
+                <td className={`${td} font-sans text-slate-900`} colSpan={5}>Total do filtro ({filtered.length} lançamentos)</td>
+                <td className={`${td} text-right text-emerald-700`}>{brl(total)}</td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
       <div className="flex justify-between items-center text-[11px] text-slate-500">
