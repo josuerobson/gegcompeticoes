@@ -7820,6 +7820,25 @@ export default function AdminPanel({
           if (!detailByStage.has(key)) detailByStage.set(key, []);
           detailByStage.get(key)!.push(r);
         }
+        // registration_type vem do banco mas em dados legados de migração ele
+        // quase sempre está gravado como 'normal' mesmo quando é claramente
+        // uma reinscrição (mesmo atleta/etapa/modalidade repetidos) — então,
+        // além do campo armazenado, detecta reinscrição por duplicidade de
+        // (atleta, etapa, modalidade) dentro do campeonato, na ordem de
+        // registro: a primeira ocorrência é Inscrição, as seguintes são
+        // Reinscrição.
+        const detailIsReinscricao = new Map<string, boolean>();
+        {
+          const seenKeys = new Set<string>();
+          const sorted = [...detailRegs].sort((a, b) =>
+            (a.registeredAt || '').localeCompare(b.registeredAt || '') || a.id.localeCompare(b.id)
+          );
+          for (const r of sorted) {
+            const key = `${r.userId}::${r.stageId}::${r.modalityId}`;
+            detailIsReinscricao.set(r.id, r.registrationType === 'reinscrição' || seenKeys.has(key));
+            seenKeys.add(key);
+          }
+        }
         // Só as pendências com credor (clubOwedAmount) podem ser quitadas
         // por aqui — inscrições pendentes no próprio campeonato do clube são
         // um PIX individual do atleta, não uma fatura entre clubes.
@@ -8039,10 +8058,19 @@ export default function AdminPanel({
                                 {stageRegs.map(r => {
                                   const athlete = users.find(u => u.id === r.userId);
                                   const isPaid = r.paymentStatus === 'approved';
-                                  const isReinscricao = r.registrationType === 'reinscrição';
+                                  const isReinscricao = detailIsReinscricao.get(r.id) || false;
+                                  const modalityName = modalities.find(m => m.id === r.modalityId)?.name || 'Modalidade não identificada';
                                   return (
                                     <tr key={r.id}>
-                                      <td className="py-2 px-3 font-semibold text-slate-800">{athlete?.fullName || r.userId}</td>
+                                      <td className="py-2 px-3 font-semibold text-slate-800">
+                                        <div className="relative inline-block group/athlete">
+                                          <span className="cursor-default border-b border-dotted border-slate-300">{athlete?.fullName || r.userId}</span>
+                                          <div className="pointer-events-none absolute left-0 bottom-full mb-1.5 hidden group-hover/athlete:block z-20 whitespace-nowrap bg-slate-900 text-white text-[10px] font-semibold px-2.5 py-1.5 rounded-lg shadow-lg">
+                                            {modalityName}
+                                            <div className="absolute left-3 top-full w-2 h-2 bg-slate-900 rotate-45 -mt-1" />
+                                          </div>
+                                        </div>
+                                      </td>
                                       <td className="py-2 px-3">
                                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${isReinscricao ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>
                                           {isReinscricao ? 'Reinscrição' : 'Inscrição'}
