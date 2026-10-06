@@ -16,6 +16,22 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="G&G Competições" />
     <meta name="mobile-web-app-capable" content="yes" />
+
+    <!--
+      Capture `beforeinstallprompt` as early as possible, before the React app
+      (and its sequential API data sync) finishes mounting — the event fires
+      once per page load and is lost forever if nothing is listening yet.
+      InstallPwaPrompt.tsx reads window.__pwaInstallEvent on mount instead of
+      listening for the native event directly.
+    -->
+    <script>
+      window.__pwaInstallEvent = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__pwaInstallEvent = e;
+        window.dispatchEvent(new Event('pwa-install-ready'));
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -25,6 +25,12 @@ function recentlyDismissed() {
   return dismissedAt > 0 && Date.now() - dismissedAt < DISMISS_DAYS * 24 * 60 * 60 * 1000;
 }
 
+declare global {
+  interface Window {
+    __pwaInstallEvent: BeforeInstallPromptEvent | null;
+  }
+}
+
 export default function InstallPwaPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [visible, setVisible] = useState(false);
@@ -33,12 +39,21 @@ export default function InstallPwaPrompt() {
   useEffect(() => {
     if (isStandalone() || recentlyDismissed()) return;
 
-    const onBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    // index.html captures beforeinstallprompt the moment it fires (often before
+    // this component ever mounts) and stashes it on window.__pwaInstallEvent —
+    // pick it up here instead of listening for the native event directly.
+    if (window.__pwaInstallEvent) {
+      setDeferredPrompt(window.__pwaInstallEvent);
       setVisible(true);
+    }
+
+    const onReady = () => {
+      if (window.__pwaInstallEvent) {
+        setDeferredPrompt(window.__pwaInstallEvent);
+        setVisible(true);
+      }
     };
-    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+    window.addEventListener('pwa-install-ready', onReady);
 
     // iOS Safari never fires beforeinstallprompt — show manual "Add to Home Screen" instructions instead.
     if (isIos()) {
@@ -53,7 +68,7 @@ export default function InstallPwaPrompt() {
     window.addEventListener('appinstalled', onInstalled);
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+      window.removeEventListener('pwa-install-ready', onReady);
       window.removeEventListener('appinstalled', onInstalled);
     };
   }, []);
@@ -70,6 +85,7 @@ export default function InstallPwaPrompt() {
     if (outcome !== 'accepted') {
       localStorage.setItem(DISMISS_KEY, String(Date.now()));
     }
+    window.__pwaInstallEvent = null;
     setDeferredPrompt(null);
     setVisible(false);
   };
