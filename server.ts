@@ -7893,7 +7893,7 @@ app.get('/api/club-invoices/unbilled-summary', requireAuth, async (req, res) => 
 app.post('/api/club-invoices/generate', requireAuth, async (req, res) => {
   try {
     const currentUser = (req as any).user as User;
-    const { clubId: requestedClubId, creditorClubId } = req.body as { clubId?: string; creditorClubId?: string };
+    const { clubId: requestedClubId, creditorClubId, championshipId } = req.body as { clubId?: string; creditorClubId?: string; championshipId?: string };
     const { clubId, allowed } = resolveClubInvoiceAccess(currentUser, requestedClubId);
     if (!allowed || !clubId) {
       return res.status(403).json({ error: 'Apenas o administrador do clube ou o Administrador Master podem gerar faturas.' });
@@ -7902,20 +7902,28 @@ app.post('/api/club-invoices/generate', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'creditorClubId é obrigatório.' });
     }
 
+    // championshipId opcional: restringe a fatura às inscrições de UM
+    // campeonato específico (usado pelo detalhamento por campeonato do
+    // Financeiro do Clube), em vez de consolidar tudo que o clube deve ao
+    // credor. idsc_registrations não tem campeonato "tradicional" associado,
+    // então o filtro só se aplica às inscrições de championships normais.
     const champRows = await pool.query(
       `SELECT r.id, r.club_owed_amount FROM registrations r
        JOIN championships ch ON ch.id = r.championship_id
-       WHERE r.club_id = $1 AND ch.club_id = $2 AND r.club_invoice_id IS NULL AND r.club_owed_amount IS NOT NULL`,
-      [clubId, creditorClubId]
+       WHERE r.club_id = $1 AND ch.club_id = $2 AND r.club_invoice_id IS NULL AND r.club_owed_amount IS NOT NULL
+       ${championshipId ? 'AND ch.id = $3' : ''}`,
+      championshipId ? [clubId, creditorClubId, championshipId] : [clubId, creditorClubId]
     );
-    const idscRows = await pool.query(
-      `SELECT ir.id, ir.club_owed_amount FROM idsc_registrations ir
-       JOIN idsc_courses co ON co.id = ir.course_id
-       JOIN idsc_stages st ON st.id = co.stage_id
-       JOIN idsc_championships ic ON ic.id = st.championship_id
-       WHERE ir.club_id = $1 AND ic.club_id = $2 AND ir.club_invoice_id IS NULL AND ir.club_owed_amount IS NOT NULL`,
-      [clubId, creditorClubId]
-    );
+    const idscRows = championshipId
+      ? { rows: [] as Array<{ id: string; club_owed_amount: string }> }
+      : await pool.query(
+        `SELECT ir.id, ir.club_owed_amount FROM idsc_registrations ir
+         JOIN idsc_courses co ON co.id = ir.course_id
+         JOIN idsc_stages st ON st.id = co.stage_id
+         JOIN idsc_championships ic ON ic.id = st.championship_id
+         WHERE ir.club_id = $1 AND ic.club_id = $2 AND ir.club_invoice_id IS NULL AND ir.club_owed_amount IS NOT NULL`,
+        [clubId, creditorClubId]
+      );
 
     const totalAmount = [...champRows.rows, ...idscRows.rows].reduce((sum, r) => sum + Number(r.club_owed_amount), 0);
     if (totalAmount <= 0) {

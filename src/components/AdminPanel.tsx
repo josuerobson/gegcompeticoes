@@ -6841,6 +6841,36 @@ export default function AdminPanel({
     }
   };
 
+  // Detalhamento por campeonato (Gerenciamento Clube > Financeiro): abre ao
+  // clicar numa linha da tabela "Inscrições do Clube por Campeonato", com
+  // quebra por etapa/atleta e opção de pagar só as pendências daquele
+  // campeonato (em vez da fatura consolidada com todos os campeonatos do
+  // mesmo credor que o botão "Fatura com o Clube Franqueador" gera).
+  const [financeiroDetailChampionshipId, setFinanceiroDetailChampionshipId] = useState<string | null>(null);
+  const [generatingChampInvoice, setGeneratingChampInvoice] = useState(false);
+  const [champInvoicePixModal, setChampInvoicePixModal] = useState<{ pixCopiaECola: string; txId: string } | null>(null);
+  const [champInvoiceError, setChampInvoiceError] = useState('');
+
+  const handleGenerateChampionshipInvoice = async (championshipId: string, clubId: string, creditorClubId: string) => {
+    if (!currentUser) return;
+    setGeneratingChampInvoice(true);
+    setChampInvoiceError('');
+    try {
+      const res = await fetch('/api/club-invoices/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify({ clubId, creditorClubId, championshipId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.pixCopiaECola || !data.txId) throw new Error(data.error || 'Erro ao gerar fatura.');
+      setChampInvoicePixModal({ pixCopiaECola: data.pixCopiaECola, txId: data.txId });
+    } catch (err: any) {
+      setChampInvoiceError(err.message || 'Erro ao gerar fatura.');
+    } finally {
+      setGeneratingChampInvoice(false);
+    }
+  };
+
   useEffect(() => {
     if (mainTab === 'clube' && clubeMenu === 'financeiro') {
       loadClubInvoiceData(false);
@@ -7754,12 +7784,12 @@ export default function AdminPanel({
         // quitada) x pendente de pagamento (ainda não entrou em fatura, ou
         // entrou mas a fatura ainda não foi paga) — pra o clube filiado
         // acompanhar e decidir quando gerar a fatura e pagar.
-        const byChampionship = new Map<string, { title: string; paidCount: number; paidValue: number; pendingCount: number; pendingValue: number }>();
+        const byChampionship = new Map<string, { id: string; title: string; paidCount: number; paidValue: number; pendingCount: number; pendingValue: number }>();
         for (const r of ownClubRegs) {
           const champ = championships.find(c => c.id === r.championshipId);
           const key = r.championshipId;
           if (!byChampionship.has(key)) {
-            byChampionship.set(key, { title: champ?.title || key, paidCount: 0, paidValue: 0, pendingCount: 0, pendingValue: 0 });
+            byChampionship.set(key, { id: key, title: champ?.title || key, paidCount: 0, paidValue: 0, pendingCount: 0, pendingValue: 0 });
           }
           const entry = byChampionship.get(key)!;
           if (r.paymentStatus === 'approved') {
@@ -7771,6 +7801,32 @@ export default function AdminPanel({
           }
         }
         const championshipRows = Array.from(byChampionship.values());
+
+        // Detalhamento do campeonato selecionado (clique na linha acima):
+        // quebra por etapa, uma linha por atleta/inscrição, com tipo
+        // (inscrição/reinscrição) e status individual.
+        const detailChampionship = financeiroDetailChampionshipId
+          ? championships.find(c => c.id === financeiroDetailChampionshipId)
+          : null;
+        const detailRegs = financeiroDetailChampionshipId
+          ? ownClubRegs.filter(r => r.championshipId === financeiroDetailChampionshipId)
+          : [];
+        const detailStages = financeiroDetailChampionshipId
+          ? stages.filter(s => s.championshipId === financeiroDetailChampionshipId).sort((a, b) => a.stageNum - b.stageNum)
+          : [];
+        const detailByStage = new Map<string, Registration[]>();
+        for (const r of detailRegs) {
+          const key = r.stageId || '—';
+          if (!detailByStage.has(key)) detailByStage.set(key, []);
+          detailByStage.get(key)!.push(r);
+        }
+        // Só as pendências com credor (clubOwedAmount) podem ser quitadas
+        // por aqui — inscrições pendentes no próprio campeonato do clube são
+        // um PIX individual do atleta, não uma fatura entre clubes.
+        const detailPendingOwed = detailRegs.filter(r => r.paymentStatus !== 'approved' && r.clubOwedAmount != null);
+        const detailPendingOwedTotal = detailPendingOwed.reduce((sum, r) => sum + (r.clubOwedAmount || 0), 0);
+        const detailCreditorClubId = detailChampionship?.clubId;
+        const detailCreditorClubName = detailCreditorClubId ? (clubs.find(c => c.id === detailCreditorClubId)?.name || detailCreditorClubId) : '';
 
         return (
           <>
@@ -7884,8 +7940,12 @@ export default function AdminPanel({
                     </thead>
                     <tbody className="divide-y divide-slate-50 text-slate-600">
                       {championshipRows.map((row) => (
-                        <tr key={row.title}>
-                          <td className="py-2.5 font-semibold text-slate-800">{row.title}</td>
+                        <tr
+                          key={row.id}
+                          onClick={() => setFinanceiroDetailChampionshipId(row.id)}
+                          className="cursor-pointer hover:bg-slate-50 transition"
+                        >
+                          <td className="py-2.5 font-semibold text-blue-700 hover:underline">{row.title}</td>
                           <td className="py-2.5 text-center font-mono text-emerald-700 font-bold">{row.paidCount}</td>
                           <td className="py-2.5 text-right font-mono text-emerald-700">R$ {row.paidValue.toFixed(2)}</td>
                           <td className="py-2.5 text-center font-mono text-amber-700 font-bold">{row.pendingCount}</td>
@@ -7896,7 +7956,7 @@ export default function AdminPanel({
                   </table>
                 </div>
               )}
-              <p className="text-[10px] text-slate-400">Pendente = inscrição já liberada para participação, mas ainda não incluída numa fatura paga. Use "Fatura com o Clube Franqueador" acima para gerar o PIX e quitar.</p>
+              <p className="text-[10px] text-slate-400">Pendente = inscrição já liberada para participação, mas ainda não incluída numa fatura paga. Clique num campeonato para ver o detalhamento por etapa/atleta e pagar as pendências.</p>
             </div>
           </div>
           {invoicePixModal && (
@@ -7907,6 +7967,122 @@ export default function AdminPanel({
               title="PIX - Fatura Clube Franqueador"
               onApproved={() => loadClubInvoiceData(false)}
               onClose={() => setInvoicePixModal(null)}
+            />
+          )}
+
+          {detailChampionship && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+              <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-3xl shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+                <div className="flex justify-between items-center px-5 pt-5 shrink-0">
+                  <div>
+                    <h4 className="font-display font-bold text-slate-900 text-sm">{detailChampionship.title}</h4>
+                    <p className="text-[11px] text-slate-500">
+                      {detailRegs.length} inscrição(ões) do clube · {detailRegs.filter(r => r.paymentStatus === 'approved').length} pagas · {detailRegs.filter(r => r.paymentStatus !== 'approved').length} pendentes
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { setFinanceiroDetailChampionshipId(null); setChampInvoiceError(''); }}
+                    className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="px-5 space-y-4 overflow-y-auto pb-5">
+                  {champInvoiceError && (
+                    <div className="bg-red-50 text-red-700 p-2.5 rounded-xl text-[11px] font-semibold border border-red-200">{champInvoiceError}</div>
+                  )}
+
+                  {detailPendingOwed.length > 0 && detailCreditorClubId && (
+                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] text-purple-700 font-semibold">Devido a {detailCreditorClubName} — {detailPendingOwed.length} inscrição(ões) deste campeonato</p>
+                        <p className="text-lg font-extrabold text-purple-900 font-mono">R$ {detailPendingOwedTotal.toFixed(2)}</p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={generatingChampInvoice}
+                        onClick={() => handleGenerateChampionshipInvoice(detailChampionship.id, currentUser?.clubId || '', detailCreditorClubId)}
+                        className="bg-purple-700 hover:bg-purple-800 disabled:opacity-60 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                      >
+                        <QrCode className="w-4 h-4" />
+                        {generatingChampInvoice ? 'Gerando cobrança...' : 'Pagar pendências deste campeonato'}
+                      </button>
+                    </div>
+                  )}
+
+                  {detailStages.length === 0 ? (
+                    <p className="text-xs text-slate-400">Nenhuma etapa cadastrada para este campeonato.</p>
+                  ) : (
+                    detailStages.map(stage => {
+                      const stageRegs = detailByStage.get(stage.id) || [];
+                      if (stageRegs.length === 0) return null;
+                      return (
+                        <div key={stage.id} className="space-y-2">
+                          <div className="flex items-center gap-2 pt-1">
+                            <Layers className="w-3.5 h-3.5 text-slate-400" />
+                            <h5 className="font-bold text-xs text-slate-800">Etapa {stage.stageNum} — {stage.title}</h5>
+                            <span className="text-[10px] text-slate-400 font-mono">{stage.date ? new Date(stage.date).toLocaleDateString() : ''}</span>
+                          </div>
+                          <div className="overflow-x-auto text-xs border border-slate-100 rounded-xl">
+                            <table className="w-full text-left">
+                              <thead>
+                                <tr className="border-b border-slate-100 bg-slate-50 text-[10px] text-slate-400 font-mono uppercase">
+                                  <th className="py-2 px-3">Atleta</th>
+                                  <th className="py-2 px-3">Tipo</th>
+                                  <th className="py-2 px-3">Status</th>
+                                  <th className="py-2 px-3 text-right">Valor</th>
+                                  <th className="py-2 px-3 text-right">Data</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-50 text-slate-600">
+                                {stageRegs.map(r => {
+                                  const athlete = users.find(u => u.id === r.userId);
+                                  const isPaid = r.paymentStatus === 'approved';
+                                  const isReinscricao = r.registrationType === 'reinscrição';
+                                  return (
+                                    <tr key={r.id}>
+                                      <td className="py-2 px-3 font-semibold text-slate-800">{athlete?.fullName || r.userId}</td>
+                                      <td className="py-2 px-3">
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${isReinscricao ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>
+                                          {isReinscricao ? 'Reinscrição' : 'Inscrição'}
+                                        </span>
+                                      </td>
+                                      <td className="py-2 px-3">
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                                          {isPaid ? 'Pago' : (r.clubOwedAmount != null ? 'Pendente (fatura clube)' : 'Pendente (PIX atleta)')}
+                                        </span>
+                                      </td>
+                                      <td className="py-2 px-3 text-right font-mono font-bold text-slate-800">R$ {netValue(r).toFixed(2)}</td>
+                                      <td className="py-2 px-3 text-right font-mono text-slate-400">
+                                        {new Date(isPaid ? (r.approvedAt || r.dataPagamento || r.registeredAt) : r.registeredAt).toLocaleDateString()}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {champInvoicePixModal && (
+            <PixPaymentModal
+              pixCopiaECola={champInvoicePixModal.pixCopiaECola}
+              pollEndpoint={`/api/club-invoices/by-tx/${champInvoicePixModal.txId}`}
+              authHeaders={currentUser ? { 'x-user-id': currentUser.id } : undefined}
+              title="PIX - Fatura do Campeonato"
+              onApproved={async () => {
+                await loadClubInvoiceData(false);
+                if (onRefreshData) await onRefreshData();
+              }}
+              onClose={() => setChampInvoicePixModal(null)}
             />
           )}
           </>
