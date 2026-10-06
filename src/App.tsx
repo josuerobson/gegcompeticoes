@@ -2626,7 +2626,7 @@ export default function App() {
 
       </div>
 
-      <InstallPwaPrompt theme={theme} />
+      <InstallPwaPrompt />
 
     </div>
   );

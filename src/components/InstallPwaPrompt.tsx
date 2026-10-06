@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Download, X, Share } from 'lucide-react';
+import { Download, X } from 'lucide-react';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -25,7 +25,7 @@ function recentlyDismissed() {
   return dismissedAt > 0 && Date.now() - dismissedAt < DISMISS_DAYS * 24 * 60 * 60 * 1000;
 }
 
-export default function InstallPwaPrompt({ theme }: { theme: 'light' | 'dark' }) {
+export default function InstallPwaPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [visible, setVisible] = useState(false);
   const [iosHint, setIosHint] = useState(false);
@@ -76,47 +76,57 @@ export default function InstallPwaPrompt({ theme }: { theme: 'light' | 'dark' })
 
   if (!visible) return null;
 
-  const dark = theme === 'dark';
-
   return (
-    <div className="fixed bottom-20 sm:bottom-6 left-3 right-3 sm:left-auto sm:right-6 sm:w-96 z-50 no-print animate-fade-in">
-      <div
-        className={`rounded-2xl shadow-2xl p-4 flex items-start gap-3 border ${dark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}
-      >
-        <img src="/icons/icon-192.png" alt="G&G Competições" className="w-11 h-11 rounded-xl shrink-0 shadow-sm" />
-
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold">Instalar G&G Competições</p>
-          {iosHint ? (
-            <p className={`text-[11px] mt-0.5 leading-snug ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
-              Toque em <Share className="w-3 h-3 inline -mt-0.5" /> Compartilhar e depois em "Adicionar à Tela de Início".
-            </p>
-          ) : (
-            <p className={`text-[11px] mt-0.5 leading-snug ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
-              Acesse mais rápido direto da tela inicial do seu celular ou computador.
-            </p>
-          )}
-
-          {!iosHint && (
-            <button
-              type="button"
-              onClick={install}
-              className="mt-2.5 inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-full transition cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Instalar app
-            </button>
-          )}
-        </div>
-
+    <div className="fixed bottom-20 left-4 right-4 sm:right-auto sm:w-[360px] z-50 no-print animate-fade-in">
+      <div className="relative bg-slate-900 border border-slate-700/80 text-white rounded-2xl shadow-2xl p-4">
         <button
           type="button"
           onClick={dismiss}
-          className={`shrink-0 transition cursor-pointer ${dark ? 'text-slate-500 hover:text-slate-200' : 'text-slate-400 hover:text-slate-700'}`}
+          className="absolute top-3 right-3 text-slate-500 hover:text-slate-200 transition cursor-pointer"
           aria-label="Fechar"
         >
           <X className="w-4 h-4" />
         </button>
+
+        <div className="flex items-start gap-3 pr-5">
+          <img src="/icons/icon-192.png" alt="G&G Competições" className="w-10 h-10 rounded-xl shrink-0 shadow-sm" />
+          <div className="min-w-0">
+            <p className="text-sm font-bold">Instalar G&G Competições</p>
+            <p className="text-xs text-slate-400 mt-1 leading-snug">
+              {iosHint
+                ? 'Toque em Compartilhar e depois em "Adicionar à Tela de Início".'
+                : 'Acesse o sistema diretamente pela tela inicial do seu celular ou computador.'}
+            </p>
+          </div>
+        </div>
+
+        {iosHint ? (
+          <button
+            type="button"
+            onClick={dismiss}
+            className="mt-4 w-full bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-2.5 rounded-lg transition cursor-pointer"
+          >
+            Entendi
+          </button>
+        ) : (
+          <div className="flex gap-2 mt-4">
+            <button
+              type="button"
+              onClick={dismiss}
+              className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-2.5 rounded-lg transition cursor-pointer"
+            >
+              Agora não
+            </button>
+            <button
+              type="button"
+              onClick={install}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-lg transition cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Instalar
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
