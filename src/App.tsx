@@ -4,6 +4,7 @@ import FeedView from './components/FeedView';
 import CardValidationView from './components/CardValidationView';
 import CertificateValidationView from './components/CertificateValidationView';
 import PaymentReturnView from './components/PaymentReturnView';
+import InstallPwaPrompt from './components/InstallPwaPrompt';
 import { normalizeSearchText } from './utils/textSearch';
 
 // Code-split: essas três telas não são a landing padrão (Feed é), então não
@@ -2624,6 +2625,8 @@ export default function App() {
         </button>
 
       </div>
+
+      <InstallPwaPrompt theme={theme} />
 
     </div>
   );
