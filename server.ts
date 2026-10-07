@@ -1110,11 +1110,8 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
     const ownerClubRes = await pool.query('SELECT club_id FROM championships WHERE id = $1', [targetItems[0].championshipId]);
     const ownerClubId = ownerClubRes.rows[0]?.club_id || null;
 
-    // Um único lote = uma única cobrança PIX no Sicoob, cobrindo
-    // todos os atletas e todos os campeonatos do pacote de uma vez.
-    const txId = generateSicoobTxId();
     const results: Array<{ userId: string; status: 'inscrito' | 'reinscrito' | 'erro'; message?: string }> = [];
-    let totalValor = 0; // subtotal "mesmo clube" (organizador do pacote)
+    let ownClubPendingCount = 0; // atletas do clube organizador do pacote
     let clubInvoiceCount = 0;
     const client = await pool.connect();
     try {
@@ -1174,20 +1171,22 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
               );
               clubInvoiceCount++;
             } else {
+              // Atleta do clube organizador: pagamento pendente, sem PIX no
+              // ato (gerado depois via /api/registrations/pay-batch).
               await client.query(
                 `INSERT INTO registrations (
                   id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
-                  payment_method, payment_status, completion_status, registered_at, tx_id,
+                  payment_method, payment_status, completion_status, registered_at,
                   disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento,
-                  multi_championship_id, payment_gateway
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,false,0,$11,$12,$13,$14,$15,'sicoob')`,
+                  multi_championship_id
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,false,0,$10,$11,$12,$13,$14)`,
                 [
                   regId, item.championshipId, athlete.userId, clubId, modalityId, item.stageId, athlete.weaponId,
-                  athlete.crNumber, new Date().toISOString(), txId, currentUser.id,
+                  athlete.crNumber, new Date().toISOString(), currentUser.id,
                   isReinscricao ? 'reinscrição' : 'normal', valorUnitario, dataPagamento, multiId
                 ]
               );
-              totalValor += Number(valorUnitario);
+              ownClubPendingCount++;
             }
           }
 
@@ -1204,29 +1203,12 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
       }
       await client.query('COMMIT');
 
-      if (totalValor <= 0 && clubInvoiceCount === 0) {
+      if (clubInvoiceCount === 0 && ownClubPendingCount === 0) {
         return res.status(400).json({ success: false, results, error: 'Nenhum atleta pôde ser inscrito.' });
       }
 
-      if (totalValor <= 0) {
-        return res.status(201).json({ success: true, results, clubInvoiceCount });
-      }
-
-      const sicoobConfig = ownerClubId ? await getSicoobConfig(pool, ownerClubId) : null;
-      if (!sicoobConfig || !sicoobConfig.clientId || !sicoobConfig.pixKey) {
-        return res.status(400).json({ success: false, results, error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por este multicampeonato. Avise a diretoria.' });
-      }
-
-      const cob = await createOrUpdateCob(sicoobConfig, {
-        txid: txId,
-        valor: totalValor,
-        devedorNome: currentUser.fullName,
-        devedorCpf: currentUser.cpf,
-        solicitacaoPagador: `Multicampeonato - Inscrição em lote (${results.filter(r => r.status !== 'erro').length} atletas)`.slice(0, 140),
-      });
-      await pool.query('UPDATE registrations SET pix_copia_e_cola = $1 WHERE tx_id = $2', [cob.pixCopiaECola, txId]);
-
-      res.status(201).json({ success: true, results, pixCopiaECola: cob.pixCopiaECola, txId, clubInvoiceCount });
+      // Inscrição em lote nunca gera cobrança PIX no ato.
+      res.status(201).json({ success: true, results, clubInvoiceCount, pendingPaymentCount: ownClubPendingCount });
     } catch (e: any) {
       await client.query('ROLLBACK');
       console.error('Register-bulk multi-championship error:', e);
@@ -1524,9 +1506,8 @@ app.post('/api/idsc/courses/:id/register-bulk', requireAdmin, async (req, res) =
     const champ = champRes.rows[0];
     const valorPago = champ ? Number(champ.club_registration_fee) : 0;
 
-    const txId = generateSicoobTxId();
     const results: Array<{ userId: string; status: 'inscrito' | 'reinscrito' | 'erro'; message?: string }> = [];
-    let totalValor = 0;
+    let ownClubPendingCount = 0;
     let clubInvoiceCount = 0;
     for (const athlete of athletes) {
       try {
@@ -1549,12 +1530,13 @@ app.post('/api/idsc/courses/:id/register-bulk', requireAdmin, async (req, res) =
           );
           clubInvoiceCount++;
         } else {
+          // Atleta do clube organizador: pagamento pendente, sem PIX no ato.
           await pool.query(
-            `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status, tx_id, payment_gateway)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pix','pending',$10,'sicoob')`,
-            [id, courseId, athlete.userId, clubId, athlete.weaponId, athlete.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago, txId]
+            `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status, registered_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pix','pending',NOW())`,
+            [id, courseId, athlete.userId, clubId, athlete.weaponId, athlete.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago]
           );
-          totalValor += Number(valorPago);
+          ownClubPendingCount++;
         }
         results.push({ userId: athlete.userId, status: isReinscricao ? 'reinscrito' : 'inscrito' });
       } catch (e: any) {
@@ -1562,29 +1544,12 @@ app.post('/api/idsc/courses/:id/register-bulk', requireAdmin, async (req, res) =
       }
     }
 
-    if (totalValor <= 0 && clubInvoiceCount === 0) {
+    if (clubInvoiceCount === 0 && ownClubPendingCount === 0) {
       return res.status(400).json({ success: false, results, error: 'Nenhum atleta pôde ser inscrito.' });
     }
 
-    if (totalValor <= 0) {
-      return res.status(201).json({ success: true, results, clubInvoiceCount });
-    }
-
-    const sicoobConfig = champ?.club_id ? await getSicoobConfig(pool, champ.club_id) : null;
-    if (!sicoobConfig || !sicoobConfig.clientId || !sicoobConfig.pixKey) {
-      return res.status(400).json({ success: false, results, error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por esta pista. Avise a diretoria.' });
-    }
-
-    const cob = await createOrUpdateCob(sicoobConfig, {
-      txid: txId,
-      valor: totalValor,
-      devedorNome: currentUser.fullName,
-      devedorCpf: currentUser.cpf,
-      solicitacaoPagador: `Inscrição IDSC em lote - ${courseRes.rows[0].name}`.slice(0, 140),
-    });
-    await pool.query('UPDATE idsc_registrations SET pix_copia_e_cola = $1 WHERE tx_id = $2', [cob.pixCopiaECola, txId]);
-
-    res.status(201).json({ success: true, results, pixCopiaECola: cob.pixCopiaECola, txId, clubInvoiceCount });
+    // Inscrição em lote nunca gera cobrança PIX no ato.
+    res.status(201).json({ success: true, results, clubInvoiceCount, pendingPaymentCount: ownClubPendingCount });
   } catch (err: any) {
     console.error('Register-bulk idsc course error:', err);
     res.status(500).json({ error: err.message || 'Erro ao realizar inscrição em lote IDSC.' });
@@ -4573,9 +4538,8 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
   if (champRes.rows.length === 0) return res.status(404).json({ error: 'Campeonato não encontrado.' });
   const champ = mapChampionship(champRes.rows[0]);
 
-  const txId = generateSicoobTxId();
   const results: Array<{ userId: string; status: 'inscrito' | 'reinscrito' | 'erro'; message?: string }> = [];
-  let totalValor = 0; // só o subtotal "mesmo clube" (organizador), que gera PIX imediato
+  let ownClubPendingCount = 0; // atletas do clube organizador: pagamento pendente, sem PIX no ato
   let clubInvoiceCount = 0; // quantos ficaram pendentes de fatura (clube filiado)
   const client = await pool.connect();
   try {
@@ -4640,18 +4604,22 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
           clubInvoiceCount++;
           results.push({ userId: athlete.userId, status: isReinscricao ? 'reinscrito' : 'inscrito' });
         } else {
+          // Atleta do próprio clube organizador: também não gera PIX agora.
+          // Fica liberado para participar com pagamento pendente (sem tx_id);
+          // o PIX é gerado depois, quando o pagamento for feito de fato
+          // (POST /api/registrations/pay-batch).
           await client.query(
             `INSERT INTO registrations
               (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
-               payment_method, payment_status, completion_status, registered_at, tx_id,
-               registered_by_user_id, registration_type, valor_pago, data_pagamento, disqualified, penalty, payment_gateway)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,$11,$12,$13,$14,false,0,'sicoob')`,
+               payment_method, payment_status, completion_status, registered_at,
+               registered_by_user_id, registration_type, valor_pago, data_pagamento, disqualified, penalty)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,$11,$12,$13,false,0)`,
             [
               regId, championshipId, athlete.userId, clubId, modalityId, stageId, athlete.weaponId,
-              athlete.crNumber, new Date().toISOString(), txId, currentUser.id, regType, valorPago, dataPagamento
+              athlete.crNumber, new Date().toISOString(), currentUser.id, regType, valorPago, dataPagamento
             ]
           );
-          totalValor += Number(valorPago);
+          ownClubPendingCount++;
           results.push({ userId: athlete.userId, status: isReinscricao ? 'reinscrito' : 'inscrito' });
         }
       } catch (e: any) {
@@ -4660,30 +4628,12 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
     }
     await client.query('COMMIT');
 
-    if (totalValor <= 0 && clubInvoiceCount === 0) {
+    if (clubInvoiceCount === 0 && ownClubPendingCount === 0) {
       return res.status(400).json({ success: false, results, error: 'Nenhum atleta pôde ser inscrito.' });
     }
 
-    if (totalValor <= 0) {
-      // Lote 100% de clubes filiados — nada a cobrar agora, tudo vai para fatura.
-      return res.status(201).json({ success: true, results, clubInvoiceCount });
-    }
-
-    const sicoobConfig = champ.clubId ? await getSicoobConfig(pool, champ.clubId) : null;
-    if (!sicoobConfig || !sicoobConfig.clientId || !sicoobConfig.pixKey) {
-      return res.status(400).json({ success: false, results, error: 'Pagamentos via PIX (Sicoob) ainda não foram configurados pelo clube responsável por este campeonato. Avise a diretoria.' });
-    }
-
-    const cob = await createOrUpdateCob(sicoobConfig, {
-      txid: txId,
-      valor: totalValor,
-      devedorNome: currentUser.fullName,
-      devedorCpf: currentUser.cpf,
-      solicitacaoPagador: `Inscrição em lote - ${champ.title}`.slice(0, 140),
-    });
-    await pool.query('UPDATE registrations SET pix_copia_e_cola = $1 WHERE tx_id = $2', [cob.pixCopiaECola, txId]);
-
-    res.status(201).json({ success: true, results, pixCopiaECola: cob.pixCopiaECola, txId, clubInvoiceCount });
+    // Inscrição em lote nunca gera cobrança PIX no ato.
+    res.status(201).json({ success: true, results, clubInvoiceCount, pendingPaymentCount: ownClubPendingCount });
   } catch (e: any) {
     await client.query('ROLLBACK');
     console.error('Register-bulk championship error:', e);

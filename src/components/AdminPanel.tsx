@@ -1193,7 +1193,12 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
             </ul>
             {clubInvoiceCount > 0 && (
               <p className="text-[11px] text-purple-700 bg-purple-50 border border-purple-200 rounded-xl p-2.5 shrink-0">
-                {clubInvoiceCount} inscrição(ões) de clube(s) filiado(s) foram aprovadas na hora — o valor devido ao clube organizador entra na fatura pendente (Gerenciamento Clube &gt; Financeiro).
+                {clubInvoiceCount} inscrição(ões) de clube(s) filiado(s) foram liberadas na hora — o valor devido ao clube organizador entra na fatura pendente (Gerenciamento Clube &gt; Financeiro).
+              </p>
+            )}
+            {success.filter(r => r.status !== 'erro').length > 0 && !pixPayment && (
+              <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-2.5 shrink-0">
+                Inscrição em lote não gera cobrança PIX: os atletas já estão liberados para participar e o pagamento fica pendente.
               </p>
             )}
             {pixPayment ? (
@@ -3596,7 +3601,12 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
             </ul>
             {clubInvoiceCount > 0 && (
               <p className="text-[11px] text-purple-700 bg-purple-50 border border-purple-200 rounded-xl p-2.5 shrink-0">
-                {clubInvoiceCount} inscrição(ões) de clube(s) filiado(s) foram aprovadas na hora — o valor devido ao clube organizador entra na fatura pendente (Gerenciamento Clube &gt; Financeiro).
+                {clubInvoiceCount} inscrição(ões) de clube(s) filiado(s) foram liberadas na hora — o valor devido ao clube organizador entra na fatura pendente (Gerenciamento Clube &gt; Financeiro).
+              </p>
+            )}
+            {success.filter(r => r.status !== 'erro').length > 0 && !pixPayment && (
+              <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-2.5 shrink-0">
+                Inscrição em lote não gera cobrança PIX: os atletas já estão liberados para participar e o pagamento fica pendente.
               </p>
             )}
             {pixPayment ? (
