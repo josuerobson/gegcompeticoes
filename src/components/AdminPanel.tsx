@@ -14,7 +14,7 @@ import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn, QrCode
+  Eye, EyeOff, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn, QrCode
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -1308,6 +1308,7 @@ function TreinamentosCompeticoesAdminPanel({
   const [loadingTrainings, setLoadingTrainings] = React.useState(false);
   const [tableSearchQuery, setTableSearchQuery] = React.useState('');
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  const [hidingId, setHidingId] = React.useState<string | null>(null);
 
   // Fetch all trainings
   const loadAllTrainings = React.useCallback(async () => {
@@ -1516,6 +1517,29 @@ function TreinamentosCompeticoesAdminPanel({
       alert(err.message);
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  // Oculta/reexibe um treino: oculto não conta na habitualidade nem aparece
+  // nos relatórios do atleta, mas continua listado aqui para o gestor.
+  const handleToggleHideTraining = async (id: string, hide: boolean) => {
+    setHidingId(id);
+    try {
+      const res = await fetch(`/api/trainings/${id}/hidden`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
+        body: JSON.stringify({ hidden: hide })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Erro ao ocultar treinamento.');
+      }
+      setTrainingsList(prev => prev.map(t => (t.id === id ? { ...t, hidden: hide } : t)));
+      if (onRefreshData) await onRefreshData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setHidingId(null);
     }
   };
 
@@ -2088,7 +2112,7 @@ function TreinamentosCompeticoesAdminPanel({
               <FileText className="w-5 h-5 text-blue-600" />
               Histórico Geral de Treinamentos ({filteredTrainingsList.length})
             </h4>
-            <p className="text-xs text-slate-400">Visão consolidada de todas as sessões de treinamento registradas no estande.</p>
+            <p className="text-xs text-slate-400">Visão consolidada de todas as sessões de treinamento registradas no estande. Treinos ocultos não contam na habitualidade nem aparecem nos relatórios do atleta.</p>
           </div>
 
           <div className="relative w-full sm:w-64">
@@ -2133,10 +2157,15 @@ function TreinamentosCompeticoesAdminPanel({
                 {filteredTrainingsList.map(t => {
                   const formattedDate = t.dateTime ? new Date(t.dateTime).toLocaleString('pt-BR') : '-';
                   return (
-                    <tr key={t.id} className="hover:bg-slate-50/70 transition">
+                    <tr key={t.id} className={`hover:bg-slate-50/70 transition ${t.hidden ? 'opacity-60 bg-slate-50/60' : ''}`}>
                       <td className="py-3 px-3">
                         <div className="font-bold text-slate-900">{t.athleteName || 'Atleta'}</div>
                         <div className="text-[10px] text-slate-400 font-mono">CR: {t.athleteCr || 'N/A'}</div>
+                        {t.hidden && (
+                          <span className="inline-block mt-1 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase bg-amber-100 text-amber-800">
+                            Oculto
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-3 font-mono text-[11px] whitespace-nowrap">{formattedDate}</td>
                       <td className="py-3 px-3">
@@ -2157,7 +2186,15 @@ function TreinamentosCompeticoesAdminPanel({
                         <div className="font-medium">{t.modality || 'Treino Livre'}</div>
                         <div className="text-[10px] text-emerald-700 font-mono font-bold">{t.score ?? 0} pts</div>
                       </td>
-                      <td className="py-3 px-3 text-right">
+                      <td className="py-3 px-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => handleToggleHideTraining(t.id, !t.hidden)}
+                          disabled={hidingId === t.id}
+                          className="text-amber-600 hover:text-amber-800 transition p-1.5 rounded hover:bg-amber-50 cursor-pointer disabled:opacity-40"
+                          title={t.hidden ? 'Reexibir treinamento (volta a contar na habitualidade)' : 'Ocultar treinamento (não conta na habitualidade nem aparece nos relatórios do atleta)'}
+                        >
+                          {t.hidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                        </button>
                         <button
                           onClick={() => handleDeleteTraining(t.id)}
                           disabled={deletingId === t.id}

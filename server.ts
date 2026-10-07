@@ -586,6 +586,7 @@ function mapTraining(t: any): TrainingSession {
     modality: t.modality || undefined,
     score: Number(t.score ?? 0),
     notes: t.notes || undefined,
+    hidden: Boolean(t.hidden),
     createdAt: t.created_at,
   };
 }
@@ -6664,7 +6665,10 @@ app.get('/api/trainings', requireAuth, async (req, res) => {
     `;
     const params: any[] = [];
     if (!fetchAll) {
-      query += ` WHERE t.user_id = $1 `;
+      // Visão do atleta (diário, habitualidade e declarações): treinos
+      // ocultos pelo gestor não aparecem nem contam. Só o histórico geral do
+      // admin (all=true) os lista, para poderem ser reexibidos.
+      query += ` WHERE t.user_id = $1 AND t.hidden = false `;
       params.push(targetUserId || currentUser.id);
     }
     query += ` ORDER BY t.date_time DESC`;
@@ -6765,6 +6769,23 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Create training error:', err);
     res.status(500).json({ error: 'Erro ao registrar treinamento.' });
+  }
+});
+
+// Oculta/reexibe um treino (só gestor). Oculto = fora da habitualidade e dos
+// relatórios do atleta, sem apagar o registro.
+app.patch('/api/trainings/:id/hidden', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const hidden = Boolean(req.body?.hidden);
+  try {
+    const r = await pool.query(`UPDATE trainings SET hidden = $1 WHERE id = $2 RETURNING id, hidden`, [hidden, id]);
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'Treinamento não encontrado.' });
+    }
+    res.json({ success: true, id, hidden: r.rows[0].hidden });
+  } catch (err) {
+    console.error('Toggle training hidden error:', err);
+    res.status(500).json({ error: 'Erro ao ocultar/reexibir treinamento.' });
   }
 });
 

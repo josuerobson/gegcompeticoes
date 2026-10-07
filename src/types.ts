@@ -428,6 +428,7 @@ export interface TrainingSession {
   modality?: string;
   score?: number;
   notes?: string;
+  hidden?: boolean;
   createdAt?: string;
 }
 

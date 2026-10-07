@@ -635,6 +635,8 @@ export async function initDB() {
       -- Additive migrations for unit of measure and club ammo type (nova vs recarga)
       ALTER TABLE ammo_invoice_items ADD COLUMN IF NOT EXISTS unit_measure TEXT DEFAULT 'un';
       ALTER TABLE trainings ADD COLUMN IF NOT EXISTS club_ammo_type TEXT DEFAULT 'recarga';
+      -- Treino oculto pelo gestor: some da habitualidade e dos relatórios do atleta, mas continua no histórico geral do admin.
+      ALTER TABLE trainings ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT false;
       ALTER TABLE registrations ADD COLUMN IF NOT EXISTS club_ammo_type TEXT DEFAULT 'recarga';
       ALTER TABLE stage_scores ADD COLUMN IF NOT EXISTS club_ammo_type TEXT DEFAULT 'recarga';
 
