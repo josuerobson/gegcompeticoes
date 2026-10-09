@@ -24,6 +24,8 @@ export interface LegacyFinalData {
   etapas: any[];
   inscricoes: any[];
   treinos: any[];
+  // CPF (só dígitos) de atletas referenciados que não estão em members — permite vincular à mesma pessoa já cadastrada.
+  cpfByAtleta?: Record<string, string>;
 }
 
 type Counts = { inserted: number; updated: number; skippedExisting: number; note?: string };
@@ -57,6 +59,16 @@ export async function applyLegacyFinalImport(pg: Pool, data: LegacyFinalData, ap
   const resolveLookup = (id: number | null | undefined): string | null => {
     if (!id) return null;
     return emptyToNull(data.lookup[String(id)]);
+  };
+
+  // Pessoa já cadastrada com o mesmo CPF (login é por CPF): usada quando o atleta legado referenciado
+  // não existe como user_legacy_<id> mas o CPF dele já está no sistema.
+  const cpfRows = await pg.query(`SELECT id, regexp_replace(cpf, '[^0-9]', '', 'g') AS d FROM users WHERE cpf IS NOT NULL ORDER BY (id LIKE 'user_legacy_%') DESC, id`);
+  const userByCpf = new Map<string, string>();
+  for (const r of cpfRows.rows) { if (r.d && !userByCpf.has(r.d)) userByCpf.set(r.d, r.id); }
+  const userByLegacyAtleta = (atleta: any): string | null => {
+    const d = String(data.cpfByAtleta?.[String(atleta)] || '').replace(/\D/g, '');
+    return d ? userByCpf.get(d) || null : null;
   };
 
   // ─── Fase 1: Clubes ─────────────────────────────────────────────────────
@@ -267,7 +279,7 @@ export async function applyLegacyFinalImport(pg: Pool, data: LegacyFinalData, ap
     const pendingChamp = new Set(apply ? [] : data.campeonatos.map(c => `champ_legacy_${c.id}`));
     let missingFk = 0;
     for (const r of data.inscricoes) {
-      const userId = `user_legacy_${r.atleta}`;
+      let userId = `user_legacy_${r.atleta}`;
       const clubId = `club_legacy_${r.clube}`;
       const champId = `champ_legacy_${r.campeonato}`;
       const stageId = `stage_legacy_${r.etapa}`;
@@ -300,7 +312,12 @@ export async function applyLegacyFinalImport(pg: Pool, data: LegacyFinalData, ap
         pg.query('SELECT 1 FROM modalities WHERE id=$1', [modId]).then(x => x.rows.length > 0 || (!apply && data.modalities.some(m => `mod_legacy_${m.id}` === modId))),
         pg.query('SELECT 1 FROM users WHERE id=$1', [userId]).then(x => x.rows.length > 0 || (!apply && data.members.some(m => `user_legacy_${m.id}` === userId))),
       ]);
-      if (!clubOk || !champOk || !stageOk || !modOk || !userOk) {
+      let userOkFinal = userOk;
+      if (!userOkFinal) {
+        const alt = userByLegacyAtleta(r.atleta);
+        if (alt) { userId = alt; userOkFinal = true; (report['registrations'] ||= { inserted: 0, updated: 0, skippedExisting: 0 }); ((report as any).__viaCpf ||= { registrations: 0, trainings: 0 }).registrations++; }
+      }
+      if (!clubOk || !champOk || !stageOk || !modOk || !userOkFinal) {
         missingFk++;
         // Motivo do descarte; "noAranas" = o campeonato da inscrição é da loja 2017 (as demais são de outros sites do legado).
         const det = ((report as any).__skipDetail ||= { total: {} as Record<string, number>, aranas: {} as Record<string, number> });
@@ -374,13 +391,18 @@ export async function applyLegacyFinalImport(pg: Pool, data: LegacyFinalData, ap
     let missingFk = 0;
     for (const r of data.treinos) {
       if (existingIds.has(r.id)) { bump('trainings', 'skippedExisting'); continue; }
-      const userId = `user_legacy_${r.atleta}`;
+      let userId = `user_legacy_${r.atleta}`;
       const clubId = `club_legacy_${r.id_clube}`;
       const [userOk, clubOk] = await Promise.all([
         pg.query('SELECT 1 FROM users WHERE id=$1', [userId]).then(x => x.rows.length > 0 || (!apply && data.members.some(m => `user_legacy_${m.id}` === userId))),
         pg.query('SELECT 1 FROM clubs WHERE id=$1', [clubId]).then(x => x.rows.length > 0 || (!apply && data.clubs.some(c => `club_legacy_${c.id}` === clubId))),
       ]);
-      if (!userOk || !clubOk) { missingFk++; continue; }
+      let userOkFinal = userOk;
+      if (!userOkFinal) {
+        const alt = userByLegacyAtleta(r.atleta);
+        if (alt) { userId = alt; userOkFinal = true; ((report as any).__viaCpf ||= { registrations: 0, trainings: 0 }).trainings++; }
+      }
+      if (!userOkFinal || !clubOk) { missingFk++; continue; }
       let weaponId: string | null = null, weaponName: string | null = null, weaponCaliber: string | null = null;
       if (r.id_arma) {
         const w = await pg.query('SELECT id, model, caliber FROM weapons WHERE legacy_id=$1', [r.id_arma]);
