@@ -300,7 +300,19 @@ export async function applyLegacyFinalImport(pg: Pool, data: LegacyFinalData, ap
         pg.query('SELECT 1 FROM modalities WHERE id=$1', [modId]).then(x => x.rows.length > 0 || (!apply && data.modalities.some(m => `mod_legacy_${m.id}` === modId))),
         pg.query('SELECT 1 FROM users WHERE id=$1', [userId]).then(x => x.rows.length > 0 || (!apply && data.members.some(m => `user_legacy_${m.id}` === userId))),
       ]);
-      if (!clubOk || !champOk || !stageOk || !modOk || !userOk) { missingFk++; continue; }
+      if (!clubOk || !champOk || !stageOk || !modOk || !userOk) {
+        missingFk++;
+        // Motivo do descarte; "noAranas" = o campeonato da inscrição é da loja 2017 (as demais são de outros sites do legado).
+        const det = ((report as any).__skipDetail ||= { total: {} as Record<string, number>, aranas: {} as Record<string, number> });
+        const inAranas = data.campeonatos.some(c => `champ_legacy_${c.id}` === champId);
+        const reasons = [!clubOk && 'clube', !champOk && 'campeonato', !stageOk && 'etapa', !modOk && 'modalidade', !userOk && 'atleta'].filter(Boolean) as string[];
+        for (const k of reasons) {
+          det.total[k] = (det.total[k] || 0) + 1;
+          if (inAranas) det.aranas[k] = (det.aranas[k] || 0) + 1;
+        }
+        if (inAranas) det.aranas.__linhas = (det.aranas.__linhas || 0) + 1;
+        continue;
+      }
       let resolvedWeaponId: string | null = null;
       if (weaponId) {
         const w = await pg.query('SELECT 1 FROM weapons WHERE id=$1', [weaponId]);
