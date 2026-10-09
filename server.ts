@@ -8,6 +8,7 @@ import { defaultChampionships, shootingImages } from './src/data/mockData.js';
 import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, MultiChampionshipItem, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan, RankingHighlight, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult, LegacyMultiDiscount } from './src/types.js';
 import { pool, initDB } from './src/db.js';
 import { hashPassword, verifyPassword } from './src/auth.js';
+import { applyLegacyFinalImport, LegacyFinalData } from './src/legacyFinalImport.js'; // TEMPORÁRIO (importação final do legado)
 import { uploadDocument, getDocumentStream, storageEnabled } from './src/storage.js';
 import {
   getMercadoPagoConfig, mercadoPagoEnvFromToken, maskAccessToken,
@@ -1946,6 +1947,37 @@ app.post('/api/admin/clubs', requireAdmin, async (req, res) => {
 // na extração) deixaram e-mails com sufixo +N atribuídos a pessoas diferentes
 // das da extração final, o que trava updates sequenciais em colisão cruzada.
 // Não toca em club_aranas nem em nenhum dado que não tenha legacy_id.
+// TEMPORÁRIO — importação final do legado (corte de 2026-10-07). Recebe as
+// linhas extraídas localmente do MySQL do legado (o servidor de produção não
+// conecta no legado) e aplica com a regra "só insere o que falta". Roda em
+// segundo plano e guarda o resultado em memória para evitar timeout do proxy.
+// REMOVER depois de aplicado.
+let legacyFinalImportState: { status: 'idle' | 'running' | 'done' | 'error'; apply?: boolean; startedAt?: string; result?: any; error?: string } = { status: 'idle' };
+
+app.post('/api/admin/import/legacy-final', requireMasterAdmin, async (req, res) => {
+  if (legacyFinalImportState.status === 'running') {
+    return res.status(409).json({ error: 'Já existe uma importação em andamento.' });
+  }
+  const apply = req.query.apply === 'true';
+  const data = req.body as LegacyFinalData;
+  if (!data || !Array.isArray(data.members) || !Array.isArray(data.inscricoes) || !Array.isArray(data.etapas)) {
+    return res.status(400).json({ error: 'Payload inválido.' });
+  }
+  legacyFinalImportState = { status: 'running', apply, startedAt: new Date().toISOString() };
+  res.status(202).json({ started: true, apply });
+  try {
+    const result = await applyLegacyFinalImport(pool, data, apply);
+    legacyFinalImportState = { status: 'done', apply, startedAt: legacyFinalImportState.startedAt, result };
+  } catch (err: any) {
+    console.error('Legacy final import error:', err);
+    legacyFinalImportState = { status: 'error', apply, startedAt: legacyFinalImportState.startedAt, error: err?.message || String(err) };
+  }
+});
+
+app.get('/api/admin/import/legacy-final', requireMasterAdmin, (_req, res) => {
+  res.json(legacyFinalImportState);
+});
+
 app.post('/api/admin/import/legacy/cleanup', requireMasterAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
