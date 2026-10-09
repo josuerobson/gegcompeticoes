@@ -253,21 +253,22 @@ export async function applyLegacyFinalImport(pg: Pool, data: LegacyFinalData, ap
     if (noMatchingChamp > 0) report['stages'].note = `${noMatchingChamp} etapa(s) nova(s) referenciam campeonato ainda não resolvido.`;
   }
 
-  // Numeração: a "7ª ETAPA" do legado (6357) deve ficar com número 7 e a
-  // "8ª ETAPA" criada no app novo (stage_1791381982060) com 8 — o MAX+1 acima
-  // inverteria a ordem. Só mexe se as duas existirem na situação esperada.
-  if (apply) {
-    const fix = await pg.query(
-      `SELECT id, stage_num FROM stages WHERE id IN ('stage_legacy_6357','stage_1791381982060')`
+  // Numeração: o MAX+1 acima numeraria a "7ª ETAPA" importada como 8, porque o
+  // app novo já criou uma "8ª ETAPA" com número 7 nesses campeonatos. Nos
+  // campeonatos que ganharam etapa nova, o número passa a seguir o número do
+  // título ("7ª" = 7, "8ª" = 8). Só toca em etapas cujo título começa com "Nª".
+  if (apply && newStageIds.length > 0) {
+    const champsTouched = await pg.query(
+      `SELECT DISTINCT championship_id FROM stages WHERE id = ANY($1::text[])`, [newStageIds]
     );
-    const byId = new Map(fix.rows.map(r => [r.id as string, Number(r.stage_num)]));
-    if (byId.has('stage_legacy_6357') && byId.has('stage_1791381982060') && byId.get('stage_1791381982060') === 7) {
-      await pg.query(
-        `UPDATE stages SET stage_num = CASE id WHEN 'stage_legacy_6357' THEN 7 WHEN 'stage_1791381982060' THEN 8 END
-         WHERE id IN ('stage_legacy_6357','stage_1791381982060')`
-      );
-      (report['stages'] as any).renumbered = '7ª ETAPA (legado 6357) = nº 7; 8ª ETAPA (app novo) = nº 8';
-    }
+    const fixed = await pg.query(
+      `UPDATE stages SET stage_num = (regexp_match(title, '^\\s*(\\d+)'))[1]::int
+       WHERE championship_id = ANY($1::text[]) AND title ~ '^\\s*\\d+\\s*ª'
+         AND stage_num <> (regexp_match(title, '^\\s*(\\d+)'))[1]::int
+       RETURNING id, title, stage_num`,
+      [champsTouched.rows.map(r => r.championship_id)]
+    );
+    (report['stages'] as any).renumbered = fixed.rows.map(r => `${r.id}: "${String(r.title).trim()}" -> nº ${r.stage_num}`);
   }
 
   // ─── Fase 6: Inscrições ─────────────────────────────────────────────────
