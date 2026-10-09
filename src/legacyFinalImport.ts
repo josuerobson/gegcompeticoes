@@ -419,7 +419,7 @@ export async function applyLegacyFinalImport(pg: Pool, data: LegacyFinalData, ap
           `INSERT INTO trainings (id, user_id, club_id, date_time, weapon_id, weapon_name, weapon_caliber,
                                     weapon_owner_type, total_shots, own_ammo_shots, club_ammo_shots, score, legacy_id)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-           ON CONFLICT (legacy_id) DO NOTHING`,
+           ON CONFLICT (legacy_id) WHERE legacy_id IS NOT NULL DO NOTHING`,
           [`training_legacy_${r.id}`, userId, clubId, dateTime, weaponId, weaponName, weaponCaliber,
            isOwn ? 'propria' : 'clube', Number(r.tiros) || 0, isOwn ? Number(r.tiros) || 0 : 0,
            isOwn ? 0 : Number(r.tiros) || 0, Number(r.total_pontos) || 0, r.id]
