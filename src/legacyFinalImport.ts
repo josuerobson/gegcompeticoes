@@ -41,6 +41,9 @@ function dateOrNull(v: any): string | null {
   if (isNaN(d.getTime()) || d.getFullYear() <= 1899) return null;
   return d.toISOString().split('T')[0];
 }
+// O clube 1001 do legado é o próprio Aranãs, cujo id no sistema novo é club_aranas (não club_legacy_1001).
+const clubIdOf = (legacyId: any): string => (Number(legacyId) === 1001 ? 'club_aranas' : `club_legacy_${legacyId}`);
+
 function slugify(name: string): string {
   return name
     .toLowerCase()
@@ -143,7 +146,7 @@ export async function applyLegacyFinalImport(pg: Pool, data: LegacyFinalData, ap
       if (cpfDigits && existingCpfs.has(cpfDigits)) { cpfAlreadyExists++; bump('users', 'skippedExisting'); continue; }
       if (cpfDigits) existingCpfs.add(cpfDigits);
       // Sem clube (ou clube fora do Aranãs): vai para o Aranãs, como na importação original.
-      let clubId: string | null = r.id1 ? `club_legacy_${r.id1}` : 'club_aranas';
+      let clubId: string | null = r.id1 ? clubIdOf(r.id1) : 'club_aranas';
       const sexLabel = resolveLookup(r.id4);
       const affiliationLabel = resolveLookup(r.id2);
       const militaryLabel = resolveLookup(r.id5);
@@ -152,7 +155,7 @@ export async function applyLegacyFinalImport(pg: Pool, data: LegacyFinalData, ap
       if (clubId) {
         const clubExists = await pg.query('SELECT 1 FROM clubs WHERE id=$1', [clubId]);
         // Em dry-run clubes novos ainda não existem no banco — só conta como órfão quando também não está na lista a inserir.
-        const willBeInserted = !apply && data.clubs.some(c => `club_legacy_${c.id}` === clubId);
+        const willBeInserted = !apply && data.clubs.some(c => clubIdOf(c.id) === clubId);
         if (clubExists.rows.length === 0 && !willBeInserted) { noMatchingClub++; clubId = 'club_aranas'; }
       }
       bump('users', 'inserted');
@@ -281,7 +284,7 @@ export async function applyLegacyFinalImport(pg: Pool, data: LegacyFinalData, ap
     let missingFk = 0;
     for (const r of data.inscricoes) {
       let userId = `user_legacy_${r.atleta}`;
-      const clubId = `club_legacy_${r.clube}`;
+      const clubId = clubIdOf(r.clube);
       const champId = `champ_legacy_${r.campeonato}`;
       const stageId = `stage_legacy_${r.etapa}`;
       const modId = `mod_legacy_${r.modalidade}`;
@@ -307,7 +310,7 @@ export async function applyLegacyFinalImport(pg: Pool, data: LegacyFinalData, ap
       }
 
       const [clubOk, champOk, stageOk, modOk, userOk] = await Promise.all([
-        pg.query('SELECT 1 FROM clubs WHERE id=$1', [clubId]).then(x => x.rows.length > 0 || (!apply && data.clubs.some(c => `club_legacy_${c.id}` === clubId))),
+        pg.query('SELECT 1 FROM clubs WHERE id=$1', [clubId]).then(x => x.rows.length > 0 || (!apply && data.clubs.some(c => clubIdOf(c.id) === clubId))),
         pg.query('SELECT 1 FROM championships WHERE id=$1', [champId]).then(x => x.rows.length > 0 || pendingChamp.has(champId)),
         pg.query('SELECT 1 FROM stages WHERE id=$1', [stageId]).then(x => x.rows.length > 0 || pendingStage.has(stageId)),
         pg.query('SELECT 1 FROM modalities WHERE id=$1', [modId]).then(x => x.rows.length > 0 || (!apply && data.modalities.some(m => `mod_legacy_${m.id}` === modId))),
@@ -393,10 +396,10 @@ export async function applyLegacyFinalImport(pg: Pool, data: LegacyFinalData, ap
     for (const r of data.treinos) {
       if (existingIds.has(r.id)) { bump('trainings', 'skippedExisting'); continue; }
       let userId = `user_legacy_${r.atleta}`;
-      const clubId = `club_legacy_${r.id_clube}`;
+      const clubId = clubIdOf(r.id_clube);
       const [userOk, clubOk] = await Promise.all([
         pg.query('SELECT 1 FROM users WHERE id=$1', [userId]).then(x => x.rows.length > 0 || (!apply && data.members.some(m => `user_legacy_${m.id}` === userId))),
-        pg.query('SELECT 1 FROM clubs WHERE id=$1', [clubId]).then(x => x.rows.length > 0 || (!apply && data.clubs.some(c => `club_legacy_${c.id}` === clubId))),
+        pg.query('SELECT 1 FROM clubs WHERE id=$1', [clubId]).then(x => x.rows.length > 0 || (!apply && data.clubs.some(c => clubIdOf(c.id) === clubId))),
       ]);
       let userOkFinal = userOk;
       if (!userOkFinal) {
