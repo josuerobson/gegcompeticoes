@@ -14,7 +14,7 @@ import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, EyeOff, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn, QrCode
+  Eye, EyeOff, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn, QrCode, KeyRound, Copy, AlertTriangle
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -7226,6 +7226,105 @@ export default function AdminPanel({
     }
   };
 
+  // Excluir atleta (Novo Atleta): popup mostra o que será apagado e exige
+  // digitar "ciente"; a exclusão não tem volta.
+  type AthleteDeleteSummary = {
+    fullName: string; championshipResults: number; trainings: number; posts: number;
+    also: { registrationsWithoutResult: number; paidRegistrations: number; comments: number; weapons: number };
+  };
+  const [deleteAthleteTarget, setDeleteAthleteTarget] = useState<User | null>(null);
+  const [deleteAthleteSummary, setDeleteAthleteSummary] = useState<AthleteDeleteSummary | null>(null);
+  const [deleteAthleteLoading, setDeleteAthleteLoading] = useState(false);
+  const [deleteAthleteConfirm, setDeleteAthleteConfirm] = useState('');
+  const [deletingAthlete, setDeletingAthlete] = useState(false);
+  const [deleteAthleteError, setDeleteAthleteError] = useState('');
+  const [athleteActionMsg, setAthleteActionMsg] = useState('');
+
+  const openDeleteAthlete = async (athlete: User) => {
+    setDeleteAthleteTarget(athlete);
+    setDeleteAthleteSummary(null);
+    setDeleteAthleteConfirm('');
+    setDeleteAthleteError('');
+    setDeleteAthleteLoading(true);
+    try {
+      const res = await fetch(`/api/admin/athletes/${athlete.id}/delete-summary`, { headers: { 'x-user-id': currentUser?.id || '' } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao levantar os dados do atleta.');
+      setDeleteAthleteSummary(data);
+    } catch (err: any) {
+      setDeleteAthleteError(err.message || 'Erro ao levantar os dados do atleta.');
+    } finally {
+      setDeleteAthleteLoading(false);
+    }
+  };
+
+  const closeDeleteAthlete = () => {
+    if (deletingAthlete) return;
+    setDeleteAthleteTarget(null);
+    setDeleteAthleteSummary(null);
+    setDeleteAthleteConfirm('');
+    setDeleteAthleteError('');
+  };
+
+  const confirmDeleteAthlete = async () => {
+    if (!deleteAthleteTarget || deleteAthleteConfirm.trim().toLowerCase() !== 'ciente') return;
+    setDeletingAthlete(true);
+    setDeleteAthleteError('');
+    try {
+      const res = await fetch(`/api/admin/athletes/${deleteAthleteTarget.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
+        body: JSON.stringify({ confirm: deleteAthleteConfirm.trim() })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao excluir o atleta.');
+      const name = deleteAthleteTarget.fullName;
+      setDeleteAthleteTarget(null);
+      setDeleteAthleteSummary(null);
+      setDeleteAthleteConfirm('');
+      setAthleteActionMsg(`Atleta "${name}" excluído definitivamente.`);
+      setTimeout(() => setAthleteActionMsg(''), 6000);
+      if (onRefreshData) await onRefreshData();
+    } catch (err: any) {
+      setDeleteAthleteError(err.message || 'Erro ao excluir o atleta.');
+    } finally {
+      setDeletingAthlete(false);
+    }
+  };
+
+  // Nova senha de acesso do atleta: gerada no servidor e exibida uma única vez.
+  const [resetAthleteTarget, setResetAthleteTarget] = useState<User | null>(null);
+  const [resettingAthlete, setResettingAthlete] = useState(false);
+  const [resetAthletePassword, setResetAthletePassword] = useState('');
+  const [resetAthleteError, setResetAthleteError] = useState('');
+  const [resetCopied, setResetCopied] = useState(false);
+
+  const generateAthletePassword = async () => {
+    if (!resetAthleteTarget) return;
+    setResettingAthlete(true);
+    setResetAthleteError('');
+    try {
+      const res = await fetch(`/api/admin/athletes/${resetAthleteTarget.id}/reset-password`, {
+        method: 'POST',
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao gerar nova senha.');
+      setResetAthletePassword(data.password);
+    } catch (err: any) {
+      setResetAthleteError(err.message || 'Erro ao gerar nova senha.');
+    } finally {
+      setResettingAthlete(false);
+    }
+  };
+
+  const closeResetAthlete = () => {
+    setResetAthleteTarget(null);
+    setResetAthletePassword('');
+    setResetAthleteError('');
+    setResetCopied(false);
+  };
+
   // Editar atleta (Novo Atleta) — inclui trocar o clube ao qual pertence,
   // exclusivo do master_admin.
   const [editingAthlete, setEditingAthlete] = useState<User | null>(null);
@@ -9330,6 +9429,22 @@ export default function AdminPanel({
                             <Pencil className="w-3 h-3 text-blue-600" />
                             Editar
                           </button>
+                          <button
+                            onClick={() => { setResetAthleteTarget(u); setResetAthletePassword(''); setResetAthleteError(''); setResetCopied(false); }}
+                            className="flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-[11px] px-3 py-1.5 rounded-lg transition cursor-pointer"
+                            title="Gerar uma nova senha de acesso para este atleta"
+                          >
+                            <KeyRound className="w-3 h-3 text-amber-600" />
+                            Nova senha
+                          </button>
+                          <button
+                            onClick={() => openDeleteAthlete(u)}
+                            className="flex items-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold text-[11px] px-3 py-1.5 rounded-lg transition cursor-pointer"
+                            title="Excluir este atleta definitivamente"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Excluir
+                          </button>
                         </div>
                       </div>
                     );
@@ -9337,6 +9452,171 @@ export default function AdminPanel({
                 </div>
               )}
             </div>
+
+            {athleteActionMsg && (
+              <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
+                <CheckCircle className="w-5 h-5 text-emerald-600" />
+                {athleteActionMsg}
+              </div>
+            )}
+
+            {/* Modal de Exclusão do Atleta */}
+            {deleteAthleteTarget && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+                <div className="bg-white rounded-2xl border border-red-200 w-full max-w-md overflow-hidden shadow-2xl text-slate-800 flex flex-col text-left max-h-[90vh]">
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-red-100 bg-red-50">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-red-600" />
+                      <div>
+                        <h4 className="font-display font-bold text-red-800 text-base">Excluir atleta</h4>
+                        <p className="text-xs text-red-600">{deleteAthleteTarget.fullName}</p>
+                      </div>
+                    </div>
+                    <button onClick={closeDeleteAthlete} className="text-slate-400 hover:text-slate-600 p-1">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="p-6 space-y-4 overflow-y-auto">
+                    {deleteAthleteLoading ? (
+                      <div className="py-6 text-center text-slate-400">
+                        <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-red-500" />
+                        <p className="text-xs">Verificando os dados do atleta...</p>
+                      </div>
+                    ) : deleteAthleteSummary ? (
+                      <>
+                        <div>
+                          <p className="text-sm font-bold text-slate-900 mb-2">Este atleta possui:</p>
+                          <ul className="text-sm text-slate-700 space-y-1 font-mono">
+                            <li><strong>{deleteAthleteSummary.championshipResults}</strong> Participações em campeonatos com resultados lançados</li>
+                            <li><strong>{deleteAthleteSummary.trainings}</strong> Registros de Habitualidade</li>
+                            <li><strong>{deleteAthleteSummary.posts}</strong> Posts no feed</li>
+                          </ul>
+                        </div>
+                        {(deleteAthleteSummary.also.registrationsWithoutResult > 0 || deleteAthleteSummary.also.paidRegistrations > 0 || deleteAthleteSummary.also.comments > 0 || deleteAthleteSummary.also.weapons > 0) && (
+                          <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl p-2.5">
+                            Também serão apagados:{' '}
+                            {[
+                              deleteAthleteSummary.also.registrationsWithoutResult > 0 && `${deleteAthleteSummary.also.registrationsWithoutResult} inscrição(ões) sem resultado`,
+                              deleteAthleteSummary.also.comments > 0 && `${deleteAthleteSummary.also.comments} comentário(s)`,
+                              deleteAthleteSummary.also.weapons > 0 && `${deleteAthleteSummary.also.weapons} arma(s) cadastrada(s)`,
+                            ].filter(Boolean).join(', ') || 'curtidas, seguidores e saldos de munição'}.
+                            {deleteAthleteSummary.also.paidRegistrations > 0 && (
+                              <span className="block mt-1 font-semibold text-amber-700">
+                                Atenção: {deleteAthleteSummary.also.paidRegistrations} inscrição(ões) deste atleta estão com pagamento aprovado e deixarão de constar nos relatórios financeiros.
+                              </span>
+                            )}
+                          </p>
+                        )}
+                        <p className="text-sm font-bold text-slate-900">Deseja realmente excluir este atleta?</p>
+                        <p className="text-sm font-bold text-red-700">Esta ação não tem como ser desfeita!</p>
+                        <div className="space-y-1">
+                          <label className="text-xs text-slate-600 block">
+                            Escreva abaixo: <strong>"ciente"</strong> para registrar que está ciente que esta ação não tem como ser desfeita.
+                          </label>
+                          <input
+                            type="text"
+                            value={deleteAthleteConfirm}
+                            onChange={e => setDeleteAthleteConfirm(e.target.value)}
+                            placeholder="ciente"
+                            autoFocus
+                            className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-red-500 text-sm text-slate-800"
+                          />
+                        </div>
+                      </>
+                    ) : null}
+                    {deleteAthleteError && (
+                      <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{deleteAthleteError}</div>
+                    )}
+                  </div>
+                  <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+                    <button
+                      type="button"
+                      onClick={closeDeleteAthlete}
+                      disabled={deletingAthlete}
+                      className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmDeleteAthlete}
+                      disabled={!deleteAthleteSummary || deleteAthleteConfirm.trim().toLowerCase() !== 'ciente' || deletingAthlete}
+                      className="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs px-6 py-2.5 rounded-xl font-bold transition cursor-pointer"
+                    >
+                      {deletingAthlete ? 'Excluindo...' : 'Excluir definitivamente'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal de Nova Senha do Atleta */}
+            {resetAthleteTarget && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+                <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl text-slate-800 flex flex-col text-left">
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                    <div>
+                      <h4 className="font-display font-bold text-slate-900 text-base">Nova senha de acesso</h4>
+                      <p className="text-xs text-slate-400">{resetAthleteTarget.fullName}</p>
+                    </div>
+                    <button onClick={closeResetAthlete} className="text-slate-400 hover:text-slate-600 p-1">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="p-6 space-y-4">
+                    {resetAthletePassword ? (
+                      <>
+                        <p className="text-xs text-slate-600">
+                          Nova senha gerada. Anote ou copie agora — ela <strong>não será exibida novamente</strong> e a senha anterior deixou de funcionar.
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 bg-slate-100 border border-slate-200 rounded-xl p-3 text-base font-mono font-bold tracking-wider text-slate-900 select-all">
+                            {resetAthletePassword}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try { await navigator.clipboard.writeText(resetAthletePassword); setResetCopied(true); } catch { /* sem permissão de área de transferência */ }
+                            }}
+                            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-3 rounded-xl font-bold transition cursor-pointer"
+                          >
+                            <Copy className="w-4 h-4" />
+                            {resetCopied ? 'Copiada' : 'Copiar'}
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-slate-500">O login do atleta continua sendo o CPF dele.</p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-slate-700">
+                        Gerar uma nova senha de acesso para <strong>{resetAthleteTarget.fullName}</strong>? A senha atual deixará de funcionar.
+                      </p>
+                    )}
+                    {resetAthleteError && (
+                      <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{resetAthleteError}</div>
+                    )}
+                  </div>
+                  <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+                    <button
+                      type="button"
+                      onClick={closeResetAthlete}
+                      className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+                    >
+                      {resetAthletePassword ? 'Fechar' : 'Cancelar'}
+                    </button>
+                    {!resetAthletePassword && (
+                      <button
+                        type="button"
+                        onClick={generateAthletePassword}
+                        disabled={resettingAthlete}
+                        className="bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-xs px-6 py-2.5 rounded-xl font-bold transition cursor-pointer"
+                      >
+                        {resettingAthlete ? 'Gerando...' : 'Gerar nova senha'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Modal de Edição do Atleta */}
             {editingAthlete && (

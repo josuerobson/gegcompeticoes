@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import compression from 'compression';
 import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
@@ -2628,6 +2629,119 @@ async function applyUserProfileFields(userId: string, body: Record<string, unkno
   );
   return fullUserRes.rows[0] ? mapUser(fullUserRes.rows[0]) : null;
 }
+
+// ---------------------------------------------------------------------------
+// Gestão de atleta pelo gestor (Gerenciamento Plataforma > Novo Atleta):
+// nova senha de acesso e exclusão definitiva.
+// ---------------------------------------------------------------------------
+
+// Carrega o atleta-alvo e valida se o gestor pode mexer nele: só usuários
+// com perfil 'member', nunca o próprio gestor, e (exceto master) apenas
+// atletas dos clubes do tenant da franquia do gestor.
+async function loadManageableAthlete(currentUser: User, targetId: string): Promise<{ row?: any; status?: number; error?: string }> {
+  const r = await pool.query('SELECT id, full_name, role, club_id FROM users WHERE id = $1', [targetId]);
+  if (r.rows.length === 0) return { status: 404, error: 'Atleta não encontrado.' };
+  const row = r.rows[0];
+  if (row.role !== 'member') return { status: 403, error: 'Só é possível gerenciar contas de atleta por aqui.' };
+  if (row.id === currentUser.id) return { status: 403, error: 'Você não pode executar esta ação na sua própria conta.' };
+  if (currentUser.role !== 'master_admin') {
+    const franchiseId = await getFranchiseClubId(currentUser.clubId || DEFAULT_TENANT_ID);
+    const franchiseRow = await pool.query('SELECT * FROM clubs WHERE id = $1', [franchiseId]);
+    const visible = franchiseRow.rows[0] ? await getVisibleClubIds(mapClub(franchiseRow.rows[0])) : [franchiseId];
+    if (!row.club_id || !visible.includes(row.club_id)) {
+      return { status: 403, error: 'Este atleta não pertence à sua rede de clubes.' };
+    }
+  }
+  return { row };
+}
+
+// O que será apagado junto com o atleta — exibido no popup de confirmação.
+app.get('/api/admin/athletes/:id/delete-summary', requireFranchiseAdmin, async (req, res) => {
+  try {
+    const currentUser = (req as any).user as User;
+    const target = await loadManageableAthlete(currentUser, req.params.id);
+    if (!target.row) return res.status(target.status!).json({ error: target.error });
+    const id = req.params.id;
+    const count = async (sql: string) => Number((await pool.query(sql, [id])).rows[0].n);
+
+    const regsWithResult = await count(`SELECT COUNT(*) n FROM registrations WHERE user_id = $1 AND (completion_status = 'completed' OR COALESCE(total_points, 0) > 0)`);
+    const idscWithResult = await count(`SELECT COUNT(*) n FROM idsc_results r JOIN idsc_registrations ir ON ir.id = r.registration_id WHERE ir.user_id = $1 AND r.completion_status <> 'pending'`);
+    const regsTotal = await count(`SELECT COUNT(*) n FROM registrations WHERE user_id = $1`);
+    const idscTotal = await count(`SELECT COUNT(*) n FROM idsc_registrations WHERE user_id = $1`);
+    const paidRegs = await count(`SELECT COUNT(*) n FROM registrations WHERE user_id = $1 AND payment_status = 'approved'`);
+
+    res.json({
+      fullName: target.row.full_name,
+      championshipResults: regsWithResult + idscWithResult,
+      trainings: await count(`SELECT COUNT(*) n FROM trainings WHERE user_id = $1`),
+      posts: await count(`SELECT COUNT(*) n FROM posts WHERE user_id = $1`),
+      also: {
+        registrationsWithoutResult: Math.max(regsTotal + idscTotal - regsWithResult - idscWithResult, 0),
+        paidRegistrations: paidRegs,
+        comments: (await count(`SELECT COUNT(*) n FROM comments WHERE user_id = $1`)) + (await count(`SELECT COUNT(*) n FROM ranking_highlight_comments WHERE user_id = $1`)),
+        weapons: await count(`SELECT COUNT(*) n FROM weapons WHERE owner_id = $1`),
+      },
+    });
+  } catch (err) {
+    console.error('Athlete delete-summary error:', err);
+    res.status(500).json({ error: 'Erro ao levantar os dados do atleta.' });
+  }
+});
+
+// Exclusão definitiva do atleta e de tudo que ele gerou (posts, comentários,
+// curtidas, inscrições, resultados, treinos, armas, saldos de munição...).
+// A maior parte sai por ON DELETE CASCADE; cessões de arma e armas do atleta
+// (sem cascade) são removidas explicitamente. Exige digitar "ciente".
+app.delete('/api/admin/athletes/:id', requireFranchiseAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const confirm = String(req.body?.confirm || '').trim().toLowerCase();
+  if (confirm !== 'ciente') {
+    return res.status(400).json({ error: 'Digite "ciente" para confirmar a exclusão.' });
+  }
+  const client = await pool.connect();
+  try {
+    const target = await loadManageableAthlete(currentUser, req.params.id);
+    if (!target.row) return res.status(target.status!).json({ error: target.error });
+    const id = req.params.id;
+
+    await client.query('BEGIN');
+    await client.query(
+      `DELETE FROM weapon_concessions WHERE athlete_id = $1 OR weapon_id IN (SELECT id FROM weapons WHERE owner_id = $1)`,
+      [id]
+    );
+    await client.query('DELETE FROM weapons WHERE owner_id = $1', [id]);
+    await client.query('DELETE FROM users WHERE id = $1', [id]);
+    await client.query('COMMIT');
+
+    console.log(`Atleta ${id} (${target.row.full_name}) excluído por ${currentUser.id}`);
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Delete athlete error:', err);
+    res.status(500).json({ error: 'Erro ao excluir o atleta.' });
+  } finally {
+    client.release();
+  }
+});
+
+// Gera uma nova senha de acesso aleatória para o atleta e a devolve uma única
+// vez ao gestor (não fica guardada em texto — só o hash).
+app.post('/api/admin/athletes/:id/reset-password', requireFranchiseAdmin, async (req, res) => {
+  try {
+    const currentUser = (req as any).user as User;
+    const target = await loadManageableAthlete(currentUser, req.params.id);
+    if (!target.row) return res.status(target.status!).json({ error: target.error });
+
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+    const bytes = crypto.randomBytes(10);
+    const password = Array.from(bytes, b => alphabet[b % alphabet.length]).join('');
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hashPassword(password), req.params.id]);
+    res.json({ success: true, password });
+  } catch (err) {
+    console.error('Reset athlete password error:', err);
+    res.status(500).json({ error: 'Erro ao gerar nova senha.' });
+  }
+});
 
 app.patch('/api/users/me/profile', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
