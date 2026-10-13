@@ -6,12 +6,12 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
-// Dismissing hides the card only for the current browser session — the
-// `beforeinstallprompt` event is unreliable enough (fires once, only on some
-// browsers, sometimes not at all) that we don't gate visibility on it; the
-// card always shows when not installed, and just upgrades to the native
-// one-tap install flow if/when that event does show up.
-const DISMISS_KEY = 'gg_pwa_install_dismissed_session';
+// Dismissing only hides the card for the current page view, not persisted
+// anywhere — reloading the page (or navigating back later) shows it again.
+// The `beforeinstallprompt` event is unreliable enough (fires once, only on
+// some browsers, sometimes not at all) that we don't gate visibility on it
+// either; the card always shows when not installed, and just upgrades to the
+// native one-tap install flow if/when that event does show up.
 
 function isStandalone() {
   return (
@@ -37,7 +37,7 @@ export default function InstallPwaPrompt() {
   const iosHint = isIos();
 
   useEffect(() => {
-    if (isStandalone() || sessionStorage.getItem(DISMISS_KEY)) return;
+    if (isStandalone()) return;
 
     setVisible(true);
 
@@ -68,7 +68,6 @@ export default function InstallPwaPrompt() {
   }, []);
 
   const dismiss = () => {
-    sessionStorage.setItem(DISMISS_KEY, '1');
     setVisible(false);
   };
 
