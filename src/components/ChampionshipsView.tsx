@@ -281,15 +281,13 @@ export default function ChampionshipsView({
   };
   const eligibleWeapons = weapons.filter(w => w.ownerId === currentUser?.id || (currentUser?.clubId && w.ownerId === currentUser.clubId));
 
-  // Só uma inscrição já aprovada conta como reinscrição (mesma regra do
-  // backend) — uma pendente/recusada não deve mostrar o preço promocional
-  // de reinscrição antes de a anterior ter sido realmente paga.
+  // Qualquer inscrição já existente do atleta neste campeonato > etapa > modalidade
+  // (paga ou não) faz a próxima ser Re-inscrição — mesma regra do backend.
   const isAlreadyRegistered = registrations.some(
     r => r.userId === currentUser?.id &&
          r.championshipId === selectedChampReg?.id &&
          r.stageId === selectedStageId &&
-         r.modalityId === selectedModalityId &&
-         r.paymentStatus === 'approved'
+         r.modalityId === selectedModalityId
   );
 
   const registrationPrice = selectedChampReg 
@@ -352,7 +350,7 @@ export default function ChampionshipsView({
       const r = await fetch(`/api/idsc/registrations?courseId=${course.id}`, { headers: currentUser ? { 'x-user-id': currentUser.id } : {} });
       if (r.ok) {
         const data = await r.json();
-        const mine = (data.idscRegistrations || []).some((reg: any) => reg.userId === currentUser?.id && reg.paymentStatus === 'approved');
+        const mine = (data.idscRegistrations || []).some((reg: any) => reg.userId === currentUser?.id);
         setIdscAlreadyRegistered(mine);
       }
     } catch {
@@ -1056,7 +1054,7 @@ export default function ChampionshipsView({
                     </div>
                     {isAlreadyRegistered && (
                       <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider block mt-0.5">
-                        ✨ Reinscrição (Tarifa Promocional)
+                        ✨ Re-inscrição (Tarifa Promocional) — você já tem inscrição nesta etapa e modalidade
                       </span>
                     )}
                   </div>

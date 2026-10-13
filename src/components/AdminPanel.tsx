@@ -635,9 +635,11 @@ interface InscricaoClubePanelProps {
   multiChampionships?: MultiChampionship[];
   initialPrefill?: ClubBulkRegistrationPrefill | null;
   onPrefillApplied?: () => void;
+  registrations?: Registration[];
+  onRefreshData?: () => Promise<void>;
 }
 
-function InscricaoClubePanel({ championships, stages, modalities, currentUser, multiChampionships = [], initialPrefill, onPrefillApplied }: InscricaoClubePanelProps) {
+function InscricaoClubePanel({ championships, stages, modalities, currentUser, multiChampionships = [], initialPrefill, onPrefillApplied, registrations = [], onRefreshData }: InscricaoClubePanelProps) {
   const [mode, setMode] = React.useState<'individual' | 'multi'>(() => initialPrefill?.mode || 'individual');
   const [champId, setChampId] = React.useState(() => initialPrefill?.mode === 'individual' ? initialPrefill.championshipId : '');
   const [stageId, setStageId] = React.useState(() => initialPrefill?.mode === 'individual' ? initialPrefill.stageId : '');
@@ -725,6 +727,23 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
       return false;
     });
   }, [filteredMembers, athleteFilterQuery]);
+
+  // Atletas que já têm inscrição neste campeonato > etapa > modalidade (qualquer situação de
+  // pagamento): se inscritos de novo, será Re-inscrição. No pacote, vale ter inscrição em
+  // ao menos uma das etapas dele (mesma regra do servidor).
+  const reinscricaoUserIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    if (!modalityId) return ids;
+    const targets = mode === 'individual'
+      ? (champId && stageId ? [{ championshipId: champId, stageId }] : [])
+      : multiItems.map(it => ({ championshipId: it.championshipId, stageId: it.stageId }));
+    if (targets.length === 0) return ids;
+    for (const r of registrations) {
+      if (r.modalityId !== modalityId) continue;
+      if (targets.some(t => t.championshipId === r.championshipId && t.stageId === r.stageId)) ids.add(r.userId);
+    }
+    return ids;
+  }, [registrations, mode, champId, stageId, modalityId, multiItems]);
 
   React.useEffect(() => {
     if (mode === 'individual') {
@@ -864,6 +883,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
       setShowPixModal(Boolean(pix));
       setClubInvoiceCount(data.clubInvoiceCount || 0);
       setSelectedAthletes({});
+      if (onRefreshData) await onRefreshData(); // atualiza as inscrições (e a etiqueta Re-inscrição)
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -1081,6 +1101,9 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
                       <td className="py-3 px-3">
                         <span className="font-bold text-slate-800 block">{member.fullName}</span>
                         <span className="text-[10px] text-slate-400 font-mono block">CPF: {member.cpf || 'N/A'}</span>
+                        {reinscricaoUserIds.has(member.id) && (
+                          <span className="inline-block mt-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">Re-inscrição</span>
+                        )}
                       </td>
                       <td className="py-3 px-3">
                         {state.checked ? (
@@ -1143,6 +1166,9 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
                 <div>
                   <h4 className="font-bold text-slate-900 text-sm">{modalMember.fullName}</h4>
                   <p className="text-[10px] text-slate-400 font-mono">CPF: {modalMember.cpf || 'N/A'}</p>
+                  {reinscricaoUserIds.has(modalMember.id) && (
+                    <span className="inline-block mt-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">Re-inscrição</span>
+                  )}
                 </div>
                 <button onClick={() => setWeaponModalMemberId(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                   <X className="w-4 h-4" />
@@ -3252,6 +3278,18 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
   const [clubInvoiceCount, setClubInvoiceCount] = React.useState(0);
   const [error, setError] = React.useState('');
 
+  // Atletas que já têm inscrição nesta pista (qualquer situação de pagamento): se inscritos de
+  // novo, será Re-inscrição.
+  const [registeredUserIds, setRegisteredUserIds] = React.useState<Set<string>>(new Set());
+  const loadCourseRegistrations = React.useCallback(() => {
+    if (!courseId) { setRegisteredUserIds(new Set()); return; }
+    fetch(`/api/idsc/registrations?courseId=${courseId}`, { headers: { 'x-user-id': currentUser?.id || '' } })
+      .then(r => r.json())
+      .then(d => setRegisteredUserIds(new Set(((d.idscRegistrations || []) as Array<{ userId: string }>).map(x => x.userId))))
+      .catch(() => setRegisteredUserIds(new Set()));
+  }, [courseId, currentUser]);
+  React.useEffect(() => { loadCourseRegistrations(); }, [loadCourseRegistrations]);
+
   const [athleteFilterQuery, setAthleteFilterQuery] = React.useState('');
   const displayedMembers = React.useMemo(() => {
     const q = normalizeSearchText(athleteFilterQuery.trim());
@@ -3445,6 +3483,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
       setShowPixModal(Boolean(pix));
       setClubInvoiceCount(data.clubInvoiceCount || 0);
       setSelectedAthletes({});
+      loadCourseRegistrations(); // atualiza a etiqueta Re-inscrição
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -3538,6 +3577,9 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
                       <td className="py-3 px-3">
                         <span className="font-bold text-slate-800 block">{member.fullName}</span>
                         <span className="text-[10px] text-slate-400 font-mono block">CPF: {member.cpf || 'N/A'}</span>
+                        {registeredUserIds.has(member.id) && (
+                          <span className="inline-block mt-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">Re-inscrição</span>
+                        )}
                       </td>
                       <td className="py-3 px-3">
                         {state.checked ? (
@@ -3594,6 +3636,9 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
                 <div>
                   <h4 className="font-bold text-slate-900 text-sm">{modalMember.fullName}</h4>
                   <p className="text-[10px] text-slate-400 font-mono">CPF: {modalMember.cpf || 'N/A'}</p>
+                  {registeredUserIds.has(modalMember.id) && (
+                    <span className="inline-block mt-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">Re-inscrição</span>
+                  )}
                 </div>
                 <button onClick={() => setWeaponModalMemberId(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                   <X className="w-4 h-4" />
@@ -8328,6 +8373,8 @@ export default function AdminPanel({
                 multiChampionships={multiChampionships}
                 initialPrefill={pendingClubPrefill}
                 onPrefillApplied={() => setPendingClubPrefill(null)}
+                registrations={registrations}
+                onRefreshData={onRefreshData}
               />
             )}
           </div>
