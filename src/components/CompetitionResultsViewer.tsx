@@ -247,28 +247,34 @@ export function CompetitionResultsViewer({
         } catch (_) {}
       }
     }
-    // Além das modalidades hoje configuradas no campeonato, lista as que tiveram
-    // inscrições na(s) etapa(s) selecionada(s): etapas antigas (ex.: importadas do
-    // legado) usaram modalidades que não estão mais na configuração atual, e os
-    // resultados delas ficavam inacessíveis.
-    const scopeStageIds = new Set(
-      stages
-        .filter(s => s.championshipId === selectedResultChampId)
-        .filter(s => {
-          if (selectedResultStageId === 'all') return true;
-          if (selectedResultStageId === 'all_masculino') return (s.sexo || 'misto') === 'masculino';
-          if (selectedResultStageId === 'all_feminino') return (s.sexo || 'misto') === 'feminino';
-          if (selectedResultStageId === 'all_misto') return (s.sexo || 'misto') === 'misto';
-          return s.id === selectedResultStageId;
-        })
-        .map(s => s.id)
+    // Só lista as modalidades que têm resultado lançado na(s) etapa(s) selecionada(s).
+    // Etapas antigas (ex.: importadas do legado) usaram modalidades que não estão mais na
+    // configuração atual do campeonato, então a configuração sozinha não serve de filtro:
+    // vale a modalidade configurada OU a que teve inscrições na etapa, desde que haja resultado.
+    const scopeStages = stages
+      .filter(s => s.championshipId === selectedResultChampId)
+      .filter(s => {
+        if (selectedResultStageId === 'all') return true;
+        if (selectedResultStageId === 'all_masculino') return (s.sexo || 'misto') === 'masculino';
+        if (selectedResultStageId === 'all_feminino') return (s.sexo || 'misto') === 'feminino';
+        if (selectedResultStageId === 'all_misto') return (s.sexo || 'misto') === 'misto';
+        return s.id === selectedResultStageId;
+      });
+    const scopeStageIds = new Set(scopeStages.map(s => s.id));
+    const scopeStageNums = new Set(scopeStages.map(s => s.stageNum));
+    const modalityNamesWithResults = new Set(
+      stageScores
+        .filter(sc => sc.championshipId === selectedResultChampId && scopeStageNums.has(sc.stageNum))
+        .map(sc => sc.modality)
     );
     const usedModIds = new Set(
       registrations
         .filter(r => r.championshipId === selectedResultChampId && scopeStageIds.has(r.stageId))
         .map(r => r.modalityId)
     );
-    const champModalities = modalities.filter(m => champModIds.includes(m.id) || usedModIds.has(m.id));
+    const champModalities = modalities.filter(
+      m => modalityNamesWithResults.has(m.name) && (champModIds.includes(m.id) || usedModIds.has(m.id))
+    );
 
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
@@ -292,7 +298,7 @@ export function CompetitionResultsViewer({
 
         {champModalities.length === 0 ? (
           <div className="text-center py-8 text-slate-400 text-xs space-y-3">
-            <p>Nenhuma modalidade vinculada a este campeonato ainda.</p>
+            <p>Nenhuma modalidade com resultado lançado {isAllOption ? 'nesta seleção' : 'nesta etapa'} ainda.</p>
             <button
               onClick={() => setSelectedResultStageId(null)}
               className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3.5 py-1.5 rounded-lg font-bold transition cursor-pointer"
