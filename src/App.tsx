@@ -2296,6 +2296,9 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* Convite para instalar o PWA também na página inicial pública (antes só aparecia logado) */}
+        <InstallPwaPrompt />
       </div>
     );
   }
