@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, MultiChampionshipItem, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession, AnnuityPlan, AnnuityPayment, ClubBulkRegistrationPrefill, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult, LegacyMultiDiscount } from '../types';
+import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, MultiChampionshipItem, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession, AnnuityPlan, AnnuityPayment, AnnuityCharge, ClubBulkRegistrationPrefill, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult, LegacyMultiDiscount } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
@@ -6878,6 +6878,199 @@ export default function AdminPanel({
     loadAnnuityPlans();
   }, []);
 
+  // Tela "Anuidades" (Gerenciamento Plataforma > Clubes) — controle real por
+  // ciclo (vencimento + valor + baixa), diferente do AnnuityRoster (só
+  // leitura) e do Financeiro da Franquia (só cobrança PIX de clube).
+  const ANNUITY_CHARGES_PAGE_SIZE = 20;
+  const [annuityChargesKind, setAnnuityChargesKind] = useState<'all' | 'athlete' | 'club'>('all');
+  const [annuityChargesStatus, setAnnuityChargesStatus] = useState<'all' | 'pendente' | 'vencida' | 'paga'>('all');
+  const [annuityChargesQuery, setAnnuityChargesQuery] = useState('');
+  const [annuityChargesPage, setAnnuityChargesPage] = useState(1);
+  const [annuityCharges, setAnnuityCharges] = useState<AnnuityCharge[]>([]);
+  const [annuityChargesTotal, setAnnuityChargesTotal] = useState(0);
+  const [loadingAnnuityCharges, setLoadingAnnuityCharges] = useState(false);
+  const [annuitySummary, setAnnuitySummary] = useState<Array<{ kind: string; status: string; count: number; total: number }>>([]);
+  const [annuityActionMsg, setAnnuityActionMsg] = useState('');
+  const [bulkGeneratingAnnuity, setBulkGeneratingAnnuity] = useState(false);
+
+  const loadAnnuitySummary = async () => {
+    if (!currentUser) return;
+    try {
+      const r = await fetch('/api/annuity-charges/summary', { headers: { 'x-user-id': currentUser.id } });
+      const data = await r.json();
+      if (r.ok) setAnnuitySummary(data.summary || []);
+    } catch (e) { console.error('Error loading annuity summary:', e); }
+  };
+
+  const loadAnnuityCharges = async (page: number, kind: string, status: string, q: string) => {
+    if (!currentUser) return;
+    setLoadingAnnuityCharges(true);
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: String(ANNUITY_CHARGES_PAGE_SIZE) });
+      if (kind !== 'all') params.set('kind', kind);
+      if (status !== 'all') params.set('status', status);
+      if (q.trim()) params.set('q', q.trim());
+      const r = await fetch(`/api/annuity-charges?${params.toString()}`, { headers: { 'x-user-id': currentUser.id } });
+      const data = await r.json();
+      if (r.ok) {
+        setAnnuityCharges(data.charges || []);
+        setAnnuityChargesTotal(data.total || 0);
+      }
+    } catch (e) {
+      console.error('Error loading annuity charges:', e);
+    } finally {
+      setLoadingAnnuityCharges(false);
+    }
+  };
+
+  const refreshAnnuityScreen = async () => {
+    await Promise.all([
+      loadAnnuitySummary(),
+      loadAnnuityCharges(annuityChargesPage, annuityChargesKind, annuityChargesStatus, annuityChargesQuery),
+    ]);
+  };
+
+  useEffect(() => {
+    if (plataformaMenu !== 'anuidades') return;
+    const handle = setTimeout(() => {
+      loadAnnuityCharges(annuityChargesPage, annuityChargesKind, annuityChargesStatus, annuityChargesQuery);
+    }, annuityChargesQuery ? 350 : 0);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plataformaMenu, annuityChargesPage, annuityChargesKind, annuityChargesStatus, annuityChargesQuery, currentUser?.id]);
+
+  useEffect(() => {
+    if (plataformaMenu === 'anuidades') loadAnnuitySummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plataformaMenu, currentUser?.id]);
+
+  useEffect(() => {
+    setAnnuityChargesPage(1);
+  }, [annuityChargesKind, annuityChargesStatus, annuityChargesQuery]);
+
+  // Registrar baixa (pagamento manual ou visualização de uma cobrança)
+  const [baixaTarget, setBaixaTarget] = useState<AnnuityCharge | null>(null);
+  const [baixaForm, setBaixaForm] = useState({ paymentMethod: 'pix', paymentNote: '', amount: '', paidAt: '' });
+  const [savingBaixa, setSavingBaixa] = useState(false);
+  const [baixaError, setBaixaError] = useState('');
+
+  const startBaixa = (charge: AnnuityCharge) => {
+    setBaixaTarget(charge);
+    setBaixaForm({ paymentMethod: 'pix', paymentNote: '', amount: String(charge.amount), paidAt: new Date().toISOString().slice(0, 10) });
+    setBaixaError('');
+  };
+
+  const handleConfirmBaixa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!baixaTarget || !currentUser) return;
+    setSavingBaixa(true);
+    setBaixaError('');
+    try {
+      const r = await fetch(`/api/annuity-charges/${baixaTarget.id}/baixa`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify({
+          paymentMethod: baixaForm.paymentMethod,
+          paymentNote: baixaForm.paymentNote || null,
+          amount: Number(baixaForm.amount) || baixaTarget.amount,
+          paidAt: baixaForm.paidAt ? new Date(baixaForm.paidAt).toISOString() : undefined,
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro ao registrar baixa.');
+      setBaixaTarget(null);
+      setAnnuityActionMsg(`Baixa de "${baixaTarget.subjectName}" registrada — próximo ciclo já gerado.`);
+      setTimeout(() => setAnnuityActionMsg(''), 6000);
+      await refreshAnnuityScreen();
+    } catch (err: any) {
+      setBaixaError(err.message || 'Erro ao registrar baixa.');
+    } finally {
+      setSavingBaixa(false);
+    }
+  };
+
+  // Registrar nova cobrança manual (atleta ou clube)
+  const [creatingChargeOpen, setCreatingChargeOpen] = useState(false);
+  const [createChargeForm, setCreateChargeForm] = useState({ kind: 'athlete' as 'athlete' | 'club', clubId: '', amount: '', dueDate: '', recurrenceMonths: '12' });
+  const [createChargeAthleteQuery, setCreateChargeAthleteQuery] = useState('');
+  const [createChargeAthleteResults, setCreateChargeAthleteResults] = useState<Array<{ id: string; fullName: string; cpf: string }>>([]);
+  const [createChargeAthlete, setCreateChargeAthlete] = useState<{ id: string; fullName: string; cpf: string } | null>(null);
+  const [savingCreateCharge, setSavingCreateCharge] = useState(false);
+  const [createChargeError, setCreateChargeError] = useState('');
+
+  const openCreateCharge = (kind: 'athlete' | 'club') => {
+    setCreateChargeForm({ kind, clubId: '', amount: '', dueDate: '', recurrenceMonths: '12' });
+    setCreateChargeAthlete(null);
+    setCreateChargeAthleteQuery('');
+    setCreateChargeAthleteResults([]);
+    setCreateChargeError('');
+    setCreatingChargeOpen(true);
+  };
+
+  const handleCreateCharge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    if (createChargeForm.kind === 'athlete' && !createChargeAthlete) {
+      setCreateChargeError('Selecione o atleta.');
+      return;
+    }
+    if (createChargeForm.kind === 'club' && !createChargeForm.clubId) {
+      setCreateChargeError('Selecione o clube.');
+      return;
+    }
+    if (!createChargeForm.amount || !createChargeForm.dueDate) {
+      setCreateChargeError('Informe o valor e o vencimento.');
+      return;
+    }
+    setSavingCreateCharge(true);
+    setCreateChargeError('');
+    try {
+      const r = await fetch('/api/annuity-charges', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify({
+          kind: createChargeForm.kind,
+          userId: createChargeForm.kind === 'athlete' ? createChargeAthlete?.id : undefined,
+          clubId: createChargeForm.kind === 'club' ? createChargeForm.clubId : undefined,
+          amount: Number(createChargeForm.amount),
+          dueDate: createChargeForm.dueDate,
+          recurrenceMonths: Number(createChargeForm.recurrenceMonths) || 12,
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro ao registrar cobrança.');
+      setCreatingChargeOpen(false);
+      setAnnuityActionMsg('Cobrança de anuidade registrada.');
+      setTimeout(() => setAnnuityActionMsg(''), 6000);
+      await refreshAnnuityScreen();
+    } catch (err: any) {
+      setCreateChargeError(err.message || 'Erro ao registrar cobrança.');
+    } finally {
+      setSavingCreateCharge(false);
+    }
+  };
+
+  const handleBulkGenerateAnnuity = async () => {
+    if (!currentUser) return;
+    setBulkGeneratingAnnuity(true);
+    try {
+      const r = await fetch('/api/annuity-charges/bulk-generate', {
+        method: 'POST',
+        headers: { 'x-user-id': currentUser.id }
+      });
+      const data = await r.json();
+      if (r.ok) {
+        setAnnuityActionMsg(`Geradas ${data.athletesCreated} cobrança(s) de atleta e ${data.clubsCreated} de clube que ainda não tinham ciclo.`);
+        setTimeout(() => setAnnuityActionMsg(''), 8000);
+        await refreshAnnuityScreen();
+      }
+    } catch (e) {
+      console.error('Error bulk-generating annuity charges:', e);
+    } finally {
+      setBulkGeneratingAnnuity(false);
+    }
+  };
+
   // Faturamento entre clube filiado e clube franqueador (Percentual Clube).
   // Club_admin vê só o próprio clube; master_admin (sem clubId) vê todos —
   // usado tanto no card "Financeiro" do clube quanto em "Gestão de Cobranças".
@@ -10391,6 +10584,335 @@ export default function AdminPanel({
         );
       }
 
+      case 'anuidades': {
+        const summaryFor = (kind: string, status: string) =>
+          annuitySummary.find(s => s.kind === kind && s.status === status) || { count: 0, total: 0 };
+        const athletePend = summaryFor('athlete', 'pendente');
+        const athleteVenc = summaryFor('athlete', 'vencida');
+        const clubPend = summaryFor('club', 'pendente');
+        const clubVenc = summaryFor('club', 'vencida');
+        const annuityTotalPages = Math.max(Math.ceil(annuityChargesTotal / ANNUITY_CHARGES_PAGE_SIZE), 1);
+        const statusBadge = (status: string) => {
+          if (status === 'paga') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+          if (status === 'vencida') return 'bg-red-50 text-red-700 border-red-200';
+          return 'bg-amber-50 text-amber-700 border-amber-200';
+        };
+        const statusLabel = (status: string) => status === 'paga' ? 'Paga' : status === 'vencida' ? 'Vencida' : 'Pendente';
+        const fmtDate = (d?: string) => {
+          if (!d) return '—';
+          const parts = d.slice(0, 10).split('-');
+          return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : d;
+        };
+        const fmtMoney = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`;
+
+        return (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5 shadow-xs text-left">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="font-display font-bold text-slate-900 text-base">Anuidades</h3>
+                  <p className="text-xs text-slate-400">Controle de vencimento, valor e baixa de pagamento — atletas e clubes filiados.</p>
+                </div>
+                <DollarSign className="w-5 h-5 text-blue-600" />
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-amber-50/50 border border-amber-100 rounded-xl p-3">
+                  <p className="text-[10px] font-bold text-amber-700 uppercase">Atletas pendentes</p>
+                  <p className="text-lg font-display font-bold text-amber-800">{athletePend.count}</p>
+                  <p className="text-[11px] text-amber-600">{fmtMoney(athletePend.total)}</p>
+                </div>
+                <div className="bg-red-50/50 border border-red-100 rounded-xl p-3">
+                  <p className="text-[10px] font-bold text-red-700 uppercase">Atletas vencidas</p>
+                  <p className="text-lg font-display font-bold text-red-800">{athleteVenc.count}</p>
+                  <p className="text-[11px] text-red-600">{fmtMoney(athleteVenc.total)}</p>
+                </div>
+                <div className="bg-amber-50/50 border border-amber-100 rounded-xl p-3">
+                  <p className="text-[10px] font-bold text-amber-700 uppercase">Clubes pendentes</p>
+                  <p className="text-lg font-display font-bold text-amber-800">{clubPend.count}</p>
+                  <p className="text-[11px] text-amber-600">{fmtMoney(clubPend.total)}</p>
+                </div>
+                <div className="bg-red-50/50 border border-red-100 rounded-xl p-3">
+                  <p className="text-[10px] font-bold text-red-700 uppercase">Clubes vencidas</p>
+                  <p className="text-lg font-display font-bold text-red-800">{clubVenc.count}</p>
+                  <p className="text-[11px] text-red-600">{fmtMoney(clubVenc.total)}</p>
+                </div>
+              </div>
+
+              {annuityActionMsg && (
+                <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
+                  <CheckCircle className="w-5 h-5 text-emerald-600" />
+                  {annuityActionMsg}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={annuityChargesKind}
+                  onChange={e => setAnnuityChargesKind(e.target.value as any)}
+                  className="bg-slate-50 border border-slate-200 outline-none px-3 py-2 rounded-xl text-xs text-slate-700"
+                >
+                  <option value="all">Todos</option>
+                  <option value="athlete">Atletas</option>
+                  <option value="club">Clubes</option>
+                </select>
+                <select
+                  value={annuityChargesStatus}
+                  onChange={e => setAnnuityChargesStatus(e.target.value as any)}
+                  className="bg-slate-50 border border-slate-200 outline-none px-3 py-2 rounded-xl text-xs text-slate-700"
+                >
+                  <option value="all">Todas as situações</option>
+                  <option value="pendente">Pendente</option>
+                  <option value="vencida">Vencida</option>
+                  <option value="paga">Paga</option>
+                </select>
+                <input
+                  type="text"
+                  value={annuityChargesQuery}
+                  onChange={e => setAnnuityChargesQuery(e.target.value)}
+                  placeholder="Buscar por nome, CPF ou clube..."
+                  className="bg-slate-50 border border-slate-200 outline-none px-3 py-2 rounded-xl focus:border-blue-500 text-xs text-slate-700 flex-1 min-w-[180px]"
+                />
+                <button
+                  type="button"
+                  onClick={() => openCreateCharge('athlete')}
+                  className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition cursor-pointer"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  Cobrança de atleta
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openCreateCharge('club')}
+                  className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-3 py-2 rounded-xl transition cursor-pointer"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  Cobrança de clube
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkGenerateAnnuity}
+                  disabled={bulkGeneratingAnnuity}
+                  title="Gera o ciclo pendente para atletas/clubes que ainda não têm nenhum registrado"
+                  className="flex items-center gap-1.5 bg-white hover:bg-slate-100 disabled:opacity-60 text-slate-700 border border-slate-200 text-xs font-bold px-3 py-2 rounded-xl transition cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  {bulkGeneratingAnnuity ? 'Gerando...' : 'Gerar pendências em lote'}
+                </button>
+              </div>
+
+              {loadingAnnuityCharges ? (
+                <p className="text-xs text-slate-400">Carregando...</p>
+              ) : annuityCharges.length === 0 ? (
+                <p className="text-xs text-slate-400">Nenhuma anuidade encontrada.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-2">
+                  {annuityCharges.map(c => (
+                    <div key={c.id} className="border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row justify-between sm:items-center gap-2 bg-slate-50/50 hover:border-slate-300 transition">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-bold text-slate-900 text-xs">{c.subjectName}</h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                            {c.kind === 'athlete' ? 'Atleta' : 'Clube'}
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadge(c.status)}`}>
+                            {statusLabel(c.status)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          {c.kind === 'athlete' && c.clubName ? `Clube: ${c.clubName} • ` : ''}
+                          Valor: {fmtMoney(c.amount)} • Vencimento: {fmtDate(c.dueDate)}
+                          {c.paidAt ? ` • Pago em ${fmtDate(c.paidAt)} (${c.paymentMethod || '—'})` : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {c.status !== 'paga' && (
+                          <button
+                            onClick={() => startBaixa(c)}
+                            className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-[11px] px-3 py-1.5 rounded-lg transition cursor-pointer"
+                          >
+                            <Check className="w-3 h-3" />
+                            Registrar baixa
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {annuityTotalPages > 1 && (
+                <div className="flex items-center justify-center gap-3 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setAnnuityChargesPage(p => Math.max(p - 1, 1))}
+                    disabled={annuityChargesPage <= 1 || loadingAnnuityCharges}
+                    className="flex items-center gap-1 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 border border-slate-200 font-bold text-[11px] px-3 py-1.5 rounded-lg transition cursor-pointer"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    Anterior
+                  </button>
+                  <span className="text-[11px] text-slate-500 font-semibold">Página {annuityChargesPage} de {annuityTotalPages}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAnnuityChargesPage(p => Math.min(p + 1, annuityTotalPages))}
+                    disabled={annuityChargesPage >= annuityTotalPages || loadingAnnuityCharges}
+                    className="flex items-center gap-1 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 border border-slate-200 font-bold text-[11px] px-3 py-1.5 rounded-lg transition cursor-pointer"
+                  >
+                    Próxima
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Modal: Registrar baixa */}
+            {baixaTarget && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+                <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl text-slate-800 flex flex-col text-left">
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                    <div>
+                      <h4 className="font-display font-bold text-slate-900 text-base">Registrar baixa</h4>
+                      <p className="text-xs text-slate-400">{baixaTarget.subjectName} • Vencimento {fmtDate(baixaTarget.dueDate)}</p>
+                    </div>
+                    <button onClick={() => setBaixaTarget(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <form onSubmit={handleConfirmBaixa} className="p-6 space-y-4">
+                    {baixaError && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{baixaError}</div>}
+                    <MemberField label="Valor pago (R$)" type="number" value={baixaForm.amount} onChange={v => setBaixaForm({ ...baixaForm, amount: v })} />
+                    <MemberField label="Data do pagamento" type="date" value={baixaForm.paidAt} onChange={v => setBaixaForm({ ...baixaForm, paidAt: v })} />
+                    <MemberSelect
+                      label="Forma de pagamento"
+                      value={baixaForm.paymentMethod}
+                      onChange={v => setBaixaForm({ ...baixaForm, paymentMethod: v })}
+                      options={[
+                        { value: 'pix', label: 'PIX' },
+                        { value: 'dinheiro', label: 'Dinheiro' },
+                        { value: 'boleto', label: 'Boleto' },
+                        { value: 'transferencia', label: 'Transferência' },
+                        { value: 'outro', label: 'Outro' },
+                      ]}
+                    />
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Observação (opcional)</label>
+                      <textarea
+                        value={baixaForm.paymentNote}
+                        onChange={e => setBaixaForm({ ...baixaForm, paymentNote: e.target.value })}
+                        rows={2}
+                        className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400">Ao confirmar, o próximo ciclo já nasce pendente com vencimento = esta data + recorrência ({baixaTarget.recurrenceMonths} meses).</p>
+                    <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                      <button type="button" onClick={() => setBaixaTarget(null)} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer">Cancelar</button>
+                      <button type="submit" disabled={savingBaixa} className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs px-6 py-2.5 rounded-xl font-bold transition shadow-lg shadow-emerald-100 cursor-pointer">
+                        {savingBaixa ? 'Salvando...' : 'Confirmar baixa'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Modal: Registrar cobrança manual */}
+            {creatingChargeOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+                <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl text-slate-800 flex flex-col text-left">
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                    <h4 className="font-display font-bold text-slate-900 text-base">
+                      Registrar cobrança de {createChargeForm.kind === 'athlete' ? 'atleta' : 'clube'}
+                    </h4>
+                    <button onClick={() => setCreatingChargeOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <form onSubmit={handleCreateCharge} className="p-6 space-y-4">
+                    {createChargeError && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{createChargeError}</div>}
+
+                    {createChargeForm.kind === 'athlete' ? (
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Atleta</label>
+                        {createChargeAthlete ? (
+                          <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+                            <div>
+                              <p className="text-xs font-bold text-blue-800">{createChargeAthlete.fullName}</p>
+                              <p className="text-[10px] font-mono text-blue-600">{createChargeAthlete.cpf}</p>
+                            </div>
+                            <button type="button" onClick={() => setCreateChargeAthlete(null)} className="text-blue-500 hover:text-blue-700 transition cursor-pointer"><X className="w-4 h-4" /></button>
+                          </div>
+                        ) : (
+                          <div className="relative">
+                            <input
+                              type="text"
+                              placeholder="Digite CPF ou nome (mín. 3 chars)..."
+                              value={createChargeAthleteQuery}
+                              onChange={async (e) => {
+                                const val = e.target.value;
+                                setCreateChargeAthleteQuery(val);
+                                if (val.length < 3) { setCreateChargeAthleteResults([]); return; }
+                                try {
+                                  const r = await fetch(`/api/members/search?q=${encodeURIComponent(val)}`, { headers: { 'x-user-id': currentUser?.id || '' } });
+                                  const d = await r.json();
+                                  setCreateChargeAthleteResults(d.members || []);
+                                } catch { setCreateChargeAthleteResults([]); }
+                              }}
+                              className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 pr-8"
+                            />
+                            <Search className="absolute right-3 top-3 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                            {createChargeAthleteResults.length > 0 && (
+                              <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                                {createChargeAthleteResults.map(m => (
+                                  <button
+                                    key={m.id}
+                                    type="button"
+                                    onClick={() => { setCreateChargeAthlete(m); setCreateChargeAthleteResults([]); setCreateChargeAthleteQuery(''); }}
+                                    className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition border-b border-slate-100 last:border-0 cursor-pointer"
+                                  >
+                                    <p className="text-xs font-semibold text-slate-800">{m.fullName}</p>
+                                    <p className="text-[10px] font-mono text-slate-500">{m.cpf}</p>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Clube</label>
+                        <select
+                          value={createChargeForm.clubId}
+                          onChange={e => setCreateChargeForm({ ...createChargeForm, clubId: e.target.value })}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
+                        >
+                          <option value="">Selecione o clube...</option>
+                          {clubs.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <MemberField label="Valor (R$)" type="number" value={createChargeForm.amount} onChange={v => setCreateChargeForm({ ...createChargeForm, amount: v })} />
+                    <MemberField label="Vencimento" type="date" value={createChargeForm.dueDate} onChange={v => setCreateChargeForm({ ...createChargeForm, dueDate: v })} />
+                    <MemberField label="Recorrência (meses)" type="number" value={createChargeForm.recurrenceMonths} onChange={v => setCreateChargeForm({ ...createChargeForm, recurrenceMonths: v })} />
+
+                    <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                      <button type="button" onClick={() => setCreatingChargeOpen(false)} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer">Cancelar</button>
+                      <button type="submit" disabled={savingCreateCharge} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-6 py-2.5 rounded-xl font-bold transition shadow-lg shadow-blue-100 cursor-pointer">
+                        {savingCreateCharge ? 'Salvando...' : 'Registrar cobrança'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
       case 'novo_campeonato':
         return (
           <div className="space-y-6">
@@ -12300,6 +12822,7 @@ export default function AdminPanel({
                     <button onClick={() => setPlataformaMenu('novo_atleta')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'novo_atleta' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Novo Atleta</button>
                     <button onClick={() => setPlataformaMenu('relatorio_financeiro')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'relatorio_financeiro' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Relatorio Financeiro</button>
                     <button onClick={() => setPlataformaMenu('financeiro_franquia')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'financeiro_franquia' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Financeiro da Franquia</button>
+                    <button onClick={() => setPlataformaMenu('anuidades')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'anuidades' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Anuidades</button>
                   </div>
                 )}
               </div>

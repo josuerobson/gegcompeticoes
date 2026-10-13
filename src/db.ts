@@ -1570,6 +1570,72 @@ export async function initDB() {
       );
     `);
 
+    // Anuidades: controle real por ciclo (vencimento + valor + baixa), em vez
+    // do campo único que se sobrescreve a cada renovação (users.signature_expiry
+    // / clubs.annuity_due_date, que continuam existindo e sendo sincronizados a
+    // cada baixa, para não quebrar as telas que já leem deles). Uma linha por
+    // ciclo de cobrança, atleta ou clube filiado — paid_at NULL = pendente.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS annuity_charges (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('athlete','club')),
+        user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL,
+        plan_id TEXT REFERENCES annuity_plans(id) ON DELETE SET NULL,
+        subject_name TEXT,
+        amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+        due_date TEXT NOT NULL,
+        paid_at TIMESTAMPTZ,
+        payment_method TEXT,
+        payment_note TEXT,
+        tx_id TEXT,
+        recurrence_months INTEGER NOT NULL DEFAULT 12,
+        created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+        paid_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_annuity_charges_user ON annuity_charges(user_id);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_annuity_charges_club ON annuity_charges(club_id);`);
+
+    // Backfill único (guardado por NOT EXISTS, então roda sem efeito em todo
+    // boot seguinte): gera o ciclo "atual" de cada atleta/clube a partir do
+    // que já existe em users/clubs, pra tela de Anuidades não nascer vazia.
+    // Nunca fabrica um pagamento — fica pendente até uma baixa real.
+    await client.query(`
+      INSERT INTO annuity_charges (id, kind, user_id, club_id, plan_id, subject_name, amount, due_date, recurrence_months)
+      SELECT
+        'anncharge_seed_' || u.id,
+        'athlete',
+        u.id,
+        u.club_id,
+        u.annuity_plan_id,
+        u.full_name,
+        COALESCE(ap.price, 360),
+        COALESCE(u.signature_expiry, CURRENT_DATE::TEXT),
+        12
+      FROM users u
+      LEFT JOIN annuity_plans ap ON ap.id = u.annuity_plan_id
+      WHERE u.role = 'member'
+        AND NOT EXISTS (SELECT 1 FROM annuity_charges ac WHERE ac.user_id = u.id)
+      ON CONFLICT (id) DO NOTHING;
+    `);
+    await client.query(`
+      INSERT INTO annuity_charges (id, kind, club_id, subject_name, amount, due_date, recurrence_months)
+      SELECT
+        'anncharge_seed_' || c.id,
+        'club',
+        c.id,
+        c.name,
+        c.annuity_price,
+        COALESCE(c.annuity_due_date, CURRENT_DATE::TEXT),
+        12
+      FROM clubs c
+      WHERE c.annuity_price IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM annuity_charges ac WHERE ac.club_id = c.id AND ac.kind = 'club')
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
     console.log('Database seed check complete.');
 
     try {

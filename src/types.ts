@@ -66,6 +66,25 @@ export interface AnnuityPlan {
   createdAt: string;
 }
 
+export interface AnnuityCharge {
+  id: string;
+  kind: 'athlete' | 'club';
+  userId?: string;
+  clubId?: string;
+  planId?: string;
+  subjectName: string;
+  clubName?: string;
+  amount: number;
+  dueDate: string;
+  paidAt?: string;
+  paymentMethod?: string;
+  paymentNote?: string;
+  txId?: string;
+  recurrenceMonths: number;
+  status: 'pendente' | 'vencida' | 'paga';
+  createdAt: string;
+}
+
 export interface LegacyMultiDiscount {
   id: string;
   title: string;

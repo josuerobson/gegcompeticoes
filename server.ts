@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import compression from 'compression';
 import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
-import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, MultiChampionshipItem, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan, RankingHighlight, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult, LegacyMultiDiscount } from './src/types.js';
+import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, MultiChampionshipItem, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan, AnnuityCharge, RankingHighlight, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult, LegacyMultiDiscount } from './src/types.js';
 import { pool, initDB } from './src/db.js';
 import { hashPassword, verifyPassword } from './src/auth.js';
 import { uploadDocument, getDocumentStream, storageEnabled } from './src/storage.js';
@@ -135,6 +135,72 @@ function mapAnnuityPlan(p: any): AnnuityPlan {
     description: p.description || undefined,
     createdAt: p.created_at,
   };
+}
+
+function mapAnnuityCharge(c: any): AnnuityCharge {
+  const today = new Date().toISOString().split('T')[0];
+  const status: AnnuityCharge['status'] = c.paid_at ? 'paga' : (c.due_date && c.due_date < today ? 'vencida' : 'pendente');
+  return {
+    id: c.id,
+    kind: c.kind,
+    userId: c.user_id || undefined,
+    clubId: c.club_id || undefined,
+    planId: c.plan_id || undefined,
+    subjectName: c.subject_name || '',
+    clubName: c.club_name || undefined,
+    amount: Number(c.amount) || 0,
+    dueDate: c.due_date,
+    paidAt: c.paid_at || undefined,
+    paymentMethod: c.payment_method || undefined,
+    paymentNote: c.payment_note || undefined,
+    txId: c.tx_id || undefined,
+    recurrenceMonths: c.recurrence_months || 12,
+    status,
+    createdAt: c.created_at,
+  };
+}
+
+function addMonthsToDateString(dateStr: string, months: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+  date.setUTCMonth(date.getUTCMonth() + months);
+  return date.toISOString().split('T')[0];
+}
+
+// Marca um ciclo de anuidade como pago e já gera o próximo (vencimento =
+// anterior + recorrência), sincronizando o "estado atual" que as telas mais
+// antigas (AnnuityRoster, Meu Cadastro, Novo Clube) continuam lendo —
+// users.signature_expiry/has_paid_signature ou clubs.annuity_due_date/
+// annuity_paid_at. Usado tanto pela baixa manual quanto pela confirmação PIX.
+async function settleAnnuityCharge(chargeId: string, opts: {
+  paymentMethod: string; paymentNote?: string | null; paidBy?: string | null; paidAt?: string; amountOverride?: number; txId?: string | null;
+}): Promise<void> {
+  const chargeRes = await pool.query('SELECT * FROM annuity_charges WHERE id = $1', [chargeId]);
+  if (chargeRes.rows.length === 0) return;
+  const charge = chargeRes.rows[0];
+  if (charge.paid_at) return;
+  const paidAt = opts.paidAt || new Date().toISOString();
+  const finalAmount = opts.amountOverride ?? Number(charge.amount);
+
+  await pool.query(
+    `UPDATE annuity_charges SET paid_at = $1, payment_method = $2, payment_note = $3, paid_by = $4, amount = $5, tx_id = COALESCE($6, tx_id) WHERE id = $7`,
+    [paidAt, opts.paymentMethod, opts.paymentNote || null, opts.paidBy || null, finalAmount, opts.txId || null, chargeId]
+  );
+
+  const recurrence = charge.recurrence_months || 12;
+  const nextDue = addMonthsToDateString(charge.due_date, recurrence);
+  const nextId = `anncharge_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  await pool.query(
+    `INSERT INTO annuity_charges (id, kind, user_id, club_id, plan_id, subject_name, amount, due_date, recurrence_months, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [nextId, charge.kind, charge.user_id, charge.club_id, charge.plan_id, charge.subject_name, finalAmount, nextDue, recurrence, opts.paidBy || null]
+  );
+
+  if (charge.kind === 'athlete' && charge.user_id) {
+    await pool.query(`UPDATE users SET has_paid_signature = true, signature_expiry = $1 WHERE id = $2`, [nextDue, charge.user_id]);
+  } else if (charge.kind === 'club' && charge.club_id) {
+    await pool.query(`UPDATE clubs SET annuity_due_date = $1, annuity_paid_at = $2 WHERE id = $3`, [nextDue, paidAt, charge.club_id]);
+  }
 }
 
 function mapClub(c: any): Club {
@@ -6825,6 +6891,227 @@ app.delete('/api/annuity-plans/:id', requireFranchiseAdmin, async (req, res) => 
 });
 
 // ==========================================
+// 9b. ANUIDADES — controle real por ciclo (vencimento, valor, baixa)
+// Tela "Anuidades" em Gerenciamento Plataforma. Vendo apenas o que está
+// dentro da rede visível do tenant/franquia — mesma regra de GET
+// /api/admin/athletes.
+// ==========================================
+
+app.get('/api/annuity-charges/summary', requireFranchiseAdmin, async (req, res) => {
+  try {
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
+    const r = await pool.query(
+      `SELECT
+        kind,
+        CASE WHEN paid_at IS NOT NULL THEN 'paga' WHEN due_date < CURRENT_DATE::TEXT THEN 'vencida' ELSE 'pendente' END AS status,
+        COUNT(*)::int AS count,
+        COALESCE(SUM(amount), 0)::numeric AS total
+      FROM annuity_charges
+      WHERE club_id = ANY($1)
+        AND (paid_at IS NULL OR paid_at >= NOW() - INTERVAL '90 days')
+      GROUP BY kind, status`,
+      [visibleClubIds]
+    );
+    res.json({
+      summary: r.rows.map(row => ({ kind: row.kind, status: row.status, count: row.count, total: Number(row.total) || 0 }))
+    });
+  } catch (err) {
+    console.error('Annuity charges summary error:', err);
+    res.status(500).json({ error: 'Erro ao buscar resumo de anuidades.' });
+  }
+});
+
+app.get('/api/annuity-charges', requireFranchiseAdmin, async (req, res) => {
+  try {
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
+    const kind = (req.query.kind as string) || '';
+    const status = (req.query.status as string) || '';
+    const q = ((req.query.q as string) || '').trim();
+    const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 30, 1), 100);
+    const offset = (page - 1) * limit;
+
+    const params: any[] = [visibleClubIds];
+    let where = `WHERE ac.club_id = ANY($1)`;
+    if (kind === 'athlete' || kind === 'club') {
+      params.push(kind);
+      where += ` AND ac.kind = $${params.length}`;
+    }
+    if (status === 'pendente') {
+      where += ` AND ac.paid_at IS NULL AND ac.due_date >= CURRENT_DATE::TEXT`;
+    } else if (status === 'vencida') {
+      where += ` AND ac.paid_at IS NULL AND ac.due_date < CURRENT_DATE::TEXT`;
+    } else if (status === 'paga') {
+      where += ` AND ac.paid_at IS NOT NULL`;
+    }
+    if (q) {
+      const digits = q.replace(/\D/g, '');
+      params.push(`%${q}%`);
+      where += ` AND (unaccent_lower(ac.subject_name) LIKE unaccent_lower($${params.length})`;
+      if (digits) {
+        params.push(`%${digits}%`);
+        where += ` OR regexp_replace(COALESCE((SELECT cpf FROM users WHERE id = ac.user_id), ''), '[^0-9]', '', 'g') LIKE $${params.length}`;
+      }
+      where += `)`;
+    }
+
+    const countRes = await pool.query(`SELECT COUNT(*)::int AS total FROM annuity_charges ac ${where}`, params);
+    const total = countRes.rows[0].total;
+
+    const listParams = [...params, limit, offset];
+    const listRes = await pool.query(
+      `SELECT ac.*, c.name AS club_name FROM annuity_charges ac
+       LEFT JOIN clubs c ON c.id = ac.club_id
+       ${where}
+       ORDER BY (ac.paid_at IS NULL) DESC, ac.due_date ASC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      listParams
+    );
+    res.json({ charges: listRes.rows.map(mapAnnuityCharge), total, page, limit });
+  } catch (err) {
+    console.error('List annuity charges error:', err);
+    res.status(500).json({ error: 'Erro ao buscar anuidades.' });
+  }
+});
+
+app.post('/api/annuity-charges', requireFranchiseAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { kind, userId, clubId, amount, dueDate, recurrenceMonths, planId } = req.body;
+  if (kind !== 'athlete' && kind !== 'club') {
+    return res.status(400).json({ error: 'Tipo de anuidade inválido.' });
+  }
+  if (!amount || !dueDate) {
+    return res.status(400).json({ error: 'Informe o valor e o vencimento.' });
+  }
+  try {
+    let subjectName = '';
+    let resolvedClubId: string | null = null;
+    if (kind === 'athlete') {
+      if (!userId) return res.status(400).json({ error: 'Selecione o atleta.' });
+      const u = await pool.query('SELECT full_name, club_id FROM users WHERE id = $1', [userId]);
+      if (u.rows.length === 0) return res.status(404).json({ error: 'Atleta não encontrado.' });
+      subjectName = u.rows[0].full_name;
+      resolvedClubId = u.rows[0].club_id;
+    } else {
+      if (!clubId) return res.status(400).json({ error: 'Selecione o clube.' });
+      const c = await pool.query('SELECT name FROM clubs WHERE id = $1', [clubId]);
+      if (c.rows.length === 0) return res.status(404).json({ error: 'Clube não encontrado.' });
+      subjectName = c.rows[0].name;
+      resolvedClubId = clubId;
+    }
+    const id = `anncharge_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    await pool.query(
+      `INSERT INTO annuity_charges (id, kind, user_id, club_id, plan_id, subject_name, amount, due_date, recurrence_months, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [id, kind, kind === 'athlete' ? userId : null, resolvedClubId, planId || null, subjectName, amount, dueDate, recurrenceMonths || 12, currentUser.id]
+    );
+    const r = await pool.query('SELECT ac.*, c.name AS club_name FROM annuity_charges ac LEFT JOIN clubs c ON c.id = ac.club_id WHERE ac.id = $1', [id]);
+    res.status(201).json({ charge: mapAnnuityCharge(r.rows[0]) });
+  } catch (err) {
+    console.error('Create annuity charge error:', err);
+    res.status(500).json({ error: 'Erro ao registrar cobrança de anuidade.' });
+  }
+});
+
+app.patch('/api/annuity-charges/:id', requireFranchiseAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { amount, dueDate, recurrenceMonths } = req.body;
+  try {
+    const existing = await pool.query('SELECT paid_at FROM annuity_charges WHERE id = $1', [id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Cobrança não encontrada.' });
+    if (existing.rows[0].paid_at) return res.status(400).json({ error: 'Esta cobrança já foi paga — não é possível editar o valor/vencimento de um ciclo já quitado.' });
+
+    const updates: string[] = [];
+    const values: unknown[] = [];
+    if (amount !== undefined) { updates.push(`amount = $${updates.length + 1}`); values.push(amount); }
+    if (dueDate !== undefined) { updates.push(`due_date = $${updates.length + 1}`); values.push(dueDate); }
+    if (recurrenceMonths !== undefined) { updates.push(`recurrence_months = $${updates.length + 1}`); values.push(recurrenceMonths); }
+    if (updates.length === 0) return res.status(400).json({ error: 'Nenhum campo para atualizar.' });
+
+    values.push(id);
+    await pool.query(`UPDATE annuity_charges SET ${updates.join(', ')} WHERE id = $${values.length}`, values);
+    const r = await pool.query('SELECT ac.*, c.name AS club_name FROM annuity_charges ac LEFT JOIN clubs c ON c.id = ac.club_id WHERE ac.id = $1', [id]);
+    res.json({ charge: mapAnnuityCharge(r.rows[0]) });
+  } catch (err) {
+    console.error('Update annuity charge error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar cobrança de anuidade.' });
+  }
+});
+
+app.post('/api/annuity-charges/:id/baixa', requireFranchiseAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { id } = req.params;
+  const { paymentMethod, paymentNote, amount, paidAt } = req.body;
+  if (!paymentMethod) return res.status(400).json({ error: 'Informe a forma de pagamento.' });
+  try {
+    const existing = await pool.query('SELECT paid_at FROM annuity_charges WHERE id = $1', [id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Cobrança não encontrada.' });
+    if (existing.rows[0].paid_at) return res.status(400).json({ error: 'Esta cobrança já foi baixada.' });
+
+    await settleAnnuityCharge(id, {
+      paymentMethod, paymentNote: paymentNote || null, paidBy: currentUser.id,
+      amountOverride: amount !== undefined ? Number(amount) : undefined,
+      paidAt: paidAt || undefined,
+    });
+    const r = await pool.query('SELECT ac.*, c.name AS club_name FROM annuity_charges ac LEFT JOIN clubs c ON c.id = ac.club_id WHERE ac.id = $1', [id]);
+    res.json({ charge: mapAnnuityCharge(r.rows[0]) });
+  } catch (err) {
+    console.error('Settle annuity charge error:', err);
+    res.status(500).json({ error: 'Erro ao registrar baixa da anuidade.' });
+  }
+});
+
+app.delete('/api/annuity-charges/:id', requireFranchiseAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const existing = await pool.query('SELECT paid_at FROM annuity_charges WHERE id = $1', [id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Cobrança não encontrada.' });
+    if (existing.rows[0].paid_at) return res.status(400).json({ error: 'Não é possível excluir um ciclo já pago — ele é histórico.' });
+    await pool.query('DELETE FROM annuity_charges WHERE id = $1', [id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete annuity charge error:', err);
+    res.status(500).json({ error: 'Erro ao excluir cobrança de anuidade.' });
+  }
+});
+
+// Gera o ciclo pendente para qualquer atleta/clube visível que ainda não
+// tenha nenhum (mesma lógica do backfill em initDB, só que sob demanda —
+// cobre atletas importados depois do primeiro boot).
+app.post('/api/annuity-charges/bulk-generate', requireFranchiseAdmin, async (req, res) => {
+  try {
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
+    const athletesRes = await pool.query(
+      `INSERT INTO annuity_charges (id, kind, user_id, club_id, plan_id, subject_name, amount, due_date, recurrence_months)
+       SELECT 'anncharge_bulk_' || u.id, 'athlete', u.id, u.club_id, u.annuity_plan_id, u.full_name,
+         COALESCE(ap.price, 360), COALESCE(u.signature_expiry, CURRENT_DATE::TEXT), 12
+       FROM users u
+       LEFT JOIN annuity_plans ap ON ap.id = u.annuity_plan_id
+       WHERE u.role = 'member' AND u.club_id = ANY($1)
+         AND NOT EXISTS (SELECT 1 FROM annuity_charges ac WHERE ac.user_id = u.id)
+       ON CONFLICT (id) DO NOTHING`,
+      [visibleClubIds]
+    );
+    const clubsRes = await pool.query(
+      `INSERT INTO annuity_charges (id, kind, club_id, subject_name, amount, due_date, recurrence_months)
+       SELECT 'anncharge_bulk_' || c.id, 'club', c.id, c.name, c.annuity_price, COALESCE(c.annuity_due_date, CURRENT_DATE::TEXT), 12
+       FROM clubs c
+       WHERE c.id = ANY($1) AND c.annuity_price IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM annuity_charges ac WHERE ac.club_id = c.id AND ac.kind = 'club')
+       ON CONFLICT (id) DO NOTHING`,
+      [visibleClubIds]
+    );
+    res.json({ athletesCreated: athletesRes.rowCount || 0, clubsCreated: clubsRes.rowCount || 0 });
+  } catch (err) {
+    console.error('Bulk generate annuity charges error:', err);
+    res.status(500).json({ error: 'Erro ao gerar cobranças em lote.' });
+  }
+});
+
+// ==========================================
 // 10. REAL TRAINING SESSIONS (Diário de Treinamentos / Habitualidade)
 // ==========================================
 
@@ -7508,34 +7795,43 @@ async function getSicoobClubIdForTx(txId: string): Promise<string | null> {
   return null;
 }
 
-// Data de expiração/vencimento usada ao confirmar anuidade (atleta ou clube
-// filiado): sempre +1 ano a partir de hoje, mesmo padrão do fluxo manual
-// já existente (admin editando signatureExpiry direto no cadastro).
-function oneYearFromNowDateString(): string {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() + 1);
-  return d.toISOString().split('T')[0];
-}
-
 // Confirma anuidade (de atleta ou de clube filiado) pendente para este
 // tx_id, se houver — chamado ao lado das mesmas atualizações de
 // registrations/idsc_registrations/club_invoices, tanto pelo webhook quanto
-// pela reconciliação por polling. UPDATE sem match não falha (0 linhas).
+// pela reconciliação por polling. Sem match não falha (loop vazio).
+// Resolve o ciclo pendente em annuity_charges (criando um na hora se por
+// algum motivo não existir um) e deixa settleAnnuityCharge cuidar de marcar
+// como pago, gerar o próximo ciclo e sincronizar signature_expiry/
+// annuity_due_date — mesmo caminho usado pela baixa manual.
 async function confirmAnnuityForTx(txId: string): Promise<void> {
-  const expiry = oneYearFromNowDateString();
   const userRes = await pool.query(
-    `UPDATE users SET has_paid_signature = true, signature_expiry = $2, annuity_tx_id = NULL, annuity_pix_copia_e_cola = NULL
-     WHERE annuity_tx_id = $1
-     RETURNING id, full_name, club_id, annuity_plan_id`,
-    [txId, expiry]
+    `SELECT id, full_name, club_id, annuity_plan_id FROM users WHERE annuity_tx_id = $1`,
+    [txId]
   );
-  // Histórico de pagamento (tx_id UNIQUE: webhook + polling nunca duplicam).
   for (const u of userRes.rows) {
     let amount = 360;
     if (u.annuity_plan_id) {
       const planRes = await pool.query('SELECT price FROM annuity_plans WHERE id = $1', [u.annuity_plan_id]);
       if (planRes.rows[0]?.price) amount = Number(planRes.rows[0].price);
     }
+    await pool.query(`UPDATE users SET annuity_tx_id = NULL, annuity_pix_copia_e_cola = NULL WHERE id = $1`, [u.id]);
+
+    const pendingRes = await pool.query(
+      `SELECT id FROM annuity_charges WHERE user_id = $1 AND paid_at IS NULL ORDER BY due_date ASC LIMIT 1`,
+      [u.id]
+    );
+    let chargeId: string = pendingRes.rows[0]?.id;
+    if (!chargeId) {
+      chargeId = `anncharge_pix_${txId}`;
+      await pool.query(
+        `INSERT INTO annuity_charges (id, kind, user_id, club_id, plan_id, subject_name, amount, due_date)
+         VALUES ($1,'athlete',$2,$3,$4,$5,$6, CURRENT_DATE::TEXT) ON CONFLICT (id) DO NOTHING`,
+        [chargeId, u.id, u.club_id, u.annuity_plan_id, u.full_name, amount]
+      );
+    }
+    await settleAnnuityCharge(chargeId, { paymentMethod: 'pix', txId });
+
+    // Histórico de pagamento (tx_id UNIQUE: webhook + polling nunca duplicam).
     const franchiseId = await getFranchiseClubId(u.club_id || DEFAULT_TENANT_ID);
     await pool.query(
       `INSERT INTO annuity_payments (id, kind, user_id, club_id, franchise_club_id, subject_name, amount, tx_id)
@@ -7543,13 +7839,26 @@ async function confirmAnnuityForTx(txId: string): Promise<void> {
       [`annpay_${txId}`, u.id, u.club_id, franchiseId, u.full_name, amount, txId]
     );
   }
-  const clubRes = await pool.query(
-    `UPDATE clubs SET annuity_paid_at = NOW(), annuity_due_date = $2, annuity_tx_id = NULL, annuity_pix_copia_e_cola = NULL
-     WHERE annuity_tx_id = $1
-     RETURNING id, name, annuity_price`,
-    [txId, expiry]
-  );
+
+  const clubRes = await pool.query(`SELECT id, name, annuity_price FROM clubs WHERE annuity_tx_id = $1`, [txId]);
   for (const c of clubRes.rows) {
+    await pool.query(`UPDATE clubs SET annuity_tx_id = NULL, annuity_pix_copia_e_cola = NULL WHERE id = $1`, [c.id]);
+
+    const pendingRes = await pool.query(
+      `SELECT id FROM annuity_charges WHERE club_id = $1 AND kind = 'club' AND paid_at IS NULL ORDER BY due_date ASC LIMIT 1`,
+      [c.id]
+    );
+    let chargeId: string = pendingRes.rows[0]?.id;
+    if (!chargeId) {
+      chargeId = `anncharge_pix_${txId}`;
+      await pool.query(
+        `INSERT INTO annuity_charges (id, kind, club_id, subject_name, amount, due_date)
+         VALUES ($1,'club',$2,$3,$4, CURRENT_DATE::TEXT) ON CONFLICT (id) DO NOTHING`,
+        [chargeId, c.id, c.name, Number(c.annuity_price || 0)]
+      );
+    }
+    await settleAnnuityCharge(chargeId, { paymentMethod: 'pix', txId });
+
     const franchiseId = await getFranchiseClubId(c.id);
     await pool.query(
       `INSERT INTO annuity_payments (id, kind, club_id, franchise_club_id, subject_name, amount, tx_id)
