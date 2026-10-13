@@ -247,7 +247,28 @@ export function CompetitionResultsViewer({
         } catch (_) {}
       }
     }
-    const champModalities = modalities.filter(m => champModIds.includes(m.id));
+    // Além das modalidades hoje configuradas no campeonato, lista as que tiveram
+    // inscrições na(s) etapa(s) selecionada(s): etapas antigas (ex.: importadas do
+    // legado) usaram modalidades que não estão mais na configuração atual, e os
+    // resultados delas ficavam inacessíveis.
+    const scopeStageIds = new Set(
+      stages
+        .filter(s => s.championshipId === selectedResultChampId)
+        .filter(s => {
+          if (selectedResultStageId === 'all') return true;
+          if (selectedResultStageId === 'all_masculino') return (s.sexo || 'misto') === 'masculino';
+          if (selectedResultStageId === 'all_feminino') return (s.sexo || 'misto') === 'feminino';
+          if (selectedResultStageId === 'all_misto') return (s.sexo || 'misto') === 'misto';
+          return s.id === selectedResultStageId;
+        })
+        .map(s => s.id)
+    );
+    const usedModIds = new Set(
+      registrations
+        .filter(r => r.championshipId === selectedResultChampId && scopeStageIds.has(r.stageId))
+        .map(r => r.modalityId)
+    );
+    const champModalities = modalities.filter(m => champModIds.includes(m.id) || usedModIds.has(m.id));
 
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">

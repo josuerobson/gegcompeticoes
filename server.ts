@@ -1947,6 +1947,64 @@ app.post('/api/admin/clubs', requireAdmin, async (req, res) => {
 // na extração) deixaram e-mails com sufixo +N atribuídos a pessoas diferentes
 // das da extração final, o que trava updates sequenciais em colisão cruzada.
 // Não toca em club_aranas nem em nenhum dado que não tenha legacy_id.
+// TEMPORÁRIO — a importação final do legado (2026-10-09) inseriu inscrições com
+// pontos mas sem a linha espelho em stage_scores que a importação original
+// criava (é ela que alimenta o ranking/resultados). Esta rota cria as linhas
+// faltantes (só inscrições do legado com pontos > 0 e sem linha) e marca a
+// inscrição como concluída. GET = contagem; POST ?apply=true = grava.
+// REMOVER depois de aplicada.
+const BACKFILL_SCORES_WHERE = `r.legacy_id IS NOT NULL AND COALESCE(r.total_points, 0) > 0
+  AND NOT EXISTS (SELECT 1 FROM stage_scores ss WHERE ss.registration_id = r.id)`;
+
+app.get('/api/admin/maintenance/backfill-stage-scores', requireMasterAdmin, async (_req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT r.stage_id, COUNT(*)::int AS n FROM registrations r WHERE ${BACKFILL_SCORES_WHERE} GROUP BY r.stage_id ORDER BY r.stage_id`
+    );
+    res.json({ total: r.rows.reduce((s, x) => s + x.n, 0), byStage: r.rows });
+  } catch (err) {
+    console.error('Backfill count error:', err);
+    res.status(500).json({ error: 'Erro ao contar.' });
+  }
+});
+
+app.post('/api/admin/maintenance/backfill-stage-scores', requireMasterAdmin, async (req, res) => {
+  if (req.query.apply !== 'true') return res.status(400).json({ error: 'Use ?apply=true para gravar.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const ins = await client.query(
+      `INSERT INTO stage_scores (id, championship_id, registration_id, user_id, shooter_name, modality, stage_num, score, time_seconds, created_at, legacy_id)
+       SELECT 'score_legacy_' || r.legacy_id, r.championship_id, r.id, r.user_id, u.full_name, m.name, s.stage_num,
+              COALESCE(r.total_points, 0), r.idsc_tempo_pista, NOW()::text, r.legacy_id
+       FROM registrations r
+       JOIN users u ON u.id = r.user_id
+       JOIN modalities m ON m.id = r.modality_id
+       JOIN stages s ON s.id = r.stage_id
+       WHERE ${BACKFILL_SCORES_WHERE}
+       ON CONFLICT (legacy_id) DO NOTHING
+       RETURNING registration_id`
+    );
+    const ids = ins.rows.map(x => x.registration_id);
+    let completed = 0;
+    if (ids.length > 0) {
+      const upd = await client.query(
+        `UPDATE registrations SET completion_status = 'completed' WHERE id = ANY($1::text[]) AND completion_status <> 'completed'`,
+        [ids]
+      );
+      completed = upd.rowCount || 0;
+    }
+    await client.query('COMMIT');
+    res.json({ success: true, scoresCreated: ids.length, registrationsMarkedCompleted: completed });
+  } catch (err: any) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Backfill stage_scores error:', err);
+    res.status(500).json({ error: err.message || 'Erro ao gerar o ranking.' });
+  } finally {
+    client.release();
+  }
+});
+
 app.post('/api/admin/import/legacy/cleanup', requireMasterAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
