@@ -6,8 +6,12 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
-const DISMISS_KEY = 'gg_pwa_install_dismissed_at';
-const DISMISS_DAYS = 7;
+// Dismissing hides the card only for the current browser session — the
+// `beforeinstallprompt` event is unreliable enough (fires once, only on some
+// browsers, sometimes not at all) that we don't gate visibility on it; the
+// card always shows when not installed, and just upgrades to the native
+// one-tap install flow if/when that event does show up.
+const DISMISS_KEY = 'gg_pwa_install_dismissed_session';
 
 function isStandalone() {
   return (
@@ -20,11 +24,6 @@ function isIos() {
   return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
 }
 
-function recentlyDismissed() {
-  const dismissedAt = Number(localStorage.getItem(DISMISS_KEY) || 0);
-  return dismissedAt > 0 && Date.now() - dismissedAt < DISMISS_DAYS * 24 * 60 * 60 * 1000;
-}
-
 declare global {
   interface Window {
     __pwaInstallEvent: BeforeInstallPromptEvent | null;
@@ -34,32 +33,27 @@ declare global {
 export default function InstallPwaPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [visible, setVisible] = useState(false);
-  const [iosHint, setIosHint] = useState(false);
+  const [showManualTip, setShowManualTip] = useState(false);
+  const iosHint = isIos();
 
   useEffect(() => {
-    if (isStandalone() || recentlyDismissed()) return;
+    if (isStandalone() || sessionStorage.getItem(DISMISS_KEY)) return;
+
+    setVisible(true);
 
     // index.html captures beforeinstallprompt the moment it fires (often before
     // this component ever mounts) and stashes it on window.__pwaInstallEvent —
-    // pick it up here instead of listening for the native event directly.
+    // pick it up here instead of listening for the native event directly. When
+    // it's never available at all (Firefox, Safari, or Chrome simply not
+    // offering it) the card still shows, just with a manual-install fallback.
     if (window.__pwaInstallEvent) {
       setDeferredPrompt(window.__pwaInstallEvent);
-      setVisible(true);
     }
 
     const onReady = () => {
-      if (window.__pwaInstallEvent) {
-        setDeferredPrompt(window.__pwaInstallEvent);
-        setVisible(true);
-      }
+      if (window.__pwaInstallEvent) setDeferredPrompt(window.__pwaInstallEvent);
     };
     window.addEventListener('pwa-install-ready', onReady);
-
-    // iOS Safari never fires beforeinstallprompt — show manual "Add to Home Screen" instructions instead.
-    if (isIos()) {
-      setIosHint(true);
-      setVisible(true);
-    }
 
     const onInstalled = () => {
       setVisible(false);
@@ -74,20 +68,20 @@ export default function InstallPwaPrompt() {
   }, []);
 
   const dismiss = () => {
-    localStorage.setItem(DISMISS_KEY, String(Date.now()));
+    sessionStorage.setItem(DISMISS_KEY, '1');
     setVisible(false);
   };
 
   const install = async () => {
-    if (!deferredPrompt) return;
+    if (!deferredPrompt) {
+      setShowManualTip(true);
+      return;
+    }
     await deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    if (outcome !== 'accepted') {
-      localStorage.setItem(DISMISS_KEY, String(Date.now()));
-    }
     window.__pwaInstallEvent = null;
     setDeferredPrompt(null);
-    setVisible(false);
+    if (outcome === 'accepted') setVisible(false);
   };
 
   if (!visible) return null;
@@ -111,12 +105,14 @@ export default function InstallPwaPrompt() {
             <p className="text-xs text-slate-400 mt-1 leading-snug">
               {iosHint
                 ? 'Toque em Compartilhar e depois em "Adicionar à Tela de Início".'
+                : showManualTip
+                ? 'Toque no menu (⋮ ou ⋯) do navegador e escolha "Instalar aplicativo" ou "Adicionar à tela inicial".'
                 : 'Acesse o sistema diretamente pela tela inicial do seu celular ou computador.'}
             </p>
           </div>
         </div>
 
-        {iosHint ? (
+        {iosHint || showManualTip ? (
           <button
             type="button"
             onClick={dismiss}
