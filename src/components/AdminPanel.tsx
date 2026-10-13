@@ -14,7 +14,7 @@ import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, EyeOff, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn, QrCode, KeyRound, Copy, AlertTriangle
+  Eye, EyeOff, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn, QrCode, KeyRound, Copy, AlertTriangle, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -7251,6 +7251,53 @@ export default function AdminPanel({
   const [createAthleteSuccess, setCreateAthleteSuccess] = useState(false);
   const [athleteSearchQuery, setAthleteSearchQuery] = useState('');
 
+  // Paginação real (server-side) da lista "Atletas Cadastrados" — diferente do
+  // resto do painel, que opera sobre o array `users` já carregado inteiro no
+  // cliente, aqui são 1000+ cadastros nacionais e o gestor da franquia precisa
+  // folhear todos eles sem precisar saber o CPF de antemão.
+  const ATHLETES_PAGE_SIZE = 30;
+  const [athletePage, setAthletePage] = useState(1);
+  const [pagedAthletes, setPagedAthletes] = useState<User[]>([]);
+  const [pagedAthletesTotal, setPagedAthletesTotal] = useState(0);
+  const [loadingAthletes, setLoadingAthletes] = useState(false);
+
+  const loadPagedAthletes = async (page: number, q: string) => {
+    if (!currentUser) return;
+    setLoadingAthletes(true);
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: String(ATHLETES_PAGE_SIZE) });
+      if (q.trim()) params.set('q', q.trim());
+      const r = await fetch(`/api/admin/athletes?${params.toString()}`, {
+        headers: { 'x-user-id': currentUser.id }
+      });
+      const data = await r.json();
+      if (r.ok) {
+        setPagedAthletes(data.athletes || []);
+        setPagedAthletesTotal(data.total || 0);
+      }
+    } catch (e) {
+      console.error('Error loading paged athletes:', e);
+    } finally {
+      setLoadingAthletes(false);
+    }
+  };
+
+  // Recarrega ao trocar de página e, com debounce, a cada letra digitada na
+  // busca (voltando sempre para a página 1 numa busca nova).
+  useEffect(() => {
+    if (plataformaMenu !== 'novo_atleta') return;
+    const handle = setTimeout(() => {
+      loadPagedAthletes(athletePage, athleteSearchQuery);
+    }, athleteSearchQuery ? 350 : 0);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plataformaMenu, athletePage, athleteSearchQuery, currentUser?.id]);
+
+  useEffect(() => {
+    setAthletePage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [athleteSearchQuery]);
+
   const handleCreateAthleteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateAthleteError('');
@@ -7266,6 +7313,7 @@ export default function AdminPanel({
       setCreateAthleteSuccess(true);
       setTimeout(() => setCreateAthleteSuccess(false), 2500);
       if (onRefreshData) await onRefreshData();
+      await loadPagedAthletes(athletePage, athleteSearchQuery);
     } else {
       setCreateAthleteError(result.error || 'Erro ao cadastrar atleta.');
     }
@@ -7330,6 +7378,7 @@ export default function AdminPanel({
       setAthleteActionMsg(`Atleta "${name}" excluído definitivamente.`);
       setTimeout(() => setAthleteActionMsg(''), 6000);
       if (onRefreshData) await onRefreshData();
+      await loadPagedAthletes(athletePage, athleteSearchQuery);
     } catch (err: any) {
       setDeleteAthleteError(err.message || 'Erro ao excluir o atleta.');
     } finally {
@@ -7370,22 +7419,44 @@ export default function AdminPanel({
     setResetCopied(false);
   };
 
-  // Editar atleta (Novo Atleta) — inclui trocar o clube ao qual pertence,
-  // exclusivo do master_admin.
+  // Editar atleta (Novo Atleta) — formulário único com todos os dados do
+  // atleta (igual ao whitelist de USER_PROFILE_COLUMNS no servidor, mais
+  // clube/CPF/e-mail, exclusivos de quem gerencia a franquia), incluindo a
+  // anuidade — em vez do fluxo seccionado de "Cadastrar Membros", aqui é tudo
+  // num formulário só, salvo de uma vez.
+  const EMPTY_EDIT_ATHLETE_FORM = {
+    clubId: '', fullName: '', cpf: '', email: '',
+    birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
+    fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', nationality: '',
+    phone: '',
+    cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '',
+    guiaTransitoExpiry: '', signatureExpiry: '', annuityPlanId: '',
+  };
   const [editingAthlete, setEditingAthlete] = useState<User | null>(null);
-  const [editAthleteForm, setEditAthleteForm] = useState({ fullName: '', cpf: '', email: '', clubId: '' });
+  const [editAthleteForm, setEditAthleteForm] = useState(EMPTY_EDIT_ATHLETE_FORM);
+  const [editAthleteHasPaidSignature, setEditAthleteHasPaidSignature] = useState(false);
   const [savingEditAthlete, setSavingEditAthlete] = useState(false);
   const [editAthleteError, setEditAthleteError] = useState('');
   const [editAthleteSuccess, setEditAthleteSuccess] = useState(false);
+  const canEditAthleteClubCpfEmail = currentUser?.role === 'master_admin' || currentUser?.role === 'club_admin';
 
   const startEditingAthlete = (athlete: User) => {
     setEditingAthlete(athlete);
     setEditAthleteForm({
-      fullName: athlete.fullName || '',
-      cpf: athlete.cpf || '',
-      email: athlete.email || '',
-      clubId: athlete.clubId || '',
+      clubId: athlete.clubId || '', fullName: athlete.fullName || '', cpf: athlete.cpf || '', email: athlete.email || '',
+      birthDate: athlete.birthDate || '', sex: athlete.sex || '', rg: athlete.rg || '',
+      rgIssuer: athlete.rgIssuer || '', rgIssueDate: athlete.rgIssueDate || '',
+      fatherName: athlete.fatherName || '', motherName: athlete.motherName || '',
+      crNumber: athlete.crNumber || '', crValidity: athlete.crValidity || '',
+      militaryRegion: athlete.militaryRegion || '', nationality: athlete.nationality || '',
+      phone: athlete.phone || '',
+      cep: athlete.cep || '', address: athlete.address || '', addressNumber: athlete.addressNumber || '',
+      complement: athlete.complement || '', neighborhood: athlete.neighborhood || '',
+      city: athlete.city || '', state: athlete.state || '',
+      guiaTransitoExpiry: athlete.guiaTransitoExpiry || '', signatureExpiry: athlete.signatureExpiry || '',
+      annuityPlanId: athlete.annuityPlanId || '',
     });
+    setEditAthleteHasPaidSignature(Boolean(athlete.hasPaidSignature));
     setEditAthleteError('');
     setEditAthleteSuccess(false);
   };
@@ -7395,11 +7466,18 @@ export default function AdminPanel({
     if (!editingAthlete) return;
     setSavingEditAthlete(true);
     setEditAthleteError('');
-    const ok = await onUpdateMemberProfile(editingAthlete.id, editAthleteForm);
+    // Datas/texto em branco viram null (não string vazia) para não quebrar as
+    // colunas DATE no banco quando o diretor deixa um campo sem preencher.
+    const payload: Record<string, unknown> = { hasPaidSignature: editAthleteHasPaidSignature };
+    for (const [key, value] of Object.entries(editAthleteForm) as [string, string][]) {
+      payload[key] = value.trim() === '' ? null : value;
+    }
+    const ok = await onUpdateMemberProfile(editingAthlete.id, payload);
     setSavingEditAthlete(false);
     if (ok) {
       setEditAthleteSuccess(true);
       if (onRefreshData) await onRefreshData();
+      await loadPagedAthletes(athletePage, athleteSearchQuery);
       setTimeout(() => {
         setEditAthleteSuccess(false);
         setEditingAthlete(null);
@@ -9361,19 +9439,7 @@ export default function AdminPanel({
         );
 
       case 'novo_atleta': {
-        const filteredAthletes = (() => {
-          const q = normalizeSearchText(athleteSearchQuery.trim());
-          const allMembers = users.filter(u => u.role === 'member');
-          if (!q) return allMembers.slice(0, 30);
-          const qDigits = q.replace(/\D/g, '');
-          const clubNameById = new Map(clubs.map(c => [c.id, normalizeSearchText(c.name)]));
-          return allMembers.filter(u =>
-            normalizeSearchText(u.fullName).includes(q) ||
-            (qDigits && (u.cpf || '').replace(/\D/g, '').includes(qDigits)) ||
-            (u.clubId && (clubNameById.get(u.clubId) || '').includes(q))
-          ).slice(0, 100);
-        })();
-        const totalAthletes = users.filter(u => u.role === 'member').length;
+        const athleteTotalPages = Math.max(Math.ceil(pagedAthletesTotal / ATHLETES_PAGE_SIZE), 1);
 
         return (
           <div className="space-y-6">
@@ -9430,7 +9496,7 @@ export default function AdminPanel({
 
             <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs text-left">
               <div className="flex items-center justify-between gap-3 flex-wrap">
-                <h4 className="font-display font-bold text-slate-900 text-sm">Atletas Cadastrados ({totalAthletes})</h4>
+                <h4 className="font-display font-bold text-slate-900 text-sm">Atletas Cadastrados ({pagedAthletesTotal})</h4>
                 <input
                   type="text"
                   value={athleteSearchQuery}
@@ -9439,14 +9505,16 @@ export default function AdminPanel({
                   className="bg-slate-50 border border-slate-200 outline-none px-3 py-2 rounded-xl focus:border-blue-500 text-xs text-slate-700 w-full sm:w-64"
                 />
               </div>
-              {!athleteSearchQuery.trim() && (
-                <p className="text-[11px] text-slate-400">Mostrando os 30 mais recentes — use a busca para encontrar outros atletas.</p>
-              )}
-              {filteredAthletes.length === 0 ? (
+              <p className="text-[11px] text-slate-400">
+                Página {athletePage} de {athleteTotalPages} — navegue pelas páginas para ver todos os cadastros, mesmo sem saber o CPF.
+              </p>
+              {loadingAthletes ? (
+                <p className="text-xs text-slate-400">Carregando...</p>
+              ) : pagedAthletes.length === 0 ? (
                 <p className="text-xs text-slate-400">Nenhum atleta encontrado.</p>
               ) : (
                 <div className="grid grid-cols-1 gap-2">
-                  {filteredAthletes.map(u => {
+                  {pagedAthletes.map(u => {
                     const club = clubs.find(c => c.id === u.clubId);
                     return (
                       <div key={u.id} className="border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row justify-between sm:items-center gap-2 bg-slate-50/50 hover:border-slate-300 transition">
@@ -9496,6 +9564,29 @@ export default function AdminPanel({
                       </div>
                     );
                   })}
+                </div>
+              )}
+              {athleteTotalPages > 1 && (
+                <div className="flex items-center justify-center gap-3 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setAthletePage(p => Math.max(p - 1, 1))}
+                    disabled={athletePage <= 1 || loadingAthletes}
+                    className="flex items-center gap-1 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 border border-slate-200 font-bold text-[11px] px-3 py-1.5 rounded-lg transition cursor-pointer"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    Anterior
+                  </button>
+                  <span className="text-[11px] text-slate-500 font-semibold">Página {athletePage} de {athleteTotalPages}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAthletePage(p => Math.min(p + 1, athleteTotalPages))}
+                    disabled={athletePage >= athleteTotalPages || loadingAthletes}
+                    className="flex items-center gap-1 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 border border-slate-200 font-bold text-[11px] px-3 py-1.5 rounded-lg transition cursor-pointer"
+                  >
+                    Próxima
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               )}
             </div>
@@ -9665,20 +9756,20 @@ export default function AdminPanel({
               </div>
             )}
 
-            {/* Modal de Edição do Atleta */}
+            {/* Modal de Edição do Atleta — formulário único com todos os dados */}
             {editingAthlete && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-                <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl text-slate-800 flex flex-col text-left">
-                  <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-3xl overflow-hidden shadow-2xl text-slate-800 flex flex-col text-left max-h-[90vh]">
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
                     <div>
                       <h4 className="font-display font-bold text-slate-900 text-base">Editar Atleta</h4>
                       <p className="text-xs text-slate-400">{editingAthlete.fullName}</p>
                     </div>
-                    <button onClick={() => setEditingAthlete(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                    <button onClick={() => setEditingAthlete(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
-                  <form onSubmit={handleSaveEditAthlete} className="p-6 space-y-4">
+                  <form onSubmit={handleSaveEditAthlete} className="p-6 space-y-5 overflow-y-auto">
                     {editAthleteSuccess && (
                       <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
                         <CheckCircle className="w-5 h-5 text-emerald-600" />
@@ -9688,23 +9779,97 @@ export default function AdminPanel({
                     {editAthleteError && (
                       <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{editAthleteError}</div>
                     )}
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Clube</label>
-                      <select
-                        value={editAthleteForm.clubId}
-                        onChange={e => setEditAthleteForm({ ...editAthleteForm, clubId: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
-                      >
-                        <option value="">Selecione o clube...</option>
-                        {clubs.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
+
+                    <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-xl space-y-3">
+                      <h5 className="font-bold text-xs text-slate-700">Clube & Acesso{!canEditAthleteClubCpfEmail && ' (exclusivo do gestor da franquia)'}</h5>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block">Clube</label>
+                          <select
+                            value={editAthleteForm.clubId}
+                            onChange={e => setEditAthleteForm({ ...editAthleteForm, clubId: e.target.value })}
+                            disabled={!canEditAthleteClubCpfEmail}
+                            className={`w-full border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 ${canEditAthleteClubCpfEmail ? 'bg-slate-50' : 'bg-slate-100 text-slate-500 cursor-not-allowed'}`}
+                          >
+                            <option value="">Selecione o clube...</option>
+                            {clubs.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                              <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <MemberField label="CPF" value={editAthleteForm.cpf} onChange={v => setEditAthleteForm({ ...editAthleteForm, cpf: v })} disabled={!canEditAthleteClubCpfEmail} />
+                        <div className="sm:col-span-2">
+                          <MemberField label="E-mail" type="email" value={editAthleteForm.email} onChange={v => setEditAthleteForm({ ...editAthleteForm, email: v })} disabled={!canEditAthleteClubCpfEmail} />
+                        </div>
+                      </div>
                     </div>
-                    <MemberField label="Nome completo" value={editAthleteForm.fullName} onChange={v => setEditAthleteForm({ ...editAthleteForm, fullName: v })} />
-                    <MemberField label="CPF" value={editAthleteForm.cpf} onChange={v => setEditAthleteForm({ ...editAthleteForm, cpf: v })} />
-                    <MemberField label="E-mail" type="email" value={editAthleteForm.email} onChange={v => setEditAthleteForm({ ...editAthleteForm, email: v })} />
-                    <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+
+                    <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-xl space-y-3">
+                      <h5 className="font-bold text-xs text-slate-700">Dados Cadastrais</h5>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="sm:col-span-2"><MemberField label="Nome completo" value={editAthleteForm.fullName} onChange={v => setEditAthleteForm({ ...editAthleteForm, fullName: v })} /></div>
+                        <MemberField label="Data de nascimento" type="date" value={editAthleteForm.birthDate} onChange={v => setEditAthleteForm({ ...editAthleteForm, birthDate: v })} />
+                        <MemberSelect
+                          label="Sexo"
+                          value={editAthleteForm.sex}
+                          onChange={v => setEditAthleteForm({ ...editAthleteForm, sex: v })}
+                          options={[{ value: 'masculino', label: 'Masculino' }, { value: 'feminino', label: 'Feminino' }]}
+                        />
+                        <MemberField label="RG" value={editAthleteForm.rg} onChange={v => setEditAthleteForm({ ...editAthleteForm, rg: v })} />
+                        <MemberField label="Órgão emissor RG" value={editAthleteForm.rgIssuer} onChange={v => setEditAthleteForm({ ...editAthleteForm, rgIssuer: v })} />
+                        <MemberField label="Data emissão RG" type="date" value={editAthleteForm.rgIssueDate} onChange={v => setEditAthleteForm({ ...editAthleteForm, rgIssueDate: v })} />
+                        <MemberField label="Nome do pai" value={editAthleteForm.fatherName} onChange={v => setEditAthleteForm({ ...editAthleteForm, fatherName: v })} />
+                        <MemberField label="Nome da mãe" value={editAthleteForm.motherName} onChange={v => setEditAthleteForm({ ...editAthleteForm, motherName: v })} />
+                        <MemberField label="CR" placeholder="Ex: CR-102938-DF" value={editAthleteForm.crNumber} onChange={v => setEditAthleteForm({ ...editAthleteForm, crNumber: v })} />
+                        <MemberField label="Validade CR" type="date" value={editAthleteForm.crValidity} onChange={v => setEditAthleteForm({ ...editAthleteForm, crValidity: v })} />
+                        <MemberField label="Região Militar" value={editAthleteForm.militaryRegion} onChange={v => setEditAthleteForm({ ...editAthleteForm, militaryRegion: v })} />
+                        <MemberField label="Nacionalidade" value={editAthleteForm.nationality} onChange={v => setEditAthleteForm({ ...editAthleteForm, nationality: v })} />
+                        <MemberField label="Celular" type="tel" value={editAthleteForm.phone} onChange={v => setEditAthleteForm({ ...editAthleteForm, phone: v })} />
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-xl space-y-3">
+                      <h5 className="font-bold text-xs text-slate-700">Endereço</h5>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <MemberField label="CEP" value={editAthleteForm.cep} onChange={v => setEditAthleteForm({ ...editAthleteForm, cep: v })} />
+                        <MemberField label="Endereço" value={editAthleteForm.address} onChange={v => setEditAthleteForm({ ...editAthleteForm, address: v })} />
+                        <MemberField label="Número" value={editAthleteForm.addressNumber} onChange={v => setEditAthleteForm({ ...editAthleteForm, addressNumber: v })} />
+                        <MemberField label="Complemento" value={editAthleteForm.complement} onChange={v => setEditAthleteForm({ ...editAthleteForm, complement: v })} />
+                        <MemberField label="Bairro" value={editAthleteForm.neighborhood} onChange={v => setEditAthleteForm({ ...editAthleteForm, neighborhood: v })} />
+                        <MemberField label="Cidade" value={editAthleteForm.city} onChange={v => setEditAthleteForm({ ...editAthleteForm, city: v })} />
+                        <MemberField label="Estado" value={editAthleteForm.state} onChange={v => setEditAthleteForm({ ...editAthleteForm, state: v })} />
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-xl space-y-3">
+                      <h5 className="font-bold text-xs text-slate-700">Validades & Anuidade</h5>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <MemberField label="Vencimento Guia de Trânsito" type="date" value={editAthleteForm.guiaTransitoExpiry} onChange={v => setEditAthleteForm({ ...editAthleteForm, guiaTransitoExpiry: v })} />
+                        <MemberField label="Vencimento Anuidade" type="date" value={editAthleteForm.signatureExpiry} onChange={v => setEditAthleteForm({ ...editAthleteForm, signatureExpiry: v })} />
+                        <div className="sm:col-span-2">
+                          <MemberSelect
+                            label="Plano de Anuidade do Atleta"
+                            value={editAthleteForm.annuityPlanId}
+                            onChange={v => setEditAthleteForm({ ...editAthleteForm, annuityPlanId: v })}
+                            options={[
+                              { value: '', label: 'Nenhum plano específico (Anuidade Avulsa / Padrão R$ 360,00)' },
+                              ...annuityPlans.map(p => ({ value: p.id, label: `${p.name} — R$ ${p.price.toFixed(2)}` }))
+                            ]}
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer sm:col-span-2">
+                          <input
+                            type="checkbox"
+                            checked={editAthleteHasPaidSignature}
+                            onChange={e => setEditAthleteHasPaidSignature(e.target.checked)}
+                            className="w-4 h-4 accent-blue-600 cursor-pointer"
+                          />
+                          Anuidade paga / em dia
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 sticky bottom-0 bg-white">
                       <button
                         type="button"
                         onClick={() => setEditingAthlete(null)}

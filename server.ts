@@ -681,6 +681,18 @@ const requireFranchiseAdmin = async (req: express.Request, res: express.Response
   return res.status(403).json({ error: 'Apenas a franquia dona do tenant ou o Administrador Master podem gerenciar campeonatos, etapas, modalidades, multicampeonatos e planos de anuidade.' });
 };
 
+// Mesmo critério de requireFranchiseAdmin, mas como função booleana reutilizável
+// dentro de um handler já autenticado por requireAdmin (ex.: editar atleta em
+// "Novo Atleta", onde um club_admin comum também pode entrar na tela, só que
+// com menos poderes que o gestor da franquia).
+async function isFranchiseRootAdmin(currentUser: User): Promise<boolean> {
+  if (currentUser.role === 'master_admin') return true;
+  if (currentUser.role === 'club_admin' && currentUser.clubId) {
+    return (await getFranchiseClubId(currentUser.clubId)) === currentUser.clubId;
+  }
+  return false;
+}
+
 // ─── Multi-tenancy: resolução de tenant por subdomínio ─────────────────────
 // Cada clube "premium" (ativado) é isolado: nada de campeonatos, modalidades,
 // atletas, feed ou catálogo de armas é compartilhado entre tenants. Clubes
@@ -2759,28 +2771,29 @@ app.patch('/api/admin/members/:id/profile', requireAdmin, async (req, res) => {
   const currentUser = (req as any).user as User;
   const memberId = req.params.id;
   const { clubId: bodyClubId, cpf: bodyCpf, email: bodyEmail, ...profileFields } = req.body;
-  const isMasterAdmin = currentUser.role === 'master_admin';
+  const isFranchiseAdmin = await isFranchiseRootAdmin(currentUser);
 
   try {
     const memberCheck = await pool.query('SELECT club_id FROM users WHERE id = $1', [memberId]);
     if (memberCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Membro não encontrado.' });
     }
-    if (!isMasterAdmin && memberCheck.rows[0].club_id !== currentUser.clubId) {
+    if (!isFranchiseAdmin && memberCheck.rows[0].club_id !== currentUser.clubId) {
       return res.status(403).json({ error: 'Este membro não pertence ao seu clube.' });
     }
 
-    // Trocar de clube / editar CPF / editar e-mail são exclusivos do master_admin
-    // (tela "Novo Atleta" em Gerenciamento Plataforma) — fora do whitelist
-    // compartilhado com "Meu Cadastro", que nunca deixa o próprio membro mudá-los.
-    if (isMasterAdmin && bodyClubId && bodyClubId !== memberCheck.rows[0].club_id) {
+    // Trocar de clube / editar CPF / editar e-mail são exclusivos de quem gerencia
+    // a franquia (master_admin ou o club_admin dono do tenant, tela "Novo Atleta"
+    // em Gerenciamento Plataforma) — fora do whitelist compartilhado com "Meu
+    // Cadastro", que nunca deixa o próprio membro mudá-los.
+    if (isFranchiseAdmin && bodyClubId && bodyClubId !== memberCheck.rows[0].club_id) {
       const clubCheckRes = await pool.query('SELECT 1 FROM clubs WHERE id = $1', [bodyClubId]);
       if (clubCheckRes.rows.length === 0) {
         return res.status(400).json({ error: 'Clube selecionado não encontrado.' });
       }
       await pool.query('UPDATE users SET club_id = $1 WHERE id = $2', [bodyClubId, memberId]);
     }
-    if (isMasterAdmin && bodyCpf) {
+    if (isFranchiseAdmin && bodyCpf) {
       const cleanCpf = String(bodyCpf).replace(/\D/g, '');
       const conflictRes = await pool.query(
         `SELECT 1 FROM users WHERE regexp_replace(cpf, '[^0-9]', '', 'g') = $1 AND id != $2`,
@@ -2791,7 +2804,7 @@ app.patch('/api/admin/members/:id/profile', requireAdmin, async (req, res) => {
       }
       await pool.query('UPDATE users SET cpf = $1 WHERE id = $2', [bodyCpf, memberId]);
     }
-    if (isMasterAdmin && bodyEmail) {
+    if (isFranchiseAdmin && bodyEmail) {
       const conflictRes = await pool.query('SELECT 1 FROM users WHERE email = $1 AND id != $2', [bodyEmail, memberId]);
       if (conflictRes.rows.length > 0) {
         return res.status(400).json({ error: 'Já existe outro usuário cadastrado com este e-mail.' });
@@ -2842,8 +2855,13 @@ app.patch('/api/clubs/:id', requireAuth, async (req, res) => {
 
   const isAdmin = currentUser.role === 'admin' || currentUser.role === 'master_admin';
   const isClubAdminOfThisClub = currentUser.role === 'club_admin' && currentUser.clubId === clubId;
+  // Gestor da franquia (club_admin dono do tenant) edita qualquer clube filiado
+  // da própria rede, não só o próprio cadastro — mesmo critério já usado logo
+  // abaixo para annuityPrice.
+  const isFranchiseAdminOfThisClub = currentUser.role === 'club_admin' && !!currentUser.clubId
+    && (await getFranchiseClubId(clubId)) === currentUser.clubId;
 
-  if (!isAdmin && !isClubAdminOfThisClub) {
+  if (!isAdmin && !isClubAdminOfThisClub && !isFranchiseAdminOfThisClub) {
     return res.status(403).json({ error: 'Apenas administradores podem editar este clube.' });
   }
 
@@ -3157,6 +3175,49 @@ app.get('/api/users', async (req, res) => {
     res.json({ users });
   } catch (err) {
     console.error('Fetch users database error:', err);
+    res.status(500).json({ error: 'Erro ao buscar atletas.' });
+  }
+});
+
+// Lista paginada de atletas para a tela "Novo Atleta" (Gerenciamento
+// Plataforma) — diferente de GET /api/users (que carrega o tenant inteiro de
+// uma vez para o feed/perfis), aqui o gestor da franquia precisa navegar por
+// todos os 1000+ cadastros sem precisar saber o CPF de antemão, então o corte
+// de página/busca roda no banco em vez de no array já carregado no cliente.
+app.get('/api/admin/athletes', requireFranchiseAdmin, async (req, res) => {
+  try {
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
+    const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 30, 1), 100);
+    const offset = (page - 1) * limit;
+    const q = ((req.query.q as string) || '').trim();
+
+    const baseParams: any[] = [visibleClubIds];
+    let whereExtra = '';
+    if (q) {
+      const digits = q.replace(/\D/g, '');
+      baseParams.push(`%${digits || q}%`);
+      baseParams.push(`%${q}%`);
+      whereExtra = ` AND (regexp_replace(u.cpf, '[^0-9]', '', 'g') ILIKE $2 OR unaccent_lower(u.full_name) LIKE unaccent_lower($3))`;
+    }
+
+    const countRes = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM users u WHERE u.club_id = ANY($1) AND u.role = 'member'${whereExtra}`,
+      baseParams
+    );
+    const total = countRes.rows[0].total;
+
+    const listParams = [...baseParams, limit, offset];
+    const listRes = await pool.query(
+      `SELECT u.* FROM users u WHERE u.club_id = ANY($1) AND u.role = 'member'${whereExtra}
+       ORDER BY u.full_name ASC LIMIT $${baseParams.length + 1} OFFSET $${baseParams.length + 2}`,
+      listParams
+    );
+    const athletes = listRes.rows.map(mapUser);
+    res.json({ athletes, total, page, limit });
+  } catch (err) {
+    console.error('Fetch paginated athletes database error:', err);
     res.status(500).json({ error: 'Erro ao buscar atletas.' });
   }
 });
