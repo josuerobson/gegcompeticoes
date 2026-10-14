@@ -4227,6 +4227,27 @@ app.post('/api/modalities', requireFranchiseAdmin, async (req, res) => {
   }
 });
 
+app.patch('/api/modalities/:id', requireFranchiseAdmin, async (req, res) => {
+  const { name, seriesCount, shotsPerSeries, timePerSeriesMinutes, evaluationType } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'Nome da modalidade é obrigatório.' });
+  }
+  try {
+    const result = await pool.query(
+      `UPDATE modalities SET name = $1, series_count = $2, shots_per_series = $3, time_per_series_minutes = $4, evaluation_type = $5
+       WHERE id = $6 RETURNING *`,
+      [name, seriesCount || null, shotsPerSeries || null, timePerSeriesMinutes || null, evaluationType || null, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Modalidade não encontrada.' });
+    }
+    res.json({ modality: mapModality(result.rows[0]) });
+  } catch (err) {
+    console.error('Update modality database error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar modalidade.' });
+  }
+});
+
 app.delete('/api/modalities/:id', requireFranchiseAdmin, async (req, res) => {
   try {
     const result = await pool.query('DELETE FROM modalities WHERE id = $1 RETURNING id', [req.params.id]);

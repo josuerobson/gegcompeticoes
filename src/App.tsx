@@ -368,7 +368,11 @@ export default function App() {
     if (r.weapons) setWeapons(r.weapons);
   };
   const refreshModalities = async () => {
-    const r = await fetch('/api/modalities', { headers: buildAuthHeaders() }).then(r => r.json()).catch(() => ({}));
+    // GET /api/modalities responde com Cache-Control: max-age=300 (para a
+    // carga normal da tela) — sem no-store aqui, editar/excluir uma
+    // modalidade e recarregar em seguida mostrava o dado antigo por até
+    // 5 minutos, mesmo o servidor já tendo salvo a mudança.
+    const r = await fetch('/api/modalities', { headers: buildAuthHeaders(), cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
     if (r.modalities) setModalities(r.modalities);
   };
   const refreshStages = async () => {
@@ -376,7 +380,8 @@ export default function App() {
     if (r.stages) setStages(r.stages);
   };
   const refreshWeaponLookups = async () => {
-    const r = await fetch('/api/weapon-lookups', { headers: buildAuthHeaders() }).then(r => r.json()).catch(() => ({}));
+    // Mesmo problema de cache do refreshModalities acima.
+    const r = await fetch('/api/weapon-lookups', { headers: buildAuthHeaders(), cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
     if (r.options) setWeaponLookupOptions(r.options);
   };
   const refreshSettings = async () => {
@@ -423,10 +428,10 @@ export default function App() {
         targetUserId ? fetch('/api/registrations', { headers: authHeaders }).then(r => r.json()) : Promise.resolve({ registrations: [] }),
         fetch('/api/scores?activeOnly=true', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/clubs', { headers: authHeaders, cache: 'no-store' }).then(r => r.json()),
-        fetch('/api/modalities', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/modalities', { headers: authHeaders, cache: 'no-store' }).then(r => r.json()),
         fetch('/api/stages', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/weapons', { headers: authHeaders }).then(r => r.json()),
-        fetch('/api/weapon-lookups', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/weapon-lookups', { headers: authHeaders, cache: 'no-store' }).then(r => r.json()),
         fetch('/api/settings', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/multi-championships').then(r => r.json())
       ]);
@@ -1430,6 +1435,25 @@ export default function App() {
     } else {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || 'Erro ao cadastrar modalidade.');
+    }
+  };
+
+  const handleUpdateModality = async (modalityId: string, modality: { name: string; seriesCount?: number; shotsPerSeries?: number; timePerSeriesMinutes?: number; evaluationType?: string }) => {
+    const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentUser) {
+      authHeaders['x-user-id'] = currentUser.id;
+    }
+
+    const res = await fetch(`/api/modalities/${modalityId}`, {
+      method: 'PATCH',
+      headers: authHeaders,
+      body: JSON.stringify(modality)
+    });
+    if (res.ok) {
+      await refreshModalities();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Erro ao atualizar modalidade.');
     }
   };
 
@@ -2529,6 +2553,7 @@ export default function App() {
               onUpdateWeaponLookup={handleUpdateWeaponLookup}
               onRemoveWeaponLookup={handleRemoveWeaponLookup}
               onAddModality={handleAddModality}
+              onUpdateModality={handleUpdateModality}
               onRemoveModality={handleRemoveModality}
               settings={settings}
               onSaveSetting={handleSaveSetting}

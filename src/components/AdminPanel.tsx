@@ -51,6 +51,7 @@ interface AdminPanelProps {
   onUpdateWeaponLookup: (id: string, label: string) => Promise<{ error?: string }>;
   onRemoveWeaponLookup: (id: string) => Promise<{ error?: string }>;
   onAddModality: (modality: { name: string; seriesCount?: number; shotsPerSeries?: number; timePerSeriesMinutes?: number; evaluationType?: string }) => Promise<void>;
+  onUpdateModality: (modalityId: string, modality: { name: string; seriesCount?: number; shotsPerSeries?: number; timePerSeriesMinutes?: number; evaluationType?: string }) => Promise<void>;
   onRemoveModality: (modalityId: string) => Promise<void>;
   onCreateChampionship: (data: ChampionshipInput) => Promise<{ championship?: Championship; error?: string }>;
   onUpdateChampionship?: (id: string, data: ChampionshipInput) => Promise<{ championship?: Championship; error?: string }>;
@@ -6338,6 +6339,7 @@ export default function AdminPanel({
   onUpdateWeaponLookup,
   onRemoveWeaponLookup,
   onAddModality,
+  onUpdateModality,
   onRemoveModality,
   onCreateChampionship,
   onUpdateChampionship,
@@ -6420,25 +6422,51 @@ export default function AdminPanel({
 
   const weaponLookup = (kind: string) => weaponLookupOptions.filter(o => o.kind === kind);
 
-  const [newModality, setNewModality] = useState({ name: '', seriesCount: '', shotsPerSeries: '', timePerSeriesMinutes: '', evaluationType: '' });
+  const EMPTY_MODALITY_FORM = { name: '', seriesCount: '', shotsPerSeries: '', timePerSeriesMinutes: '', evaluationType: '' };
+  const [newModality, setNewModality] = useState(EMPTY_MODALITY_FORM);
   const [savingModality, setSavingModality] = useState(false);
   const [modalityError, setModalityError] = useState('');
+  const [editingModalityId, setEditingModalityId] = useState<string | null>(null);
+
+  const startEditingModality = (m: Modality) => {
+    setEditingModalityId(m.id);
+    setNewModality({
+      name: m.name || '',
+      seriesCount: m.seriesCount != null ? String(m.seriesCount) : '',
+      shotsPerSeries: m.shotsPerSeries != null ? String(m.shotsPerSeries) : '',
+      timePerSeriesMinutes: m.timePerSeriesMinutes != null ? String(m.timePerSeriesMinutes) : '',
+      evaluationType: m.evaluationType || '',
+    });
+    setModalityError('');
+  };
+
+  const cancelEditingModality = () => {
+    setEditingModalityId(null);
+    setNewModality(EMPTY_MODALITY_FORM);
+    setModalityError('');
+  };
 
   const handleSaveModality = async () => {
     if (!newModality.name) return;
     setSavingModality(true);
     setModalityError('');
     try {
-      await onAddModality({
+      const payload = {
         name: newModality.name,
         seriesCount: newModality.seriesCount ? Number(newModality.seriesCount) : undefined,
         shotsPerSeries: newModality.shotsPerSeries ? Number(newModality.shotsPerSeries) : undefined,
         timePerSeriesMinutes: newModality.timePerSeriesMinutes ? Number(newModality.timePerSeriesMinutes) : undefined,
         evaluationType: newModality.evaluationType || undefined
-      });
-      setNewModality({ name: '', seriesCount: '', shotsPerSeries: '', timePerSeriesMinutes: '', evaluationType: '' });
+      };
+      if (editingModalityId) {
+        await onUpdateModality(editingModalityId, payload);
+        setEditingModalityId(null);
+      } else {
+        await onAddModality(payload);
+      }
+      setNewModality(EMPTY_MODALITY_FORM);
     } catch (err: any) {
-      setModalityError(err.message || 'Erro ao cadastrar modalidade.');
+      setModalityError(err.message || (editingModalityId ? 'Erro ao atualizar modalidade.' : 'Erro ao cadastrar modalidade.'));
     } finally {
       setSavingModality(false);
     }
@@ -6448,6 +6476,7 @@ export default function AdminPanel({
     setModalityError('');
     try {
       await onRemoveModality(modalityId);
+      if (editingModalityId === modalityId) cancelEditingModality();
     } catch (err: any) {
       setModalityError(err.message || 'Erro ao remover modalidade.');
     }
@@ -11773,7 +11802,7 @@ export default function AdminPanel({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Cadastrar Modalidades */}
               <div className="border border-slate-100 p-4 rounded-xl bg-slate-50/50 space-y-3">
-                <h4 className="font-bold text-xs">Cadastrar Modalidade</h4>
+                <h4 className="font-bold text-xs">{editingModalityId ? 'Editar Modalidade' : 'Cadastrar Modalidade'}</h4>
                 <div className="space-y-2">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade</label>
@@ -11828,13 +11857,24 @@ export default function AdminPanel({
                     </select>
                   </div>
                 </div>
-                <button
-                  onClick={handleSaveModality}
-                  disabled={savingModality || !newModality.name}
-                  className="w-full bg-blue-600 disabled:opacity-60 text-white text-xs py-2 rounded-lg font-bold"
-                >
-                  {savingModality ? 'Salvando...' : 'Salvar'}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveModality}
+                    disabled={savingModality || !newModality.name}
+                    className="flex-1 bg-blue-600 disabled:opacity-60 text-white text-xs py-2 rounded-lg font-bold"
+                  >
+                    {savingModality ? 'Salvando...' : editingModalityId ? 'Salvar Alterações' : 'Salvar'}
+                  </button>
+                  {editingModalityId && (
+                    <button
+                      onClick={cancelEditingModality}
+                      disabled={savingModality}
+                      className="px-4 bg-slate-200 hover:bg-slate-300 disabled:opacity-60 text-slate-700 text-xs py-2 rounded-lg font-bold"
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* List */}
@@ -11842,7 +11882,7 @@ export default function AdminPanel({
                 {modalities.length === 0 ? (
                   <p className="text-xs text-slate-400 p-2.5">Nenhuma modalidade cadastrada ainda.</p>
                 ) : modalities.map((m) => (
-                  <div key={m.id} className="flex justify-between items-center bg-slate-100/50 p-2.5 rounded-lg text-xs font-semibold">
+                  <div key={m.id} className={`flex justify-between items-center p-2.5 rounded-lg text-xs font-semibold ${editingModalityId === m.id ? 'bg-blue-50 ring-1 ring-blue-200' : 'bg-slate-100/50'}`}>
                     <div>
                       <span className="block">{m.name}</span>
                       <span className="block text-[10px] text-slate-450 font-normal">
@@ -11854,7 +11894,10 @@ export default function AdminPanel({
                         ].filter(Boolean).join(' • ') || 'Sem detalhes cadastrados'}
                       </span>
                     </div>
-                    <button onClick={() => handleDeleteModality(m.id)} className="text-red-500 hover:text-red-700">Excluir</button>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <button onClick={() => startEditingModality(m)} className="text-blue-600 hover:text-blue-800">Editar</button>
+                      <button onClick={() => handleDeleteModality(m.id)} className="text-red-500 hover:text-red-700">Excluir</button>
+                    </div>
                   </div>
                 ))}
               </div>
