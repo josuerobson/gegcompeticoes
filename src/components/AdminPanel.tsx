@@ -283,6 +283,99 @@ function MemberFileField({ label, onUpload }: { label: string; onUpload: (file: 
   );
 }
 
+// Seletor de modalidades para Novo/Editar Campeonato — tabela com busca e
+// checkbox em vez do antigo grid de botões (ilegível com 50+ modalidades e
+// não mostrava séries/tiros/tempo/avaliação, só o nome). `pinKey` muda
+// (ex: o id do campeonato sendo editado) sempre que o conjunto "já
+// selecionado no início" deve ser recalculado — assim quem já estava marcado
+// fica fixo no topo mesmo que o admin desmarque/marque outras linhas depois,
+// sem a lista inteira reordenar a cada clique.
+function ModalitySelectorTable({ modalities, selectedIds, onToggle, pinKey }: {
+  modalities: Modality[];
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+  pinKey: string;
+}) {
+  const [query, setQuery] = useState('');
+  const pinnedRef = useRef<{ key: string; ids: string[] }>({ key: pinKey, ids: selectedIds });
+  if (pinnedRef.current.key !== pinKey) {
+    pinnedRef.current = { key: pinKey, ids: selectedIds };
+  }
+  const pinnedIds = pinnedRef.current.ids;
+
+  const evalLabel = (t?: string) => t === 'pontuacao' ? 'Pontuação' : t === 'pontuacao_tempo' ? 'Pontuação + Tempo' : t === 'tempo' ? 'Tempo' : '—';
+
+  const q = normalizeSearchText(query.trim());
+  const filtered = q ? modalities.filter(m => normalizeSearchText(m.name).includes(q)) : modalities;
+  const sorted = [...filtered].sort((a, b) => {
+    const aPinned = pinnedIds.includes(a.id) ? 0 : 1;
+    const bPinned = pinnedIds.includes(b.id) ? 0 : 1;
+    return aPinned - bPinned;
+  });
+
+  return (
+    <div className="border border-slate-200 rounded-xl overflow-hidden">
+      <div className="p-2 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
+        <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar modalidade por nome..."
+          className="w-full bg-white border border-slate-200 outline-none px-3 py-1.5 rounded-lg text-xs text-slate-700 focus:border-blue-500"
+        />
+      </div>
+      <div className="max-h-72 overflow-y-auto">
+        <table className="w-full text-[11px] border-collapse">
+          <thead className="sticky top-0 bg-slate-100 text-slate-500 uppercase text-[10px] z-10">
+            <tr>
+              <th className="w-8 p-2"></th>
+              <th className="text-left p-2">Modalidade</th>
+              <th className="text-center p-2 whitespace-nowrap">Séries</th>
+              <th className="text-center p-2 whitespace-nowrap">Tiros/Série</th>
+              <th className="text-center p-2 whitespace-nowrap">Tempo/Série</th>
+              <th className="text-left p-2">Avaliação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {modalities.length === 0 ? (
+              <tr><td colSpan={6} className="p-3 text-center text-slate-400">Nenhuma modalidade cadastrada. Cadastre em "Modalidades" primeiro.</td></tr>
+            ) : sorted.length === 0 ? (
+              <tr><td colSpan={6} className="p-3 text-center text-slate-400">Nenhuma modalidade encontrada para "{query}".</td></tr>
+            ) : sorted.map((m) => {
+              const isSel = selectedIds.includes(m.id);
+              return (
+                <tr
+                  key={m.id}
+                  onClick={() => onToggle(m.id)}
+                  className={`border-t border-slate-100 cursor-pointer transition ${isSel ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-slate-50'}`}
+                >
+                  <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={isSel}
+                      onChange={() => onToggle(m.id)}
+                      className="w-3.5 h-3.5 accent-blue-600 cursor-pointer"
+                    />
+                  </td>
+                  <td className={`p-2 font-semibold ${isSel ? 'text-blue-800' : 'text-slate-700'}`}>{m.name}</td>
+                  <td className="p-2 text-center text-slate-500">{m.seriesCount ?? '—'}</td>
+                  <td className="p-2 text-center text-slate-500">{m.shotsPerSeries ?? '—'}</td>
+                  <td className="p-2 text-center text-slate-500">{m.timePerSeriesMinutes ? `${m.timePerSeriesMinutes} min` : '—'}</td>
+                  <td className="p-2 text-slate-500">{evalLabel(m.evaluationType)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="px-3 py-1.5 bg-slate-50/50 border-t border-slate-100 text-[10px] text-slate-500 font-semibold">
+        {selectedIds.length} modalidade{selectedIds.length === 1 ? '' : 's'} selecionada{selectedIds.length === 1 ? '' : 's'}
+      </div>
+    </div>
+  );
+}
+
 // Cadastro completo de campeonato — every field beyond the "quick create" basics
 // (title/description/dates/fee/modalities/stagesCount/banner), shared by both the
 // create and edit forms so the ~40 fields aren't declared/rendered twice.
@@ -11000,29 +11093,18 @@ export default function AdminPanel({
                       <div className="space-y-1 sm:col-span-2">
                         <label className="text-[10px] font-bold text-slate-500 uppercase block">Conjunto de Modalidades e Regras</label>
                         <p className="text-[10px] text-slate-400 mb-1">Selecione as modalidades já cadastradas. Séries/tiros/tempo/avaliação vêm da própria modalidade e só podem ser alterados na tela "Modalidades".</p>
-                        <div className="flex flex-wrap gap-2">
-                          {modalities.length === 0 ? (
-                            <p className="text-xs text-slate-400">Nenhuma modalidade cadastrada. Cadastre em "Modalidades" primeiro.</p>
-                          ) : modalities.map((m) => {
-                            const isSel = editSelectedMods.includes(m.id);
-                            return (
-                              <button
-                                key={m.id}
-                                type="button"
-                                onClick={() => {
-                                  if (isSel) {
-                                    setEditSelectedMods(editSelectedMods.filter(id => id !== m.id));
-                                  } else {
-                                    setEditSelectedMods([...editSelectedMods, m.id]);
-                                  }
-                                }}
-                                className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${isSel ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650'}`}
-                              >
-                                {m.name}
-                              </button>
+                        <ModalitySelectorTable
+                          modalities={modalities}
+                          selectedIds={editSelectedMods}
+                          pinKey={editingChampId || ''}
+                          onToggle={(id) => {
+                            setEditSelectedMods(
+                              editSelectedMods.includes(id)
+                                ? editSelectedMods.filter(x => x !== id)
+                                : [...editSelectedMods, id]
                             );
-                          })}
-                        </div>
+                          }}
+                        />
                       </div>
 
                       <div className="space-y-1">
@@ -11237,29 +11319,18 @@ export default function AdminPanel({
                       <div className="space-y-1 sm:col-span-2">
                         <label className="text-[10px] font-bold text-slate-500 uppercase block">Conjunto de Modalidades e Regras</label>
                         <p className="text-[10px] text-slate-400 mb-1">Selecione as modalidades já cadastradas. Séries/tiros/tempo/avaliação vêm da própria modalidade e só podem ser alterados na tela "Modalidades".</p>
-                        <div className="flex flex-wrap gap-2">
-                          {modalities.length === 0 ? (
-                            <p className="text-xs text-slate-400">Nenhuma modalidade cadastrada. Cadastre em "Modalidades" primeiro.</p>
-                          ) : modalities.map((m) => {
-                            const isSel = selectedMods.includes(m.id);
-                            return (
-                              <button
-                                key={m.id}
-                                type="button"
-                                onClick={() => {
-                                  if (isSel) {
-                                    setSelectedMods(selectedMods.filter(id => id !== m.id));
-                                  } else {
-                                    setSelectedMods([...selectedMods, m.id]);
-                                  }
-                                }}
-                                className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition ${isSel ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-650'}`}
-                              >
-                                {m.name}
-                              </button>
+                        <ModalitySelectorTable
+                          modalities={modalities}
+                          selectedIds={selectedMods}
+                          pinKey="novo-campeonato"
+                          onToggle={(id) => {
+                            setSelectedMods(
+                              selectedMods.includes(id)
+                                ? selectedMods.filter(x => x !== id)
+                                : [...selectedMods, id]
                             );
-                          })}
-                        </div>
+                          }}
+                        />
                       </div>
 
                       <div className="space-y-1">
