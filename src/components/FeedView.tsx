@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { shootingImages } from '../data/mockData';
 import likeIcon from '@/assets/like_icon.png';
 import { compressUploadImage } from '../utils/imageCompressor';
+import { linkifyText } from '../utils/linkify';
 
 const SHOOTING_CATEGORIES = [
   'Tiro de Precisão',
@@ -656,7 +657,7 @@ function RankingHighlightCard({ currentUser, onViewProfile }: { currentUser: Use
               {currentComments.map(c => (
                 <div key={c.id} className="flex gap-1.5 text-xs">
                   <span className="font-bold text-white cursor-pointer hover:underline shrink-0" onClick={() => onViewProfile(c.username)}>@{c.username}:</span>
-                  <span className="text-slate-300 break-words">{c.content}</span>
+                  <span className="text-slate-300 break-words">{linkifyText(c.content)}</span>
                 </div>
               ))}
             </div>
@@ -1669,7 +1670,7 @@ export default function FeedView({
                   <div className="p-4 space-y-4">
                     {post.content && post.content.trim() !== '' && (
                       <p className="text-slate-800 text-[14px] leading-relaxed whitespace-pre-wrap">
-                        {post.content}
+                        {linkifyText(post.content)}
                       </p>
                     )}
 
@@ -1859,7 +1860,7 @@ export default function FeedView({
                         {post.comments.slice(-3).map((comment) => (
                           <div key={comment.id} className="flex gap-2">
                             <span className="font-bold text-slate-800 cursor-pointer hover:underline" onClick={() => onViewProfile(comment.username)}>@{comment.username}:</span>
-                            <span className="text-slate-600">{comment.content}</span>
+                            <span className="text-slate-600">{linkifyText(comment.content)}</span>
                           </div>
                         ))}
                         {post.comments.length > 3 && (
@@ -2042,7 +2043,7 @@ export default function FeedView({
                           <div>
                             <div className="bg-slate-100 rounded-2xl p-3">
                               <span className="font-bold text-slate-800 block text-xs cursor-pointer hover:underline" onClick={() => onViewProfile(comment.username)}>@{comment.username}</span>
-                              <span className="text-slate-600 block mt-0.5">{comment.content}</span>
+                              <span className="text-slate-600 block mt-0.5">{linkifyText(comment.content)}</span>
                             </div>
                             <span className="text-[10px] text-slate-400 pl-2">
                               {new Date(comment.createdAt).toLocaleDateString('pt-BR')}
