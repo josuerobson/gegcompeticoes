@@ -1035,20 +1035,20 @@ export default function App() {
       authHeaders['x-user-id'] = currentUser.id;
     }
 
-    try {
-      const res = await fetch('/api/posts', {
-        method: 'POST',
-        headers: authHeaders,
-        body: JSON.stringify({ content, imageUrl, targetScore, imageUrls, sharedPost, isPrivate })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.post) {
-          setPosts(prev => [data.post, ...prev]);
-        }
-      }
-    } catch (err) {
-      console.error(err);
+    // Deixa o erro propagar para quem chamou (FeedView) em vez de engolir
+    // aqui — sem isso, uma falha de rede/servidor fazia o formulário "Postar
+    // Treino" limpar e fechar como se tivesse publicado, sem nenhum aviso.
+    const res = await fetch('/api/posts', {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ content, imageUrl, targetScore, imageUrls, sharedPost, isPrivate })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `Erro ao publicar (HTTP ${res.status}).`);
+    }
+    if (data.post) {
+      setPosts(prev => [data.post, ...prev]);
     }
   };
 

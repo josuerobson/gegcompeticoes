@@ -733,10 +733,12 @@ export default function FeedView({
   const [shareModalPost, setShareModalPost] = useState<Post | null>(null);
   const [shareComment, setShareComment] = useState('');
   const [isSubmittingShare, setIsSubmittingShare] = useState(false);
+  const [shareSubmitError, setShareSubmitError] = useState('');
 
   const handleConfirmShare = async () => {
     if (!shareModalPost || !currentUser) return;
     setIsSubmittingShare(true);
+    setShareSubmitError('');
     try {
       const originalPostInfo: SharedPostInfo = {
         originalPostId: shareModalPost.sharedPost ? shareModalPost.sharedPost.originalPostId : shareModalPost.id,
@@ -754,8 +756,9 @@ export default function FeedView({
 
       setShareModalPost(null);
       setShareComment('');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error sharing post:', err);
+      setShareSubmitError(err?.message || 'Erro ao compartilhar. Tente novamente.');
     } finally {
       setIsSubmittingShare(false);
     }
@@ -781,6 +784,7 @@ export default function FeedView({
   const [commentInputs, setCommentInputs] = useState<{ [postId: string]: string }>({});
   const [activeCommentDrawer, setActiveCommentDrawer] = useState<string | null>(null);
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
+  const [postSubmitError, setPostSubmitError] = useState('');
 
   // --- Randomized Feed State & Algorithm ---
   // Prioritizes new posts (last 3 days or top 5 newest), shuffling them randomly among themselves on each load,
@@ -922,6 +926,7 @@ export default function FeedView({
   const handleSubmitPost = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmittingPost(true);
+    setPostSubmitError('');
     try {
       let finalImagesList: string[] | undefined = undefined;
 
@@ -967,8 +972,9 @@ export default function FeedView({
       setIsPostPrivate(false);
       setExecutionDate(new Date().toISOString().split('T')[0]);
       setIsPostingOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setPostSubmitError(err?.message || 'Erro ao publicar. Verifique sua conexão e tente novamente.');
     } finally {
       setIsSubmittingPost(false);
     }
@@ -981,6 +987,7 @@ export default function FeedView({
     setIncludeTargetScore(false);
     setIsPostPrivate(false);
     setExecutionDate(new Date().toISOString().split('T')[0]);
+    setPostSubmitError('');
   };
 
   const handleSendComment = async (postId: string) => {
@@ -1169,6 +1176,10 @@ export default function FeedView({
                 </div>
               )}
             </div>
+
+            {postSubmitError && (
+              <p className="text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{postSubmitError}</p>
+            )}
 
             <div className="flex justify-end pt-1">
               <button
@@ -1477,6 +1488,10 @@ export default function FeedView({
                       </div>
                     )}
                   </div>
+
+                  {postSubmitError && (
+                    <p className="text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{postSubmitError}</p>
+                  )}
 
                   <div className="flex gap-3 pt-3">
                     <button
@@ -2231,6 +2246,10 @@ export default function FeedView({
                     </div>
                   )}
                 </div>
+
+                {shareSubmitError && (
+                  <p className="text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{shareSubmitError}</p>
+                )}
 
                 {/* Modal Buttons */}
                 <div className="flex gap-3 pt-2">
