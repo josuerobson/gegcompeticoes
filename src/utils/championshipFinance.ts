@@ -63,3 +63,45 @@ export function computeRevenueBreakdown(champ: Championship | undefined | null, 
     vPremiacaoEquipes: totalArrecadado * (percentualPremiacaoClube / 100),
   };
 }
+
+export interface TodasEtapasPrizeBreakdown {
+  pTodasEtapasSlice: number;
+  vAdicionalTodasEtapas: number;
+  vPoolTodasEtapas: number;
+  pPosTodas: number[];
+  prizes: { position: number; percent: number; value: number }[];
+}
+
+// Premiação acumulada "Todas as Etapas" para atletas — fatia dentro do % Atletas
+// mais premiação adicional e curva do 1º ao 5º lugar. Centralizada aqui para
+// manter ChampionshipsView.tsx, CompetitionResultsViewer.tsx e
+// ChampionshipFinanceReport.tsx rigorosamente alinhados.
+export function computeTodasEtapasPrize(
+  champ: Championship | undefined | null,
+  vPremiacaoAtleta: number,
+  additionalOverride?: number
+): TodasEtapasPrizeBreakdown {
+  const pTodasEtapasSlice = champ?.percentualPremiacaoTodasEtapas ?? 30;
+  const vAdicionalTodasEtapas = additionalOverride !== undefined ? additionalOverride : (champ?.premiacaoAdicionalTodasEtapas ?? 0);
+  const vPoolTodasEtapas = (vPremiacaoAtleta * (pTodasEtapasSlice / 100)) + vAdicionalTodasEtapas;
+  const pPosTodas = [
+    champ?.percentualPos1TodasEtapas ?? 40,
+    champ?.percentualPos2TodasEtapas ?? 25,
+    champ?.percentualPos3TodasEtapas ?? 15,
+    champ?.percentualPos4TodasEtapas ?? 12,
+    champ?.percentualPos5TodasEtapas ?? 8,
+  ];
+  const prizes = pPosTodas.map((percent, idx) => ({
+    position: idx + 1,
+    percent,
+    value: vPoolTodasEtapas * (percent / 100),
+  }));
+
+  return {
+    pTodasEtapasSlice,
+    vAdicionalTodasEtapas,
+    vPoolTodasEtapas,
+    pPosTodas,
+    prizes,
+  };
+}

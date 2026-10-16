@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: janela popup e tela cheia responsiva para lancamento rapido de resultados sem rolagem` |
-| Data/hora | 2026-08-14T19:18:00-03:00 |
+| Mensagem | `feat: adiciona bloco de premiacoes de todas as etapas no relatorio financeiro de campeonatos` |
+| Data/hora | 2026-10-16T17:51:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,8 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Bloco de Premiações de Todas as Etapas no Relatório Financeiro (`ChampionshipFinanceReport.tsx`, `utils/championshipFinance.ts`, `CompetitionResultsViewer.tsx`, `ChampionshipsView.tsx`)**: No drill-down por etapa do campeonato em *Premiação Campeonatos*, foi adicionado o bloco visual dedicado de premiações acumuladas de "Todas as Etapas" logo abaixo dos cards de resumo e acima da tabela de etapas. O bloco consome a função unificada `computeTodasEtapasPrize` (centralizada em `utils/championshipFinance.ts`), calculando e exibindo a fatia de premiação de atletas (`percentualPremiacaoTodasEtapas`), o valor adicional se configurado (`premiacaoAdicionalTodasEtapas`), a quantidade de etapas consideradas e critérios de descarte, o pool total acumulado e a distribuição do 1º ao 5º lugar com valores em R$ e percentuais tanto no consolidado geral quanto aberto por cada modalidade cadastrada (M1, M2...). As telas `CompetitionResultsViewer.tsx` e `ChampionshipsView.tsx` foram alinhadas para consumir a mesma função unificada.
 
 - **Seleção de Campeonatos e Etapas Específicas em Multicampeonatos (`AdminPanel.tsx`, `ChampionshipsView.tsx`, `server.ts`, `src/db.ts`, `src/types.ts`)**: Ao criar ou editar uma oferta de multicampeonato ("Nome da Oferta", ex: "Pacote promocional Primeira etapa"), o diretor seleciona cada campeonato e marca a única etapa vinculada àquela oferta, repetindo o processo até incluir todos os campeonatos desejados. A tabela `multi_championships` armazena `items JSONB` (`{ championshipId, stageId }[]`). Na inscrição do atleta, as inscrições individuais são geradas automaticamente com o `stage_id` configurado para cada campeonato na oferta, dispensando a seleção de etapa genérica pelo atleta no modal de inscrição.
 

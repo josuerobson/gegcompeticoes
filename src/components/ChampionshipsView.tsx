@@ -4,7 +4,7 @@ import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, CreditCard, 
 import { motion, AnimatePresence } from 'motion/react';
 import { PixPaymentModal } from './PixPaymentModal';
 import { normalizeSearchText } from '../utils/textSearch';
-import { computeRevenueBreakdown } from '../utils/championshipFinance';
+import { computeRevenueBreakdown, computeTodasEtapasPrize } from '../utils/championshipFinance';
 
 interface ChampionshipsProps {
   championships: Championship[];
@@ -1821,17 +1821,8 @@ export default function ChampionshipsView({
                   champ.percentualPos5Medalha ?? 0
                 ];
 
-                // Position Percentages for Todas as Etapas (1º ao 5º lugar)
-                const pPosTodas = [
-                  champ.percentualPos1TodasEtapas ?? 40,
-                  champ.percentualPos2TodasEtapas ?? 25,
-                  champ.percentualPos3TodasEtapas ?? 15,
-                  champ.percentualPos4TodasEtapas ?? 12,
-                  champ.percentualPos5TodasEtapas ?? 8
-                ];
-
-                const pTodasEtapasSlice = champ.percentualPremiacaoTodasEtapas ?? 30;
-                const vPoolTodasEtapas = (vPremiacaoAtleta * (pTodasEtapasSlice / 100)) + vAdicionalTodasEtapas;
+                // Position Percentages and Pool for Todas as Etapas (1º ao 5º lugar)
+                const { pPosTodas, pTodasEtapasSlice, vPoolTodasEtapas } = computeTodasEtapasPrize(champ, vPremiacaoAtleta);
 
                 const fmt = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 

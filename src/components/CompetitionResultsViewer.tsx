@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Championship, Stage, Modality, Registration, StageScore, Club, User } from '../types';
 import { Trophy, Calendar, Activity, ArrowLeft } from 'lucide-react';
-import { computeRevenueBreakdown } from '../utils/championshipFinance';
+import { computeRevenueBreakdown, computeTodasEtapasPrize } from '../utils/championshipFinance';
 
 export interface CompetitionResultsViewerProps {
   championships: Championship[];
@@ -490,17 +490,8 @@ export function CompetitionResultsViewer({
       r => r.championshipId === selectedResultChampId && r.modalityId === currentMod?.id && targetStageIds.includes(r.stageId)
     );
     const { totalArrecadado, vPremiacaoAtleta } = computeRevenueBreakdown(currentChamp, stageModRegs);
-    const vAdicionalTodasEtapas = currentChamp?.premiacaoAdicionalTodasEtapas ?? 0;
-    const pTodasEtapasSlice = currentChamp?.percentualPremiacaoTodasEtapas ?? 30;
-    const vPoolTodasEtapas = (vPremiacaoAtleta * (pTodasEtapasSlice / 100)) + vAdicionalTodasEtapas;
-    const pPosTodas = [
-      currentChamp?.percentualPos1TodasEtapas ?? 40,
-      currentChamp?.percentualPos2TodasEtapas ?? 25,
-      currentChamp?.percentualPos3TodasEtapas ?? 15,
-      currentChamp?.percentualPos4TodasEtapas ?? 12,
-      currentChamp?.percentualPos5TodasEtapas ?? 8
-    ];
-    const prizeForPosition = (index: number) => index >= 0 && index <= 4 ? vPoolTodasEtapas * (pPosTodas[index] / 100) : 0;
+    const todasEtapasPrize = computeTodasEtapasPrize(currentChamp, vPremiacaoAtleta);
+    const prizeForPosition = (index: number) => index >= 0 && index < todasEtapasPrize.prizes.length ? todasEtapasPrize.prizes[index].value : 0;
     const fmtBRL = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     return (
