@@ -421,8 +421,8 @@ export default function MemberProfile({
   const isRegistrationComplete = isClubAdmin ? isClubDataComplete : Boolean(selectedUser.isProfileComplete);
 
   const [profileForm, setProfileForm] = useState({
-    fullName: '', birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
-    fatherName: '', motherName: '', crNumber: '', crValidity: '', guiaTransitoExpiry: '', militaryRegion: '', nationality: '',
+    fullName: '', isCac: false, birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
+    fatherName: '', motherName: '', crNumber: '', crValidity: '', guiaTransitoExpiry: '', militaryRegion: '', clubAffiliationDate: '', nationality: '',
     phone: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
   });
   const [clubForm, setClubForm] = useState({
@@ -484,6 +484,7 @@ export default function MemberProfile({
   useEffect(() => {
     setProfileForm({
       fullName: selectedUser.fullName || '',
+      isCac: Boolean(selectedUser.isCac),
       birthDate: selectedUser.birthDate || '',
       sex: selectedUser.sex || '',
       rg: selectedUser.rg || '',
@@ -493,7 +494,9 @@ export default function MemberProfile({
       motherName: selectedUser.motherName || '',
       crNumber: selectedUser.crNumber || '',
       crValidity: selectedUser.crValidity || '',
+      guiaTransitoExpiry: selectedUser.guiaTransitoExpiry || '',
       militaryRegion: selectedUser.militaryRegion || '',
+      clubAffiliationDate: selectedUser.clubAffiliationDate || '',
       nationality: selectedUser.nationality || '',
       phone: selectedUser.phone || '',
       cep: selectedUser.cep || '',
@@ -525,7 +528,7 @@ export default function MemberProfile({
     });
   }, [myClub?.id]);
 
-  const saveUserSection = async (sectionId: string, fields: Record<string, string>) => {
+  const saveUserSection = async (sectionId: string, fields: Record<string, unknown>) => {
     setSavingSection(sectionId);
     setSavedSection(null);
     const ok = await onUpdateProfile(fields);
@@ -2166,16 +2169,39 @@ export default function MemberProfile({
                   <ProfileSection
                     title="Dados Cadastrais"
                     onSave={() => saveUserSection('user_data', {
-                      fullName: profileForm.fullName, birthDate: profileForm.birthDate, sex: profileForm.sex, rg: profileForm.rg,
+                      fullName: profileForm.fullName, isCac: profileForm.isCac, birthDate: profileForm.birthDate, sex: profileForm.sex, rg: profileForm.rg,
                       rgIssuer: profileForm.rgIssuer, rgIssueDate: profileForm.rgIssueDate, fatherName: profileForm.fatherName,
-                      motherName: profileForm.motherName, crNumber: profileForm.crNumber, crValidity: profileForm.crValidity,
+                      motherName: profileForm.motherName,
+                      crNumber: profileForm.isCac ? profileForm.crNumber : null,
+                      crValidity: profileForm.isCac ? profileForm.crValidity : null,
+                      militaryRegion: profileForm.isCac ? profileForm.militaryRegion : null,
+                      clubAffiliationDate: profileForm.isCac ? profileForm.clubAffiliationDate : null,
                       guiaTransitoExpiry: profileForm.guiaTransitoExpiry,
-                      militaryRegion: profileForm.militaryRegion, nationality: profileForm.nationality
+                      nationality: profileForm.nationality
                     })}
                     saving={savingSection === 'user_data'}
                     saved={savedSection === 'user_data'}
                   >
                     <div className="sm:col-span-2"><ProfileField label="Nome completo" value={profileForm.fullName} onChange={v => setProfileForm({ ...profileForm, fullName: v })} /></div>
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-450 block">Você é CAC (Caçador, Atirador ou Colecionador)?</label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setProfileForm({ ...profileForm, isCac: true })}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${profileForm.isCac ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-500'}`}
+                        >
+                          Sou CAC
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setProfileForm({ ...profileForm, isCac: false })}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${!profileForm.isCac ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-500'}`}
+                        >
+                          Não sou CAC
+                        </button>
+                      </div>
+                    </div>
                     <ProfileField label="Data de nascimento" type="date" value={profileForm.birthDate} onChange={v => setProfileForm({ ...profileForm, birthDate: v })} />
                     <ProfileSelect
                       label="Sexo"
@@ -2191,11 +2217,16 @@ export default function MemberProfile({
                     <ProfileField label="Data emissão RG" type="date" value={profileForm.rgIssueDate} onChange={v => setProfileForm({ ...profileForm, rgIssueDate: v })} />
                     <ProfileField label="Nome do pai" value={profileForm.fatherName} onChange={v => setProfileForm({ ...profileForm, fatherName: v })} />
                     <ProfileField label="Nome da mãe" value={profileForm.motherName} onChange={v => setProfileForm({ ...profileForm, motherName: v })} />
-                    <ProfileField label="CR" placeholder="Ex: CR-102938-DF" value={profileForm.crNumber} onChange={v => setProfileForm({ ...profileForm, crNumber: v })} />
-                    <ProfileField label="Validade CR" type="date" value={profileForm.crValidity} onChange={v => setProfileForm({ ...profileForm, crValidity: v })} />
                     <ProfileField label="Vencimento Guia de Trânsito" type="date" value={profileForm.guiaTransitoExpiry} onChange={v => setProfileForm({ ...profileForm, guiaTransitoExpiry: v })} />
-                    <ProfileField label="Região Militar" value={profileForm.militaryRegion} onChange={v => setProfileForm({ ...profileForm, militaryRegion: v })} />
                     <ProfileField label="Nacionalidade" value={profileForm.nationality} onChange={v => setProfileForm({ ...profileForm, nationality: v })} />
+                    {profileForm.isCac && (
+                      <>
+                        <ProfileField label="CR" placeholder="Ex: CR-102938-DF" value={profileForm.crNumber} onChange={v => setProfileForm({ ...profileForm, crNumber: v })} />
+                        <ProfileField label="Validade CR" type="date" value={profileForm.crValidity} onChange={v => setProfileForm({ ...profileForm, crValidity: v })} />
+                        <ProfileField label="Região Militar" value={profileForm.militaryRegion} onChange={v => setProfileForm({ ...profileForm, militaryRegion: v })} />
+                        <ProfileField label="Data de filiação ao clube" type="date" value={profileForm.clubAffiliationDate} onChange={v => setProfileForm({ ...profileForm, clubAffiliationDate: v })} />
+                      </>
+                    )}
                   </ProfileSection>
 
                   <ProfileSection
@@ -2228,9 +2259,13 @@ export default function MemberProfile({
                   <div className="bg-slate-50 p-4 rounded-xl space-y-3 border border-slate-100">
                     <h5 className="text-[10px] font-bold uppercase tracking-wider text-slate-450">Documentos (PDF/JPG/PNG até 1MB)</h5>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                      <ProfileFileField label="RG ou CNH" onUpload={f => uploadProfileDoc('rg_cnh', f)} />
-                      <ProfileFileField label="CR" onUpload={f => uploadProfileDoc('cr', f)} />
-                      <div className="sm:col-span-2"><ProfileFileField label="Declaração de filiação" onUpload={f => uploadProfileDoc('declaracao_filiacao', f)} /></div>
+                      <div className="sm:col-span-2"><ProfileFileField label="RG ou CNH" onUpload={f => uploadProfileDoc('rg_cnh', f)} /></div>
+                      {profileForm.isCac && (
+                        <>
+                          <ProfileFileField label="CR" onUpload={f => uploadProfileDoc('cr', f)} />
+                          <div className="sm:col-span-2"><ProfileFileField label="Declaração de filiação" onUpload={f => uploadProfileDoc('declaracao_filiacao', f)} /></div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

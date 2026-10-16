@@ -6966,8 +6966,8 @@ export default function AdminPanel({
   const [memberAnuidadeFilter, setMemberAnuidadeFilter] = useState<'all' | 'active' | 'expired'>('all');
 
   const [memberEditForm, setMemberEditForm] = useState({
-    fullName: '', birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
-    fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', nationality: '',
+    fullName: '', isCac: false, birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
+    fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', clubAffiliationDate: '', nationality: '',
     phone: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '',
     guiaTransitoExpiry: '', signatureExpiry: '', annuityPlanId: '', bookNumber: ''
   });
@@ -7479,6 +7479,7 @@ export default function AdminPanel({
     if (!selectedMember) return;
     setMemberEditForm({
       fullName: selectedMember.fullName || '',
+      isCac: Boolean(selectedMember.isCac),
       birthDate: selectedMember.birthDate || '',
       sex: selectedMember.sex || '',
       rg: selectedMember.rg || '',
@@ -7489,6 +7490,7 @@ export default function AdminPanel({
       crNumber: selectedMember.crNumber || '',
       crValidity: selectedMember.crValidity || '',
       militaryRegion: selectedMember.militaryRegion || '',
+      clubAffiliationDate: selectedMember.clubAffiliationDate || '',
       nationality: selectedMember.nationality || '',
       phone: selectedMember.phone || '',
       cep: selectedMember.cep || '',
@@ -7746,11 +7748,12 @@ export default function AdminPanel({
     fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', nationality: '',
     phone: '',
     cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '',
-    guiaTransitoExpiry: '', signatureExpiry: '', annuityPlanId: '', bookNumber: '',
+    guiaTransitoExpiry: '', signatureExpiry: '', annuityPlanId: '', bookNumber: '', clubAffiliationDate: '',
   };
   const [editingAthlete, setEditingAthlete] = useState<User | null>(null);
   const [editAthleteForm, setEditAthleteForm] = useState(EMPTY_EDIT_ATHLETE_FORM);
   const [editAthleteHasPaidSignature, setEditAthleteHasPaidSignature] = useState(false);
+  const [editAthleteIsCac, setEditAthleteIsCac] = useState(false);
   const [savingEditAthlete, setSavingEditAthlete] = useState(false);
   const [editAthleteError, setEditAthleteError] = useState('');
   const [editAthleteSuccess, setEditAthleteSuccess] = useState(false);
@@ -7771,8 +7774,10 @@ export default function AdminPanel({
       city: athlete.city || '', state: athlete.state || '',
       guiaTransitoExpiry: athlete.guiaTransitoExpiry || '', signatureExpiry: athlete.signatureExpiry || '',
       annuityPlanId: athlete.annuityPlanId || '', bookNumber: athlete.bookNumber || '',
+      clubAffiliationDate: athlete.clubAffiliationDate || '',
     });
     setEditAthleteHasPaidSignature(Boolean(athlete.hasPaidSignature));
+    setEditAthleteIsCac(Boolean(athlete.isCac));
     setEditAthleteError('');
     setEditAthleteSuccess(false);
   };
@@ -7784,9 +7789,17 @@ export default function AdminPanel({
     setEditAthleteError('');
     // Datas/texto em branco viram null (não string vazia) para não quebrar as
     // colunas DATE no banco quando o diretor deixa um campo sem preencher.
-    const payload: Record<string, unknown> = { hasPaidSignature: editAthleteHasPaidSignature };
+    const payload: Record<string, unknown> = { hasPaidSignature: editAthleteHasPaidSignature, isCac: editAthleteIsCac };
     for (const [key, value] of Object.entries(editAthleteForm) as [string, string][]) {
       payload[key] = value.trim() === '' ? null : value;
+    }
+    // Campos de CAC não gravam se o atleta não é CAC, mesmo que algo tenha
+    // ficado preenchido no form antes de desmarcar o toggle.
+    if (!editAthleteIsCac) {
+      payload.crNumber = null;
+      payload.crValidity = null;
+      payload.militaryRegion = null;
+      payload.clubAffiliationDate = null;
     }
     const ok = await onUpdateMemberProfile(editingAthlete.id, payload);
     setSavingEditAthlete(false);
@@ -8032,7 +8045,7 @@ export default function AdminPanel({
     }, 1800);
   };
 
-  const saveMemberSection = async (sectionId: string, fields: Record<string, string>) => {
+  const saveMemberSection = async (sectionId: string, fields: Record<string, unknown>) => {
     if (!selectedMemberId) return;
     setMemberSavingSection(sectionId);
     setMemberSavedSection(null);
@@ -8827,15 +8840,38 @@ export default function AdminPanel({
                   <MemberSection
                     title="Dados Cadastrais"
                     onSave={() => saveMemberSection('member_data', {
-                      fullName: memberEditForm.fullName, birthDate: memberEditForm.birthDate, sex: memberEditForm.sex, rg: memberEditForm.rg,
+                      fullName: memberEditForm.fullName, isCac: memberEditForm.isCac, birthDate: memberEditForm.birthDate, sex: memberEditForm.sex, rg: memberEditForm.rg,
                       rgIssuer: memberEditForm.rgIssuer, rgIssueDate: memberEditForm.rgIssueDate, fatherName: memberEditForm.fatherName,
-                      motherName: memberEditForm.motherName, crNumber: memberEditForm.crNumber, crValidity: memberEditForm.crValidity,
-                      militaryRegion: memberEditForm.militaryRegion, nationality: memberEditForm.nationality
+                      motherName: memberEditForm.motherName,
+                      crNumber: memberEditForm.isCac ? memberEditForm.crNumber : null,
+                      crValidity: memberEditForm.isCac ? memberEditForm.crValidity : null,
+                      militaryRegion: memberEditForm.isCac ? memberEditForm.militaryRegion : null,
+                      clubAffiliationDate: memberEditForm.isCac ? memberEditForm.clubAffiliationDate : null,
+                      nationality: memberEditForm.nationality
                     })}
                     saving={memberSavingSection === 'member_data'}
                     saved={memberSavedSection === 'member_data'}
                   >
                     <div className="sm:col-span-2"><MemberField label="Nome completo" value={memberEditForm.fullName} onChange={v => setMemberEditForm({ ...memberEditForm, fullName: v })} /></div>
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Você é CAC (Caçador, Atirador ou Colecionador)?</label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMemberEditForm({ ...memberEditForm, isCac: true })}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${memberEditForm.isCac ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-500'}`}
+                        >
+                          Sou CAC
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMemberEditForm({ ...memberEditForm, isCac: false })}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${!memberEditForm.isCac ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-500'}`}
+                        >
+                          Não sou CAC
+                        </button>
+                      </div>
+                    </div>
                     <MemberField label="Data de nascimento" type="date" value={memberEditForm.birthDate} onChange={v => setMemberEditForm({ ...memberEditForm, birthDate: v })} />
                     <MemberSelect
                       label="Sexo"
@@ -8851,10 +8887,15 @@ export default function AdminPanel({
                     <MemberField label="Data emissão RG" type="date" value={memberEditForm.rgIssueDate} onChange={v => setMemberEditForm({ ...memberEditForm, rgIssueDate: v })} />
                     <MemberField label="Nome do pai" value={memberEditForm.fatherName} onChange={v => setMemberEditForm({ ...memberEditForm, fatherName: v })} />
                     <MemberField label="Nome da mãe" value={memberEditForm.motherName} onChange={v => setMemberEditForm({ ...memberEditForm, motherName: v })} />
-                    <MemberField label="CR" placeholder="Ex: CR-102938-DF" value={memberEditForm.crNumber} onChange={v => setMemberEditForm({ ...memberEditForm, crNumber: v })} />
-                    <MemberField label="Validade CR" type="date" value={memberEditForm.crValidity} onChange={v => setMemberEditForm({ ...memberEditForm, crValidity: v })} />
-                    <MemberField label="Região Militar" value={memberEditForm.militaryRegion} onChange={v => setMemberEditForm({ ...memberEditForm, militaryRegion: v })} />
                     <MemberField label="Nacionalidade" value={memberEditForm.nationality} onChange={v => setMemberEditForm({ ...memberEditForm, nationality: v })} />
+                    {memberEditForm.isCac && (
+                      <>
+                        <MemberField label="CR" placeholder="Ex: CR-102938-DF" value={memberEditForm.crNumber} onChange={v => setMemberEditForm({ ...memberEditForm, crNumber: v })} />
+                        <MemberField label="Validade CR" type="date" value={memberEditForm.crValidity} onChange={v => setMemberEditForm({ ...memberEditForm, crValidity: v })} />
+                        <MemberField label="Região Militar" value={memberEditForm.militaryRegion} onChange={v => setMemberEditForm({ ...memberEditForm, militaryRegion: v })} />
+                        <MemberField label="Data de filiação ao clube" type="date" value={memberEditForm.clubAffiliationDate} onChange={v => setMemberEditForm({ ...memberEditForm, clubAffiliationDate: v })} />
+                      </>
+                    )}
                   </MemberSection>
 
                   {/* Vencimento Guia de Trânsito, Vencimento Anuidade e Plano de Anuidade (Exclusivo Painel Diretor > Gerenciamento Clube > Cadastrar Membros) */}
@@ -8932,9 +8973,13 @@ export default function AdminPanel({
                   <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-xl space-y-3">
                     <h4 className="font-bold text-xs text-slate-700">Documentos (PDF/JPG/PNG até 1MB)</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <MemberFileField label="RG ou CNH" onUpload={f => uploadMemberDoc('rg_cnh', f)} />
-                      <MemberFileField label="CR" onUpload={f => uploadMemberDoc('cr', f)} />
-                      <div className="sm:col-span-2"><MemberFileField label="Declaração de filiação" onUpload={f => uploadMemberDoc('declaracao_filiacao', f)} /></div>
+                      <div className="sm:col-span-2"><MemberFileField label="RG ou CNH" onUpload={f => uploadMemberDoc('rg_cnh', f)} /></div>
+                      {memberEditForm.isCac && (
+                        <>
+                          <MemberFileField label="CR" onUpload={f => uploadMemberDoc('cr', f)} />
+                          <div className="sm:col-span-2"><MemberFileField label="Declaração de filiação" onUpload={f => uploadMemberDoc('declaracao_filiacao', f)} /></div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -10130,6 +10175,25 @@ export default function AdminPanel({
                       <h5 className="font-bold text-xs text-slate-700">Dados Cadastrais</h5>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="sm:col-span-2"><MemberField label="Nome completo" value={editAthleteForm.fullName} onChange={v => setEditAthleteForm({ ...editAthleteForm, fullName: v })} /></div>
+                        <div className="sm:col-span-2 space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block">Você é CAC (Caçador, Atirador ou Colecionador)?</label>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setEditAthleteIsCac(true)}
+                              className={`flex-1 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${editAthleteIsCac ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-500'}`}
+                            >
+                              Sou CAC
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditAthleteIsCac(false)}
+                              className={`flex-1 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${!editAthleteIsCac ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-500'}`}
+                            >
+                              Não sou CAC
+                            </button>
+                          </div>
+                        </div>
                         <MemberField label="Data de nascimento" type="date" value={editAthleteForm.birthDate} onChange={v => setEditAthleteForm({ ...editAthleteForm, birthDate: v })} />
                         <MemberSelect
                           label="Sexo"
@@ -10142,11 +10206,16 @@ export default function AdminPanel({
                         <MemberField label="Data emissão RG" type="date" value={editAthleteForm.rgIssueDate} onChange={v => setEditAthleteForm({ ...editAthleteForm, rgIssueDate: v })} />
                         <MemberField label="Nome do pai" value={editAthleteForm.fatherName} onChange={v => setEditAthleteForm({ ...editAthleteForm, fatherName: v })} />
                         <MemberField label="Nome da mãe" value={editAthleteForm.motherName} onChange={v => setEditAthleteForm({ ...editAthleteForm, motherName: v })} />
-                        <MemberField label="CR" placeholder="Ex: CR-102938-DF" value={editAthleteForm.crNumber} onChange={v => setEditAthleteForm({ ...editAthleteForm, crNumber: v })} />
-                        <MemberField label="Validade CR" type="date" value={editAthleteForm.crValidity} onChange={v => setEditAthleteForm({ ...editAthleteForm, crValidity: v })} />
-                        <MemberField label="Região Militar" value={editAthleteForm.militaryRegion} onChange={v => setEditAthleteForm({ ...editAthleteForm, militaryRegion: v })} />
                         <MemberField label="Nacionalidade" value={editAthleteForm.nationality} onChange={v => setEditAthleteForm({ ...editAthleteForm, nationality: v })} />
                         <MemberField label="Celular" type="tel" value={editAthleteForm.phone} onChange={v => setEditAthleteForm({ ...editAthleteForm, phone: v })} />
+                        {editAthleteIsCac && (
+                          <>
+                            <MemberField label="CR" placeholder="Ex: CR-102938-DF" value={editAthleteForm.crNumber} onChange={v => setEditAthleteForm({ ...editAthleteForm, crNumber: v })} />
+                            <MemberField label="Validade CR" type="date" value={editAthleteForm.crValidity} onChange={v => setEditAthleteForm({ ...editAthleteForm, crValidity: v })} />
+                            <MemberField label="Região Militar" value={editAthleteForm.militaryRegion} onChange={v => setEditAthleteForm({ ...editAthleteForm, militaryRegion: v })} />
+                            <MemberField label="Data de filiação ao clube" type="date" value={editAthleteForm.clubAffiliationDate} onChange={v => setEditAthleteForm({ ...editAthleteForm, clubAffiliationDate: v })} />
+                          </>
+                        )}
                       </div>
                     </div>
 
