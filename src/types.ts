@@ -45,6 +45,8 @@ export interface User {
   bookNumber?: string;
   isActive?: boolean;
   isBlocked?: boolean;
+  isCac?: boolean;
+  clubAffiliationDate?: string;
 }
 
 export interface AnnuityPayment {

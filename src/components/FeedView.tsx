@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Post, User, Comment, ShootingResult, SharedPostInfo, RankingHighlight } from '../types';
-import { MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat, Trash2, ZoomIn, ZoomOut, RotateCcw, Eye, Medal, Pause, Play } from 'lucide-react';
+import { MessageCircle, Send, Award, Target, PlusCircle, Bookmark, CheckCircle2, Trophy, Loader2, X, RotateCw, ChevronLeft, ChevronRight, Images, Plus, Maximize2, Share2, Repeat, Trash2, ZoomIn, ZoomOut, RotateCcw, Eye, Medal, Pause, Play, Pencil, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { shootingImages } from '../data/mockData';
 import likeIcon from '@/assets/like_icon.png';
@@ -29,6 +29,7 @@ interface FeedProps {
   onLikePost: (postId: string) => Promise<void>;
   onCommentPost: (postId: string, content: string) => Promise<void>;
   onDeletePost?: (postId: string) => Promise<void>;
+  onEditPost?: (postId: string, content: string) => Promise<void>;
   onToggleFollow: (userId: string) => Promise<void>;
   defaultImage?: string;
   onViewProfile: (username: string) => void;
@@ -694,6 +695,7 @@ export default function FeedView({
   onLikePost,
   onCommentPost,
   onDeletePost,
+  onEditPost,
   onToggleFollow,
   defaultImage,
   onViewProfile
@@ -786,6 +788,39 @@ export default function FeedView({
   const [activeCommentDrawer, setActiveCommentDrawer] = useState<string | null>(null);
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
   const [postSubmitError, setPostSubmitError] = useState('');
+
+  // Edição de post (só o autor) — texto inline substituindo o parágrafo de
+  // conteúdo, sem reabrir o composer inteiro.
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [editPostContent, setEditPostContent] = useState('');
+  const [savingEditPost, setSavingEditPost] = useState(false);
+  const [editPostError, setEditPostError] = useState('');
+
+  const startEditingPost = (post: Post) => {
+    setEditingPostId(post.id);
+    setEditPostContent(post.content);
+    setEditPostError('');
+  };
+
+  const cancelEditingPost = () => {
+    setEditingPostId(null);
+    setEditPostContent('');
+    setEditPostError('');
+  };
+
+  const handleSaveEditPost = async (postId: string) => {
+    if (!onEditPost) return;
+    setSavingEditPost(true);
+    setEditPostError('');
+    try {
+      await onEditPost(postId, editPostContent);
+      setEditingPostId(null);
+    } catch (err: any) {
+      setEditPostError(err?.message || 'Erro ao salvar edição. Tente novamente.');
+    } finally {
+      setSavingEditPost(false);
+    }
+  };
 
   // --- Randomized Feed State & Algorithm ---
   // Prioritizes new posts (last 3 days or top 5 newest), shuffling them randomly among themselves on each load,
@@ -1610,8 +1645,22 @@ export default function FeedView({
                       </div>
                     </div>
 
-                    {/* Right side actions in Header: Delete button (if owner or admin) & Follow button */}
+                    {/* Right side actions in Header: Edit (owner only), Delete (owner or admin) & Follow button */}
                     <div className="flex items-center gap-2">
+                      {currentUser && currentUser.id === post.userId && onEditPost && post.content && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startEditingPost(post);
+                          }}
+                          className="p-1.5 rounded-full text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition cursor-pointer"
+                          title="Editar publicação"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+
                       {currentUser && (currentUser.id === post.userId || ['admin', 'master_admin', 'club_admin'].includes(currentUser.role)) && onDeletePost && (
                         <button
                           type="button"
@@ -1668,7 +1717,39 @@ export default function FeedView({
 
                   {/* Body Content */}
                   <div className="p-4 space-y-4">
-                    {post.content && post.content.trim() !== '' && (
+                    {editingPostId === post.id ? (
+                      <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                        <textarea
+                          value={editPostContent}
+                          onChange={(e) => setEditPostContent(e.target.value)}
+                          rows={3}
+                          autoFocus
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-[14px] text-slate-800 resize-none"
+                        />
+                        {editPostError && (
+                          <p className="text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{editPostError}</p>
+                        )}
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEditPost(post.id)}
+                            disabled={savingEditPost}
+                            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold px-3 py-1.5 rounded-full transition cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            {savingEditPost ? 'Salvando...' : 'Salvar'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEditingPost}
+                            disabled={savingEditPost}
+                            className="bg-slate-100 hover:bg-slate-200 disabled:opacity-60 text-slate-700 text-xs font-bold px-3 py-1.5 rounded-full transition cursor-pointer"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : post.content && post.content.trim() !== '' && (
                       <p className="text-slate-800 text-[14px] leading-relaxed whitespace-pre-wrap">
                         {linkifyText(post.content)}
                       </p>

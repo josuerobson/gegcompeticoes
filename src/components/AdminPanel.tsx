@@ -6969,7 +6969,7 @@ export default function AdminPanel({
     fullName: '', birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
     fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', nationality: '',
     phone: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '',
-    guiaTransitoExpiry: '', signatureExpiry: '', annuityPlanId: ''
+    guiaTransitoExpiry: '', signatureExpiry: '', annuityPlanId: '', bookNumber: ''
   });
   const [memberSavingSection, setMemberSavingSection] = useState<string | null>(null);
   const [memberSavedSection, setMemberSavedSection] = useState<string | null>(null);
@@ -7500,7 +7500,8 @@ export default function AdminPanel({
       state: selectedMember.state || '',
       guiaTransitoExpiry: selectedMember.guiaTransitoExpiry || '',
       signatureExpiry: selectedMember.signatureExpiry ? selectedMember.signatureExpiry.split('T')[0] : '',
-      annuityPlanId: selectedMember.annuityPlanId || ''
+      annuityPlanId: selectedMember.annuityPlanId || '',
+      bookNumber: selectedMember.bookNumber || ''
     });
   }, [selectedMember?.id]);
 
@@ -7745,7 +7746,7 @@ export default function AdminPanel({
     fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', nationality: '',
     phone: '',
     cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '',
-    guiaTransitoExpiry: '', signatureExpiry: '', annuityPlanId: '',
+    guiaTransitoExpiry: '', signatureExpiry: '', annuityPlanId: '', bookNumber: '',
   };
   const [editingAthlete, setEditingAthlete] = useState<User | null>(null);
   const [editAthleteForm, setEditAthleteForm] = useState(EMPTY_EDIT_ATHLETE_FORM);
@@ -7769,7 +7770,7 @@ export default function AdminPanel({
       complement: athlete.complement || '', neighborhood: athlete.neighborhood || '',
       city: athlete.city || '', state: athlete.state || '',
       guiaTransitoExpiry: athlete.guiaTransitoExpiry || '', signatureExpiry: athlete.signatureExpiry || '',
-      annuityPlanId: athlete.annuityPlanId || '',
+      annuityPlanId: athlete.annuityPlanId || '', bookNumber: athlete.bookNumber || '',
     });
     setEditAthleteHasPaidSignature(Boolean(athlete.hasPaidSignature));
     setEditAthleteError('');
@@ -8862,7 +8863,8 @@ export default function AdminPanel({
                     onSave={() => saveMemberSection('member_club_validities', {
                       guiaTransitoExpiry: memberEditForm.guiaTransitoExpiry,
                       signatureExpiry: memberEditForm.signatureExpiry,
-                      annuityPlanId: memberEditForm.annuityPlanId || null
+                      annuityPlanId: memberEditForm.annuityPlanId || null,
+                      bookNumber: memberEditForm.bookNumber || null
                     })}
                     saving={memberSavingSection === 'member_club_validities'}
                     saved={memberSavedSection === 'member_club_validities'}
@@ -8893,6 +8895,11 @@ export default function AdminPanel({
                         ]}
                       />
                     </div>
+                    <MemberField
+                      label="Número de registro do livro físico"
+                      value={memberEditForm.bookNumber}
+                      onChange={v => setMemberEditForm({ ...memberEditForm, bookNumber: v })}
+                    />
                   </MemberSection>
 
                   <MemberSection
@@ -10172,6 +10179,7 @@ export default function AdminPanel({
                             ]}
                           />
                         </div>
+                        <MemberField label="Número de registro do livro físico" value={editAthleteForm.bookNumber} onChange={v => setEditAthleteForm({ ...editAthleteForm, bookNumber: v })} />
                         <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer sm:col-span-2">
                           <input
                             type="checkbox"

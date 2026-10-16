@@ -123,6 +123,8 @@ function mapUser(u: any): User {
     bookNumber: u.book_number || undefined,
     isActive: u.is_active ?? undefined,
     isBlocked: u.is_blocked ?? undefined,
+    isCac: u.is_cac ?? undefined,
+    clubAffiliationDate: u.club_affiliation_date || undefined,
   };
 }
 
@@ -1843,7 +1845,7 @@ app.post('/api/auth/register', async (req, res) => {
       fullName, birthDate, sex, rg, rgIssuer, rgIssueDate, fatherName, motherName,
       crNumber, crValidity, militaryRegion, nationality, phone, email,
       cep, address, addressNumber, complement, neighborhood, city, state,
-      cpf, password, clubId
+      cpf, password, clubId, isCac, clubAffiliationDate
     } = req.body;
 
     if (!fullName || !email || !cpf || !password || !clubId) {
@@ -1869,10 +1871,14 @@ app.post('/api/auth/register', async (req, res) => {
       await client.query('BEGIN');
       const userId = `user_${Date.now()}`;
       const username = await uniqueUsername(client, slugify(fullName));
+      // Campos de CAC (CR, validade, região militar, data de filiação) só
+      // gravam se o cadastro declarou "Sou CAC" — quem marcou "Não sou CAC"
+      // não tem esses dados, mesmo que algo tenha ficado no form.
+      const isCacBool = isCac === true;
       await client.query(
-        `INSERT INTO users (id, email, username, full_name, avatar_url, bio, cr_number, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, cpf, rg, phone, password_hash, birth_date, sex, rg_issuer, rg_issue_date, father_name, mother_name, cr_validity, military_region, nationality, cep, address, address_number, complement, neighborhood, city, state)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)`,
-        [userId, email, username, fullName, DEFAULT_AVATAR, 'Atleta G&G Competições.', crNumber || null, true, new Date().toISOString().split('T')[0], 'member', false, clubId, false, cpf, rg || null, phone || null, hashPassword(password), birthDate || null, sex || null, rgIssuer || null, rgIssueDate || null, fatherName || null, motherName || null, crValidity || null, militaryRegion || null, nationality || null, cep || null, address || null, addressNumber || null, complement || null, neighborhood || null, city || null, state || null]
+        `INSERT INTO users (id, email, username, full_name, avatar_url, bio, cr_number, is_club_member, member_since, role, has_paid_signature, club_id, is_profile_complete, cpf, rg, phone, password_hash, birth_date, sex, rg_issuer, rg_issue_date, father_name, mother_name, cr_validity, military_region, nationality, cep, address, address_number, complement, neighborhood, city, state, is_cac, club_affiliation_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)`,
+        [userId, email, username, fullName, DEFAULT_AVATAR, 'Atleta G&G Competições.', isCacBool ? (crNumber || null) : null, true, new Date().toISOString().split('T')[0], 'member', false, clubId, false, cpf, rg || null, phone || null, hashPassword(password), birthDate || null, sex || null, rgIssuer || null, rgIssueDate || null, fatherName || null, motherName || null, isCacBool ? (crValidity || null) : null, isCacBool ? (militaryRegion || null) : null, nationality || null, cep || null, address || null, addressNumber || null, complement || null, neighborhood || null, city || null, state || null, isCacBool, isCacBool ? (clubAffiliationDate || null) : null]
       );
       await recomputeUserProfileComplete(client, userId);
       await client.query('COMMIT');
@@ -2671,6 +2677,9 @@ const USER_PROFILE_COLUMNS: Record<string, string> = {
   signatureExpiry: 'signature_expiry',
   hasPaidSignature: 'has_paid_signature',
   annuityPlanId: 'annuity_plan_id',
+  bookNumber: 'book_number',
+  isCac: 'is_cac',
+  clubAffiliationDate: 'club_affiliation_date',
 };
 
 // Shared by a member editing their own "Meu Cadastro" and a club admin
@@ -3561,6 +3570,36 @@ app.post('/api/posts/:id/comment', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Comment database error:', err);
     res.status(500).json({ error: 'Erro ao adicionar comentário.' });
+  }
+});
+
+// Editar o texto de uma publicação já feita — só o autor, nunca um admin em
+// nome de outro atleta (diferente de excluir, que é moderação; editar o
+// conteúdo de outra pessoa seria adulterar o que ela escreveu). Imagem,
+// resultado de alvo e post compartilhado não são editáveis aqui — só o texto.
+app.patch('/api/posts/:id', requireAuth, async (req, res) => {
+  const postId = req.params.id;
+  const currentUser = (req as any).user as User;
+  const { content } = req.body;
+
+  if (typeof content !== 'string') {
+    return res.status(400).json({ error: 'Conteúdo inválido.' });
+  }
+
+  try {
+    const postCheck = await pool.query('SELECT user_id FROM posts WHERE id = $1', [postId]);
+    if (postCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Publicação não encontrada.' });
+    }
+    if (postCheck.rows[0].user_id !== currentUser.id) {
+      return res.status(403).json({ error: 'Sem permissão para editar esta publicação.' });
+    }
+
+    const result = await pool.query('UPDATE posts SET content = $1 WHERE id = $2 RETURNING *', [content, postId]);
+    res.json({ post: mapPost(result.rows[0]) });
+  } catch (err) {
+    console.error('Update post database error:', err);
+    res.status(500).json({ error: 'Erro ao editar publicação.' });
   }
 });
 

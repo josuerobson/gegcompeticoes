@@ -196,6 +196,18 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN NOT NULL DEFAULT FALSE;
     `);
 
+    // CAC (Caçador, Atirador, Colecionador): atleta declara no cadastro se é
+    // CAC; só então CR/Validade CR/Região Militar/documentos de CR fazem
+    // sentido (quem não é CAC não tem esses dados). club_affiliation_date é
+    // a data declarada de filiação ao clube para fins da Declaração de
+    // Filiação — diferente de member_since, que é a data de criação da
+    // conta no sistema, não editável pelo atleta.
+    await client.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS is_cac BOOLEAN,
+        ADD COLUMN IF NOT EXISTS club_affiliation_date TEXT;
+    `);
+
     // The role CHECK constraint on a pre-existing users table may still be the old
     // admin/member-only version — replace it so master_admin/club_admin are accepted.
     await client.query(`

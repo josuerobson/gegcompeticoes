@@ -267,8 +267,8 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState('');
   const [authView, setAuthView] = useState<'login' | 'membro' | 'clube'>('login');
   const [membroForm, setMembroForm] = useState({
-    fullName: '', birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
-    fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', nationality: 'Brasileira',
+    fullName: '', isCac: false, birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
+    fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', clubAffiliationDate: '', nationality: 'Brasileira',
     phone: '', email: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '',
     cpf: '', password: '', confirmPassword: '', clubId: '', termsAccepted: false
   });
@@ -1163,6 +1163,23 @@ export default function App() {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleEditPost = async (postId: string, content: string) => {
+    if (!currentUser) return;
+    const res = await fetch(`/api/posts/${postId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+      body: JSON.stringify({ content })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `Erro ao editar publicação (HTTP ${res.status}).`);
+    }
+    // Só atualiza o texto no post local — a resposta do PATCH não traz
+    // likes/comentários (não há join nessa query), então substituir o post
+    // inteiro apagaria esses dados da tela até o próximo sync.
+    setPosts(prev => prev.map(p => (p.id === postId ? { ...p, content } : p)));
   };
 
   const handleToggleFollow = async (userId: string) => {
@@ -2160,6 +2177,25 @@ export default function App() {
                   <p className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Dados Cadastrais</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="sm:col-span-2"><AuthField label="Nome completo" theme={theme} required value={membroForm.fullName} onChange={(e) => setMembroForm({ ...membroForm, fullName: e.target.value })} /></div>
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <label className={`text-[10px] font-bold uppercase tracking-wider block ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Você é CAC (Caçador, Atirador ou Colecionador)?</label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMembroForm({ ...membroForm, isCac: true })}
+                          className={`flex-1 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer ${membroForm.isCac ? 'bg-blue-600 text-white' : theme === 'dark' ? 'bg-slate-950 border border-slate-800 text-slate-400' : 'bg-slate-50 border border-slate-200 text-slate-500'}`}
+                        >
+                          Sou CAC
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMembroForm({ ...membroForm, isCac: false })}
+                          className={`flex-1 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer ${!membroForm.isCac ? 'bg-blue-600 text-white' : theme === 'dark' ? 'bg-slate-950 border border-slate-800 text-slate-400' : 'bg-slate-50 border border-slate-200 text-slate-500'}`}
+                        >
+                          Não sou CAC
+                        </button>
+                      </div>
+                    </div>
                     <AuthField label="Data de nascimento" theme={theme} type="date" value={membroForm.birthDate} onChange={(e) => setMembroForm({ ...membroForm, birthDate: e.target.value })} />
                     <AuthSelect
                       label="Sexo"
@@ -2176,11 +2212,24 @@ export default function App() {
                     <AuthField label="Data emissão RG" theme={theme} type="date" value={membroForm.rgIssueDate} onChange={(e) => setMembroForm({ ...membroForm, rgIssueDate: e.target.value })} />
                     <AuthField label="Nome do pai" theme={theme} value={membroForm.fatherName} onChange={(e) => setMembroForm({ ...membroForm, fatherName: e.target.value })} />
                     <AuthField label="Nome da mãe" theme={theme} value={membroForm.motherName} onChange={(e) => setMembroForm({ ...membroForm, motherName: e.target.value })} />
-                    <AuthField label="CR" theme={theme} placeholder="Ex: CR-102938-DF" value={membroForm.crNumber} onChange={(e) => setMembroForm({ ...membroForm, crNumber: e.target.value })} />
-                    <AuthField label="Validade CR" theme={theme} type="date" value={membroForm.crValidity} onChange={(e) => setMembroForm({ ...membroForm, crValidity: e.target.value })} />
-                    <AuthField label="Região Militar" theme={theme} value={membroForm.militaryRegion} onChange={(e) => setMembroForm({ ...membroForm, militaryRegion: e.target.value })} />
                     <AuthField label="Nacionalidade" theme={theme} value={membroForm.nationality} onChange={(e) => setMembroForm({ ...membroForm, nationality: e.target.value })} />
                   </div>
+
+                  {membroForm.isCac && (
+                    <>
+                      <p className={`text-[10px] font-bold uppercase tracking-wider pt-2 ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Dados CAC</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <AuthField label="CR" theme={theme} placeholder="Ex: CR-102938-DF" value={membroForm.crNumber} onChange={(e) => setMembroForm({ ...membroForm, crNumber: e.target.value })} />
+                        <AuthField label="Validade CR" theme={theme} type="date" value={membroForm.crValidity} onChange={(e) => setMembroForm({ ...membroForm, crValidity: e.target.value })} />
+                        <AuthField label="Região Militar" theme={theme} value={membroForm.militaryRegion} onChange={(e) => setMembroForm({ ...membroForm, militaryRegion: e.target.value })} />
+                        <AuthField label="Data de filiação ao clube" theme={theme} type="date" value={membroForm.clubAffiliationDate} onChange={(e) => setMembroForm({ ...membroForm, clubAffiliationDate: e.target.value })} />
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <FileField label="CR (arquivo)" theme={theme} onFileChange={(f) => setMembroFiles({ ...membroFiles, cr: f })} />
+                        <FileField label="Declaração de filiação" theme={theme} onFileChange={(f) => setMembroFiles({ ...membroFiles, declaracao: f })} />
+                      </div>
+                    </>
+                  )}
 
                   <p className={`text-[10px] font-bold uppercase tracking-wider pt-2 ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Dados de Contato</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2221,9 +2270,7 @@ export default function App() {
 
                   <p className={`text-[10px] font-bold uppercase tracking-wider pt-2 ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Documentos (opcional, PDF/JPG/PNG até 1MB)</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <FileField label="RG ou CNH" theme={theme} onFileChange={(f) => setMembroFiles({ ...membroFiles, rgCnh: f })} />
-                    <FileField label="CR" theme={theme} onFileChange={(f) => setMembroFiles({ ...membroFiles, cr: f })} />
-                    <div className="sm:col-span-2"><FileField label="Declaração de filiação" theme={theme} onFileChange={(f) => setMembroFiles({ ...membroFiles, declaracao: f })} /></div>
+                    <div className="sm:col-span-2"><FileField label="RG ou CNH" theme={theme} onFileChange={(f) => setMembroFiles({ ...membroFiles, rgCnh: f })} /></div>
                   </div>
 
                   <label className={`flex items-center gap-2 text-[11px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -2490,6 +2537,7 @@ export default function App() {
               onLikePost={handleLikePost}
               onCommentPost={handleCommentPost}
               onDeletePost={handleDeletePost}
+              onEditPost={handleEditPost}
               onToggleFollow={handleToggleFollow}
               defaultImage={settings.default_image}
               onViewProfile={handleViewProfile}
@@ -2596,6 +2644,7 @@ export default function App() {
               onLikePost={handleLikePost}
               onCommentPost={handleCommentPost}
               onDeletePost={handleDeletePost}
+              onEditPost={handleEditPost}
               onDeleteRegistration={handleDeleteRegistration}
               onViewProfile={(username) => {
                 const foundUser = users.find(u => u.username === username);
