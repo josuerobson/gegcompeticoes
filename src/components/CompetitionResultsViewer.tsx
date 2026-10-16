@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Championship, Stage, Modality, Registration, StageScore, Club, User } from '../types';
 import { Trophy, Calendar, Activity, ArrowLeft } from 'lucide-react';
+import { computeRevenueBreakdown } from '../utils/championshipFinance';
 
 export interface CompetitionResultsViewerProps {
   championships: Championship[];
@@ -488,19 +489,7 @@ export function CompetitionResultsViewer({
     const stageModRegs = registrations.filter(
       r => r.championshipId === selectedResultChampId && r.modalityId === currentMod?.id && targetStageIds.includes(r.stageId)
     );
-    const totalArrecadado = stageModRegs.reduce((acc, r) => {
-      if (r.valorPago && r.valorPago > 0 && r.valorPago !== 120) return acc + r.valorPago;
-      if (r.registrationType === 'reinscrição') {
-        return acc + (currentChamp?.valorReinscricao ?? currentChamp?.registrationFee ?? 0);
-      }
-      const isClub = Boolean(r.registeredByUserId && r.registeredByUserId !== r.userId);
-      if (isClub) {
-        return acc + (currentChamp?.valorInscricaoClube ?? currentChamp?.registrationFee ?? 0);
-      }
-      return acc + (currentChamp?.valorInscricaoIndividual ?? currentChamp?.registrationFee ?? 0);
-    }, 0);
-    const pPremiacaoAtleta = currentChamp?.percentualPremiacaoAtleta ?? 30;
-    const vPremiacaoAtleta = totalArrecadado * (pPremiacaoAtleta / 100);
+    const { totalArrecadado, vPremiacaoAtleta } = computeRevenueBreakdown(currentChamp, stageModRegs);
     const vAdicionalTodasEtapas = currentChamp?.premiacaoAdicionalTodasEtapas ?? 0;
     const pTodasEtapasSlice = currentChamp?.percentualPremiacaoTodasEtapas ?? 30;
     const vPoolTodasEtapas = (vPremiacaoAtleta * (pTodasEtapasSlice / 100)) + vAdicionalTodasEtapas;

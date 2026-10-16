@@ -4,6 +4,7 @@ import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, CreditCard, 
 import { motion, AnimatePresence } from 'motion/react';
 import { PixPaymentModal } from './PixPaymentModal';
 import { normalizeSearchText } from '../utils/textSearch';
+import { computeRevenueBreakdown } from '../utils/championshipFinance';
 
 interface ChampionshipsProps {
   championships: Championship[];
@@ -1784,38 +1785,18 @@ export default function ChampionshipsView({
                   r => r.championshipId === champ.id && r.modalityId === modality.id && targetStageIds.includes(r.stageId)
                 );
 
-                const totalCount = stageModRegs.length;
-                const totalReinscricoes = stageModRegs.filter(r => r.registrationType === 'reinscrição').length;
-                const totalInscricoes = totalCount - totalReinscricoes;
-
-                // Compute total revenue for this stage / all stages + modality
-                const totalArrecadado = stageModRegs.reduce((acc, r) => {
-                  if (r.valorPago && r.valorPago > 0 && r.valorPago !== 120) return acc + r.valorPago;
-                  if (r.registrationType === 'reinscrição') {
-                    return acc + (champ.valorReinscricao ?? champ.registrationFee ?? 0);
-                  }
-                  const isClub = Boolean(r.registeredByUserId && r.registeredByUserId !== r.userId);
-                  if (isClub) {
-                    return acc + (champ.valorInscricaoClube ?? champ.registrationFee ?? 0);
-                  }
-                  return acc + (champ.valorInscricaoIndividual ?? champ.registrationFee ?? 0);
-                }, 0);
-
-                // Percentages (with defaults matching system design)
-                const pTributos = champ.percentualTributos ?? 0;
-                const pOrganizacao = champ.percentualOrganizacao ?? 0;
-                const pClubes = champ.percentualClubes ?? champ.percentualClube ?? 30;
-                const pPremiacaoAtleta = champ.percentualPremiacaoAtleta ?? 30;
-                const pPremiacaoClube = champ.percentualPremiacaoClube ?? 0;
+                // Divisão do arrecadado (Tributos/Organização/Clubes/Premiação) —
+                // fórmula centralizada em utils/championshipFinance.ts, também usada
+                // em CompetitionResultsViewer.tsx e no relatório "Premiação Campeonatos"
+                // (AdminPanel.tsx), para nunca haver cálculos divergentes no sistema.
+                const {
+                  totalCount, totalInscricoes, totalReinscricoes, totalArrecadado,
+                  percentualTributos: pTributos, percentualOrganizacao: pOrganizacao, percentualClubes: pClubes,
+                  percentualPremiacaoAtleta: pPremiacaoAtleta, percentualPremiacaoClube: pPremiacaoClube,
+                  vTributos, vOrganizacao, vClubes, vPremiacaoAtleta, vPremiacaoEquipes,
+                } = computeRevenueBreakdown(champ, stageModRegs);
 
                 const vAdicionalTodasEtapas = champ.premiacaoAdicionalTodasEtapas ?? 0;
-
-                // Monetary values for division of total revenue
-                const vTributos = totalArrecadado * (pTributos / 100);
-                const vOrganizacao = totalArrecadado * (pOrganizacao / 100);
-                const vClubes = totalArrecadado * (pClubes / 100);
-                const vPremiacaoAtleta = totalArrecadado * (pPremiacaoAtleta / 100);
-                const vPremiacaoEquipes = totalArrecadado * (pPremiacaoClube / 100);
 
                 // Medal Pools for Individual Athletes
                 const pOuro = champ.percentualOuro ?? 50;

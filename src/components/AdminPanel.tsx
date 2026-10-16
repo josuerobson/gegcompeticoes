@@ -8,6 +8,7 @@ import { MercadoPagoManager } from './MercadoPagoManager';
 import { PixPaymentModal } from './PixPaymentModal';
 import { normalizeSearchText } from '../utils/textSearch';
 import { RevenueReport, AnnuityRoster, ReceiptsStatement } from './FranchiseReports';
+import ChampionshipFinanceReport from './ChampionshipFinanceReport';
 import { PixReconciliation } from './PixReconciliation';
 import { annuityStatus, parseExpiry, ANNUITY_STATUS_LABELS } from '../utils/financeReports';
 import {
@@ -12075,6 +12076,16 @@ export default function AdminPanel({
           />
         );
 
+      case 'premiacao_campeonatos':
+        return (
+          <ChampionshipFinanceReport
+            championships={championships}
+            stages={stages}
+            modalities={modalities}
+            registrations={registrations}
+          />
+        );
+
       case 'inscricoes_resumo': {
         // Valor líquido pra franquia: club_owed_amount quando a inscrição é
         // de atleta de clube filiado diferente do organizador (já descontado
@@ -13034,6 +13045,7 @@ export default function AdminPanel({
                     <button onClick={() => setPlataformaMenu('modalidades')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'modalidades' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Modalidades</button>
                     <button onClick={() => setPlataformaMenu('cadastrar_resultados')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'cadastrar_resultados' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Cadastrar Resultados</button>
                     <button onClick={() => setPlataformaMenu('multi_campeonatos')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'multi_campeonatos' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Multi-campeonatos</button>
+                    <button onClick={() => setPlataformaMenu('premiacao_campeonatos')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'premiacao_campeonatos' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Premiação Campeonatos</button>
                     <button onClick={() => setPlataformaMenu('equipes_interclubes')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'equipes_interclubes' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Equipes Interclubes</button>
                     <button onClick={() => setPlataformaMenu('inscricoes_resumo')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'inscricoes_resumo' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Inscrições</button>
                     <button onClick={() => setPlataformaMenu('multi_campeonato_legado')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'multi_campeonato_legado' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Multi-Campeonato Legado</button>
