@@ -577,6 +577,7 @@ function mapStageScore(s: any): StageScore {
     userId: s.user_id,
     shooterName: s.shooter_name,
     modality: s.modality,
+    modalityId: s.modality_id || undefined,
     stageNum: s.stage_num,
     score: Number(s.score),
     timeSeconds: s.time_seconds !== null && s.time_seconds !== undefined ? Number(s.time_seconds) : undefined,
@@ -2436,12 +2437,12 @@ app.post('/api/admin/import/legacy-competitions', requireMasterAdmin, async (req
         // stage_scores espelha a registration (mesmo padrão usado pelo POST /scores em uso).
         // Nomes/números resolvidos em memória (evita N+1 queries no loop).
         await client.query(
-          `INSERT INTO stage_scores (id, championship_id, registration_id, user_id, shooter_name, modality, stage_num, score, time_seconds, created_at, legacy_id)
-           VALUES ($1,$2,$3,$4,(SELECT full_name FROM users WHERE id=$4),$5,$6,$7,$8,$9,$10)
-           ON CONFLICT (legacy_id) DO UPDATE SET score = EXCLUDED.score, time_seconds = EXCLUDED.time_seconds`,
+          `INSERT INTO stage_scores (id, championship_id, registration_id, user_id, shooter_name, modality, modality_id, stage_num, score, time_seconds, created_at, legacy_id)
+           VALUES ($1,$2,$3,$4,(SELECT full_name FROM users WHERE id=$4),$5,$6,$7,$8,$9,$10,$11)
+           ON CONFLICT (legacy_id) DO UPDATE SET score = EXCLUDED.score, time_seconds = EXCLUDED.time_seconds, modality_id = EXCLUDED.modality_id`,
           [
             `score_legacy_${r.legacyId}`, championshipId, newId, athlete.id,
-            modalityNameByLegacyId[r.modalityLegacyId] || 'Modalidade', stageNumByLegacyId[r.stageLegacyId] || 1,
+            modalityNameByLegacyId[r.modalityLegacyId] || 'Modalidade', modalityId || null, stageNumByLegacyId[r.stageLegacyId] || 1,
             r.totalPoints ?? 0, r.idscTempoPista || null, new Date().toISOString(), r.legacyId
           ]
         );
@@ -5196,11 +5197,11 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
         [championshipId, registrationId]
       );
       await client.query(
-        `INSERT INTO stage_scores (id, championship_id, registration_id, user_id, shooter_name, modality, stage_num, score, time_seconds, hit_factor, club_ammo_type, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        `INSERT INTO stage_scores (id, championship_id, registration_id, user_id, shooter_name, modality, modality_id, stage_num, score, time_seconds, hit_factor, club_ammo_type, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
         [
           `score_${Date.now()}`, championshipId, registrationId, reg.userId,
-          shooter.fullName, modalityName, Number(effectiveStageNum),
+          shooter.fullName, modalityName, reg.modalityId || null, Number(effectiveStageNum),
           finalPontos, idscTotalSeg || null, hitFactor || null, clubType, new Date().toISOString()
         ]
       );

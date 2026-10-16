@@ -388,6 +388,7 @@ export interface StageScore {
   userId: string;
   shooterName: string;
   modality: string;
+  modalityId?: string;
   stageNum: number;
   score: number; // point score (e.g. 150.45)
   timeSeconds?: number; // time format for dynamic/IPSC scoring (hit factor = points / time)

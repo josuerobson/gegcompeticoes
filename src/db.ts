@@ -838,6 +838,36 @@ export async function initDB() {
       ALTER TABLE stage_scores ADD COLUMN IF NOT EXISTS legacy_id INTEGER UNIQUE;
     `);
 
+    // stage_scores.modality sempre foi um texto solto (nome da modalidade
+    // "congelado" no momento em que o resultado foi lançado), sem vínculo
+    // real com a modalidade. Renomear uma modalidade em Gerenciamento
+    // Plataforma > Modalidades quebrava silenciosamente a exibição de
+    // resultados já lançados em todo campeonato que a usasse, porque a
+    // comparação era feita por nome (nome atual != nome congelado no
+    // resultado). modality_id é a referência estável que faltava — a coluna
+    // modality (texto) continua existindo só como histórico/exibição.
+    await client.query(`
+      ALTER TABLE stage_scores ADD COLUMN IF NOT EXISTS modality_id TEXT REFERENCES modalities(id) ON DELETE SET NULL;
+    `);
+    // Backfill: a própria inscrição (registrations.modality_id) já é uma
+    // referência estável e nunca foi afetada por renomeação — é a fonte mais
+    // confiável pra preencher os resultados já lançados.
+    await client.query(`
+      UPDATE stage_scores ss
+      SET modality_id = r.modality_id
+      FROM registrations r
+      WHERE ss.registration_id = r.id AND ss.modality_id IS NULL AND r.modality_id IS NOT NULL;
+    `);
+    // Fallback pros poucos resultados sem registration_id (ex.: importação
+    // legada antiga): casa pelo nome atual, igual ao comportamento antigo —
+    // só funciona se o nome não tiver sido renomeado desde então.
+    await client.query(`
+      UPDATE stage_scores ss
+      SET modality_id = m.id
+      FROM modalities m
+      WHERE ss.modality_id IS NULL AND m.name = ss.modality;
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS posts (
         id TEXT PRIMARY KEY,

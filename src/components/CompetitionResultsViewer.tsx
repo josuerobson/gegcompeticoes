@@ -262,18 +262,19 @@ export function CompetitionResultsViewer({
       });
     const scopeStageIds = new Set(scopeStages.map(s => s.id));
     const scopeStageNums = new Set(scopeStages.map(s => s.stageNum));
-    const modalityNamesWithResults = new Set(
-      stageScores
-        .filter(sc => sc.championshipId === selectedResultChampId && scopeStageNums.has(sc.stageNum))
-        .map(sc => sc.modality)
-    );
+    const scopedScores = stageScores.filter(sc => sc.championshipId === selectedResultChampId && scopeStageNums.has(sc.stageNum));
+    // modalityId é o vínculo estável (a modalidade pode ter sido renomeada
+    // desde que o resultado foi lançado); modalityNamesWithResults só cobre
+    // resultados antigos que nunca tiveram modalityId gravado.
+    const modalityIdsWithResults = new Set(scopedScores.map(sc => sc.modalityId).filter(Boolean));
+    const modalityNamesWithResults = new Set(scopedScores.filter(sc => !sc.modalityId).map(sc => sc.modality));
     const usedModIds = new Set(
       registrations
         .filter(r => r.championshipId === selectedResultChampId && scopeStageIds.has(r.stageId))
         .map(r => r.modalityId)
     );
     const champModalities = modalities.filter(
-      m => modalityNamesWithResults.has(m.name) && (champModIds.includes(m.id) || usedModIds.has(m.id))
+      m => (modalityIdsWithResults.has(m.id) || modalityNamesWithResults.has(m.name)) && (champModIds.includes(m.id) || usedModIds.has(m.id))
     );
 
     return (
@@ -403,7 +404,7 @@ export function CompetitionResultsViewer({
 
     const scoresForMod = stageScores.filter(score =>
       score.championshipId === selectedResultChampId &&
-      score.modality === currentMod?.name &&
+      (score.modalityId ? score.modalityId === currentMod?.id : score.modality === currentMod?.name) &&
       targetStageNums.has(score.stageNum)
     );
 
@@ -623,10 +624,10 @@ export function CompetitionResultsViewer({
   }
 
   // --- Lógica para Etapa Individual ---
-  const filteredScores = stageScores.filter(score => 
+  const filteredScores = stageScores.filter(score =>
     score.championshipId === selectedResultChampId &&
     score.stageNum === currentStage?.stageNum &&
-    score.modality === currentMod?.name
+    (score.modalityId ? score.modalityId === currentMod?.id : score.modality === currentMod?.name)
   );
 
   // Agrupamento por atleta único: Mantém apenas a melhor participação do atleta na etapa (Regra de Reinscrições)

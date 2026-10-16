@@ -2877,7 +2877,7 @@ export default function MemberProfile({
                       const champ = championships.find(c => c.id === reg.championshipId);
                       if (!champ) return null;
 
-                      const scoresForChamp = userScores.filter(s => s.championshipId === reg.championshipId && s.modality === modalityName(reg.modalityId));
+                      const scoresForChamp = userScores.filter(s => s.championshipId === reg.championshipId && (s.modalityId ? s.modalityId === reg.modalityId : s.modality === modalityName(reg.modalityId)));
                       const totalPoints = scoresForChamp.reduce((sum, s) => sum + s.score, 0);
                       const progressPercent = Math.min(100, (scoresForChamp.length / champ.stagesCount) * 100);
 
