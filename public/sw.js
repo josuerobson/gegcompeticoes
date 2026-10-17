@@ -5,7 +5,7 @@
 // fallback that can never resolve to `undefined` (an earlier version did,
 // which made respondWith() throw "Failed to convert value to 'Response'"
 // and broke page loads when a network fetch failed with nothing cached yet).
-const CACHE_NAME = 'gg-competicoes-v2';
+const CACHE_NAME = 'gg-competicoes-v3';
 
 self.addEventListener('install', () => {
   self.skipWaiting();

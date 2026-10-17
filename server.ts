@@ -8814,8 +8814,20 @@ async function startServer() {
     console.log('Vite middleware mounted in development mode.');
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        // Arquivos de service worker e manifest nunca devem ficar em cache HTTP duradouro
+        if (filePath.endsWith('sw.js') || filePath.endsWith('manifest.json')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
+        }
+      }
+    }));
     app.get('*', (req, res) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.sendFile(path.join(distPath, 'index.html'));
     });
     console.log('Serving production static assets.');

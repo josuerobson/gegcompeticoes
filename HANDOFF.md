@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: alinha calculo financeiro de arrecadacao com regras nominais do legado e sincroniza inscricoes` |
-| Data/hora | 2026-10-16T21:10:00-03:00 |
+| Mensagem | `feat: implementa auto-update transparente e no-cache para pwa instalado no celular` |
+| Data/hora | 2026-10-17T09:20:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,11 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Atualização Automática Transparente e Cache-Busting no PWA (`src/main.tsx`, `public/sw.js`, `server.ts`)**:
+  - *O que foi decidido*: O Service Worker foi atualizado para uma nova versão de cache (`gg-competicoes-v3`), com ativação imediata (`self.skipWaiting()` e `clients.claim()`) e exclusão de quaisquer caches antigos. No `main.tsx`, foi adicionado um listener para `controllerchange` que recarrega a aplicação suavemente (`window.location.reload()`) assim que um novo SW assume o controle, somado a verificações ativas de atualização imediata na inicialização (`reg.update()`), ao voltar a focar no app (`visibilitychange`) e a cada 10 minutos. No `server.ts`, foi configurado cabeçalho explícito de `Cache-Control: no-cache, no-store, must-revalidate` para `sw.js`, `manifest.json` e `index.html`, impedindo que os celulares fiquem presos a versões antigas em disco.
+  - *Por que*: Usuários com o app PWA instalado na tela inicial do celular não tinham as atualizações refletidas automaticamente porque o navegador mantinha os arquivos estáticos cacheados pelo Service Worker sem forçar a revalidação imediata.
+  - *O que NÃO fazer*: Não remover o Service Worker nem desativar a capacidade de instalação offline do PWA; manter sempre as diretivas de auto-update e no-cache para o manifest e script de controle.
 
 - **Alinhamento do Cálculo de Arrecadação e Premiação com as Regras Oficiais do Legado (`src/utils/championshipFinance.ts`, `ChampionshipFinanceReport.tsx`, `CompetitionResultsViewer.tsx`, `ChampionshipsView.tsx`)**:
   - *O que foi decidido*: A base de cálculo da arrecadação de cada modalidade e etapa (`totalArrecadado` em `computeRevenueBreakdown`) prioriza a tabela nominal oficial de tarifas do campeonato (R$ 60 inscrição regular e R$ 30 reinscrição / 50%), em vez de somar o campo bruto `valorPago` que em muitos registros legados continha o valor líquido retido por clubes com desconto de repasse (R$ 36). As 20 inscrições complementares do campeonato 6054 (CBA 2026) presentes no banco legado foram migradas com segurança e suas reinscrições etiquetadas, sem afetar quaisquer inscrições posteriores ou nativas do novo sistema. Com isso, os totais arrecadados e as bonificações do 1º ao 5º lugar batem com exatidão centavo por centavo com os relatórios do sistema legado (ex: Pistola 38/380/9mm com TA R$ 17.730,00 e Pote de Premiação de R$ 2.659,50).
