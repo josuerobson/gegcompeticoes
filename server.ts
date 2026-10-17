@@ -3649,6 +3649,68 @@ app.get('/api/championships', async (req, res) => {
   }
 });
 
+app.get('/api/championships/:id/prize-stats', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const champRes = await pool.query('SELECT * FROM championships WHERE id = $1', [id]);
+    if (champRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Campeonato não encontrado.' });
+    }
+    const champ = mapChampionship(champRes.rows[0]);
+
+    // Busca apenas as contagens agregadas de inscrições por modalidade e tipo (sem expor usuários nem dados sensíveis)
+    const statsRes = await pool.query(
+      `SELECT 
+         modality_id,
+         COUNT(*)::int as total_count,
+         COUNT(CASE WHEN registration_type = 'reinscrição' THEN 1 END)::int as reinscricoes
+       FROM registrations
+       WHERE championship_id = $1
+       GROUP BY modality_id`,
+      [id]
+    );
+
+    const valorIndividual = champ.valorInscricaoIndividual ?? champ.registrationFee ?? 0;
+    const valorReinscricao = champ.valorReinscricao ?? (valorIndividual * 0.5);
+    const pAtleta = champ.percentualPremiacaoAtleta ?? 0;
+    const pTodasEtapas = champ.percentualPremiacaoTodasEtapas ?? 100;
+
+    const pPosTodas = [
+      champ.percentualPos1TodasEtapas ?? 35,
+      champ.percentualPos2TodasEtapas ?? 25,
+      champ.percentualPos3TodasEtapas ?? 20,
+      champ.percentualPos4TodasEtapas ?? 15,
+      champ.percentualPos5TodasEtapas ?? 5,
+    ];
+
+    const modalityPrizes: Record<string, { totalArrecadado: number; pool: number; prizes: number[] }> = {};
+
+    for (const row of statsRes.rows) {
+      const mid = row.modality_id;
+      const totalCount = row.total_count || 0;
+      const reinsc = row.reinscricoes || 0;
+      const normal = totalCount - reinsc;
+
+      const totalArrecadado = (normal * valorIndividual) + (reinsc * valorReinscricao);
+      const vPremiacaoAtleta = totalArrecadado * (pAtleta / 100);
+      const vPoolTodasEtapas = vPremiacaoAtleta * (pTodasEtapas / 100);
+
+      const prizes = pPosTodas.map(pct => (vPoolTodasEtapas * (pct / 100)));
+
+      modalityPrizes[mid] = {
+        totalArrecadado,
+        pool: vPoolTodasEtapas,
+        prizes,
+      };
+    }
+
+    res.json({ modalityPrizes });
+  } catch (err) {
+    console.error('Fetch prize-stats error:', err);
+    res.status(500).json({ error: 'Erro ao calcular premiações.' });
+  }
+});
+
 // Cadastro completo de campeonato — every field beyond the "quick create" basics
 // (title/description/dates/fee/modalities/stagesCount/banner/club/type), all
 // optional and dynamically inserted/updated so partial submissions never fail.

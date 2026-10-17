@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: implementa auto-update transparente e no-cache para pwa instalado no celular` |
-| Data/hora | 2026-10-17T09:20:00-03:00 |
+| Mensagem | `feat: expoe valores oficiais de premiacao em resultados de campeonatos para atletas via endpoint agregado seguro` |
+| Data/hora | 2026-10-17T10:05:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,11 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Visualização de Premiações Oficiais para Atletas via Endpoint Agregado Seguro (`server.ts`, `CompetitionResultsViewer.tsx`)**:
+  - *O que foi decidido*: Foi criado o endpoint `GET /api/championships/:id/prize-stats`, que calcula no servidor a arrecadação e os valores em R$ das premiações do 1º ao 5º lugar de cada modalidade a partir de um agrupamento SQL (`COUNT(*)` e contagem de reinscrições), sem expor nenhum dado de inscrição, usuário ou pagamento de terceiros. No `CompetitionResultsViewer.tsx`, o hook consome esses valores agregados oficiais e os exibe no texto verde ("Prêmio: R$ X,XX") para cada colocação, garantindo que atletas comuns visualizem os mesmos prêmios homologados que os administradores vêem.
+  - *Por que*: O endpoint `/api/registrations` restringe intencionalmente os dados retornados para atletas comuns (`WHERE user_id = currentUser.id`) por privacidade. Com isso, os atletas não possuíam o array completo de inscrições no navegador para calcular o pote e os prêmios locais. O novo endpoint resolve isso de forma agregada, sem conceder nenhum outro acesso aos atletas.
+  - *O que NÃO fazer*: Não relaxar o filtro de privacidade de `/api/registrations` para atletas comuns; manter dados pessoais estritamente restritos.
 
 - **Atualização Automática Transparente e Cache-Busting no PWA (`src/main.tsx`, `public/sw.js`, `server.ts`)**:
   - *O que foi decidido*: O Service Worker foi atualizado para uma nova versão de cache (`gg-competicoes-v3`), com ativação imediata (`self.skipWaiting()` e `clients.claim()`) e exclusão de quaisquer caches antigos. No `main.tsx`, foi adicionado um listener para `controllerchange` que recarrega a aplicação suavemente (`window.location.reload()`) assim que um novo SW assume o controle, somado a verificações ativas de atualização imediata na inicialização (`reg.update()`), ao voltar a focar no app (`visibilitychange`) e a cada 10 minutos. No `server.ts`, foi configurado cabeçalho explícito de `Cache-Control: no-cache, no-store, must-revalidate` para `sw.js`, `manifest.json` e `index.html`, impedindo que os celulares fiquem presos a versões antigas em disco.

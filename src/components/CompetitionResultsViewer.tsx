@@ -35,11 +35,28 @@ export function CompetitionResultsViewer({
   const [selectedResultModalityId, setSelectedResultModalityId] = useState<string | null>(initialModalityId);
   const [selectedMedalFilter, setSelectedMedalFilter] = useState<'geral' | 'ouro' | 'prata' | 'bronze'>('geral');
   const [selectedYearFilter, setSelectedYearFilter] = useState<string>(() => String(new Date().getFullYear()));
+  const [prizeStats, setPrizeStats] = useState<Record<string, { totalArrecadado: number; pool: number; prizes: number[] }>>({});
 
   // Reset medal filter when selection changes
   useEffect(() => {
     setSelectedMedalFilter('geral');
   }, [selectedResultChampId, selectedResultStageId, selectedResultModalityId]);
+
+  // Carrega os dados oficiais de premiação do campeonato (acessível com segurança para atletas sem expor inscrições de outros)
+  useEffect(() => {
+    if (!selectedResultChampId) {
+      setPrizeStats({});
+      return;
+    }
+    fetch(`/api/championships/${selectedResultChampId}/prize-stats`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.modalityPrizes) {
+          setPrizeStats(data.modalityPrizes);
+        }
+      })
+      .catch(() => {});
+  }, [selectedResultChampId]);
 
   const currentChamp = championships.find(c => c.id === selectedResultChampId);
   const currentStage = stages.find(s => s.id === selectedResultStageId);
@@ -491,7 +508,16 @@ export function CompetitionResultsViewer({
     );
     const { totalArrecadado, vPremiacaoAtleta } = computeRevenueBreakdown(currentChamp, stageModRegs);
     const todasEtapasPrize = computeTodasEtapasPrize(currentChamp, vPremiacaoAtleta);
-    const prizeForPosition = (index: number) => index >= 0 && index < todasEtapasPrize.prizes.length ? todasEtapasPrize.prizes[index].value : 0;
+
+    // Se temos estatísticas oficiais do endpoint de premiações (disponível para atletas), usa elas;
+    // senão faz o fallback para o cálculo local a partir das registrations carregadas na sessão.
+    const modPrizeStats = currentMod?.id ? prizeStats[currentMod.id] : undefined;
+    const prizeForPosition = (index: number) => {
+      if (modPrizeStats?.prizes && index >= 0 && index < modPrizeStats.prizes.length) {
+        return modPrizeStats.prizes[index];
+      }
+      return index >= 0 && index < todasEtapasPrize.prizes.length ? todasEtapasPrize.prizes[index].value : 0;
+    };
     const fmtBRL = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     return (
