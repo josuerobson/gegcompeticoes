@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: adiciona bloco de premiacoes de todas as etapas no relatorio financeiro de campeonatos` |
-| Data/hora | 2026-10-16T17:51:00-03:00 |
+| Mensagem | `feat: alinha calculo financeiro de arrecadacao com regras nominais do legado e sincroniza inscricoes` |
+| Data/hora | 2026-10-16T21:10:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,11 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Alinhamento do Cálculo de Arrecadação e Premiação com as Regras Oficiais do Legado (`src/utils/championshipFinance.ts`, `ChampionshipFinanceReport.tsx`, `CompetitionResultsViewer.tsx`, `ChampionshipsView.tsx`)**:
+  - *O que foi decidido*: A base de cálculo da arrecadação de cada modalidade e etapa (`totalArrecadado` em `computeRevenueBreakdown`) prioriza a tabela nominal oficial de tarifas do campeonato (R$ 60 inscrição regular e R$ 30 reinscrição / 50%), em vez de somar o campo bruto `valorPago` que em muitos registros legados continha o valor líquido retido por clubes com desconto de repasse (R$ 36). As 20 inscrições complementares do campeonato 6054 (CBA 2026) presentes no banco legado foram migradas com segurança e suas reinscrições etiquetadas, sem afetar quaisquer inscrições posteriores ou nativas do novo sistema. Com isso, os totais arrecadados e as bonificações do 1º ao 5º lugar batem com exatidão centavo por centavo com os relatórios do sistema legado (ex: Pistola 38/380/9mm com TA R$ 17.730,00 e Pote de Premiação de R$ 2.659,50).
+  - *Por que*: No sistema legado, a premiação de atletas é calculada sobre o volume total transacionado nominalmente na modalidade (primeiras passadas cheias + reinscrições promocionais), não sofrendo deduções de acordos operacionais ou descontos individuais.
+  - *O que NÃO fazer*: Não alterar o cálculo de premiação para deduzir repasses de clube ou aplicar porcentagens em cascata dupla sem validação explícita com o usuário.
 
 - **Bloco de Premiações de Todas as Etapas no Relatório Financeiro (`ChampionshipFinanceReport.tsx`, `utils/championshipFinance.ts`, `CompetitionResultsViewer.tsx`, `ChampionshipsView.tsx`)**: No drill-down por etapa do campeonato em *Premiação Campeonatos*, foi adicionado o bloco visual dedicado de premiações acumuladas de "Todas as Etapas" logo abaixo dos cards de resumo e acima da tabela de etapas. O bloco consome a função unificada `computeTodasEtapasPrize` (centralizada em `utils/championshipFinance.ts`), calculando e exibindo a fatia de premiação de atletas (`percentualPremiacaoTodasEtapas`), o valor adicional se configurado (`premiacaoAdicionalTodasEtapas`), a quantidade de etapas consideradas e critérios de descarte, o pool total acumulado e a distribuição do 1º ao 5º lugar com valores em R$ e percentuais tanto no consolidado geral quanto aberto por cada modalidade cadastrada (M1, M2...). As telas `CompetitionResultsViewer.tsx` e `ChampionshipsView.tsx` foram alinhadas para consumir a mesma função unificada.
 

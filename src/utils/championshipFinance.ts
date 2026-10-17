@@ -29,15 +29,25 @@ export function computeRevenueBreakdown(champ: Championship | undefined | null, 
   const totalInscricoes = totalCount - totalReinscricoes;
 
   const totalArrecadado = regs.reduce((acc, r) => {
-    if (r.valorPago && r.valorPago > 0 && r.valorPago !== 120) return acc + r.valorPago;
-    if (r.registrationType === 'reinscrição') {
-      return acc + (champ?.valorReinscricao ?? champ?.registrationFee ?? 0);
-    }
+    const isReinscricao = r.registrationType === 'reinscrição';
     const isClub = Boolean(r.registeredByUserId && r.registeredByUserId !== r.userId);
-    if (isClub) {
-      return acc + (champ?.valorInscricaoClube ?? champ?.registrationFee ?? 0);
+
+    // Se o campeonato possui valores nominais configurados (individual, reinscrição, clube ou taxa padrão),
+    // usa a tabela nominal oficial (mesma regra do legado, onde a arrecadação base não sofre deduções
+    // operacionais de repasse de clube gravadas em valorPago).
+    const nominalFee = isReinscricao
+      ? (champ?.valorReinscricao ?? (champ?.registrationFee ? champ.registrationFee * 0.5 : 0))
+      : isClub
+        ? (champ?.valorInscricaoClube ?? champ?.valorInscricaoIndividual ?? champ?.registrationFee ?? 0)
+        : (champ?.valorInscricaoIndividual ?? champ?.registrationFee ?? 0);
+
+    if (nominalFee > 0) {
+      return acc + nominalFee;
     }
-    return acc + (champ?.valorInscricaoIndividual ?? champ?.registrationFee ?? 0);
+
+    // Fallback caso não haja tarifas nominais cadastradas no campeonato
+    if (r.valorPago && r.valorPago > 0 && r.valorPago !== 120) return acc + r.valorPago;
+    return acc + (champ?.registrationFee ?? 0);
   }, 0);
 
   const percentualTributos = champ?.percentualTributos ?? 0;
