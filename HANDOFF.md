@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `docs: documenta sincronizacao de 1339 treinamentos e 474 armas do legado corrigindo habitualidades` |
-| Data/hora | 2026-10-17T11:30:00-03:00 |
+| Mensagem | `fix: alinha apuracao de habitualidades no perfil e na declaracao oficial usando datas reais de competicoes` |
+| Data/hora | 2026-10-17T11:42:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,11 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Alinhamento da Apuração de Habitualidades no Perfil e na Declaração Oficial (`src/components/MemberProfile.tsx`, `registrations`)**:
+  - *O que foi decidido*: Corrigido o cálculo de `habitualidadeCount` no card do perfil do atleta e na geração da declaração oficial (`combinedHabitualities`). Anteriormente, o card utilizava `stage_scores.created_at`, o que inflava o número porque todas as competições históricas importadas do legado foram gravadas com timestamp de criação de 2026-08-29 (somando competições de anos anteriores como se fossem dos últimos 12 meses, gerando 285 registros). Foi feito o backfill das datas reais nas inscrições legadas (`data` e `data_execucao`) e o componente passou a usar a data real do evento (`reg.dataExecucao` com fallback para `reg.registeredAt`). Agora, tanto o card "Habitualidade: Últimos 12 meses" quanto a emissão da "Declaração de Habitualidade" contabilizam os mesmos números oficiais (130 treinos + competições reais no período).
+  - *Por que*: Evita discrepância entre o número exibido no card do perfil e os registros impressos na declaração enviada ao Exército Brasileiro.
+  - *O que NÃO fazer*: Não utilizar timestamps de auditoria de banco (`created_at`) para filtrar períodos legais de habitualidade; utilizar sempre a data real do evento esportivo.
 
 - **Sincronização Completa de Habitualidades e Armas do Legado (`trainings`, `weapons`, `registrations`)**:
   - *O que foi decidido*: Foi identificado que 1.396 treinamentos do sistema legado (`registro_treinamentos`) e 474 armas (`ArmasClube`) haviam sido ignorados na migração original devido a um mismatch no identificador do Clube Aranãs (`club_legacy_1001` vs `club_aranas`). Foi executada uma importação segura aditiva:

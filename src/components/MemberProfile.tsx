@@ -1604,8 +1604,11 @@ export default function MemberProfile({
     // período do que arriscar uma data errada num documento de comprovação.
     (userScores || []).forEach(s => {
       const reg = approvedRegs.find(r => r.id === s.registrationId) || approvedRegs.find(r => r.championshipId === s.championshipId);
-      if (!reg?.dataExecucao) return;
-      const rawDate = new Date(`${reg.dataExecucao}T${reg.horaExecucao || '00:00:00'}`);
+      const rawDateStr = reg?.dataExecucao
+        ? `${reg.dataExecucao}T${reg.horaExecucao || '00:00:00'}`
+        : (reg?.registeredAt || '');
+      if (!rawDateStr) return;
+      const rawDate = new Date(rawDateStr);
       if (isNaN(rawDate.getTime())) return;
       if (rawDate < start || rawDate > end) return;
 
@@ -1702,25 +1705,31 @@ export default function MemberProfile({
   };
 
   // Calculate Habitualidade count (trainings + stage/competition participations in last 12 months)
+  // Alinhado rigorosamente com a mesma regra e datas reais da declaração de habitualidade
   const habitualidadeCount = useMemo(() => {
     const now = new Date();
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setFullYear(now.getFullYear() - 1);
 
-    // 1. Real training sessions in the last 12 months
+    // 1. Treinamentos reais nos últimos 12 meses
     const recentTrainings = (trainings || []).filter(t => {
-      const d = new Date(t.dateTime || t.createdAt || '');
-      return !isNaN(d.getTime()) ? d >= twelveMonthsAgo : true;
+      const raw = t.dateTime || (t.date ? `${t.date}T15:00:00` : '') || t.createdAt || '';
+      const d = new Date(raw);
+      return !isNaN(d.getTime()) ? d >= twelveMonthsAgo && d <= now : false;
     });
 
-    // 2. Stage Score participations (Campeonato > Etapa > Modalidade) in the last 12 months
-    const recentScores = (userScores || []).filter(s => {
-      const d = new Date(s.createdAt || '');
-      return !isNaN(d.getTime()) ? d >= twelveMonthsAgo : true;
+    // 2. Participações em competições oficiais nos últimos 12 meses (usando a data real do evento)
+    const recentComps = (userScores || []).filter(s => {
+      const reg = approvedRegs.find(r => r.id === s.registrationId) || approvedRegs.find(r => r.championshipId === s.championshipId);
+      const rawDateStr = reg?.dataExecucao
+        ? `${reg.dataExecucao}T${reg.horaExecucao || '00:00:00'}`
+        : (reg?.registeredAt || '');
+      if (!rawDateStr) return false;
+      const d = new Date(rawDateStr);
+      return !isNaN(d.getTime()) ? d >= twelveMonthsAgo && d <= now : false;
     });
 
-    const compCount = recentScores.length > 0 ? recentScores.length : approvedRegs.length;
-    return recentTrainings.length + compCount;
+    return recentTrainings.length + recentComps.length;
   }, [trainings, userScores, approvedRegs, selectedUser.id]);
 
   // Define sidebar menu items (only active for user's own profile)
