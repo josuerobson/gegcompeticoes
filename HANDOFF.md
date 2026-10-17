@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: expoe valores oficiais de premiacao em resultados de campeonatos para atletas via endpoint agregado seguro` |
-| Data/hora | 2026-10-17T10:05:00-03:00 |
+| Mensagem | `docs: documenta sincronizacao de 1339 treinamentos e 474 armas do legado corrigindo habitualidades` |
+| Data/hora | 2026-10-17T11:30:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,15 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Sincronização Completa de Habitualidades e Armas do Legado (`trainings`, `weapons`, `registrations`)**:
+  - *O que foi decidido*: Foi identificado que 1.396 treinamentos do sistema legado (`registro_treinamentos`) e 474 armas (`ArmasClube`) haviam sido ignorados na migração original devido a um mismatch no identificador do Clube Aranãs (`club_legacy_1001` vs `club_aranas`). Foi executada uma importação segura aditiva:
+    1. Importadas todas as **474 armas** faltantes de `ArmasClube` para a tabela `weapons` (totalizando 1.763 armas no Postgres, 100% alinhado com o legado).
+    2. Importados os **1.339 treinamentos** restantes cujos atletas existem no novo sistema (totalizando 6.502 treinos no Postgres, correspondendo exatamente aos 6.559 do legado com exceção de 57 registros de usuários excluídos/órfãos no legado).
+    3. Para o atleta Gilson Aparecido dos Santos (ID 1017), o histórico de treinos passou de 517 para exatamente **607 treinos** (e 130 nos últimos 12 meses), exatamente igual ao banco legado.
+    4. Atualizados os vínculos de armas em inscrições com base em `Inscricao_dados_adicionais`.
+  - *Por que*: O cliente constatou divergência nas declarações de habitualidade e nas armas utilizadas pelos atletas ao comparar os dois sistemas.
+  - *O que NÃO fazer*: Não remover ou sobrescrever os dados de treinamentos ou armas gerados nativamente no novo sistema após a migração.
 
 - **Visualização de Premiações Oficiais para Atletas via Endpoint Agregado Seguro (`server.ts`, `CompetitionResultsViewer.tsx`)**:
   - *O que foi decidido*: Foi criado o endpoint `GET /api/championships/:id/prize-stats`, que calcula no servidor a arrecadação e os valores em R$ das premiações do 1º ao 5º lugar de cada modalidade a partir de um agrupamento SQL (`COUNT(*)` e contagem de reinscrições), sem expor nenhum dado de inscrição, usuário ou pagamento de terceiros. No `CompetitionResultsViewer.tsx`, o hook consome esses valores agregados oficiais e os exibe no texto verde ("Prêmio: R$ X,XX") para cada colocação, garantindo que atletas comuns visualizem os mesmos prêmios homologados que os administradores vêem.
