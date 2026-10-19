@@ -1533,10 +1533,10 @@ export default function MemberProfile({
     return new Date().toISOString().split('T')[0];
   });
 
-  const combinedHabitualities = useMemo(() => {
-    const start = new Date(habStartDate + 'T00:00:00');
-    const end = new Date(habEndDate + 'T23:59:59');
-
+  // Helper to resolve an athlete's habitualities for any date range [startDate, endDate]
+  // Used identically by both the 12-month standard profile card AND the customizable
+  // declaration generator ("Gerar Habitualidade") to guarantee zero divergence.
+  const computeHabitualities = useCallback((startDate: Date, endDate: Date) => {
     const items: Array<{
       id: string;
       rawDate: Date;
@@ -1556,13 +1556,22 @@ export default function MemberProfile({
       ammoOwnerText: string;
     }> = [];
 
-    // 1. Process Training Sessions in the selected date range
-    (trainings || []).forEach(t => {
-      const rawDate = new Date(t.dateTime || (t.date ? `${t.date}T15:00:00` : '') || t.createdAt || '');
-      if (isNaN(rawDate.getTime())) return;
-      if (rawDate < start || rawDate > end) return;
+    const userRegs = (registrations || []).filter(r => r.userId === selectedUser.id);
+    const userRegMap = new Map<string, Registration>();
+    userRegs.forEach(r => userRegMap.set(r.id, r));
 
-      const w = t.selectedWeapon || weapons.find(wpn => wpn.id === t.weaponId);
+    // 1. Process Real Training Sessions in range
+    (trainings || []).forEach(t => {
+      const rawDateStr = t.dateTime || (t.date ? `${t.date}T15:00:00` : '') || t.createdAt || '';
+      if (!rawDateStr) return;
+      const rawDate = new Date(rawDateStr);
+      if (isNaN(rawDate.getTime())) return;
+      if (rawDate < startDate || rawDate > endDate) return;
+
+      const w = t.selectedWeapon
+        || weapons.find(wpn => wpn.id === t.weaponId)
+        || (t.weaponName ? weapons.find(wpn => wpn.model && t.weaponName.toLowerCase().includes(wpn.model.toLowerCase())) : undefined);
+
       const dateFormatted = rawDate.toLocaleDateString('pt-BR');
       const timeFormatted = t.dateTime ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:00';
 
@@ -1572,7 +1581,7 @@ export default function MemberProfile({
       const manufacturer = w?.manufacturer || 'Fabricante';
       const caliber = t.weaponCaliber || w?.caliber || t.caliber || '9mm';
       const permissionStatus = w?.permissionStatus || 'Permitido';
-      const sigma = w?.sigmaNumber || w?.serialNumber || '010101010';
+      const sigma = w?.sigmaNumber || w?.serialNumber || selectedUser.crNumber || 'N/A';
       const shotsCount = Number(t.totalShots) || ((Number(t.ownAmmoShots) || 0) + (Number(t.clubAmmoShots) || 0)) || t.shots || 50;
 
       items.push({
@@ -1595,36 +1604,43 @@ export default function MemberProfile({
       });
     });
 
-    // 2. Process Stage Scores (Competition participations)
-    // A data real do evento é registrations.dataExecucao/horaExecucao — nunca
-    // s.createdAt (quando o registro veio da importação do legado, createdAt é
-    // o instante em que o import rodou, não a data da competição; isso fazia
-    // competições de anos atrás aparecerem com a data de hoje na declaração).
-    // Sem dataExecucao, a data real é desconhecida — melhor omitir o item do
-    // período do que arriscar uma data errada num documento de comprovação.
+    // 2. Process Official Competition participations in range
+    const includedRegIds = new Set<string>();
+
+    // A. From registered stage scores
     (userScores || []).forEach(s => {
-      const reg = approvedRegs.find(r => r.id === s.registrationId) || approvedRegs.find(r => r.championshipId === s.championshipId);
+      const reg = s.registrationId ? userRegMap.get(s.registrationId) : undefined;
+      if (reg) includedRegIds.add(reg.id);
+
+      const stage = stages.find(st => (reg?.stageId && st.id === reg.stageId) || (st.championshipId === s.championshipId && (s.stageNum ? st.stageNum === s.stageNum : false)));
+      const champ = championships.find(c => c.id === s.championshipId || c.id === reg?.championshipId);
+
+      // Usar a data real da execução da prova (dataExecucao) ou a data da etapa no calendário oficial
       const rawDateStr = reg?.dataExecucao
         ? `${reg.dataExecucao}T${reg.horaExecucao || '00:00:00'}`
-        : (reg?.registeredAt || '');
+        : (stage?.date
+          ? `${stage.date}T15:00:00`
+          : (reg?.registeredAt || ''));
+
       if (!rawDateStr) return;
       const rawDate = new Date(rawDateStr);
       if (isNaN(rawDate.getTime())) return;
-      if (rawDate < start || rawDate > end) return;
+      if (rawDate < startDate || rawDate > endDate) return;
 
-      const champ = championships.find(c => c.id === s.championshipId);
-      const w = weapons.find(wpn => wpn.id === reg?.weaponId);
+      const w = weapons.find(wpn => wpn.id === reg?.weaponId)
+        || (reg?.weaponId ? weapons.find(wpn => wpn.legacyId === (reg as any).weaponLegacyId) : undefined)
+        || (s.modality ? weapons.find(wpn => wpn.model && s.modality.toLowerCase().includes(wpn.model.toLowerCase())) : undefined);
 
       const dateFormatted = rawDate.toLocaleDateString('pt-BR');
-      const timeFormatted = reg.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:54';
+      const timeFormatted = reg?.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:54';
 
       const weaponClass = w?.weaponClass || 'Pistola';
       const model = w?.model || (reg as any)?.gunModel || s.modality || 'Arma de Competição';
-      const weaponNumber = w?.weaponNumber || w?.serialNumber || 'HMA02013';
+      const weaponNumber = w?.weaponNumber || w?.serialNumber || 'N/A';
       const manufacturer = w?.manufacturer || 'IMBEL';
-      const caliber = w?.caliber || (reg as any)?.caliber || (s.modality?.includes('380') ? '.380' : '9mm');
-      const permissionStatus = w?.permissionStatus || 'Permitido';
-      const sigma = w?.sigmaNumber || selectedUser.crNumber || '010101010';
+      const caliber = w?.caliber || (reg as any)?.caliber || (s.modality?.includes('380') ? '.380' : s.modality?.includes('45') ? '.45' : '9mm');
+      const permissionStatus = w?.permissionStatus || (caliber?.includes('45') ? 'Restrita' : 'Permitida');
+      const sigma = w?.sigmaNumber || w?.serialNumber || selectedUser.crNumber || 'N/A';
       const shotsCount = (s as any).shotsCount || s.score || 20;
 
       items.push({
@@ -1647,43 +1663,60 @@ export default function MemberProfile({
       });
     });
 
-    // 3. Process Approved Registrations if userScores is empty
-    // Mesmo cuidado da seção 2: usa dataExecucao/horaExecucao (data real do
-    // evento), nunca registeredAt — em registros importados do legado,
-    // registeredAt é o instante do import, não a data da competição.
-    if (userScores.length === 0) {
-      (approvedRegs || []).forEach(reg => {
-        if (!reg.dataExecucao) return;
-        const rawDate = new Date(`${reg.dataExecucao}T${reg.horaExecucao || '00:00:00'}`);
-        if (isNaN(rawDate.getTime())) return;
-        if (rawDate < start || rawDate > end) return;
+    // B. Completed registrations that do not have a duplicate score in userScores
+    userRegs.forEach(reg => {
+      if (includedRegIds.has(reg.id)) return;
+      if (reg.completionStatus !== 'completed' && !reg.dataExecucao) return;
+      if (!reg.dataExecucao) return;
 
-        const champ = championships.find(c => c.id === reg.championshipId);
-        const w = weapons.find(wpn => wpn.id === reg.weaponId);
+      const rawDate = new Date(`${reg.dataExecucao}T${reg.horaExecucao || '00:00:00'}`);
+      if (isNaN(rawDate.getTime())) return;
+      if (rawDate < startDate || rawDate > endDate) return;
 
-        items.push({
-          id: `reg_${reg.id}`,
-          rawDate,
-          dateFormatted: rawDate.toLocaleDateString('pt-BR'),
-          timeFormatted: reg.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:54',
-          eventType: 'Competição',
-          eventName: champ?.title?.toUpperCase() || 'CAMPEONATO DE TIRO ESPORTIVO',
-          weaponClass: w?.weaponClass || 'Pistola',
-          model: w?.model || (reg as any)?.gunModel || 'Pistola de Competição',
-          weaponNumber: w?.weaponNumber || w?.serialNumber || 'HMA02013',
-          manufacturer: w?.manufacturer || 'IMBEL',
-          caliber: w?.caliber || (reg as any)?.caliber || '.380',
-          permissionStatus: w?.permissionStatus || 'Permitido',
-          sigma: w?.sigmaNumber || selectedUser.crNumber || '010101010',
-          shotsCount: reg.totalPoints || 20,
-          weaponOwnerText: 'Própria',
-          ammoOwnerText: 'Própria',
-        });
+      const champ = championships.find(c => c.id === reg.championshipId);
+      const w = weapons.find(wpn => wpn.id === reg.weaponId);
+
+      const dateFormatted = rawDate.toLocaleDateString('pt-BR');
+      const timeFormatted = reg.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:54';
+
+      const weaponClass = w?.weaponClass || 'Pistola';
+      const model = w?.model || (reg as any)?.gunModel || 'Arma de Competição';
+      const weaponNumber = w?.weaponNumber || w?.serialNumber || 'N/A';
+      const manufacturer = w?.manufacturer || 'IMBEL';
+      const caliber = w?.caliber || (reg as any)?.caliber || '.380';
+      const permissionStatus = w?.permissionStatus || (caliber?.includes('45') ? 'Restrita' : 'Permitida');
+      const sigma = w?.sigmaNumber || w?.serialNumber || selectedUser.crNumber || 'N/A';
+      const shotsCount = reg.totalPoints || 20;
+
+      items.push({
+        id: `reg_${reg.id}`,
+        rawDate,
+        dateFormatted,
+        timeFormatted,
+        eventType: 'Competição',
+        eventName: champ?.title?.toUpperCase() || 'CAMPEONATO DE TIRO ESPORTIVO',
+        weaponClass,
+        model,
+        weaponNumber,
+        manufacturer,
+        caliber,
+        permissionStatus,
+        sigma,
+        shotsCount,
+        weaponOwnerText: 'Própria',
+        ammoOwnerText: 'Própria',
       });
-    }
+    });
 
     return items.sort((a, b) => b.rawDate.getTime() - a.rawDate.getTime());
-  }, [trainings, userScores, approvedRegs, championships, weapons, habStartDate, habEndDate, selectedUser.crNumber]);
+  }, [trainings, userScores, registrations, selectedUser.id, stages, championships, weapons, selectedUser.crNumber]);
+
+  // Lista para a Declaração de Habitualidade (período selecionado nos filtros)
+  const combinedHabitualities = useMemo(() => {
+    const start = new Date(habStartDate + 'T00:00:00');
+    const end = new Date(habEndDate + 'T23:59:59');
+    return computeHabitualities(start, end);
+  }, [computeHabitualities, habStartDate, habEndDate]);
 
   // Ammo Quota Calculations
   const ammoLimits: { [key: string]: number } = {
@@ -1704,33 +1737,14 @@ export default function MemberProfile({
     return champ ? champ.title : 'Campeonato G&G Competições';
   };
 
-  // Calculate Habitualidade count (trainings + stage/competition participations in last 12 months)
+  // Card "Habitualidade: Últimos 12 meses"
   // Alinhado rigorosamente com a mesma regra e datas reais da declaração de habitualidade
   const habitualidadeCount = useMemo(() => {
     const now = new Date();
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setFullYear(now.getFullYear() - 1);
-
-    // 1. Treinamentos reais nos últimos 12 meses
-    const recentTrainings = (trainings || []).filter(t => {
-      const raw = t.dateTime || (t.date ? `${t.date}T15:00:00` : '') || t.createdAt || '';
-      const d = new Date(raw);
-      return !isNaN(d.getTime()) ? d >= twelveMonthsAgo && d <= now : false;
-    });
-
-    // 2. Participações em competições oficiais nos últimos 12 meses (usando a data real do evento)
-    const recentComps = (userScores || []).filter(s => {
-      const reg = approvedRegs.find(r => r.id === s.registrationId) || approvedRegs.find(r => r.championshipId === s.championshipId);
-      const rawDateStr = reg?.dataExecucao
-        ? `${reg.dataExecucao}T${reg.horaExecucao || '00:00:00'}`
-        : (reg?.registeredAt || '');
-      if (!rawDateStr) return false;
-      const d = new Date(rawDateStr);
-      return !isNaN(d.getTime()) ? d >= twelveMonthsAgo && d <= now : false;
-    });
-
-    return recentTrainings.length + recentComps.length;
-  }, [trainings, userScores, approvedRegs, selectedUser.id]);
+    return computeHabitualities(twelveMonthsAgo, now).length;
+  }, [computeHabitualities]);
 
   // Define sidebar menu items (only active for user's own profile)
   const menuItems = [

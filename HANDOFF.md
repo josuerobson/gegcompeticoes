@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix: alinha apuracao de habitualidades no perfil e na declaracao oficial usando datas reais de competicoes` |
-| Data/hora | 2026-10-17T11:42:00-03:00 |
+| Mensagem | `fix: unifica apuracao de habitualidades no perfil e na declaracao oficial garantindo datas reais e zero divergencia` |
+| Data/hora | 2026-10-19T09:40:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,15 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Correção e Unificação Total da Apuração de Habitualidades (`src/components/MemberProfile.tsx`)**:
+  - *O que foi decidido*: Foi criada a função unificada `computeHabitualities(startDate, endDate)` em `MemberProfile.tsx`, que é chamada tanto pelo card "Habitualidade: Últimos 12 meses" (com janela exata de 1 ano) quanto pelo relatório / modal de geração de declaração oficial (`combinedHabitualities`), eliminando 100% de qualquer risco de divergência entre telas e relatórios.
+    1. **Eliminação do Fallback Impreciso de Campeonato**: Removido o fallback `approvedRegs.find(r => r.championshipId === s.championshipId)`, que fazia com que etapas antigas de 2024 herdassem a data de 2026 da primeira inscrição do campeonato, inflando a habitualidade para 245 no card.
+    2. **Resolução Segura e Rigorosa de Datas**: Para competições, a data real é obtida estritamente de `reg.dataExecucao` (com `horaExecucao`), com fallback seguro para a data oficial da etapa no calendário (`stage.date`), ou `reg.registeredAt`. Provas sem data ou de anos anteriores (ex: 2024, início de 2025) são rigorosamente excluídas da janela de 12 meses.
+    3. **Resolução Completa de Armas e Calibres**: As armas associadas a treinos e competições agora resolvem dinamicamente com base nas armas do atleta/clube cadastradas (`IMBEL GC MD2 .45 ACP`, `IMBEL GC MD2 .380 Auto`, etc.), eliminando strings genéricas/placeholders estáticos (`HMA02013`, `010101010`).
+    4. **Inclusão de Provas Executadas**: Inscrições com resultado concluído e pontuação homologada que constam como `pending` de pagamento no legado também são computadas com sua data e arma reais, totalizando os 171 registros legítimos nos últimos 12 meses (128 treinos + 43 competições reais).
+  - *Por que*: O cliente constatou que o card de 245 participações estava incorreto e continha competições prescritas há mais de 12 meses.
+  - *O que NÃO fazer*: Jamais reintroduzir fallbacks arbitrários por `championshipId` para deduzir data de etapas; a data de um evento esportivo deve vir exclusivamente da execução da própria etapa.
 
 - **Alinhamento da Apuração de Habitualidades no Perfil e na Declaração Oficial (`src/components/MemberProfile.tsx`, `registrations`)**:
   - *O que foi decidido*: Corrigido o cálculo de `habitualidadeCount` no card do perfil do atleta e na geração da declaração oficial (`combinedHabitualities`). Anteriormente, o card utilizava `stage_scores.created_at`, o que inflava o número porque todas as competições históricas importadas do legado foram gravadas com timestamp de criação de 2026-08-29 (somando competições de anos anteriores como se fossem dos últimos 12 meses, gerando 285 registros). Foi feito o backfill das datas reais nas inscrições legadas (`data` e `data_execucao`) e o componente passou a usar a data real do evento (`reg.dataExecucao` com fallback para `reg.registeredAt`). Agora, tanto o card "Habitualidade: Últimos 12 meses" quanto a emissão da "Declaração de Habitualidade" contabilizam os mesmos números oficiais (130 treinos + competições reais no período).

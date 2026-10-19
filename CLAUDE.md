@@ -35,7 +35,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Legacy system parity.** Several `Painel Diretor` cadastro screens were rebuilt to match field-for-field specs from a legacy PHP system the user is migrating off of (raw HTML forms with generic field names like `info1`, `id4` were used as the source of truth — those internal names are not meaningful, only the field's label/position/options matter). Where this repo's data model needed to diverge from a first guess based on the legacy system, the actual legacy HTML always won. See "Painel Diretor module status" below for what's been aligned this way — don't assume an unconverted screen's fields are correct without checking for a legacy reference first.
 
-## Painel Diretor module status (as of 2026-10-16)
+## Painel Diretor module status (as of 2026-10-19)
 
 Real (backed by actual DB tables/endpoints, tested end-to-end):
 - **Gerenciamento Plataforma > Campeonatos > Premiação Campeonatos** — relatório financeiro visual: lista todos os campeonatos com arrecadação, tributos, organização, clubes, atletas e abertura por modalidades (M1, M2...). No drill-down do campeonato, exibe o bloco consolidado **"Premiações — Todas as Etapas"** (fatia atletas %, adicional R$, etapas consideradas, descarte de resultados e tabela completa de premiações 1º ao 5º lugar no geral e por modalidade) conforme as regras de premiação de atletas, além da tabela detalhada de arrecadação por etapa com exportação CSV.
