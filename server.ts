@@ -4618,7 +4618,7 @@ app.delete('/api/weapons/:id', requireAuth, async (req, res) => {
     }
     const weapon = mapWeapon(weaponRes.rows[0]);
 
-    const canDelete = weapon.ownerId === currentUser.id || (ADMIN_ROLES.includes(currentUser.role) && weapon.ownerId === currentUser.clubId);
+    const canDelete = currentUser.role === 'master_admin' || weapon.ownerId === currentUser.id || (ADMIN_ROLES.includes(currentUser.role) && weapon.ownerId === currentUser.clubId);
     if (!canDelete) {
       return res.status(403).json({ error: 'Você não tem permissão para remover esta arma.' });
     }
@@ -4634,7 +4634,7 @@ app.delete('/api/weapons/:id', requireAuth, async (req, res) => {
 app.put('/api/weapons/:id', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
   const weaponId = req.params.id;
-  const { manufacturer, model, caliber, weaponNumber, sigmaNumber, weaponClass, permissionStatus, registrySystem } = req.body;
+  const { manufacturer, model, caliber, serialNumber, weaponNumber, sigmaNumber, weaponClass, permissionStatus, registrySystem } = req.body;
 
   try {
     const weaponRes = await pool.query('SELECT * FROM weapons WHERE id = $1', [weaponId]);
@@ -4643,24 +4643,26 @@ app.put('/api/weapons/:id', requireAuth, async (req, res) => {
     }
     const weapon = mapWeapon(weaponRes.rows[0]);
 
-    const canEdit = weapon.ownerId === currentUser.id || (ADMIN_ROLES.includes(currentUser.role) && weapon.ownerId === currentUser.clubId);
+    const canEdit = currentUser.role === 'master_admin' || weapon.ownerId === currentUser.id || (ADMIN_ROLES.includes(currentUser.role) && (weapon.ownerId === currentUser.clubId || !weapon.ownerId));
     if (!canEdit) {
       return res.status(403).json({ error: 'Você não tem permissão para editar esta arma.' });
     }
 
+    const resolvedSerial = (serialNumber || weaponNumber || sigmaNumber || null);
     await pool.query(
       `UPDATE weapons SET
-        manufacturer     = COALESCE($1, manufacturer),
-        model            = COALESCE($2, model),
-        caliber          = COALESCE($3, caliber),
-        weapon_number    = $4,
-        sigma_number     = $5,
-        weapon_class     = $6,
+        manufacturer      = COALESCE($1, manufacturer),
+        model             = COALESCE($2, model),
+        caliber           = COALESCE($3, caliber),
+        weapon_number     = $4,
+        sigma_number      = $5,
+        class             = $6,
         permission_status = $7,
-        registry_system  = $8
-       WHERE id = $9`,
+        registry_system   = $8,
+        serial_number     = COALESCE($9, serial_number)
+       WHERE id = $10`,
       [manufacturer, model, caliber, weaponNumber || null, sigmaNumber || null,
-       weaponClass || null, permissionStatus || null, registrySystem || null, weaponId]
+       weaponClass || null, permissionStatus || null, registrySystem || null, resolvedSerial, weaponId]
     );
 
     const updated = await pool.query('SELECT * FROM weapons WHERE id = $1', [weaponId]);

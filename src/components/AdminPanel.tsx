@@ -6,7 +6,7 @@ import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import { SicoobPixManager } from './SicoobPixManager';
 import { MercadoPagoManager } from './MercadoPagoManager';
 import { PixPaymentModal } from './PixPaymentModal';
-import { normalizeSearchText } from '../utils/textSearch';
+import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel } from '../utils/textSearch';
 import { RevenueReport, AnnuityRoster, ReceiptsStatement } from './FranchiseReports';
 import ChampionshipFinanceReport from './ChampionshipFinanceReport';
 import { PixReconciliation } from './PixReconciliation';
@@ -1022,26 +1022,49 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
                 {searching ? 'Buscando...' : 'Nenhuma arma encontrada.'}
               </div>
             )}
-            {filteredOwn.map(w => (
-              <button
-                key={w.id}
-                type="button"
-                onMouseDown={e => { e.preventDefault(); selectWeapon(w, `${w.model} ${w.caliber} (Sigma: ${w.sigmaNumber || 'N/A'})`); }}
-                className="w-full text-left px-3 py-2 text-[11px] text-slate-700 hover:bg-blue-50 font-mono"
-              >
-                {w.model} {w.caliber} (Sigma: {w.sigmaNumber || 'N/A'})
-              </button>
-            ))}
-            {extraResults.map(w => (
-              <button
-                key={w.id}
-                type="button"
-                onMouseDown={e => { e.preventDefault(); selectWeapon(w, `${w.model} (Sigma: ${w.sigmaNumber || 'N/A'})`); }}
-                className="w-full text-left px-3 py-2 text-[11px] text-slate-700 hover:bg-blue-50 font-mono"
-              >
-                {w.model} {w.caliber} - Sigma: {w.sigmaNumber || 'N/A'} (Série: {w.serialNumber})
-              </button>
-            ))}
+            {filteredOwn.map(w => {
+              const serial = resolveWeaponSerial(w);
+              const sigma = (w.sigmaNumber || '').trim() || 'N/A';
+              const modelText = `${w.manufacturer || ''} ${w.model || ''} ${w.caliber ? `(${w.caliber})` : ''}`.trim();
+              const label = formatWeaponLabel(w);
+              return (
+                <button
+                  key={w.id}
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); selectWeapon(w, label); }}
+                  className="w-full text-left px-3 py-2 hover:bg-blue-50 transition border-b border-slate-50 last:border-0"
+                >
+                  <div className="font-bold text-slate-900 font-mono text-[11px]">
+                    Série: <span className="text-blue-700 font-black">{serial}</span> • Sigma: <span className="text-slate-800">{sigma}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-600 font-medium">
+                    {modelText} {w.ownerName ? `• Atleta: ${w.ownerName}` : ''}
+                  </div>
+                </button>
+              );
+            })}
+            {extraResults.map(w => {
+              const serial = resolveWeaponSerial(w);
+              const sigma = (w.sigmaNumber || '').trim() || 'N/A';
+              const modelText = `${w.manufacturer || ''} ${w.model || ''} ${w.caliber ? `(${w.caliber})` : ''}`.trim();
+              const clubText = w.clubName ? `• Clube: ${w.clubName}` : (w.ownerName ? `• Atleta: ${w.ownerName}` : '');
+              const label = formatWeaponLabel(w);
+              return (
+                <button
+                  key={w.id}
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); selectWeapon(w, label); }}
+                  className="w-full text-left px-3 py-2 hover:bg-blue-50 transition border-b border-slate-50 last:border-0"
+                >
+                  <div className="font-bold text-slate-900 font-mono text-[11px]">
+                    Série: <span className="text-blue-700 font-black">{serial}</span> • Sigma: <span className="text-slate-800">{sigma}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-600 font-medium">
+                    {modelText} {clubText}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1924,18 +1947,18 @@ function TreinamentosCompeticoesAdminPanel({
                               weaponName: `${w.manufacturer || ''} ${w.model || ''}`.trim() || w.weaponNumber || 'Arma Cadastrada',
                               weaponCaliber: w.caliber || prev.weaponCaliber,
                               weaponOwnerType: isAthleteOwn ? 'propria' : 'clube',
-                              weaponSearchQuery: `${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'})`.trim(),
+                              weaponSearchQuery: formatWeaponLabel(w),
                             }));
                             setIsWeaponDropdownOpen(false);
                           }}
                           className="w-full text-left p-3 hover:bg-blue-50/70 transition flex items-center justify-between cursor-pointer"
                         >
                           <div>
-                            <div className="font-bold text-slate-900 text-xs">
-                              {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[11px]">({w.caliber})</span>
+                            <div className="font-mono text-xs font-bold text-slate-900">
+                              Série: {resolveWeaponSerial(w)} • Sigma: {w.sigmaNumber || '—'}
                             </div>
-                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                              Sigma: {w.sigmaNumber || 'N/A'} | Num: {w.weaponNumber || 'N/A'}
+                            <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+                              {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[10px]">({w.caliber || 'Sem calibre'})</span>
                             </div>
                           </div>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isAthleteOwn ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-purple-100 text-purple-800 border border-purple-200'}`}>
@@ -3526,26 +3549,49 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
                 {searching ? 'Buscando...' : 'Nenhuma arma encontrada.'}
               </div>
             )}
-            {filteredOwn.map(w => (
-              <button
-                key={w.id}
-                type="button"
-                onMouseDown={e => { e.preventDefault(); selectWeapon(w, `${w.model} ${w.caliber} (Sigma: ${w.sigmaNumber || 'N/A'})`); }}
-                className="w-full text-left px-3 py-2 text-[11px] text-slate-700 hover:bg-blue-50 font-mono"
-              >
-                {w.model} {w.caliber} (Sigma: {w.sigmaNumber || 'N/A'})
-              </button>
-            ))}
-            {extraResults.map(w => (
-              <button
-                key={w.id}
-                type="button"
-                onMouseDown={e => { e.preventDefault(); selectWeapon(w, `${w.model} (Sigma: ${w.sigmaNumber || 'N/A'})`); }}
-                className="w-full text-left px-3 py-2 text-[11px] text-slate-700 hover:bg-blue-50 font-mono"
-              >
-                {w.model} {w.caliber} - Sigma: {w.sigmaNumber || 'N/A'} (Série: {w.serialNumber})
-              </button>
-            ))}
+            {filteredOwn.map(w => {
+              const serial = resolveWeaponSerial(w);
+              const sigma = (w.sigmaNumber || '').trim() || 'N/A';
+              const modelText = `${w.manufacturer || ''} ${w.model || ''} ${w.caliber ? `(${w.caliber})` : ''}`.trim();
+              const label = formatWeaponLabel(w);
+              return (
+                <button
+                  key={w.id}
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); selectWeapon(w, label); }}
+                  className="w-full text-left px-3 py-2 hover:bg-blue-50 transition border-b border-slate-50 last:border-0"
+                >
+                  <div className="font-bold text-slate-900 font-mono text-[11px]">
+                    Série: <span className="text-blue-700 font-black">{serial}</span> • Sigma: <span className="text-slate-800">{sigma}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-600 font-medium">
+                    {modelText} {w.ownerName ? `• Atleta: ${w.ownerName}` : ''}
+                  </div>
+                </button>
+              );
+            })}
+            {extraResults.map(w => {
+              const serial = resolveWeaponSerial(w);
+              const sigma = (w.sigmaNumber || '').trim() || 'N/A';
+              const modelText = `${w.manufacturer || ''} ${w.model || ''} ${w.caliber ? `(${w.caliber})` : ''}`.trim();
+              const clubText = w.clubName ? `• Clube: ${w.clubName}` : (w.ownerName ? `• Atleta: ${w.ownerName}` : '');
+              const label = formatWeaponLabel(w);
+              return (
+                <button
+                  key={w.id}
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); selectWeapon(w, label); }}
+                  className="w-full text-left px-3 py-2 hover:bg-blue-50 transition border-b border-slate-50 last:border-0"
+                >
+                  <div className="font-bold text-slate-900 font-mono text-[11px]">
+                    Série: <span className="text-blue-700 font-black">{serial}</span> • Sigma: <span className="text-slate-800">{sigma}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-600 font-medium">
+                    {modelText} {clubText}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -9237,8 +9283,8 @@ export default function AdminPanel({
                   {cessaoArmaSelecionada ? (
                     <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
                       <div>
-                        <p className="text-xs font-bold text-blue-800">{cessaoArmaSelecionada.model} — {cessaoArmaSelecionada.caliber}</p>
-                        <p className="text-[10px] font-mono text-blue-600">SIGMA: {cessaoArmaSelecionada.sigmaNumber || cessaoArmaSelecionada.weaponNumber || '—'}</p>
+                        <p className="text-xs font-bold font-mono text-blue-900">Série: {resolveWeaponSerial(cessaoArmaSelecionada)} • Sigma: {cessaoArmaSelecionada.sigmaNumber || '—'}</p>
+                        <p className="text-[11px] text-blue-700 font-medium">{cessaoArmaSelecionada.manufacturer ? `${cessaoArmaSelecionada.manufacturer} ` : ''}{cessaoArmaSelecionada.model} — {cessaoArmaSelecionada.caliber || 'Sem calibre'}</p>
                       </div>
                       <button
                         onClick={() => { setCessaoArmaSelecionada(null); setCessaoArmaQuery(''); setCessaoSalva(null); }}
@@ -9249,7 +9295,7 @@ export default function AdminPanel({
                     <div className="relative">
                       <input
                         type="text"
-                        placeholder="Digite número da arma ou SIGMA (mín. 3 chars)..."
+                        placeholder="Digite número da arma, SIGMA ou modelo..."
                         value={cessaoArmaQuery}
                         onChange={async (e) => {
                           const val = e.target.value;
@@ -9271,10 +9317,10 @@ export default function AdminPanel({
                             <button
                               key={w.id}
                               onClick={() => { setCessaoArmaSelecionada(w); setCessaoArmaResults([]); setCessaoArmaQuery(''); }}
-                              className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition border-b border-slate-100 last:border-0"
+                              className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition border-b border-slate-100 last:border-0 cursor-pointer"
                             >
-                              <p className="text-xs font-semibold text-slate-800">{w.manufacturer} {w.model} — {w.caliber}</p>
-                              <p className="text-[10px] font-mono text-slate-500">SIGMA: {w.sigmaNumber || w.weaponNumber || '—'}</p>
+                              <p className="text-xs font-bold font-mono text-slate-900">Série: {resolveWeaponSerial(w)} • Sigma: {w.sigmaNumber || '—'}</p>
+                              <p className="text-[11px] text-slate-600 font-medium">{w.manufacturer ? `${w.manufacturer} ` : ''}{w.model} — {w.caliber || 'Sem calibre'}</p>
                             </button>
                           ))}
                         </div>
@@ -12439,9 +12485,11 @@ export default function AdminPanel({
                       /* ── VIEW MODE ── */
                       <div className="bg-slate-50/50 p-2.5 flex justify-between items-start gap-2 text-xs leading-tight">
                         <div className="min-w-0">
-                          <span className="font-bold text-slate-800 block truncate">{w.manufacturer} {w.model} {w.caliber}</span>
+                          <span className="font-bold text-slate-800 block truncate">
+                            <span className="font-mono text-blue-950 font-bold">Série: {resolveWeaponSerial(w)} • Sigma: {w.sigmaNumber || '—'}</span> — {w.manufacturer} {w.model} {w.caliber}
+                          </span>
                           <span className="text-[10px] text-slate-500 font-mono block truncate">
-                            {[w.weaponNumber && `Nº ${w.weaponNumber}`, w.sigmaNumber && `Sigma ${w.sigmaNumber}`, w.weaponClass, w.registrySystem, w.permissionStatus].filter(Boolean).join(' • ')}
+                            {[w.weaponClass, w.registrySystem, w.permissionStatus].filter(Boolean).join(' • ')}
                           </span>
                         </div>
                         <div className="flex gap-1.5 shrink-0">

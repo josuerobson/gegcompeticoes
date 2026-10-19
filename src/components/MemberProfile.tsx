@@ -4,7 +4,7 @@ import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import { QRCodeView } from './QRCodeView';
 import { PixPaymentModal } from './PixPaymentModal';
-import { normalizeSearchText } from '../utils/textSearch';
+import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel } from '../utils/textSearch';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
@@ -1208,7 +1208,7 @@ export default function MemberProfile({
             caliber,
             weaponNumber: newWeaponData.weaponNumber.trim() || undefined,
             sigmaNumber: newWeaponData.sigmaNumber.trim() || undefined,
-            serialNumber: newWeaponData.sigmaNumber.trim() || newWeaponData.weaponNumber.trim() || undefined,
+            serialNumber: newWeaponData.weaponNumber.trim() || newWeaponData.sigmaNumber.trim() || undefined,
             weaponClass: newWeaponData.weaponClass || undefined,
             registrySystem: newWeaponData.registrySystem || undefined,
             permissionStatus: newWeaponData.permissionStatus || undefined,
@@ -1221,20 +1221,20 @@ export default function MemberProfile({
         }
       }
 
-      const label = `${manufacturer} ${model} (${caliber})`.trim();
       const newW: Weapon = {
         id: `wpn_${Date.now()}`,
         ownerId: currentUser?.id || '',
         manufacturer,
         model,
         caliber,
-        serialNumber: newWeaponData.sigmaNumber.trim() || newWeaponData.weaponNumber.trim() || '',
+        serialNumber: newWeaponData.weaponNumber.trim() || newWeaponData.sigmaNumber.trim() || '',
         weaponNumber: newWeaponData.weaponNumber.trim() || '',
         sigmaNumber: newWeaponData.sigmaNumber.trim() || '',
         weaponClass: newWeaponData.weaponClass,
         registrySystem: newWeaponData.registrySystem,
         permissionStatus: newWeaponData.permissionStatus,
       };
+      const label = formatWeaponLabel(newW);
 
       setTrainingForm(prev => ({
         ...prev,
@@ -1281,7 +1281,7 @@ export default function MemberProfile({
     if (q.length < 3) return [];
     const allWeapons = weapons || [];
     return allWeapons.filter(w => {
-      const fullText = normalizeSearchText(`${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.sigmaNumber || ''} ${w.weaponNumber || ''} ${w.weaponClass || ''}`);
+      const fullText = normalizeSearchText(`${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.sigmaNumber || ''} ${w.weaponNumber || ''} ${w.serialNumber || ''} ${w.weaponClass || ''}`);
       return fullText.includes(q);
     });
   }, [trainingForm.weaponSearchQuery, weapons]);
@@ -3708,18 +3708,18 @@ export default function MemberProfile({
                                       weaponName: `${w.manufacturer || ''} ${w.model || ''}`.trim() || w.weaponNumber || 'Arma Cadastrada',
                                       weaponCaliber: w.caliber || prev.weaponCaliber,
                                       weaponOwnerType: isMine ? 'propria' : 'clube',
-                                      weaponSearchQuery: `${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'})`.trim(),
+                                      weaponSearchQuery: formatWeaponLabel(w),
                                     }));
                                     setIsWeaponDropdownOpen(false);
                                   }}
                                   className="w-full text-left p-3 hover:bg-blue-50/70 transition flex items-center justify-between cursor-pointer"
                                 >
                                   <div>
-                                    <div className="font-bold text-slate-900 text-xs">
-                                      {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[11px]">({w.caliber})</span>
+                                    <div className="font-mono text-xs font-bold text-slate-900">
+                                      Série: {resolveWeaponSerial(w)} • Sigma: {w.sigmaNumber || '—'}
                                     </div>
-                                    <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                                      Sigma: {w.sigmaNumber || 'N/A'} | Num: {w.weaponNumber || 'N/A'}
+                                    <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+                                      {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[10px]">({w.caliber || 'Sem calibre'})</span>
                                     </div>
                                   </div>
                                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isMine ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-purple-100 text-purple-800 border border-purple-200'}`}>

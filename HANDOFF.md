@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: adiciona filtro de busca no cadastro de armas e amplia busca na inscricao` |
-| Data/hora | 2026-10-19T15:53:00-03:00 |
+| Mensagem | `fix: padroniza exibicao de serie e sigma em evidencia na selecao de armas e corrige update de arma` |
+| Data/hora | 2026-10-19T19:15:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,19 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Padronização Visual de Armas com Nº de Série e SIGMA em Evidência e Correção de Edição de Armas (`server.ts`, `src/utils/textSearch.ts`, `src/components/AdminPanel.tsx`, `src/components/ChampionshipsView.tsx`, `src/components/MemberProfile.tsx`)**:
+  - *O que foi decidido*:
+    1. **Correção do Bug de Edição de Armas (`PUT /api/weapons/:id`)**: No backend (`server.ts`), ao salvar alterações em uma arma existente, a query SQL executava `weapon_class = $6`, enquanto o nome real da coluna na tabela `weapons` do PostgreSQL é `class`. Isso causava erro 500 do PostgreSQL (`column "weapon_class" of relation "weapons" does not exist`), exibindo a mensagem "Erro ao atualizar arma." na tela do diretor. A query foi corrigida para usar `class = $6`, foi adicionada permissão para usuários com papel `master_admin` (mesmo quando a arma pertence a outro clube/atleta), e adicionada sincronização automática do `serial_number = COALESCE($9, serial_number)`.
+    2. **Resolução Inteligente de Número de Série (`src/utils/textSearch.ts`)**: Criadas as funções utilitárias `resolveWeaponSerial(w)` e `formatWeaponLabel(w)`. A função `resolveWeaponSerial` prioriza o número real gravado em `weapon_number` ou `serial_number` sempre que distinto do número SIGMA (ex: `AGL584781`, `AHH040447`), evitando a repetição do número SIGMA.
+    3. **Padronização de Série e SIGMA em Evidência em Todas as Seleções de Armas**:
+       - **Inscrição em Campeonatos (Individual, IDSC e Multicampeonatos)** (`ChampionshipsView.tsx`): O dropdown de pesquisa exibe na primeira linha em destaque mono/negrito `Série: <serial> • Sigma: <sigma>` e na segunda linha `<fabricante> <modelo> (<calibre>) • Atleta/Clube`. Ao selecionar ou cadastrar uma arma, o input e a confirmação refletem o rótulo padronizado `Série: ... • Sigma: ... — Modelo (Calibre)`.
+       - **Inscrição em Lote do Clube** (`AdminPanel.tsx`): Atualizado o `renderWeaponFields` tanto em `ClubBulkRegister` quanto em `ClubBulkRegistration` para exibir o Nº de Série e o SIGMA em destaque mono/negrito na primeira linha antes do modelo/calibre.
+       - **Registro de Treinamentos (Perfil do Atleta e Painel Diretor)** (`MemberProfile.tsx` e `AdminPanel.tsx`): Dropdown de autocomplete com primeira linha em destaque com Série e SIGMA, e input atualizado para preencher o rótulo completo com número de série ao selecionar.
+       - **Cessão de Armas** (`AdminPanel.tsx`): Resultados de busca e card de arma cedida selecionada exibem Série e SIGMA em destaque mono/negrito na primeira linha.
+       - **Lista de Armas no Cadastro ADM** (`AdminPanel.tsx`): Cada item da listagem exibe em evidência o Nº de Série e o SIGMA antes do modelo e fabricante.
+  - *Por que*: O cliente solicitou explicitamente que ao selecionar uma arma para um atleta, as informações em evidência devem ser o Nº de Série e o SIGMA antes do modelo, pois o número de série não estava visível nos seletores, dificultando a identificação imediata da arma pelos atletas e diretores. E relatou o erro ao editar uma arma.
+  - *O que NÃO fazer*: Não referenciar `weapon_class` diretamente no SQL do Postgres, pois a coluna se chama `class`. Não sobrescrever o `serial_number` real com o número de SIGMA.
 
 - **Filtro de Busca em Tempo Real no Cadastro de Armas e Ampliação da Busca na Inscrição (`src/components/AdminPanel.tsx`, `server.ts`, `src/components/ChampionshipsView.tsx`)**:
   - *O que foi decidido*:

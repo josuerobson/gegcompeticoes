@@ -3,7 +3,7 @@ import { Championship, User, Registration, StageScore, RankingItem, Modality, St
 import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, CreditCard, ChevronRight, Download, Medal, PlusCircle, X, Search, Layers, Zap, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PixPaymentModal } from './PixPaymentModal';
-import { normalizeSearchText } from '../utils/textSearch';
+import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel } from '../utils/textSearch';
 import { computeRevenueBreakdown, computeTodasEtapasPrize } from '../utils/championshipFinance';
 
 interface ChampionshipsProps {
@@ -226,13 +226,20 @@ export default function ChampionshipsView({
         caliber,
         weaponNumber: newWeaponData.weaponNumber.trim() || undefined,
         sigmaNumber: newWeaponData.sigmaNumber.trim() || undefined,
-        serialNumber: newWeaponData.sigmaNumber.trim() || newWeaponData.weaponNumber.trim() || undefined,
+        serialNumber: newWeaponData.weaponNumber.trim() || newWeaponData.sigmaNumber.trim() || undefined,
         weaponClass: newWeaponData.weaponClass || undefined,
         registrySystem: newWeaponData.registrySystem || undefined,
         permissionStatus: newWeaponData.permissionStatus || undefined,
       });
 
-      const label = `${manufacturer} ${model} (${caliber}) - Sigma: ${newWeaponData.sigmaNumber.trim() || 'N/A'}`;
+      const label = formatWeaponLabel({
+        manufacturer,
+        model,
+        caliber,
+        weaponNumber: newWeaponData.weaponNumber.trim(),
+        sigmaNumber: newWeaponData.sigmaNumber.trim(),
+        serialNumber: newWeaponData.weaponNumber.trim() || newWeaponData.sigmaNumber.trim(),
+      });
       setWeaponSearchQuery(label);
 
       // Auto fetch the newly registered weapon to select it
@@ -1194,31 +1201,35 @@ export default function ChampionshipsView({
                           </div>
                         ) : (
                           <>
-                            {weaponSearchResults.map(w => (
-                              <button
-                                key={w.id}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedWeaponId(w.id);
-                                  const identifier = w.weaponNumber ? `Nº ${w.weaponNumber}` : (w.sigmaNumber ? `Sigma: ${w.sigmaNumber}` : (w.serialNumber ? `Série: ${w.serialNumber}` : ''));
-                                  setWeaponSearchQuery(`${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'}) - ${identifier}`.trim());
-                                  setWeaponSearchResults([]);
-                                }}
-                                className="w-full text-left p-3 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
-                              >
-                                <div>
-                                  <div className="font-bold text-slate-900 text-xs">
-                                    {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[11px]">({w.caliber})</span>
+                            {weaponSearchResults.map(w => {
+                              const serial = resolveWeaponSerial(w);
+                              const ownerOrClub = w.ownerName ? `Atleta: ${w.ownerName}` : (w.clubName ? `Clube: ${w.clubName}` : '');
+                              return (
+                                <button
+                                  key={w.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedWeaponId(w.id);
+                                    setWeaponSearchQuery(formatWeaponLabel(w));
+                                    setWeaponSearchResults([]);
+                                  }}
+                                  className="w-full text-left p-3 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
+                                >
+                                  <div>
+                                    <div className="font-mono text-xs font-bold text-slate-900">
+                                      Série: {serial} • Sigma: {w.sigmaNumber || '—'}
+                                    </div>
+                                    <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+                                      {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[10px]">({w.caliber || 'Sem calibre'})</span>
+                                      {ownerOrClub && <span className="text-slate-400 font-normal"> • {ownerOrClub}</span>}
+                                    </div>
                                   </div>
-                                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                                    {[w.weaponNumber && `Nº ${w.weaponNumber}`, w.sigmaNumber && `Sigma: ${w.sigmaNumber}`, w.serialNumber && `Série: ${w.serialNumber}`, w.clubName && `Clube: ${w.clubName}`, w.ownerName && `Atleta: ${w.ownerName}`].filter(Boolean).join(' • ')}
-                                  </div>
-                                </div>
-                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-                                  Selecionar
-                                </span>
-                              </button>
-                            ))}
+                                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                                    Selecionar
+                                  </span>
+                                </button>
+                              );
+                            })}
                             <div className="p-2.5 bg-slate-50 text-center">
                               <button
                                 type="button"
@@ -1615,31 +1626,35 @@ export default function ChampionshipsView({
                           </div>
                         ) : (
                           <>
-                            {weaponSearchResults.map(w => (
-                              <button
-                                key={w.id}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedWeaponId(w.id);
-                                  const identifier = w.weaponNumber ? `Nº ${w.weaponNumber}` : (w.sigmaNumber ? `Sigma: ${w.sigmaNumber}` : (w.serialNumber ? `Série: ${w.serialNumber}` : ''));
-                                  setWeaponSearchQuery(`${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'}) - ${identifier}`.trim());
-                                  setWeaponSearchResults([]);
-                                }}
-                                className="w-full text-left p-3 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
-                              >
-                                <div>
-                                  <div className="font-bold text-slate-900 text-xs">
-                                    {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[11px]">({w.caliber})</span>
+                            {weaponSearchResults.map(w => {
+                              const serial = resolveWeaponSerial(w);
+                              const ownerOrClub = w.ownerName ? `Atleta: ${w.ownerName}` : (w.clubName ? `Clube: ${w.clubName}` : '');
+                              return (
+                                <button
+                                  key={w.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedWeaponId(w.id);
+                                    setWeaponSearchQuery(formatWeaponLabel(w));
+                                    setWeaponSearchResults([]);
+                                  }}
+                                  className="w-full text-left p-3 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
+                                >
+                                  <div>
+                                    <div className="font-mono text-xs font-bold text-slate-900">
+                                      Série: {serial} • Sigma: {w.sigmaNumber || '—'}
+                                    </div>
+                                    <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+                                      {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[10px]">({w.caliber || 'Sem calibre'})</span>
+                                      {ownerOrClub && <span className="text-slate-400 font-normal"> • {ownerOrClub}</span>}
+                                    </div>
                                   </div>
-                                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                                    {[w.weaponNumber && `Nº ${w.weaponNumber}`, w.sigmaNumber && `Sigma: ${w.sigmaNumber}`, w.serialNumber && `Série: ${w.serialNumber}`, w.clubName && `Clube: ${w.clubName}`, w.ownerName && `Atleta: ${w.ownerName}`].filter(Boolean).join(' • ')}
-                                  </div>
-                                </div>
-                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-                                  Selecionar
-                                </span>
-                              </button>
-                            ))}
+                                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                                    Selecionar
+                                  </span>
+                                </button>
+                              );
+                            })}
                             <div className="p-2.5 bg-slate-50 text-center">
                               <button
                                 type="button"
@@ -2194,32 +2209,36 @@ export default function ChampionshipsView({
                           </div>
                         ) : (
                           <>
-                            {weaponSearchResults.map(w => (
-                              <button
-                                key={w.id}
-                                type="button"
-                                onClick={() => {
-                                  setMultiWeaponId(w.id);
-                                  setSelectedWeaponId(w.id);
-                                  const identifier = w.weaponNumber ? `Nº ${w.weaponNumber}` : (w.sigmaNumber ? `Sigma: ${w.sigmaNumber}` : (w.serialNumber ? `Série: ${w.serialNumber}` : ''));
-                                  setWeaponSearchQuery(`${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'}) - ${identifier}`.trim());
-                                  setWeaponSearchResults([]);
-                                }}
-                                className="w-full text-left p-3 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
-                              >
-                                <div>
-                                  <div className="font-bold text-slate-900 text-xs">
-                                    {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[11px]">({w.caliber})</span>
+                            {weaponSearchResults.map(w => {
+                              const serial = resolveWeaponSerial(w);
+                              const ownerOrClub = w.ownerName ? `Atleta: ${w.ownerName}` : (w.clubName ? `Clube: ${w.clubName}` : '');
+                              return (
+                                <button
+                                  key={w.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setMultiWeaponId(w.id);
+                                    setSelectedWeaponId(w.id);
+                                    setWeaponSearchQuery(formatWeaponLabel(w));
+                                    setWeaponSearchResults([]);
+                                  }}
+                                  className="w-full text-left p-3 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
+                                >
+                                  <div>
+                                    <div className="font-mono text-xs font-bold text-slate-900">
+                                      Série: {serial} • Sigma: {w.sigmaNumber || '—'}
+                                    </div>
+                                    <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+                                      {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[10px]">({w.caliber || 'Sem calibre'})</span>
+                                      {ownerOrClub && <span className="text-slate-400 font-normal"> • {ownerOrClub}</span>}
+                                    </div>
                                   </div>
-                                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                                    {[w.weaponNumber && `Nº ${w.weaponNumber}`, w.sigmaNumber && `Sigma: ${w.sigmaNumber}`, w.serialNumber && `Série: ${w.serialNumber}`, w.clubName && `Clube: ${w.clubName}`, w.ownerName && `Atleta: ${w.ownerName}`].filter(Boolean).join(' • ')}
-                                  </div>
-                                </div>
-                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-                                  Selecionar
-                                </span>
-                              </button>
-                            ))}
+                                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                                    Selecionar
+                                  </span>
+                                </button>
+                              );
+                            })}
                             <div className="p-2.5 bg-slate-50 text-center">
                               <button
                                 type="button"
