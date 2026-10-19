@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix: unifica apuracao de habitualidades no perfil e na declaracao oficial garantindo datas reais e zero divergencia` |
-| Data/hora | 2026-10-19T09:40:00-03:00 |
+| Mensagem | `feat: adiciona modal de detalhamento de habitualidades para auditoria e esclarece contagem no perfil` |
+| Data/hora | 2026-10-19T10:45:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,14 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Modal de Detalhamento e Auditoria de Habitualidades dos Últimos 12 Meses (`src/components/MemberProfile.tsx`)**:
+  - *O que foi decidido*: Ao clicar no badge com o número total de habitualidades no card do perfil do atleta (ex: `181`), abre-se uma modal completa e responsiva de auditoria que detalha individualmente cada participação no período de 12 meses. Cada linha exibe: `#` índice, `Data / Hora`, `Tipo` (badge azul celeste para Treinamento e âmbar para Competição), `Evento / Campeonato & Modalidade / Etapa`, `Arma & Calibre` (modelo, fabricante, calibre, posse própria/clube), `Nº Série & SIGMA`, `Disparos Efetuados & Origem da Munição` (própria/clube), `Pontos / Resultado` da prova, e o `ID de Origem` para rastreio direto no banco/legado. A modal inclui barra de busca textual em tempo real, filtros por tipo (Todos / Treinamentos / Competições), chips de KPI com totais e disparos acumulados e botão de exportação para CSV.
+  - *Esclarecimento da Divergência (169 vs 181)*:
+    1. A menção inicial de 169 (em 17/10 às 13:48) foi estimada somando 130 treinos e 39 competições que possuíam nota avulsa em `stage_scores`.
+    2. Logo em seguida (17/10 às 14:27), a importação legada foi finalizada e atualizada, trazendo os 15 treinamentos mais recentes realizados em setembro e outubro de 2026 (elevando os treinos de Gilson nos últimos 12 meses para 138 na base de produção).
+    3. No commit `0f3d21f`, foram incluídas na contagem de competições as etapas concluídas com data real de execução (`data_execucao`) que não possuíam nota avulsa duplicada (como as etapas de 2026 do CBA), elevando as competições legítimas para 43.
+    4. A soma real no banco de produção é de **138 treinamentos + 43 participações em competições = 181 habitualidades nos últimos 12 meses**, rigorosamente dentro da janela anual (nenhuma prova prescrita de 2024 incluída).
 
 - **Correção e Unificação Total da Apuração de Habitualidades (`src/components/MemberProfile.tsx`)**:
   - *O que foi decidido*: Foi criada a função unificada `computeHabitualities(startDate, endDate)` em `MemberProfile.tsx`, que é chamada tanto pelo card "Habitualidade: Últimos 12 meses" (com janela exata de 1 ano) quanto pelo relatório / modal de geração de declaração oficial (`combinedHabitualities`), eliminando 100% de qualquer risco de divergência entre telas e relatórios.

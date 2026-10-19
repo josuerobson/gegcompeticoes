@@ -370,6 +370,11 @@ export default function MemberProfile({
   const [profileTab, setProfileTab] = useState<ProfileTabType>('posts');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // Modal de auditoria e detalhamento completo de Habitualidades (Últimos 12 meses)
+  const [showHabitualidadeModal, setShowHabitualidadeModal] = useState(false);
+  const [habModalSearch, setHabModalSearch] = useState('');
+  const [habModalTypeFilter, setHabModalTypeFilter] = useState<'all' | 'Treinamento' | 'Competição'>('all');
+
   useEffect(() => {
     if (profileTab === 'championships') {
       onNavigateToChampionships();
@@ -1544,6 +1549,9 @@ export default function MemberProfile({
       timeFormatted: string;
       eventType: 'Treinamento' | 'Competição';
       eventName: string;
+      modality: string;
+      stageNum?: number;
+      score: number | string;
       weaponClass: string;
       model: string;
       weaponNumber: string;
@@ -1554,6 +1562,7 @@ export default function MemberProfile({
       shotsCount: number;
       weaponOwnerText: string;
       ammoOwnerText: string;
+      originId: string;
     }> = [];
 
     const userRegs = (registrations || []).filter(r => r.userId === selectedUser.id);
@@ -1590,7 +1599,8 @@ export default function MemberProfile({
         dateFormatted,
         timeFormatted,
         eventType: 'Treinamento',
-        eventName: 'TREINAMENTO',
+        eventName: 'TREINAMENTO NO ESTANDE',
+        modality: t.modality || 'Treinamento Livre',
         weaponClass,
         model,
         weaponNumber,
@@ -1599,8 +1609,10 @@ export default function MemberProfile({
         permissionStatus,
         sigma,
         shotsCount,
+        score: t.score !== undefined && t.score !== null && t.score !== '' ? t.score : '-',
         weaponOwnerText: t.weaponOwnerType === 'clube' ? 'Clube' : 'Própria',
         ammoOwnerText: (Number(t.clubAmmoShots) || 0) > 0 ? 'Clube' : 'Própria',
+        originId: t.id,
       });
     });
 
@@ -1641,7 +1653,7 @@ export default function MemberProfile({
       const caliber = w?.caliber || (reg as any)?.caliber || (s.modality?.includes('380') ? '.380' : s.modality?.includes('45') ? '.45' : '9mm');
       const permissionStatus = w?.permissionStatus || (caliber?.includes('45') ? 'Restrita' : 'Permitida');
       const sigma = w?.sigmaNumber || w?.serialNumber || selectedUser.crNumber || 'N/A';
-      const shotsCount = (s as any).shotsCount || s.score || 20;
+      const shotsCount = (s as any).shotsCount || (s as any).totalShots || 20;
 
       items.push({
         id: `cmp_${s.id}`,
@@ -1650,6 +1662,9 @@ export default function MemberProfile({
         timeFormatted,
         eventType: 'Competição',
         eventName: champ?.title?.toUpperCase() || 'CAMPEONATO DE TIRO ESPORTIVO',
+        modality: s.modality || (reg?.modalityId ? modalityName(reg.modalityId) : (stage?.title || 'Modalidade Oficial')),
+        stageNum: s.stageNum || stage?.stageNum,
+        score: s.score !== undefined && s.score !== null ? s.score : (reg?.totalPoints ?? '-'),
         weaponClass,
         model,
         weaponNumber,
@@ -1660,6 +1675,7 @@ export default function MemberProfile({
         shotsCount,
         weaponOwnerText: 'Própria',
         ammoOwnerText: 'Própria',
+        originId: s.id,
       });
     });
 
@@ -1695,6 +1711,9 @@ export default function MemberProfile({
         timeFormatted,
         eventType: 'Competição',
         eventName: champ?.title?.toUpperCase() || 'CAMPEONATO DE TIRO ESPORTIVO',
+        modality: reg.modalityId ? modalityName(reg.modalityId) : (stage?.title || 'Modalidade Oficial'),
+        stageNum: stage?.stageNum,
+        score: reg.totalPoints !== undefined && reg.totalPoints !== null ? reg.totalPoints : '-',
         weaponClass,
         model,
         weaponNumber,
@@ -1705,11 +1724,12 @@ export default function MemberProfile({
         shotsCount,
         weaponOwnerText: 'Própria',
         ammoOwnerText: 'Própria',
+        originId: reg.id,
       });
     });
 
     return items.sort((a, b) => b.rawDate.getTime() - a.rawDate.getTime());
-  }, [trainings, userScores, registrations, selectedUser.id, stages, championships, weapons, selectedUser.crNumber]);
+  }, [trainings, userScores, registrations, selectedUser.id, stages, championships, weapons, selectedUser.crNumber, modalities]);
 
   // Lista para a Declaração de Habitualidade (período selecionado nos filtros)
   const combinedHabitualities = useMemo(() => {
@@ -1737,14 +1757,42 @@ export default function MemberProfile({
     return champ ? champ.title : 'Campeonato G&G Competições';
   };
 
-  // Card "Habitualidade: Últimos 12 meses"
+  // Card "Habitualidade: Últimos 12 meses" e Modal de Auditoria
   // Alinhado rigorosamente com a mesma regra e datas reais da declaração de habitualidade
-  const habitualidadeCount = useMemo(() => {
+  const twelveMonthsHabitualities = useMemo(() => {
     const now = new Date();
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setFullYear(now.getFullYear() - 1);
-    return computeHabitualities(twelveMonthsAgo, now).length;
+    return computeHabitualities(twelveMonthsAgo, now);
   }, [computeHabitualities]);
+
+  const habitualidadeCount = twelveMonthsHabitualities.length;
+
+  const filteredModalHabitualities = useMemo(() => {
+    return twelveMonthsHabitualities.filter(item => {
+      if (habModalTypeFilter !== 'all' && item.eventType !== habModalTypeFilter) {
+        return false;
+      }
+      if (!habModalSearch.trim()) return true;
+      const q = normalizeSearchText(habModalSearch.toLowerCase());
+      const fields = [
+        item.dateFormatted,
+        item.timeFormatted,
+        item.eventType,
+        item.eventName,
+        item.modality,
+        item.model,
+        item.manufacturer,
+        item.caliber,
+        item.weaponNumber,
+        item.sigma,
+        item.originId,
+        String(item.score ?? ''),
+        String(item.stageNum ?? '')
+      ].map(f => normalizeSearchText(String(f || '').toLowerCase())).join(' ');
+      return fields.includes(q);
+    });
+  }, [twelveMonthsHabitualities, habModalTypeFilter, habModalSearch]);
 
   // Define sidebar menu items (only active for user's own profile)
   const menuItems = [
@@ -1933,9 +1981,18 @@ export default function MemberProfile({
                   {/* Habitualidade */}
                   <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                     <span className="text-slate-450 font-sans text-[11px]">Habitualidade: Últimos 12 meses</span>
-                    <span className="font-extrabold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-100 font-sans text-xs">
-                      {habitualidadeCount}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowHabitualidadeModal(true)}
+                      className="font-extrabold text-blue-700 bg-blue-50 hover:bg-blue-100 hover:text-blue-900 px-2.5 py-1 rounded-md border border-blue-200 hover:border-blue-300 font-sans text-xs transition cursor-pointer flex items-center gap-1.5 shadow-2xs group"
+                      title="Clique para ver o detalhamento completo de cada habitualidade (auditoria de treinos e competições)"
+                    >
+                      <span>{habitualidadeCount}</span>
+                      <span className="text-[10px] text-blue-600 font-medium underline flex items-center gap-0.5 group-hover:text-blue-900">
+                        <Eye className="w-3 h-3" />
+                        ver detalhes
+                      </span>
+                    </button>
                   </div>
 
                   {/* Guia de Trânsito */}
@@ -5303,6 +5360,320 @@ export default function MemberProfile({
             </div>
           );
         })()}
+      </AnimatePresence>
+
+      {/* MODAL DE DETALHAMENTO DAS HABITUALIDADES (AUDITORIA / CONFERÊNCIA) */}
+      <AnimatePresence>
+        {showHabitualidadeModal && (
+          <div
+            className="fixed inset-0 z-[250] bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4"
+            onClick={() => setShowHabitualidadeModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white flex justify-between items-start gap-4 border-b border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-600/30 border border-blue-400/40 flex items-center justify-center text-blue-400 shrink-0">
+                    <Target className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                      Detalhamento de Habitualidades — Últimos 12 Meses
+                    </h3>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      Atleta: <span className="font-semibold text-white">{selectedUser.fullName || selectedUser.username}</span> • CPF: <span className="font-mono text-slate-200">{selectedUser.cpf || 'N/A'}</span> • CR: <span className="font-mono text-slate-200">{selectedUser.crNumber || 'N/A'}</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowHabitualidadeModal(false)}
+                  className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition cursor-pointer"
+                  title="Fechar (Esc)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* KPI Bar */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 sm:p-4 bg-slate-50 border-b border-slate-200">
+                <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block tracking-wider">Total no Período</span>
+                  <div className="flex items-baseline gap-1 mt-0.5">
+                    <span className="text-2xl font-black text-blue-700">{twelveMonthsHabitualities.length}</span>
+                    <span className="text-[10px] text-slate-450 font-medium">participações</span>
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block tracking-wider">Treinamentos</span>
+                  <div className="flex items-baseline gap-1 mt-0.5">
+                    <span className="text-2xl font-black text-sky-600">
+                      {twelveMonthsHabitualities.filter(i => i.eventType === 'Treinamento').length}
+                    </span>
+                    <span className="text-[10px] text-slate-450 font-medium">sessões</span>
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block tracking-wider">Competições Oficiais</span>
+                  <div className="flex items-baseline gap-1 mt-0.5">
+                    <span className="text-2xl font-black text-amber-600">
+                      {twelveMonthsHabitualities.filter(i => i.eventType === 'Competição').length}
+                    </span>
+                    <span className="text-[10px] text-slate-450 font-medium">etapas/provas</span>
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block tracking-wider">Total de Disparos</span>
+                  <div className="flex items-baseline gap-1 mt-0.5">
+                    <span className="text-2xl font-black text-emerald-600">
+                      {twelveMonthsHabitualities.reduce((sum, i) => sum + (Number(i.shotsCount) || 0), 0).toLocaleString('pt-BR')}
+                    </span>
+                    <span className="text-[10px] text-slate-450 font-medium">tiros efetuados</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Search & Filters */}
+              <div className="p-3 sm:px-5 sm:py-3 bg-white border-b border-slate-200/80 flex flex-wrap gap-2.5 items-center justify-between">
+                <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+                  <div className="relative w-full">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={habModalSearch}
+                      onChange={(e) => setHabModalSearch(e.target.value)}
+                      placeholder="Pesquisar por campeonato, modalidade, data, arma, calibre, ID..."
+                      className="w-full pl-9 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition text-slate-800"
+                    />
+                    {habModalSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setHabModalSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setHabModalTypeFilter('all')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      habModalTypeFilter === 'all'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Todos ({twelveMonthsHabitualities.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHabModalTypeFilter('Treinamento')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      habModalTypeFilter === 'Treinamento'
+                        ? 'bg-sky-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Treinamentos ({twelveMonthsHabitualities.filter(i => i.eventType === 'Treinamento').length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHabModalTypeFilter('Competição')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      habModalTypeFilter === 'Competição'
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Competições ({twelveMonthsHabitualities.filter(i => i.eventType === 'Competição').length})
+                  </button>
+                </div>
+              </div>
+
+              {/* Table Container */}
+              <div className="flex-1 overflow-y-auto p-2 sm:p-4 bg-slate-50/50">
+                {filteredModalHabitualities.length === 0 ? (
+                  <div className="text-center py-12 bg-white rounded-xl border border-slate-200 p-8">
+                    <Target className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-slate-700">Nenhum registro encontrado</p>
+                    <p className="text-xs text-slate-450 mt-1">
+                      Tente ajustar o termo de pesquisa ou trocar o filtro.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100/80 text-[10.5px] uppercase font-bold text-slate-600 border-b border-slate-200 sticky top-0 z-10 backdrop-blur-xs">
+                            <th className="py-2.5 px-3 w-12 text-center">#</th>
+                            <th className="py-2.5 px-3 w-28">Data / Hora</th>
+                            <th className="py-2.5 px-3 w-28">Tipo</th>
+                            <th className="py-2.5 px-3 min-w-[200px]">Evento / Modalidade</th>
+                            <th className="py-2.5 px-3 min-w-[160px]">Arma & Calibre</th>
+                            <th className="py-2.5 px-3 w-32">Nº Série / SIGMA</th>
+                            <th className="py-2.5 px-3 w-28">Disparos</th>
+                            <th className="py-2.5 px-3 w-20 text-center">Pontos</th>
+                            <th className="py-2.5 px-3 w-32 text-right">ID Origem</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-150">
+                          {filteredModalHabitualities.map((item, idx) => {
+                            const isTraining = item.eventType === 'Treinamento';
+                            return (
+                              <tr
+                                key={item.id}
+                                className="hover:bg-blue-50/40 transition-colors"
+                              >
+                                <td className="py-2.5 px-3 text-center font-mono text-[11px] text-slate-450">
+                                  {idx + 1}
+                                </td>
+                                <td className="py-2.5 px-3 font-mono text-slate-850 whitespace-nowrap">
+                                  <span className="font-semibold block">{item.dateFormatted}</span>
+                                  <span className="text-[10px] text-slate-450">{item.timeFormatted}</span>
+                                </td>
+                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                  <span
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                      isTraining
+                                        ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                                        : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                    }`}
+                                  >
+                                    {isTraining ? (
+                                      <Target className="w-2.5 h-2.5" />
+                                    ) : (
+                                      <Trophy className="w-2.5 h-2.5" />
+                                    )}
+                                    {item.eventType}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  <span className="font-bold text-slate-800 block leading-tight">
+                                    {item.eventName}
+                                  </span>
+                                  <span className="text-[10.5px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                    {item.modality}
+                                    {item.stageNum ? ` • Etapa ${item.stageNum}` : ''}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  <span className="font-semibold text-slate-800 block truncate max-w-[200px]" title={item.model}>
+                                    {item.model}
+                                  </span>
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
+                                    <span className="font-bold text-blue-700 bg-blue-50 px-1 py-0.2 rounded border border-blue-100">
+                                      {item.caliber}
+                                    </span>
+                                    <span>•</span>
+                                    <span>{item.manufacturer}</span>
+                                    <span>•</span>
+                                    <span className="text-slate-450 font-medium">{item.weaponOwnerText}</span>
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-3 font-mono text-[11px] text-slate-650">
+                                  <span className="block truncate max-w-[120px]" title={item.weaponNumber}>
+                                    {item.weaponNumber && item.weaponNumber !== 'N/A' ? item.weaponNumber : '-'}
+                                  </span>
+                                  <span className="text-[9.5px] text-slate-450 block truncate max-w-[120px]" title={item.sigma}>
+                                    SIGMA: {item.sigma || '-'}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                  <span className="font-bold text-slate-800 block">
+                                    {item.shotsCount} tiros
+                                  </span>
+                                  <span className="text-[10px] text-slate-450">
+                                    Mun: {item.ammoOwnerText}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-center font-bold text-slate-700 whitespace-nowrap">
+                                  {item.score !== undefined && item.score !== null ? (
+                                    <span className={item.score !== '-' ? 'text-emerald-700 font-extrabold' : 'text-slate-400'}>
+                                      {item.score}
+                                    </span>
+                                  ) : (
+                                    '-'
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono text-[10px] text-slate-500 whitespace-nowrap">
+                                  <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 select-all" title={item.originId}>
+                                    {item.originId}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 py-3 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <span className="text-slate-500 font-medium">
+                  Exibindo <span className="font-bold text-slate-800">{filteredModalHabitualities.length}</span> de <span className="font-bold text-slate-800">{twelveMonthsHabitualities.length}</span> habitualidades no período
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const csvHeader = 'Data;Hora;Tipo;Evento;Modalidade;Arma;Calibre;Fabricante;Serie;SIGMA;Disparos;Municao;Pontos;ID_Origem\n';
+                      const csvRows = filteredModalHabitualities.map(i => [
+                        i.dateFormatted,
+                        i.timeFormatted,
+                        i.eventType,
+                        `"${(i.eventName || '').replace(/"/g, '""')}"`,
+                        `"${(i.modality || '').replace(/"/g, '""')}"`,
+                        `"${(i.model || '').replace(/"/g, '""')}"`,
+                        i.caliber,
+                        i.manufacturer,
+                        i.weaponNumber,
+                        i.sigma,
+                        i.shotsCount,
+                        i.ammoOwnerText,
+                        i.score,
+                        i.originId
+                      ].join(';')).join('\n');
+                      const blob = new Blob([csvHeader + csvRows], { type: 'text/csv;charset=utf-8;' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `habitualidades_${(selectedUser.fullName || selectedUser.username).toLowerCase().replace(/\s+/g, '_')}_12meses.csv`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition cursor-pointer flex items-center gap-1.5"
+                    title="Exportar dados filtrados para planilha CSV"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Exportar CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowHabitualidadeModal(false)}
+                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition cursor-pointer shadow-xs"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </AnimatePresence>
 
     </div>
