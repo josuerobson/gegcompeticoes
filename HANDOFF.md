@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: adiciona modal de detalhamento de habitualidades para auditoria e esclarece contagem no perfil` |
-| Data/hora | 2026-10-19T10:45:00-03:00 |
+| Mensagem | `feat: adiciona filtro de busca no cadastro de armas e amplia busca na inscricao` |
+| Data/hora | 2026-10-19T15:53:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,13 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Filtro de Busca em Tempo Real no Cadastro de Armas e Ampliação da Busca na Inscrição (`src/components/AdminPanel.tsx`, `server.ts`, `src/components/ChampionshipsView.tsx`)**:
+  - *O que foi decidido*:
+    1. **Filtro de busca em "Cadastro de Armas" (Painel Diretor > ADM > Cadastro de Armas)**: Adicionada barra de busca em tempo real com ícone, botão de limpar busca (`X`) e contador dinâmico de armas ("Listando X de Y armas"), filtrando instantaneamente por número da arma, sigma, série, modelo, fabricante, calibre, classe, tipo e permissão. Caso nenhum item seja encontrado, exibe mensagem clara com botão de limpar filtro.
+    2. **Correção e Ampliação de Busca de Armas na Inscrição (`/api/weapons/search` e `ChampionshipsView.tsx`)**:
+       - No backend (`server.ts`), a rota `/api/weapons/search` omitia a coluna `serial_number` e restringia a busca ao clube do usuário quando este possuía `clubId`, impedindo atletas e diretores de localizarem armas registradas pelo clube ou armas cadastradas em campeonatos abertos. A rota agora busca universalmente por `weapon_number`, `serial_number`, `sigma_number`, `model`, `manufacturer`, `caliber`, `class`, `registry_system`, `owner_name` e `club_name` com ordenação inteligente por relevância (armas próprias > armas do clube > armas de membros do clube > demais armas cadastradas).
+       - No frontend (`ChampionshipsView.tsx`), corrigido o fallback local para incluir `w.weaponNumber` (anteriormente ignorado, impedindo a localização de armas registradas por número como `AGL584781`), ajustado o gatilho de busca para 2 caracteres e incluído no dropdown a exibição completa de número da arma, Sigma, número de série, clube e atleta.
 
 - **Modal de Detalhamento e Auditoria de Habitualidades dos Últimos 12 Meses (`src/components/MemberProfile.tsx`)**:
   - *O que foi decidido*: Ao clicar no badge com o número total de habitualidades no card do perfil do atleta (ex: `181`), abre-se uma modal completa e responsiva de auditoria que detalha individualmente cada participação no período de 12 meses. Cada linha exibe: `#` índice, `Data / Hora`, `Tipo` (badge azul celeste para Treinamento e âmbar para Competição), `Evento / Campeonato & Modalidade / Etapa`, `Arma & Calibre` (modelo, fabricante, calibre, posse própria/clube), `Nº Série & SIGMA`, `Disparos Efetuados & Origem da Munição` (própria/clube), `Pontos / Resultado` da prova, e o `ID de Origem` para rastreio direto no banco/legado. A modal inclui barra de busca textual em tempo real, filtros por tipo (Todos / Treinamentos / Competições), chips de KPI com totais e disparos acumulados e botão de exportação para CSV.

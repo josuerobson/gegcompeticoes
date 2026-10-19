@@ -293,6 +293,8 @@ function mapWeapon(w: any): Weapon {
     permissionStatus: w.permission_status || undefined,
     registrySystem: w.registry_system || undefined,
     legacyId: w.legacy_id ?? undefined,
+    ownerName: w.owner_name || undefined,
+    clubName: w.club_name || undefined,
   };
 }
 
@@ -4762,39 +4764,36 @@ app.get('/api/weapons/search', requireAuth, async (req, res) => {
   const q = (req.query.q as string || '').trim();
   if (!q || q.length < 2) return res.json({ weapons: [] });
   try {
-    let rows;
     const searchPattern = `%${q}%`;
-    if (['master_admin', 'admin'].includes(currentUser.role) && !currentUser.clubId) {
-      // master_admin can search all weapons in the system
-      const r = await pool.query(
-        `SELECT w.*, u.full_name as owner_name, c.name as club_name FROM weapons w
-         LEFT JOIN users u ON u.id = w.owner_id
-         LEFT JOIN clubs c ON c.id = u.club_id OR c.id = w.owner_id
-         WHERE unaccent_lower(w.sigma_number) LIKE unaccent_lower($1) OR unaccent_lower(w.weapon_number) LIKE unaccent_lower($1)
-           OR unaccent_lower(w.model) LIKE unaccent_lower($1) OR unaccent_lower(w.manufacturer) LIKE unaccent_lower($1)
-           OR unaccent_lower(w.caliber) LIKE unaccent_lower($1) OR unaccent_lower(w.class) LIKE unaccent_lower($1) OR unaccent_lower(u.full_name) LIKE unaccent_lower($1)
-         ORDER BY w.model, w.manufacturer LIMIT 30`,
-        [searchPattern]
-      );
-      rows = r.rows;
-    } else {
-      // Search weapons owned by user, or weapons in user's club, or matching query
-      const targetClubId = currentUser.clubId || '';
-      const r = await pool.query(
-        `SELECT w.*, u.full_name as owner_name, c.name as club_name FROM weapons w
-         LEFT JOIN users u ON u.id = w.owner_id
-         LEFT JOIN clubs c ON c.id = u.club_id OR c.id = w.owner_id
-         WHERE (w.owner_id = $1 OR w.owner_id = $2 OR u.club_id = $2 OR $2 = '') AND (
-           unaccent_lower(w.sigma_number) LIKE unaccent_lower($3) OR unaccent_lower(w.weapon_number) LIKE unaccent_lower($3)
-           OR unaccent_lower(w.model) LIKE unaccent_lower($3) OR unaccent_lower(w.manufacturer) LIKE unaccent_lower($3)
-           OR unaccent_lower(w.caliber) LIKE unaccent_lower($3) OR unaccent_lower(w.class) LIKE unaccent_lower($3) OR unaccent_lower(u.full_name) LIKE unaccent_lower($3)
-         )
-         ORDER BY w.model, w.manufacturer LIMIT 30`,
-        [currentUser.id, targetClubId, searchPattern]
-      );
-      rows = r.rows;
-    }
-    res.json({ weapons: rows.map(mapWeapon) });
+    const targetClubId = currentUser.clubId || '';
+    const r = await pool.query(
+      `SELECT w.*, u.full_name as owner_name, c.name as club_name FROM weapons w
+       LEFT JOIN users u ON u.id = w.owner_id
+       LEFT JOIN clubs c ON c.id = u.club_id OR c.id = w.owner_id
+       WHERE (
+         unaccent_lower(COALESCE(w.weapon_number, '')) LIKE unaccent_lower($1)
+         OR unaccent_lower(COALESCE(w.serial_number, '')) LIKE unaccent_lower($1)
+         OR unaccent_lower(COALESCE(w.sigma_number, '')) LIKE unaccent_lower($1)
+         OR unaccent_lower(COALESCE(w.model, '')) LIKE unaccent_lower($1)
+         OR unaccent_lower(COALESCE(w.manufacturer, '')) LIKE unaccent_lower($1)
+         OR unaccent_lower(COALESCE(w.caliber, '')) LIKE unaccent_lower($1)
+         OR unaccent_lower(COALESCE(w.class, '')) LIKE unaccent_lower($1)
+         OR unaccent_lower(COALESCE(w.registry_system, '')) LIKE unaccent_lower($1)
+         OR unaccent_lower(COALESCE(u.full_name, '')) LIKE unaccent_lower($1)
+         OR unaccent_lower(COALESCE(c.name, '')) LIKE unaccent_lower($1)
+       )
+       ORDER BY 
+         CASE 
+           WHEN w.owner_id = $2 THEN 1 
+           WHEN w.owner_id = $3 THEN 2 
+           WHEN u.club_id = $3 THEN 3 
+           ELSE 4 
+         END, 
+         w.model, w.manufacturer 
+       LIMIT 50`,
+      [searchPattern, currentUser.id, targetClubId]
+    );
+    res.json({ weapons: r.rows.map(mapWeapon) });
   } catch (err) {
     console.error('Weapon search error:', err);
     res.status(500).json({ error: 'Erro ao buscar armas.' });

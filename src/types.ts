@@ -235,6 +235,8 @@ export interface Weapon {
   permissionStatus?: string; // "Status de permissão" (Permitida/Restrita)
   registrySystem?: string; // "Arma é" (Sigma/Sinarm)
   legacyId?: number;
+  ownerName?: string;
+  clubName?: string;
 }
 
 // Managed dropdown option for the weapon form's Classe/Modelo/Calibre/

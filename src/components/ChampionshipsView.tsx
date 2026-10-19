@@ -174,7 +174,7 @@ export default function ChampionshipsView({
 
   const handleSearchWeapon = async (q: string) => {
     setWeaponSearchQuery(q);
-    if (q.trim().length < 3) {
+    if (q.trim().length < 2) {
       setWeaponSearchResults([]);
       return;
     }
@@ -191,7 +191,7 @@ export default function ChampionshipsView({
         const all = weapons || [];
         const term = normalizeSearchText(q.trim());
         results = all.filter(w =>
-          normalizeSearchText(`${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`).includes(term)
+          normalizeSearchText(`${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.weaponNumber || ''} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`).includes(term)
         );
       }
       setWeaponSearchResults(results);
@@ -199,7 +199,7 @@ export default function ChampionshipsView({
       const all = weapons || [];
       const term = normalizeSearchText(q.trim());
       const matches = all.filter(w =>
-        normalizeSearchText(`${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`).includes(term)
+        normalizeSearchText(`${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.weaponNumber || ''} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`).includes(term)
       );
       setWeaponSearchResults(matches);
     } finally {
@@ -1156,10 +1156,10 @@ export default function ChampionshipsView({
                       {searchingWeapon && <span className="absolute right-3 top-3.5 text-[10px] text-blue-600 font-bold">Buscando...</span>}
                     </div>
 
-                    {weaponSearchQuery.length > 0 && weaponSearchQuery.length < 3 && (
+                    {weaponSearchQuery.length === 1 && (
                       <div className="flex justify-between items-center mt-1">
                         <p className="text-[10.5px] text-amber-600 font-medium">
-                          Digite mais {3 - weaponSearchQuery.length} caractere(s) para pesquisar...
+                          Digite mais 1 caractere para pesquisar...
                         </p>
                         <button
                           type="button"
@@ -1175,7 +1175,7 @@ export default function ChampionshipsView({
                     )}
 
                     {/* Weapon Search Results Dropdown */}
-                    {weaponSearchQuery.length >= 3 && (
+                    {weaponSearchQuery.length >= 2 && (
                       <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100">
                         {weaponSearchResults.length === 0 ? (
                           <div className="p-4 text-center space-y-2">
@@ -1200,7 +1200,8 @@ export default function ChampionshipsView({
                                 type="button"
                                 onClick={() => {
                                   setSelectedWeaponId(w.id);
-                                  setWeaponSearchQuery(`${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'}) - Sigma: ${w.sigmaNumber || 'N/A'}`.trim());
+                                  const identifier = w.weaponNumber ? `Nº ${w.weaponNumber}` : (w.sigmaNumber ? `Sigma: ${w.sigmaNumber}` : (w.serialNumber ? `Série: ${w.serialNumber}` : ''));
+                                  setWeaponSearchQuery(`${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'}) - ${identifier}`.trim());
                                   setWeaponSearchResults([]);
                                 }}
                                 className="w-full text-left p-3 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
@@ -1210,7 +1211,7 @@ export default function ChampionshipsView({
                                     {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[11px]">({w.caliber})</span>
                                   </div>
                                   <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                                    Sigma: {w.sigmaNumber || 'N/A'} | Série: {w.serialNumber || 'N/A'}
+                                    {[w.weaponNumber && `Nº ${w.weaponNumber}`, w.sigmaNumber && `Sigma: ${w.sigmaNumber}`, w.serialNumber && `Série: ${w.serialNumber}`, w.clubName && `Clube: ${w.clubName}`, w.ownerName && `Atleta: ${w.ownerName}`].filter(Boolean).join(' • ')}
                                   </div>
                                 </div>
                                 <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
@@ -1577,10 +1578,10 @@ export default function ChampionshipsView({
                       {searchingWeapon && <span className="absolute right-3 top-3.5 text-[10px] text-blue-600 font-bold">Buscando...</span>}
                     </div>
 
-                    {weaponSearchQuery.length > 0 && weaponSearchQuery.length < 3 && (
+                    {weaponSearchQuery.length === 1 && (
                       <div className="flex justify-between items-center mt-1">
                         <p className="text-[10.5px] text-amber-600 font-medium">
-                          Digite mais {3 - weaponSearchQuery.length} caractere(s) para pesquisar...
+                          Digite mais 1 caractere para pesquisar...
                         </p>
                         <button
                           type="button"
@@ -1595,7 +1596,7 @@ export default function ChampionshipsView({
                       </div>
                     )}
 
-                    {weaponSearchQuery.length >= 3 && (
+                    {weaponSearchQuery.length >= 2 && (
                       <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100">
                         {weaponSearchResults.length === 0 ? (
                           <div className="p-4 text-center space-y-2">
@@ -1620,7 +1621,8 @@ export default function ChampionshipsView({
                                 type="button"
                                 onClick={() => {
                                   setSelectedWeaponId(w.id);
-                                  setWeaponSearchQuery(`${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'}) - Sigma: ${w.sigmaNumber || 'N/A'}`.trim());
+                                  const identifier = w.weaponNumber ? `Nº ${w.weaponNumber}` : (w.sigmaNumber ? `Sigma: ${w.sigmaNumber}` : (w.serialNumber ? `Série: ${w.serialNumber}` : ''));
+                                  setWeaponSearchQuery(`${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'}) - ${identifier}`.trim());
                                   setWeaponSearchResults([]);
                                 }}
                                 className="w-full text-left p-3 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
@@ -1630,7 +1632,7 @@ export default function ChampionshipsView({
                                     {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[11px]">({w.caliber})</span>
                                   </div>
                                   <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                                    Sigma: {w.sigmaNumber || 'N/A'} | Série: {w.serialNumber || 'N/A'}
+                                    {[w.weaponNumber && `Nº ${w.weaponNumber}`, w.sigmaNumber && `Sigma: ${w.sigmaNumber}`, w.serialNumber && `Série: ${w.serialNumber}`, w.clubName && `Clube: ${w.clubName}`, w.ownerName && `Atleta: ${w.ownerName}`].filter(Boolean).join(' • ')}
                                   </div>
                                 </div>
                                 <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
@@ -2154,10 +2156,10 @@ export default function ChampionshipsView({
                       {searchingWeapon && <span className="absolute right-3 top-3.5 text-[10px] text-blue-600 font-bold">Buscando...</span>}
                     </div>
 
-                    {weaponSearchQuery.length > 0 && weaponSearchQuery.length < 3 && (
+                    {weaponSearchQuery.length === 1 && (
                       <div className="flex justify-between items-center mt-1">
                         <p className="text-[10.5px] text-amber-600 font-medium">
-                          Digite mais {3 - weaponSearchQuery.length} caractere(s) para pesquisar...
+                          Digite mais 1 caractere para pesquisar...
                         </p>
                         <button
                           type="button"
@@ -2173,7 +2175,7 @@ export default function ChampionshipsView({
                     )}
 
                     {/* Weapon Search Results Dropdown */}
-                    {weaponSearchQuery.length >= 3 && (
+                    {weaponSearchQuery.length >= 2 && (
                       <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100">
                         {weaponSearchResults.length === 0 ? (
                           <div className="p-4 text-center space-y-2">
@@ -2199,7 +2201,8 @@ export default function ChampionshipsView({
                                 onClick={() => {
                                   setMultiWeaponId(w.id);
                                   setSelectedWeaponId(w.id);
-                                  setWeaponSearchQuery(`${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'}) - Sigma: ${w.sigmaNumber || 'N/A'}`.trim());
+                                  const identifier = w.weaponNumber ? `Nº ${w.weaponNumber}` : (w.sigmaNumber ? `Sigma: ${w.sigmaNumber}` : (w.serialNumber ? `Série: ${w.serialNumber}` : ''));
+                                  setWeaponSearchQuery(`${w.manufacturer || ''} ${w.model || ''} (${w.caliber || 'Sem calibre'}) - ${identifier}`.trim());
                                   setWeaponSearchResults([]);
                                 }}
                                 className="w-full text-left p-3 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
@@ -2209,7 +2212,7 @@ export default function ChampionshipsView({
                                     {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[11px]">({w.caliber})</span>
                                   </div>
                                   <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                                    Sigma: {w.sigmaNumber || 'N/A'} | Série: {w.serialNumber || 'N/A'}
+                                    {[w.weaponNumber && `Nº ${w.weaponNumber}`, w.sigmaNumber && `Sigma: ${w.sigmaNumber}`, w.serialNumber && `Série: ${w.serialNumber}`, w.clubName && `Clube: ${w.clubName}`, w.ownerName && `Atleta: ${w.ownerName}`].filter(Boolean).join(' • ')}
                                   </div>
                                 </div>
                                 <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">

@@ -3495,7 +3495,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
     const isOpen = openWeaponFieldId === member.id;
     const query = normalizeSearchText((searchInput || '').trim());
     const filteredOwn = athleteWeapons.filter(w =>
-      !query || normalizeSearchText(`${w.model} ${w.caliber} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`).includes(query)
+      !query || normalizeSearchText(`${w.manufacturer || ''} ${w.model} ${w.caliber} ${w.weaponNumber || ''} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`).includes(query)
     );
     const extraResults = results.filter(w => !filteredOwn.some(fw => fw.id === w.id));
 
@@ -6481,6 +6481,7 @@ export default function AdminPanel({
   const DEFAULT_CLUB_WEAPON = { weaponNumber: '', sigmaNumber: '', weaponClass: '', model: '', caliber: '', manufacturer: '', registrySystem: '', permissionStatus: '' };
   const [newClubWeapon, setNewClubWeapon] = useState(DEFAULT_CLUB_WEAPON);
   const [savingClubWeapon, setSavingClubWeapon] = useState(false);
+  const [clubWeaponSearch, setClubWeaponSearch] = useState('');
 
   const handleSaveClubWeapon = async () => {
     if (!newClubWeapon.manufacturer || !newClubWeapon.model || !newClubWeapon.caliber || !currentUser?.clubId) return;
@@ -12277,10 +12278,31 @@ export default function AdminPanel({
         );
 
       case 'cadastro_armas': {
-        const clubWeapons = weapons.filter(w => w.ownerId === currentUser?.clubId);
+        const clubWeapons = currentUser?.clubId
+          ? weapons.filter(w => w.ownerId === currentUser.clubId)
+          : weapons;
+        const normalizedFilter = normalizeSearchText(clubWeaponSearch.trim());
+        const filteredClubWeapons = normalizedFilter
+          ? clubWeapons.filter(w => {
+              const fullSearch = normalizeSearchText(
+                `${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.weaponNumber || ''} ${w.serialNumber || ''} ${w.sigmaNumber || ''} ${w.weaponClass || ''} ${w.registrySystem || ''} ${w.permissionStatus || ''}`
+              );
+              return fullSearch.includes(normalizedFilter);
+            })
+          : clubWeapons;
+
         return (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-805">
-            <h3 className="font-display font-bold text-slate-900 text-base">Cadastro de Armas do Clube</h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+              <div>
+                <h3 className="font-display font-bold text-slate-900 text-base">Cadastro de Armas do Clube</h3>
+                <p className="text-xs text-slate-500">Gerencie o acervo de armas registradas no estande para uso em competições e treinos.</p>
+              </div>
+              <div className="text-xs text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 w-fit">
+                Total de armas: <span className="font-bold text-slate-800">{clubWeapons.length}</span>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-xl space-y-3">
                 <h4 className="font-bold text-xs">Registrar Arma no Estande</h4>
@@ -12322,10 +12344,47 @@ export default function AdminPanel({
               </div>
 
               {/* Weapons list */}
-              <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
-                {clubWeapons.length === 0 ? (
-                  <p className="text-xs text-slate-400 p-2.5">Nenhuma arma cadastrada para este clube ainda.</p>
-                ) : clubWeapons.map((w) => (
+              <div className="space-y-3">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={clubWeaponSearch}
+                    onChange={(e) => setClubWeaponSearch(e.target.value)}
+                    placeholder="Buscar por número, série, sigma, modelo, fabricante, calibre..."
+                    className="w-full bg-slate-50 border border-slate-200 pl-8 pr-8 py-2 rounded-lg text-xs outline-none focus:border-blue-500 focus:bg-white transition"
+                  />
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+                  {clubWeaponSearch && (
+                    <button
+                      onClick={() => setClubWeaponSearch('')}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 transition"
+                      title="Limpar busca"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {normalizedFilter && (
+                  <p className="text-[11px] text-slate-500 px-1">
+                    Listando <span className="font-bold text-slate-700">{filteredClubWeapons.length}</span> de <span className="font-bold text-slate-700">{clubWeapons.length}</span> armas
+                  </p>
+                )}
+
+                <div className="space-y-2 max-h-[440px] overflow-y-auto pr-1">
+                  {clubWeapons.length === 0 ? (
+                    <p className="text-xs text-slate-400 p-2.5">Nenhuma arma cadastrada para este clube ainda.</p>
+                  ) : filteredClubWeapons.length === 0 ? (
+                    <div className="p-4 text-center bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                      <p className="text-xs text-slate-500">Nenhuma arma encontrada para &quot;{clubWeaponSearch}&quot;.</p>
+                      <button
+                        onClick={() => setClubWeaponSearch('')}
+                        className="mt-2 text-xs text-blue-600 font-semibold hover:underline cursor-pointer"
+                      >
+                        Limpar filtro
+                      </button>
+                    </div>
+                  ) : filteredClubWeapons.map((w) => (
                   <div key={w.id} className="border border-slate-200 rounded-xl overflow-hidden">
                     {editingWeaponId === w.id ? (
                       /* ── EDIT MODE ── */
@@ -12419,6 +12478,7 @@ export default function AdminPanel({
                   </div>
                 ))}
               </div>
+            </div>
 
             </div>
           </div>
