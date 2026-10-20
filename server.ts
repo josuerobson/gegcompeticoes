@@ -2930,7 +2930,7 @@ async function applyUserProfileFields(
 
   for (const [key, column] of Object.entries(allowedColumns)) {
     if (Object.prototype.hasOwnProperty.call(payload, key)) {
-      updates.push(`${column} = ${updates.length + 1}`);
+      updates.push(`${column} = $${updates.length + 1}`);
       values.push(payload[key] ?? null);
     }
   }
@@ -2938,7 +2938,7 @@ async function applyUserProfileFields(
   if (updates.length === 0) return null;
 
   values.push(userId);
-  await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ${values.length}`, values);
+  await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${values.length}`, values);
   await recomputeUserProfileComplete(pool, userId);
 
   const fullUserRes = await pool.query(
