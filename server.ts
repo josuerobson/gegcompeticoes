@@ -1913,9 +1913,12 @@ app.post('/api/auth/login', async (req, res) => {
 // "Entrar como" (impersonação) — emite um token assinado para o usuário alvo,
 // já que o token Bearer tem prioridade no middleware de auth e trocar só o
 // x-user-id no localStorage (sem um token novo) nunca mudava a sessão de
-// verdade. master_admin pode entrar como qualquer um; admin não pode entrar
-// como outro admin/master_admin; club_admin só entra como membros do próprio
-// clube (nunca como outro admin), para nunca permitir escalada de privilégio.
+// verdade. master_admin e o club_admin da franquia dona do tenant (mesmo
+// critério de isFranchiseRootAdmin/requireFranchiseAdmin usado no resto do
+// sistema, ex. Novo Campeonato) podem entrar como qualquer um, exceto outro
+// master_admin; admin comum não entra como outro admin/master_admin; um
+// club_admin de clube filiado comum só entra como membros do próprio clube
+// (nunca como outro admin), para nunca permitir escalada de privilégio.
 app.post('/api/auth/impersonate', requireAuth, requireAdmin, async (req, res) => {
   const requester = (req as any).user as User;
   const { targetUserId } = req.body;
@@ -1939,11 +1942,19 @@ app.post('/api/auth/impersonate', requireAuth, requireAdmin, async (req, res) =>
     }
     const target = mapUser(targetRes.rows[0]);
 
-    if (requester.role === 'admin' && ADMIN_ROLES.includes(target.role)) {
-      return res.status(403).json({ error: 'Você não tem permissão para entrar como este usuário.' });
-    }
-    if (requester.role === 'club_admin' && (target.clubId !== requester.clubId || ADMIN_ROLES.includes(target.role))) {
-      return res.status(403).json({ error: 'Você só pode entrar como membros do seu próprio clube.' });
+    const requesterIsFranchiseRoot = await isFranchiseRootAdmin(requester);
+    if (requesterIsFranchiseRoot) {
+      if (target.role === 'master_admin' && requester.role !== 'master_admin') {
+        return res.status(403).json({ error: 'Você não tem permissão para entrar como este usuário.' });
+      }
+    } else if (requester.role === 'admin') {
+      if (ADMIN_ROLES.includes(target.role)) {
+        return res.status(403).json({ error: 'Você não tem permissão para entrar como este usuário.' });
+      }
+    } else if (requester.role === 'club_admin') {
+      if (target.clubId !== requester.clubId || ADMIN_ROLES.includes(target.role)) {
+        return res.status(403).json({ error: 'Você só pode entrar como membros do seu próprio clube.' });
+      }
     }
 
     const token = signToken({ userId: target.id, role: target.role, clubId: target.clubId });
