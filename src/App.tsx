@@ -338,7 +338,11 @@ export default function App() {
 
   // Builds auth headers using the current user id (or what's in localStorage during boot)
   const buildAuthHeaders = (userIdOverride?: string): HeadersInit => {
-    const h: HeadersInit = { 'Content-Type': 'application/json' };
+    const h: Record<string, string> = { 'Content-Type': 'application/json' };
+    const token = localStorage.getItem('gg_token');
+    if (token) {
+      h['Authorization'] = `Bearer ${token}`;
+    }
     const uid = userIdOverride || currentUser?.id || localStorage.getItem('gg_user_id');
     if (uid) h['x-user-id'] = uid;
     return h;
@@ -727,6 +731,9 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.user) {
+        if (data.token) {
+          localStorage.setItem('gg_token', data.token);
+        }
         setCurrentUser(data.user);
         localStorage.setItem('gg_user_id', data.user.id);
         setActiveTab('feed');
@@ -744,6 +751,7 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUser(null);
+    localStorage.removeItem('gg_token');
     localStorage.removeItem('gg_user_id');
     setSelectedProfileUser(null);
     setActiveTab('feed');
@@ -757,7 +765,10 @@ export default function App() {
     try {
       const res = await fetch('/api/uploads', {
         method: 'POST',
-        headers: { 'x-user-id': userId },
+        headers: {
+          'x-user-id': userId,
+          ...(localStorage.getItem('gg_token') ? { 'Authorization': `Bearer ${localStorage.getItem('gg_token')}` } : {})
+        },
         body: formData
       });
       return res.ok;
@@ -799,6 +810,9 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.user) {
+        if (data.token) {
+          localStorage.setItem('gg_token', data.token);
+        }
         if (docs && docs.length > 0) {
           const target = payload.type === 'clube' ? 'club' : 'user';
           await Promise.all(docs.map(d => uploadDocumentFile(data.user.id, d.kind, d.file, target)));

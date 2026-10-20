@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(security): fase 1 blindagem de dados cadastrais, privacidade de armas e correcao de mass assignment` |
-| Data/hora | 2026-10-19T22:25:00-03:00 |
+| Mensagem | `feat(security): fase 2 tokens jwt assinados com hmac-sha256, rate limiting no login e security headers` |
+| Data/hora | 2026-10-19T22:35:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,21 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Fase 2 de Segurança: Tokens Assinados (JWT/HMAC-SHA256), Rate Limiting no Login e Cabeçalhos de Segurança HTTP (`src/auth.ts`, `server.ts`, `src/App.tsx`, `src/db.ts`)**:
+  - *O que foi decidido*:
+    1. **Tokens Criptográficos de Sessão (`src/auth.ts`, `server.ts`, `src/App.tsx`)**:
+       - Implementadas as funções `signToken` e `verifyToken` utilizando HMAC-SHA256 (`crypto.createHmac`) com comparação em tempo constante (`crypto.timingSafeEqual`) contra ataques de temporização.
+       - A chave secreta de assinatura (`jwt_auth_secret`) é gerada automaticamente com 64 bytes aleatórios no primeiro boot e persistida na tabela `settings` do PostgreSQL, permanecendo 100% estável e válida entre deploys, reinicializações e novos builds do EasyPanel.
+       - No login (`POST /api/auth/login`) e no cadastro (`POST /api/auth/register`), o servidor emite o token assinado contendo `{ userId, role, clubId, exp, iat }` com validade de 30 dias.
+       - No frontend (`src/App.tsx`), o token é armazenado no `localStorage` (`gg_token`) e enviado via cabeçalho `Authorization: Bearer <token>`. O middleware do servidor prioriza o token verificado, mantendo suporte transparente de transição para o cabeçalho `x-user-id`.
+    2. **Rate Limiting e Bloqueio de Força Bruta no Login (`server.ts`)**:
+       - Implementado limitador de taxa nativo em memória por IP e CPF.
+       - Após 5 tentativas incorretas consecutivas no período de 15 minutos, o acesso é temporariamente bloqueado por 15 minutos, retornando HTTP 429 Too Many Requests com mensagem clara e contador de segundos restantes para nova tentativa. Tentativas bem-sucedidas limpam imediatamente o contador.
+    3. **Cabeçalhos de Segurança HTTP (Hardening)**:
+       - Injetados cabeçalhos de proteção em todas as respostas Express: `X-Content-Type-Options: nosniff` (prevenção de MIME-sniffing), `X-Frame-Options: SAMEORIGIN` (prevenção de Clickjacking), `X-XSS-Protection: 1; mode=block`, `Referrer-Policy: strict-origin-when-cross-origin` e `Permissions-Policy: camera=(), microphone=(), geolocation=()`.
+  - *Por que*: O usuário solicitou o avanço para a Fase 2 de segurança para eliminar a fragilidade do cabeçalho cru `x-user-id`, prevenir ataques de força bruta contra senhas de atletas/diretores e blindar as respostas HTTP do servidor.
+  - *O que NÃO fazer*: Não depender de chaves estáticas inseguras no código ou perder a chave entre restarts.
 
 - **Fase 1 de Segurança de Dados e Conformidade LGPD/CAC (`server.ts`, `src/db.ts`)**:
   - *O que foi decidido*:

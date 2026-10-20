@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import pg from 'pg';
 import { defaultUsers, defaultPosts, defaultClubs, defaultWeapons } from './data/mockData.js';
 import { hashPassword } from './auth.js';
@@ -936,6 +937,13 @@ export async function initDB() {
         value TEXT NOT NULL
       );
     `);
+
+    // Chave secreta de autenticação e assinatura de tokens JWT
+    const existingSecret = await client.query(`SELECT value FROM settings WHERE key = 'jwt_auth_secret'`);
+    if (existingSecret.rows.length === 0) {
+      const generatedSecret = crypto.randomBytes(64).toString('hex');
+      await client.query(`INSERT INTO settings (key, value) VALUES ('jwt_auth_secret', $1) ON CONFLICT (key) DO NOTHING`, [generatedSecret]);
+    }
 
     // Integração de pagamento (Sicoob PIX) é uma configuração por clube/tenant
     // — cada clube usa sua própria conta bancária/CNPJ, não uma credencial

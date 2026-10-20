@@ -8,7 +8,7 @@ import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
 import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, MultiChampionshipItem, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan, AnnuityCharge, RankingHighlight, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult, LegacyMultiDiscount } from './src/types.js';
 import { pool, initDB } from './src/db.js';
-import { hashPassword, verifyPassword } from './src/auth.js';
+import { hashPassword, verifyPassword, signToken, verifyToken, setAuthSecret } from './src/auth.js';
 import { uploadDocument, getDocumentStream, storageEnabled } from './src/storage.js';
 import {
   getMercadoPagoConfig, mercadoPagoEnvFromToken, maskAccessToken,
@@ -28,6 +28,80 @@ const PORT = 3000;
 // Respostas JSON de listas grandes (usuários, inscrições, clubes com logos em
 // base64) saem sem compressão hoje — isso sozinho corta boa parte do peso.
 app.use(compression());
+
+// ---------------------------------------------------------------------------
+// HTTP Security Headers (Proteção contra Clickjacking, MIME-Sniffing e XSS)
+// ---------------------------------------------------------------------------
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
+
+// ---------------------------------------------------------------------------
+// Proteção contra Força Bruta no Login (Rate Limiting por IP + CPF)
+// ---------------------------------------------------------------------------
+interface LoginAttempt {
+  count: number;
+  firstAttempt: number;
+  blockedUntil?: number;
+}
+
+const loginAttempts = new Map<string, LoginAttempt>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, attempt] of loginAttempts.entries()) {
+    if (now - attempt.firstAttempt > 15 * 60 * 1000 && (!attempt.blockedUntil || now > attempt.blockedUntil)) {
+      loginAttempts.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
+
+function getClientIp(req: express.Request): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string') {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.socket.remoteAddress || 'unknown-ip';
+}
+
+function checkLoginRateLimit(ip: string, cleanCpf: string): { allowed: boolean; waitSeconds?: number } {
+  const now = Date.now();
+  const key = `${ip}_${cleanCpf}`;
+  const attempt = loginAttempts.get(key) || loginAttempts.get(ip);
+  if (attempt && attempt.blockedUntil && attempt.blockedUntil > now) {
+    const waitSeconds = Math.ceil((attempt.blockedUntil - now) / 1000);
+    return { allowed: false, waitSeconds };
+  }
+  return { allowed: true };
+}
+
+function recordFailedLogin(ip: string, cleanCpf: string) {
+  const now = Date.now();
+  const key = `${ip}_${cleanCpf}`;
+  const existing = loginAttempts.get(key) || { count: 0, firstAttempt: now };
+  if (now - existing.firstAttempt > 15 * 60 * 1000) {
+    existing.count = 1;
+    existing.firstAttempt = now;
+    delete existing.blockedUntil;
+  } else {
+    existing.count += 1;
+  }
+  if (existing.count >= 5) {
+    existing.blockedUntil = now + 15 * 60 * 1000;
+  }
+  loginAttempts.set(key, existing);
+  loginAttempts.set(ip, existing);
+}
+
+function recordSuccessfulLogin(ip: string, cleanCpf: string) {
+  loginAttempts.delete(`${ip}_${cleanCpf}`);
+  loginAttempts.delete(ip);
+}
 
 // Fields a member profile needs to be considered complete for championship
 // registration. Computed live from the row on every read (not trusted from
@@ -734,9 +808,29 @@ function saveBase64ImageToDisk(base64Data: string, prefix: string): string {
   return base64Data;
 }
 
-// Auth middleware - reads client user context from header for stateless simple authentication
+// Auth middleware - prioriza Token Bearer assinado com HMAC-SHA256, com fallback de transição para x-user-id
 app.use(async (req, res, next) => {
-  const userId = req.headers['x-user-id'] as string;
+  let userId: string | undefined;
+
+  // 1. Prioridade máxima: Token Bearer assinado
+  const authHeader = req.headers['authorization'];
+  if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    const rawToken = authHeader.slice(7).trim();
+    const tokenPayload = verifyToken(rawToken);
+    if (tokenPayload?.userId) {
+      userId = tokenPayload.userId;
+      (req as any).tokenVerified = true;
+    }
+  }
+
+  // 2. Fallback de transição
+  if (!userId) {
+    const headerUid = req.headers['x-user-id'] as string;
+    if (headerUid) {
+      userId = headerUid;
+    }
+  }
+
   if (userId) {
     try {
       const userRes = await pool.query(
@@ -1776,7 +1870,18 @@ app.post('/api/auth/login', async (req, res) => {
   }
 
   const cleanCpf = String(cpf).replace(/\D/g, '');
-  const invalidCredentials = () => res.status(401).json({ error: 'CPF ou senha inválidos.' });
+  const clientIp = getClientIp(req);
+  const rateCheck = checkLoginRateLimit(clientIp, cleanCpf);
+  if (!rateCheck.allowed) {
+    return res.status(429).json({
+      error: `Muitas tentativas incorretas de login. Por favor, aguarde ${rateCheck.waitSeconds} segundos antes de tentar novamente.`
+    });
+  }
+
+  const invalidCredentials = () => {
+    recordFailedLogin(clientIp, cleanCpf);
+    return res.status(401).json({ error: 'CPF ou senha inválidos.' });
+  };
 
   try {
     const userRes = await pool.query(
@@ -1795,7 +1900,10 @@ app.post('/api/auth/login', async (req, res) => {
       return invalidCredentials();
     }
 
-    res.json({ user: mapUser(userRes.rows[0]) });
+    recordSuccessfulLogin(clientIp, cleanCpf);
+    const user = mapUser(userRes.rows[0]);
+    const token = signToken({ userId: user.id, role: user.role, clubId: user.clubId });
+    res.json({ user, token });
   } catch (err) {
     console.error('Login database error:', err);
     res.status(500).json({ error: 'Erro interno ao realizar login.' });
@@ -1884,7 +1992,9 @@ app.post('/api/auth/register', async (req, res) => {
           `SELECT u.*, '[]'::json as followers, '[]'::json as following FROM users u WHERE id = $1`,
           [userId]
         );
-        return res.status(201).json({ user: mapUser(fullUserRes.rows[0]) });
+        const newUser = mapUser(fullUserRes.rows[0]);
+        const token = signToken({ userId: newUser.id, role: newUser.role, clubId: newUser.clubId });
+        return res.status(201).json({ user: newUser, token });
       } catch (e) {
         await client.query('ROLLBACK');
         throw e;
@@ -1940,7 +2050,9 @@ app.post('/api/auth/register', async (req, res) => {
         `SELECT u.*, '[]'::json as followers, '[]'::json as following FROM users u WHERE id = $1`,
         [userId]
       );
-      res.status(201).json({ user: mapUser(fullUserRes.rows[0]) });
+      const newUser = mapUser(fullUserRes.rows[0]);
+      const token = signToken({ userId: newUser.id, role: newUser.role, clubId: newUser.clubId });
+      res.status(201).json({ user: newUser, token });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
@@ -8976,6 +9088,14 @@ async function startServer() {
   try {
     await initDB();
     console.log('PostgreSQL database initialized successfully.');
+    try {
+      const secretRes = await pool.query(`SELECT value FROM settings WHERE key = 'jwt_auth_secret'`);
+      if (secretRes.rows.length > 0 && secretRes.rows[0].value) {
+        setAuthSecret(secretRes.rows[0].value);
+      }
+    } catch (e) {
+      console.warn('Could not load jwt_auth_secret from settings:', e);
+    }
   } catch (err) {
     console.error('Critical: Failed to initialize PostgreSQL database:', err);
     process.exit(1);
