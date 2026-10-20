@@ -153,21 +153,51 @@ export default function App() {
     if (!id) return null;
     return { id, name: localStorage.getItem('gg_impersonator_name') || 'Administrador' };
   });
-  const handleLoginAs = (userId: string) => {
+  const handleLoginAs = async (userId: string) => {
     if (!currentUser || userId === currentUser.id) return;
-    if (!localStorage.getItem('gg_impersonator_id')) {
-      localStorage.setItem('gg_impersonator_id', currentUser.id);
-      localStorage.setItem('gg_impersonator_name', currentUser.fullName || currentUser.username || 'Administrador');
+    try {
+      const token = localStorage.getItem('gg_token');
+      const res = await fetch('/api/auth/impersonate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          'x-user-id': currentUser.id,
+        },
+        body: JSON.stringify({ targetUserId: userId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.token) {
+        alert(data.error || 'Não foi possível entrar como este usuário.');
+        return;
+      }
+      // Só grava o impersonador na primeira troca — nunca sobrescreve um que
+      // já esteja salvo, para não perder o caminho de volta ao aninhar.
+      if (!localStorage.getItem('gg_impersonator_id')) {
+        localStorage.setItem('gg_impersonator_id', currentUser.id);
+        localStorage.setItem('gg_impersonator_name', currentUser.fullName || currentUser.username || 'Administrador');
+        localStorage.setItem('gg_impersonator_token', token || '');
+      }
+      localStorage.setItem('gg_token', data.token);
+      localStorage.setItem('gg_user_id', userId);
+      window.location.reload();
+    } catch {
+      alert('Erro de conexão ao tentar entrar como este usuário.');
     }
-    localStorage.setItem('gg_user_id', userId);
-    window.location.reload();
   };
   const handleReturnToAdmin = () => {
     const id = localStorage.getItem('gg_impersonator_id');
     if (!id) return;
+    const token = localStorage.getItem('gg_impersonator_token');
     localStorage.setItem('gg_user_id', id);
+    if (token) {
+      localStorage.setItem('gg_token', token);
+    } else {
+      localStorage.removeItem('gg_token');
+    }
     localStorage.removeItem('gg_impersonator_id');
     localStorage.removeItem('gg_impersonator_name');
+    localStorage.removeItem('gg_impersonator_token');
     window.location.reload();
   };
   const [users, setUsers] = useState<User[]>([]);

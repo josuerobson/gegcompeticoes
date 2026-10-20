@@ -1910,6 +1910,50 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// "Entrar como" (impersonação) — emite um token assinado para o usuário alvo,
+// já que o token Bearer tem prioridade no middleware de auth e trocar só o
+// x-user-id no localStorage (sem um token novo) nunca mudava a sessão de
+// verdade. master_admin pode entrar como qualquer um; admin não pode entrar
+// como outro admin/master_admin; club_admin só entra como membros do próprio
+// clube (nunca como outro admin), para nunca permitir escalada de privilégio.
+app.post('/api/auth/impersonate', requireAuth, requireAdmin, async (req, res) => {
+  const requester = (req as any).user as User;
+  const { targetUserId } = req.body;
+  if (!targetUserId || typeof targetUserId !== 'string') {
+    return res.status(400).json({ error: 'targetUserId é obrigatório.' });
+  }
+  if (targetUserId === requester.id) {
+    return res.status(400).json({ error: 'Você já está logado como este usuário.' });
+  }
+
+  try {
+    const targetRes = await pool.query(
+      `SELECT u.*,
+        COALESCE((SELECT json_agg(follower_id) FROM follows WHERE following_id = u.id), '[]'::json) as followers,
+        COALESCE((SELECT json_agg(following_id) FROM follows WHERE follower_id = u.id), '[]'::json) as following
+      FROM users u WHERE u.id = $1`,
+      [targetUserId]
+    );
+    if (targetRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+    const target = mapUser(targetRes.rows[0]);
+
+    if (requester.role === 'admin' && ADMIN_ROLES.includes(target.role)) {
+      return res.status(403).json({ error: 'Você não tem permissão para entrar como este usuário.' });
+    }
+    if (requester.role === 'club_admin' && (target.clubId !== requester.clubId || ADMIN_ROLES.includes(target.role))) {
+      return res.status(403).json({ error: 'Você só pode entrar como membros do seu próprio clube.' });
+    }
+
+    const token = signToken({ userId: target.id, role: target.role, clubId: target.clubId });
+    res.json({ user: target, token });
+  } catch (err) {
+    console.error('Impersonate database error:', err);
+    res.status(500).json({ error: 'Erro interno ao tentar entrar como este usuário.' });
+  }
+});
+
 const COMBINING_DIACRITICS_PATTERN = new RegExp('[' + String.fromCharCode(0x0300) + '-' + String.fromCharCode(0x036f) + ']', 'g');
 
 function slugify(name: string): string {
