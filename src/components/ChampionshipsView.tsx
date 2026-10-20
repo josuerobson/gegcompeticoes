@@ -159,7 +159,8 @@ export default function ChampionshipsView({
     caliber: '',
     manufacturer: '',
     registrySystem: '',
-    permissionStatus: ''
+    permissionStatus: '',
+    ownerType: 'propria' as 'propria' | 'clube'
   });
   const [savingWeapon, setSavingWeapon] = useState(false);
   const [showProfileIncompleteNotice, setShowProfileIncompleteNotice] = useState(false);
@@ -220,7 +221,7 @@ export default function ChampionshipsView({
     setSavingWeapon(true);
     try {
       await onAddWeapon({
-        ownerId: currentUser?.id,
+        ownerId: (newWeaponData.ownerType === 'clube' && currentUser?.clubId) ? currentUser.clubId : currentUser?.id,
         manufacturer,
         model,
         caliber,
@@ -263,7 +264,8 @@ export default function ChampionshipsView({
         caliber: '',
         manufacturer: '',
         registrySystem: '',
-        permissionStatus: ''
+        permissionStatus: '',
+    ownerType: 'propria' as 'propria' | 'clube'
       });
       setShowAddWeapon(false);
       setWeaponSearchResults([]);
@@ -1368,6 +1370,35 @@ export default function ChampionshipsView({
               </div>
 
               <form onSubmit={handleSaveNewWeapon} className="space-y-3 text-xs">
+                {isClubAccount && (
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Vincular arma a quem?</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewWeaponData(prev => ({ ...prev, ownerType: 'propria' }))}
+                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                          newWeaponData.ownerType === 'propria'
+                            ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-xs'
+                            : 'bg-white border-slate-200 text-slate-600'
+                        }`}
+                      >
+                        🎯 Minha Arma
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewWeaponData(prev => ({ ...prev, ownerType: 'clube' }))}
+                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                          newWeaponData.ownerType === 'clube'
+                            ? 'bg-purple-50 border-purple-500 text-purple-700 shadow-xs'
+                            : 'bg-white border-slate-200 text-slate-600'
+                        }`}
+                      >
+                        🏛️ Acervo do Clube
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {/* Número da arma & Número Sigma */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>

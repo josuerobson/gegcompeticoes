@@ -2848,7 +2848,7 @@ app.patch('/api/users/me/profile', requireAuth, async (req, res) => {
 app.patch('/api/admin/members/:id/profile', requireAdmin, async (req, res) => {
   const currentUser = (req as any).user as User;
   const memberId = req.params.id;
-  const { clubId: bodyClubId, cpf: bodyCpf, email: bodyEmail, ...profileFields } = req.body;
+  const { clubId: bodyClubId, cpf: bodyCpf, email: bodyEmail, newPassword: bodyNewPassword, ...profileFields } = req.body;
   const isFranchiseAdmin = await isFranchiseRootAdmin(currentUser);
 
   try {
@@ -2856,14 +2856,12 @@ app.patch('/api/admin/members/:id/profile', requireAdmin, async (req, res) => {
     if (memberCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Membro não encontrado.' });
     }
-    if (!isFranchiseAdmin && memberCheck.rows[0].club_id !== currentUser.clubId) {
+    const isMemberOfMyClub = memberCheck.rows[0].club_id === currentUser.clubId;
+    if (!isFranchiseAdmin && !isMemberOfMyClub) {
       return res.status(403).json({ error: 'Este membro não pertence ao seu clube.' });
     }
 
-    // Trocar de clube / editar CPF / editar e-mail são exclusivos de quem gerencia
-    // a franquia (master_admin ou o club_admin dono do tenant, tela "Novo Atleta"
-    // em Gerenciamento Plataforma) — fora do whitelist compartilhado com "Meu
-    // Cadastro", que nunca deixa o próprio membro mudá-los.
+    // Trocar de clube / rede permanece restrito a administradores da franquia/master_admin
     if (isFranchiseAdmin && bodyClubId && bodyClubId !== memberCheck.rows[0].club_id) {
       const clubCheckRes = await pool.query('SELECT 1 FROM clubs WHERE id = $1', [bodyClubId]);
       if (clubCheckRes.rows.length === 0) {
@@ -2871,7 +2869,11 @@ app.patch('/api/admin/members/:id/profile', requireAdmin, async (req, res) => {
       }
       await pool.query('UPDATE users SET club_id = $1 WHERE id = $2', [bodyClubId, memberId]);
     }
-    if (isFranchiseAdmin && bodyCpf) {
+
+    // Gestores da franquia E o clube parceiro ao qual o membro é filiado têm acesso total para editar CPF, E-mail e Senha
+    const canManageAccount = isFranchiseAdmin || isMemberOfMyClub;
+
+    if (canManageAccount && bodyCpf) {
       const cleanCpf = String(bodyCpf).replace(/\D/g, '');
       const conflictRes = await pool.query(
         `SELECT 1 FROM users WHERE regexp_replace(cpf, '[^0-9]', '', 'g') = $1 AND id != $2`,
@@ -2882,18 +2884,24 @@ app.patch('/api/admin/members/:id/profile', requireAdmin, async (req, res) => {
       }
       await pool.query('UPDATE users SET cpf = $1 WHERE id = $2', [bodyCpf, memberId]);
     }
-    if (isFranchiseAdmin && bodyEmail) {
-      const conflictRes = await pool.query('SELECT 1 FROM users WHERE email = $1 AND id != $2', [bodyEmail, memberId]);
+    if (canManageAccount && bodyEmail) {
+      const cleanEmail = String(bodyEmail).trim().toLowerCase();
+      const conflictRes = await pool.query('SELECT 1 FROM users WHERE LOWER(email) = $1 AND id != $2', [cleanEmail, memberId]);
       if (conflictRes.rows.length > 0) {
         return res.status(400).json({ error: 'Já existe outro usuário cadastrado com este e-mail.' });
       }
-      await pool.query('UPDATE users SET email = $1 WHERE id = $2', [bodyEmail, memberId]);
+      await pool.query('UPDATE users SET email = $1 WHERE id = $2', [cleanEmail, memberId]);
+    }
+    if (canManageAccount && bodyNewPassword) {
+      const newPass = String(bodyNewPassword).trim();
+      if (newPass.length < 4) {
+        return res.status(400).json({ error: 'A senha deve ter no mínimo 4 caracteres.' });
+      }
+      await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hashPassword(newPass), memberId]);
     }
 
-    const user = await applyUserProfileFields(memberId, profileFields);
-    if (user) return res.json({ user });
+    await applyUserProfileFields(memberId, profileFields);
 
-    // Nenhum campo do whitelist de perfil mudou, mas clube/CPF/e-mail podem ter mudado.
     const fullUserRes = await pool.query(
       `SELECT u.*,
         COALESCE((SELECT json_agg(follower_id) FROM follows WHERE following_id = u.id), '[]'::json) as followers,
@@ -4560,13 +4568,21 @@ app.post('/api/weapons', requireAuth, async (req, res) => {
     if (currentUser.role === 'master_admin') {
       resolvedOwnerId = ownerId;
     } else if (ADMIN_ROLES.includes(currentUser.role) && currentUser.clubId) {
-      resolvedOwnerId = currentUser.clubId;
+      if (ownerId === currentUser.clubId) {
+        resolvedOwnerId = currentUser.clubId;
+      } else {
+        const targetMember = await pool.query('SELECT club_id FROM users WHERE id = $1', [ownerId]);
+        if (targetMember.rows.length > 0 && targetMember.rows[0].club_id === currentUser.clubId) {
+          resolvedOwnerId = ownerId;
+        } else {
+          resolvedOwnerId = currentUser.clubId;
+        }
+      }
     }
   }
 
-  // "Registro" isn't part of the real Cadastro de Armas form — derive it from
-  // whichever identifier the club actually filled in.
-  const resolvedSerialNumber = serialNumber || sigmaNumber || weaponNumber || `SIGMA-${Date.now()}`;
+  // Prioriza o número de série / número da arma real quando preenchido
+  const resolvedSerialNumber = serialNumber || weaponNumber || sigmaNumber || `SIGMA-${Date.now()}`;
 
   const newWeapon: Weapon = {
     id: `weapon_${Date.now()}`,

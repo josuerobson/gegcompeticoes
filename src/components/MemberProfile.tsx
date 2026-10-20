@@ -1690,6 +1690,7 @@ export default function MemberProfile({
       if (rawDate < startDate || rawDate > endDate) return;
 
       const champ = championships.find(c => c.id === reg.championshipId);
+      const stage = stages.find(st => st.id === reg.stageId);
       const w = weapons.find(wpn => wpn.id === reg.weaponId);
 
       const dateFormatted = rawDate.toLocaleDateString('pt-BR');

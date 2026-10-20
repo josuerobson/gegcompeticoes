@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix: padroniza exibicao de serie e sigma em evidencia na selecao de armas e corrige update de arma` |
-| Data/hora | 2026-10-19T19:15:00-03:00 |
+| Mensagem | `feat: adiciona botao cadastrar nova arma na inscricao e edicao completa de membros pelo clube parceiro` |
+| Data/hora | 2026-10-19T21:30:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,22 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Botão "Cadastrar Nova Arma" em Todas as Inscrições e Edição Completa de Membros pelo Clube Parceiro (`server.ts`, `src/components/AdminPanel.tsx`, `src/components/ChampionshipsView.tsx`)**:
+  - *O que foi decidido*:
+    1. **Botão "Cadastrar nova arma" na Inscrição quando a arma não for localizada e em destaque permanente**:
+       - Em todas as telas e locais de inscrição que exigem seleção de arma (Inscrição Individual em `ChampionshipsView.tsx`, Inscrição em Lote do Clube `InscricaoClubePanel` e Inscrição IDSC `IdscInscricaoPanel` em `AdminPanel.tsx`):
+       - Quando a busca não encontra nenhuma arma cadastrada, é exibido o alerta e o botão destacado em azul "+ Cadastrar nova arma" diretamente no mesmo campo, permitindo ao atleta ou clube cadastrar a arma na hora.
+       - Quando já existem armas encontradas, é exibido no rodapé do seletor a opção "Arma não encontrada? Cadastrar nova arma".
+       - Criada a modal reutilizável `QuickAddWeaponModal` (e no modal inline de `ChampionshipsView.tsx`), permitindo selecionar o proprietário da arma: "🎯 Arma do Atleta" (atribuída ao atleta da inscrição) ou "🏛️ Acervo do Clube" (atribuída ao acervo institucional do clube). Ao salvar via `POST /api/weapons`, a arma recém-criada é instantaneamente selecionada para a inscrição daquele atleta, os campos são preenchidos com o rótulo padrão em evidência (Série e SIGMA) e o checkbox de inclusão do atleta é automaticamente marcado.
+    2. **Acesso Total e Edição de Membros pelo Clube Parceiro (`AdminPanel.tsx` e `server.ts`)**:
+       - No backend (`server.ts`), atualizado o endpoint `PATCH /api/admin/members/:id/profile` para que tanto administradores da franquia quanto clubes parceiros (`club_admin`) possam editar livremente os dados completos dos atletas pertencentes ao clube, incluindo **CPF**, **E-mail** e redefinição de **Senha** (`newPassword` criptografada com `scrypt`), com validação de duplicidade de CPF e e-mail.
+       - No frontend (`AdminPanel.tsx` em "Cadastrar Membros"):
+         - Na listagem "Membros do Clube", adicionado botão explícito **"Editar"** com ícone de lápis em cada cartão de atleta, permitindo selecionar o membro e rolar suavemente até o formulário `#member-edit-card`.
+         - Adicionada a seção de destaque **"Acesso e Login (CPF, E-mail e Senha)"** no topo do formulário de edição, permitindo ao clube visualizar e alterar o CPF e o e-mail do atleta, além de redefinir sua senha de acesso.
+         - Adicionado o campo E-mail na seção "Contato" e banner superior com o status do cadastro e identificação clara do atleta em edição.
+  - *Por que*: O cliente solicitou que quando o sistema não localizar a arma pesquisada durante a inscrição, seja oferecido diretamente no campo o botão "Cadastrar nova arma" para atletas e clubes parceiros. E também solicitou que o clube parceiro logado tenha acesso total aos dados de seus membros atribuídos, podendo editar e preencher todas as informações com um botão explícito "Editar".
+  - *O que NÃO fazer*: Não permitir que um clube parceiro edite membros que não pertençam ao seu clube.
 
 - **Padronização Visual de Armas com Nº de Série e SIGMA em Evidência e Correção de Edição de Armas (`server.ts`, `src/utils/textSearch.ts`, `src/components/AdminPanel.tsx`, `src/components/ChampionshipsView.tsx`, `src/components/MemberProfile.tsx`)**:
   - *O que foi decidido*:

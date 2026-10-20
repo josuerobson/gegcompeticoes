@@ -720,6 +720,337 @@ function ChampExtraFields({ values, onChange }: { values: ChampExtraState; onCha
 }
 
 // =============================================================================
+// QuickAddWeaponModal — Modal rápido para cadastrar arma durante a inscrição
+// =============================================================================
+interface QuickAddWeaponModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  member: User | null;
+  initialSearch?: string;
+  currentUser: User | null;
+  weaponLookupOptions?: WeaponLookupOption[];
+  onWeaponCreated: (weapon: Weapon, formattedLabel: string) => void;
+}
+
+function QuickAddWeaponModal({
+  isOpen,
+  onClose,
+  member,
+  initialSearch = '',
+  currentUser,
+  weaponLookupOptions = [],
+  onWeaponCreated,
+}: QuickAddWeaponModalProps) {
+  const [ownerType, setOwnerType] = React.useState<'atleta' | 'clube'>('atleta');
+  const [weaponNumber, setWeaponNumber] = React.useState('');
+  const [sigmaNumber, setSigmaNumber] = React.useState('');
+  const [weaponClass, setWeaponClass] = React.useState('');
+  const [manufacturer, setManufacturer] = React.useState('');
+  const [model, setModel] = React.useState('');
+  const [caliber, setCaliber] = React.useState('');
+  const [registrySystem, setRegistrySystem] = React.useState('SIGMA');
+  const [permissionStatus, setPermissionStatus] = React.useState('Permitido');
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setOwnerType('atleta');
+      setError('');
+      const trimmed = (initialSearch || '').trim();
+      setModel(trimmed);
+      setWeaponNumber('');
+      setSigmaNumber('');
+      setWeaponClass('');
+      setManufacturer('');
+      setCaliber('');
+      setRegistrySystem('SIGMA');
+      setPermissionStatus('Permitido');
+    }
+  }, [isOpen, initialSearch]);
+
+  if (!isOpen) return null;
+
+  const lookup = (kind: string) => weaponLookupOptions.filter(o => o.kind === kind);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manufacturer.trim() || !model.trim() || !caliber.trim()) {
+      setError('Fabricante, Modelo e Calibre são obrigatórios.');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    try {
+      const targetOwnerId = ownerType === 'clube' ? currentUser?.clubId : (member?.id || currentUser?.id);
+      const res = await fetch('/api/weapons', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser?.id || '',
+        },
+        body: JSON.stringify({
+          ownerId: targetOwnerId,
+          manufacturer: manufacturer.trim(),
+          model: model.trim(),
+          caliber: caliber.trim(),
+          weaponNumber: weaponNumber.trim() || undefined,
+          sigmaNumber: sigmaNumber.trim() || undefined,
+          serialNumber: weaponNumber.trim() || sigmaNumber.trim() || undefined,
+          weaponClass: weaponClass || undefined,
+          registrySystem: registrySystem || undefined,
+          permissionStatus: permissionStatus || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao cadastrar arma.');
+      }
+
+      const createdWeapon = data.weapon;
+      const formatted = formatWeaponLabel(createdWeapon);
+      onWeaponCreated(createdWeapon, formatted);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao salvar arma.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white max-w-lg w-full rounded-2xl shadow-2xl overflow-hidden text-slate-800 p-6 space-y-4 text-left border border-slate-100 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+              <PlusCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="font-bold text-slate-900 text-sm">Cadastrar Nova Arma na Inscrição</h4>
+              {member && (
+                <p className="text-[11px] text-slate-500">
+                  Atleta: <span className="font-semibold text-slate-800">{member.fullName}</span> {member.cpf ? `(${member.cpf})` : ''}
+                </p>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {error && (
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 px-3 py-2 rounded-xl text-xs font-semibold">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+          {/* Owner Selector */}
+          <div>
+            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Vincular arma a quem?</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setOwnerType('atleta')}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                  ownerType === 'atleta'
+                    ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-xs'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                🎯 Arma do Atleta
+              </button>
+              <button
+                type="button"
+                onClick={() => setOwnerType('clube')}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                  ownerType === 'clube'
+                    ? 'bg-purple-50 border-purple-500 text-purple-700 shadow-xs'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                🏛️ Acervo do Clube
+              </button>
+            </div>
+          </div>
+
+          {/* Número de Série / Número da Arma & SIGMA */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                Nº de Série / Nº da Arma
+              </label>
+              <input
+                type="text"
+                placeholder="Ex: AGL584781"
+                value={weaponNumber}
+                onChange={e => setWeaponNumber(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-mono font-bold text-slate-800"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                Nº SIGMA
+              </label>
+              <input
+                type="text"
+                placeholder="Ex: 2002911378"
+                value={sigmaNumber}
+                onChange={e => setSigmaNumber(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-mono font-bold text-slate-800"
+              />
+            </div>
+          </div>
+
+          {/* Classe */}
+          <div>
+            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Classe da Arma</label>
+            <select
+              value={weaponClass}
+              onChange={e => setWeaponClass(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-semibold text-slate-700"
+            >
+              <option value="">Selecione a classe...</option>
+              {lookup('classe').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
+              {!lookup('classe').some(o => o.label === 'Pistola') && <option value="Pistola">Pistola</option>}
+              {!lookup('classe').some(o => o.label === 'Revólver') && <option value="Revólver">Revólver</option>}
+              {!lookup('classe').some(o => o.label === 'Carabina') && <option value="Carabina">Carabina</option>}
+              {!lookup('classe').some(o => o.label === 'Fuzil') && <option value="Fuzil">Fuzil</option>}
+              {!lookup('classe').some(o => o.label === 'Espingarda') && <option value="Espingarda">Espingarda</option>}
+            </select>
+          </div>
+
+          {/* Fabricante e Modelo */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                Fabricante <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                list="quick-manufacturers-list"
+                placeholder="Ex: TAURUS, IMBEL, GLOCK..."
+                value={manufacturer}
+                onChange={e => setManufacturer(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-semibold text-slate-800"
+                required
+              />
+              <datalist id="quick-manufacturers-list">
+                {lookup('fabricante').map(o => <option key={o.id} value={o.label} />)}
+                <option value="TAURUS" />
+                <option value="IMBEL" />
+                <option value="GLOCK" />
+                <option value="CBC" />
+                <option value="BOITO" />
+                <option value="CZ" />
+                <option value="BERETTA" />
+                <option value="COLT" />
+                <option value="SMITH & WESSON" />
+              </datalist>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                Modelo <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                list="quick-models-list"
+                placeholder="Ex: TS9, PT 58 HC PLUS, G17..."
+                value={model}
+                onChange={e => setModel(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-semibold text-slate-800"
+                required
+              />
+              <datalist id="quick-models-list">
+                {lookup('modelo').map(o => <option key={o.id} value={o.label} />)}
+              </datalist>
+            </div>
+          </div>
+
+          {/* Calibre */}
+          <div>
+            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+              Calibre <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              list="quick-calibers-list"
+              placeholder="Ex: 9mm, .380 Auto, .40 S&W, .45 ACP, .38 SPL, 12 GA..."
+              value={caliber}
+              onChange={e => setCaliber(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-semibold text-slate-800"
+              required
+            />
+            <datalist id="quick-calibers-list">
+              {lookup('calibre').map(o => <option key={o.id} value={o.label} />)}
+              <option value="9mm" />
+              <option value=".380 Auto" />
+              <option value=".40 S&W" />
+              <option value=".45 ACP" />
+              <option value=".38 SPL" />
+              <option value=".357 Mag" />
+              <option value=".22 LR" />
+              <option value="12 GA" />
+            </datalist>
+          </div>
+
+          {/* Sistema de Registro & Status */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Sistema de Registro</label>
+              <select
+                value={registrySystem}
+                onChange={e => setRegistrySystem(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-semibold text-slate-700"
+              >
+                <option value="SIGMA">SIGMA (Exército)</option>
+                <option value="SINARM">SINARM (Polícia Federal)</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Status de Permissão</label>
+              <select
+                value={permissionStatus}
+                onChange={e => setPermissionStatus(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-semibold text-slate-700"
+              >
+                <option value="Permitido">Uso Permitido</option>
+                <option value="Restrito">Uso Restrito</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-blue-200"
+            >
+              {saving ? 'Cadastrando...' : 'Cadastrar e Vincular Arma'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // InscricaoClubePanel — Inscrição em lote para atletas do clube
 // =============================================================================
 interface InscricaoClubePanelProps {
@@ -732,9 +1063,10 @@ interface InscricaoClubePanelProps {
   onPrefillApplied?: () => void;
   registrations?: Registration[];
   onRefreshData?: () => Promise<void>;
+  weaponLookupOptions?: WeaponLookupOption[];
 }
 
-function InscricaoClubePanel({ championships, stages, modalities, currentUser, multiChampionships = [], initialPrefill, onPrefillApplied, registrations = [], onRefreshData }: InscricaoClubePanelProps) {
+function InscricaoClubePanel({ championships, stages, modalities, currentUser, multiChampionships = [], initialPrefill, onPrefillApplied, registrations = [], onRefreshData, weaponLookupOptions = [] }: InscricaoClubePanelProps) {
   const [mode, setMode] = React.useState<'individual' | 'multi'>(() => initialPrefill?.mode || 'individual');
   const [champId, setChampId] = React.useState(() => initialPrefill?.mode === 'individual' ? initialPrefill.championshipId : '');
   const [stageId, setStageId] = React.useState(() => initialPrefill?.mode === 'individual' ? initialPrefill.stageId : '');
@@ -765,6 +1097,11 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
   const [weaponModalMemberId, setWeaponModalMemberId] = React.useState<string | null>(null);
   // Campo único de arma: qual atleta tem o dropdown de busca/seleção aberto no momento.
   const [openWeaponFieldId, setOpenWeaponFieldId] = React.useState<string | null>(null);
+
+  // Modal para cadastrar nova arma durante a inscrição do atleta
+  const [showAddWeaponModal, setShowAddWeaponModal] = React.useState(false);
+  const [addWeaponMember, setAddWeaponMember] = React.useState<User | null>(null);
+  const [addWeaponInitialSearch, setAddWeaponInitialSearch] = React.useState('');
   React.useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
     const update = () => setIsMobile(window.innerWidth <= 767);
@@ -1018,8 +1355,23 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
         {isOpen && (
           <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
             {filteredOwn.length === 0 && extraResults.length === 0 && (
-              <div className="px-3 py-2 text-[11px] text-slate-400 font-semibold">
-                {searching ? 'Buscando...' : 'Nenhuma arma encontrada.'}
+              <div className="p-3 text-center space-y-2">
+                <div className="text-[11px] text-slate-500 font-medium">
+                  {searching ? 'Buscando...' : (searchInput ? `Nenhuma arma encontrada para "${searchInput}".` : 'Nenhuma arma encontrada.')}
+                </div>
+                <button
+                  type="button"
+                  onMouseDown={e => {
+                    e.preventDefault();
+                    setAddWeaponMember(member);
+                    setAddWeaponInitialSearch(searchInput);
+                    setShowAddWeaponModal(true);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg transition flex items-center justify-center gap-1 mx-auto cursor-pointer shadow-xs"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  Cadastrar nova arma
+                </button>
               </div>
             )}
             {filteredOwn.map(w => {
@@ -1065,6 +1417,21 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
                 </button>
               );
             })}
+            <div className="p-2 bg-slate-50 text-center border-t border-slate-100">
+              <button
+                type="button"
+                onMouseDown={e => {
+                  e.preventDefault();
+                  setAddWeaponMember(member);
+                  setAddWeaponInitialSearch(searchInput);
+                  setShowAddWeaponModal(true);
+                }}
+                className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center justify-center gap-1 mx-auto cursor-pointer"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                Arma não encontrada? Cadastrar nova arma
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -1381,6 +1748,30 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
           onClose={() => setShowPixModal(false)}
         />
       )}
+
+      <QuickAddWeaponModal
+        isOpen={showAddWeaponModal}
+        onClose={() => {
+          setShowAddWeaponModal(false);
+          setAddWeaponMember(null);
+          setAddWeaponInitialSearch('');
+        }}
+        member={addWeaponMember}
+        initialSearch={addWeaponInitialSearch}
+        currentUser={currentUser}
+        weaponLookupOptions={weaponLookupOptions}
+        onWeaponCreated={(w, label) => {
+          if (!addWeaponMember) return;
+          const targetId = addWeaponMember.id;
+          setClubWeapons(prev => [...prev, w]);
+          handleSelectWeapon(targetId, w.id);
+          setSearchQueries(prev => ({ ...prev, [targetId]: label }));
+          setSearchResults(prev => ({ ...prev, [targetId]: [] }));
+          setSelectedAthletes(prev => ({ ...prev, [targetId]: { weaponId: w.id, checked: true } }));
+          setOpenWeaponFieldId(null);
+          if (onRefreshData) onRefreshData();
+        }}
+      />
     </div>
   );
 }
@@ -3374,9 +3765,11 @@ interface IdscInscricaoPanelProps {
   currentUser: User | null;
   initialPrefill?: ClubBulkRegistrationPrefill | null;
   onPrefillApplied?: () => void;
+  weaponLookupOptions?: WeaponLookupOption[];
+  onRefreshData?: () => Promise<void>;
 }
 
-function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: IdscInscricaoPanelProps) {
+function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, weaponLookupOptions = [], onRefreshData }: IdscInscricaoPanelProps) {
   const [championships, setChampionships] = React.useState<IdscChampionship[]>([]);
   const [championshipId, setChampionshipId] = React.useState(() => initialPrefill?.mode === 'idsc' ? initialPrefill.championshipId : '');
   const [stages, setStages] = React.useState<IdscStage[]>([]);
@@ -3427,6 +3820,11 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
   const [weaponModalMemberId, setWeaponModalMemberId] = React.useState<string | null>(null);
   // Campo único de arma: qual atleta tem o dropdown de busca/seleção aberto no momento.
   const [openWeaponFieldId, setOpenWeaponFieldId] = React.useState<string | null>(null);
+
+  // Modal para cadastrar nova arma durante a inscrição do atleta
+  const [showAddWeaponModal, setShowAddWeaponModal] = React.useState(false);
+  const [addWeaponMember, setAddWeaponMember] = React.useState<User | null>(null);
+  const [addWeaponInitialSearch, setAddWeaponInitialSearch] = React.useState('');
   React.useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
     const update = () => setIsMobile(window.innerWidth <= 767);
@@ -3545,8 +3943,23 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
         {isOpen && (
           <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
             {filteredOwn.length === 0 && extraResults.length === 0 && (
-              <div className="px-3 py-2 text-[11px] text-slate-400 font-semibold">
-                {searching ? 'Buscando...' : 'Nenhuma arma encontrada.'}
+              <div className="p-3 text-center space-y-2">
+                <div className="text-[11px] text-slate-500 font-medium">
+                  {searching ? 'Buscando...' : (searchInput ? `Nenhuma arma encontrada para "${searchInput}".` : 'Nenhuma arma encontrada.')}
+                </div>
+                <button
+                  type="button"
+                  onMouseDown={e => {
+                    e.preventDefault();
+                    setAddWeaponMember(member);
+                    setAddWeaponInitialSearch(searchInput);
+                    setShowAddWeaponModal(true);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg transition flex items-center justify-center gap-1 mx-auto cursor-pointer shadow-xs"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  Cadastrar nova arma
+                </button>
               </div>
             )}
             {filteredOwn.map(w => {
@@ -3592,6 +4005,21 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
                 </button>
               );
             })}
+            <div className="p-2 bg-slate-50 text-center border-t border-slate-100">
+              <button
+                type="button"
+                onMouseDown={e => {
+                  e.preventDefault();
+                  setAddWeaponMember(member);
+                  setAddWeaponInitialSearch(searchInput);
+                  setShowAddWeaponModal(true);
+                }}
+                className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center justify-center gap-1 mx-auto cursor-pointer"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                Arma não encontrada? Cadastrar nova arma
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -3861,6 +4289,30 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied }: I
           onClose={() => setShowPixModal(false)}
         />
       )}
+
+      <QuickAddWeaponModal
+        isOpen={showAddWeaponModal}
+        onClose={() => {
+          setShowAddWeaponModal(false);
+          setAddWeaponMember(null);
+          setAddWeaponInitialSearch('');
+        }}
+        member={addWeaponMember}
+        initialSearch={addWeaponInitialSearch}
+        currentUser={currentUser}
+        weaponLookupOptions={weaponLookupOptions}
+        onWeaponCreated={(w, label) => {
+          if (!addWeaponMember) return;
+          const targetId = addWeaponMember.id;
+          setClubWeapons(prev => [...prev, w]);
+          handleWeapon(targetId, w.id);
+          setSearchQueries(prev => ({ ...prev, [targetId]: label }));
+          setSearchResults(prev => ({ ...prev, [targetId]: [] }));
+          setSelectedAthletes(prev => ({ ...prev, [targetId]: { weaponId: w.id, checked: true } }));
+          setOpenWeaponFieldId(null);
+          if (onRefreshData) onRefreshData();
+        }}
+      />
     </div>
   );
 }
@@ -7017,7 +7469,8 @@ export default function AdminPanel({
     fullName: '', isCac: false, birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
     fatherName: '', motherName: '', crNumber: '', crValidity: '', militaryRegion: '', clubAffiliationDate: '', nationality: '',
     phone: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '',
-    guiaTransitoExpiry: '', signatureExpiry: '', annuityPlanId: '', bookNumber: ''
+    guiaTransitoExpiry: '', signatureExpiry: '', annuityPlanId: '', bookNumber: '',
+    cpf: '', email: '', newPassword: ''
   });
   const [memberSavingSection, setMemberSavingSection] = useState<string | null>(null);
   const [memberSavedSection, setMemberSavedSection] = useState<string | null>(null);
@@ -7551,7 +8004,10 @@ export default function AdminPanel({
       guiaTransitoExpiry: selectedMember.guiaTransitoExpiry || '',
       signatureExpiry: selectedMember.signatureExpiry ? selectedMember.signatureExpiry.split('T')[0] : '',
       annuityPlanId: selectedMember.annuityPlanId || '',
-      bookNumber: selectedMember.bookNumber || ''
+      bookNumber: selectedMember.bookNumber || '',
+      cpf: selectedMember.cpf || '',
+      email: selectedMember.email || '',
+      newPassword: ''
     });
   }, [selectedMember?.id]);
 
@@ -8102,6 +8558,9 @@ export default function AdminPanel({
     if (ok) {
       setMemberSavedSection(sectionId);
       setTimeout(() => setMemberSavedSection(null), 2500);
+      if (onRefreshData) await onRefreshData();
+    } else {
+      alert('Erro ao salvar dados do membro. Verifique se o CPF ou E-mail já estão cadastrados para outro atleta.');
     }
   };
 
@@ -8818,6 +9277,8 @@ export default function AdminPanel({
                 currentUser={currentUser}
                 initialPrefill={pendingClubPrefill}
                 onPrefillApplied={() => setPendingClubPrefill(null)}
+                weaponLookupOptions={weaponLookupOptions}
+                onRefreshData={onRefreshData}
               />
             ) : (
               <InscricaoClubePanel
@@ -8830,6 +9291,7 @@ export default function AdminPanel({
                 onPrefillApplied={() => setPendingClubPrefill(null)}
                 registrations={registrations}
                 onRefreshData={onRefreshData}
+                weaponLookupOptions={weaponLookupOptions}
               />
             )}
           </div>
@@ -8853,15 +9315,15 @@ export default function AdminPanel({
       case 'cadastrar_membros':
         return (
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
+            <div id="member-edit-card" className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs scroll-mt-6">
               <div className="flex justify-between items-center pb-3 border-b border-slate-100">
                 <div>
                   <h3 className="font-display font-bold text-slate-900 text-base">
-                    {selectedMember ? `Editando: ${selectedMember.fullName}` : 'Cadastrar Novo Sócio / Atleta'}
+                    {selectedMember ? `Editando Cadastro: ${selectedMember.fullName}` : 'Cadastrar Novo Sócio / Atleta'}
                   </h3>
                   <p className="text-xs text-slate-400">
                     {selectedMember
-                      ? 'Complete os dados quando puder — cada seção é salva de forma independente.'
+                      ? 'Preencha ou atualize as informações completas do atleta — cada seção é salva de forma independente.'
                       : 'Crie o login do atleta; o resto do cadastro pode ser completado depois.'}
                   </p>
                 </div>
@@ -8877,13 +9339,67 @@ export default function AdminPanel({
 
               {selectedMember ? (
                 <div className="space-y-4">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedMemberId(null)}
-                    className="text-blue-600 hover:text-blue-700 text-xs font-bold cursor-pointer"
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50/50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
+                        <Pencil className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-slate-900 text-sm">Editando Cadastro do Atleta</h3>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selectedMember.isProfileComplete ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                            {selectedMember.isProfileComplete ? 'Cadastro Completo' : 'Cadastro Incompleto'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-blue-900 font-semibold mt-0.5">
+                          {selectedMember.fullName} {selectedMember.cpf ? `• CPF: ${selectedMember.cpf}` : ''} {selectedMember.crNumber ? `• CR: ${selectedMember.crNumber}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMemberId(null)}
+                      className="bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold px-3.5 py-2 rounded-xl transition cursor-pointer self-start sm:self-auto shrink-0 flex items-center gap-1.5 shadow-xs"
+                    >
+                      <X className="w-4 h-4 text-slate-500" />
+                      Fechar Edição / Cadastrar Novo
+                    </button>
+                  </div>
+
+                  {/* Dados de Login e Acesso (CPF, E-mail, Senha) */}
+                  <MemberSection
+                    title="Acesso e Login (CPF, E-mail e Senha)"
+                    onSave={() => saveMemberSection('member_account', {
+                      cpf: memberEditForm.cpf,
+                      email: memberEditForm.email,
+                      newPassword: memberEditForm.newPassword || undefined,
+                    })}
+                    saving={memberSavingSection === 'member_account'}
+                    saved={memberSavedSection === 'member_account'}
                   >
-                    + Cadastrar outro membro
-                  </button>
+                    <MemberField
+                      label="CPF"
+                      value={memberEditForm.cpf}
+                      onChange={v => setMemberEditForm({ ...memberEditForm, cpf: v })}
+                      placeholder="000.000.000-00"
+                    />
+                    <MemberField
+                      label="E-mail"
+                      type="email"
+                      value={memberEditForm.email}
+                      onChange={v => setMemberEditForm({ ...memberEditForm, email: v })}
+                      placeholder="atleta@exemplo.com"
+                    />
+                    <div className="sm:col-span-2">
+                      <MemberField
+                        label="Redefinir Senha do Atleta"
+                        type="password"
+                        value={memberEditForm.newPassword}
+                        onChange={v => setMemberEditForm({ ...memberEditForm, newPassword: v })}
+                        placeholder="Digite uma nova senha para o atleta (deixe em branco para manter a senha atual)"
+                      />
+                    </div>
+                  </MemberSection>
 
                   <MemberSection
                     title="Dados Cadastrais"
@@ -8993,11 +9509,12 @@ export default function AdminPanel({
 
                   <MemberSection
                     title="Contato"
-                    onSave={() => saveMemberSection('member_contact', { phone: memberEditForm.phone })}
+                    onSave={() => saveMemberSection('member_contact', { phone: memberEditForm.phone, email: memberEditForm.email })}
                     saving={memberSavingSection === 'member_contact'}
                     saved={memberSavedSection === 'member_contact'}
                   >
-                    <MemberField label="Celular" type="tel" value={memberEditForm.phone} onChange={v => setMemberEditForm({ ...memberEditForm, phone: v })} />
+                    <MemberField label="Celular / WhatsApp" type="tel" value={memberEditForm.phone} onChange={v => setMemberEditForm({ ...memberEditForm, phone: v })} />
+                    <MemberField label="E-mail" type="email" value={memberEditForm.email} onChange={v => setMemberEditForm({ ...memberEditForm, email: v })} />
                   </MemberSection>
 
                   <MemberSection
@@ -9158,15 +9675,13 @@ export default function AdminPanel({
                     const isAnuidadeActive = Boolean(anuidadeExpiry && anuidadeExpiry >= today);
 
                     return (
-                      <button
+                      <div
                         key={m.id}
-                        type="button"
-                        onClick={() => setSelectedMemberId(m.id)}
-                        className={`w-full flex flex-col sm:flex-row sm:items-center justify-between py-3 px-3 text-left rounded-xl transition cursor-pointer gap-2 ${selectedMemberId === m.id ? 'bg-blue-50 border border-blue-200 shadow-xs' : 'hover:bg-slate-50'}`}
+                        className={`w-full flex flex-col sm:flex-row sm:items-center justify-between py-3 px-3 text-left rounded-xl transition gap-2 ${selectedMemberId === m.id ? 'bg-blue-50/80 border border-blue-200 shadow-xs' : 'hover:bg-slate-50'}`}
                       >
-                        <div className="space-y-0.5">
+                        <div className="space-y-0.5 min-w-0">
                           <div className="flex items-center gap-2">
-                            <p className="text-xs font-bold text-slate-900">{m.fullName}</p>
+                            <p className="text-xs font-bold text-slate-900 truncate">{m.fullName}</p>
                             {m.crNumber && (
                               <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
                                 CR: {m.crNumber}
@@ -9187,8 +9702,19 @@ export default function AdminPanel({
                           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${m.isProfileComplete ? 'text-emerald-700 bg-emerald-100' : 'text-amber-700 bg-amber-100'}`}>
                             {m.isProfileComplete ? 'Completo' : 'Incompleto'}
                           </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedMemberId(m.id);
+                              document.getElementById('member-edit-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }}
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            Editar
+                          </button>
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -12753,6 +13279,8 @@ export default function AdminPanel({
           currentUser={currentUser}
           initialPrefill={pendingClubPrefill}
           onPrefillApplied={() => setPendingClubPrefill(null)}
+          weaponLookupOptions={weaponLookupOptions}
+          onRefreshData={onRefreshData}
         />;
 
       case 'idsc_resultados':
