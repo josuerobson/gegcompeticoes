@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: adiciona botao cadastrar nova arma na inscricao e edicao completa de membros pelo clube parceiro` |
-| Data/hora | 2026-10-19T21:30:00-03:00 |
+| Mensagem | `fix(security): fase 1 blindagem de dados cadastrais, privacidade de armas e correcao de mass assignment` |
+| Data/hora | 2026-10-19T22:25:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,16 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Fase 1 de Segurança de Dados e Conformidade LGPD/CAC (`server.ts`, `src/db.ts`)**:
+  - *O que foi decidido*:
+    1. **Privacidade e Sanitização de Usuários (`GET /api/users`)**: Implementada a função `mapUserSanitized(u, requester)`. Usuários não autenticados ou atletas comuns consultando a listagem geral passam a receber dados estritamente públicos (id, username, nome completo, avatar, bio, clube, cargo). Dados sensíveis (CPF, RG, filiação de pai/mãe, endereço residencial completo, CEP, telefones, CR, validades de CR e guia de trânsito) são ocultados (`undefined`), permanecendo acessíveis exclusivamente: (a) pelo próprio atleta consultando seus dados; (b) pelo diretor do clube para os membros do seu respectivo clube; (c) pelo Administrador Master.
+    2. **Proteção do Acervo de Armas (`GET /api/weapons`)**: Endpoint protegido obrigatoriamente por `requireAuth`. Atletas comuns visualizam estritamente suas próprias armas cadastradas e o acervo institucional do seu clube (para empréstimo em provas), bloqueando qualquer tentativa de visualização ou enumeração de armas de outros atletas. Diretores de clube visualizam apenas o acervo do clube e dos seus próprios membros, e o Administrador Master dentro do escopo do tenant.
+    3. **Prevenção de Mass Assignment em Meu Cadastro (`PATCH /api/users/me/profile`)**: Separadas as whitelists `MEMBER_SELF_PROFILE_COLUMNS` e `ADMIN_MEMBER_PROFILE_COLUMNS`. Campos financeiros e de controle de anuidade (`signatureExpiry`, `hasPaidSignature`, `annuityPlanId`, `bookNumber`, `isCac`, `clubAffiliationDate`) foram removidos da edição do próprio atleta e mantidos restritos a endpoints administrativos (`/api/admin/members/:id/profile`) e webhooks bancários, impedindo que atletas se auto-concedam gratuidade ou status de anuidade paga.
+    4. **Proteção de Identificador na Carteirinha Pública (`/api/public/validar/carteirinha/:userId`)**: O identificador retornado na resposta pública foi mascarado para o formato de código de autenticação (`GG-AUT-XXXXXX`), impedindo que consultas por QR Code vazem o ID interno de banco do atleta.
+    5. **Preservação de Senhas Alteradas em Boot (`src/db.ts`)**: No método `initDB()`, a cláusula de inserção das contas seed foi alterada para `password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash)`, garantindo que senhas customizadas salvas pelos administradores em produção não sejam resetadas para `123456` a cada reinicialização ou deploy do servidor.
+  - *Por que*: O usuário solicitou a execução da Fase 1 do plano de segurança para blindar a privacidade de dados dos atletas, prevenir vazamento de dados de armas de fogo e residências (LGPD e segurança física) e fechar brechas de privilégios.
+  - *O que NÃO fazer*: Nunca reexpor campos sensíveis (CPF, endereço, armas de terceiros) em rotas abertas.
 
 - **Botão "Cadastrar Nova Arma" em Todas as Inscrições e Edição Completa de Membros pelo Clube Parceiro (`server.ts`, `src/components/AdminPanel.tsx`, `src/components/ChampionshipsView.tsx`)**:
   - *O que foi decidido*:

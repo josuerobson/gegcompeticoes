@@ -1183,7 +1183,7 @@ export async function initDB() {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
          ON CONFLICT (id) DO UPDATE SET
            role = EXCLUDED.role, club_id = EXCLUDED.club_id, is_profile_complete = EXCLUDED.is_profile_complete,
-           cpf = EXCLUDED.cpf, rg = EXCLUDED.rg, phone = EXCLUDED.phone, password_hash = EXCLUDED.password_hash`,
+           cpf = EXCLUDED.cpf, rg = EXCLUDED.rg, phone = EXCLUDED.phone, password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash)`,
         [u.id, u.email, u.username, u.fullName, u.avatarUrl, u.bio, u.crNumber || null, u.isClubMember, u.memberSince || null, u.role, u.hasPaidSignature, u.signatureExpiry || null, u.clubId || null, u.isProfileComplete || false, u.cpf || null, u.rg || null, u.phone || null, DEMO_PASSWORD_HASH]
       );
     }

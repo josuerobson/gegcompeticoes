@@ -74,6 +74,8 @@ function logoUrlFor(clubId: string, rawValue: string | null | undefined): string
   return rawValue || undefined;
 }
 
+const ADMIN_ROLES = ['admin', 'master_admin', 'club_admin'];
+
 // Mapping functions to convert PostgreSQL row format to client/React expected format
 function mapUser(u: any): User {
   return {
@@ -125,6 +127,55 @@ function mapUser(u: any): User {
     isBlocked: u.is_blocked ?? undefined,
     isCac: u.is_cac ?? undefined,
     clubAffiliationDate: u.club_affiliation_date || undefined,
+  };
+}
+
+// Sanitização de dados de usuários conforme LGPD e proteção de atiradores:
+// Oculta CPF, RG, filiação, endereço residencial completo, telefone e CR para
+// terceiros ou consultas públicas, preservando o acesso completo apenas para:
+// 1) O próprio usuário logado;
+// 2) O administrador do próprio clube do atleta;
+// 3) Administrador Master da plataforma.
+function mapUserSanitized(u: any, requester?: User): User {
+  const full = mapUser(u);
+  const isMaster = requester?.role === 'master_admin';
+  const isSelf = Boolean(requester && requester.id === u.id);
+  const isOwnClubAdmin = Boolean(
+    requester &&
+    ADMIN_ROLES.includes(requester.role) &&
+    requester.clubId &&
+    u.club_id === requester.clubId
+  );
+
+  if (isMaster || isSelf || isOwnClubAdmin) {
+    return full;
+  }
+
+  return {
+    ...full,
+    cpf: undefined,
+    rg: undefined,
+    rgIssuer: undefined,
+    rgIssueDate: undefined,
+    birthDate: undefined,
+    fatherName: undefined,
+    motherName: undefined,
+    phone: undefined,
+    cellPhone: undefined,
+    email: undefined,
+    cep: undefined,
+    address: undefined,
+    addressNumber: undefined,
+    complement: undefined,
+    neighborhood: undefined,
+    crNumber: undefined,
+    crValidity: undefined,
+    militaryRegion: undefined,
+    guiaTransitoExpiry: undefined,
+    bookNumber: undefined,
+    docRgCnhUploaded: false,
+    docCrUploaded: false,
+    docDeclaracaoUploaded: false,
   };
 }
 
@@ -713,8 +764,7 @@ const requireAuth = (req: express.Request, res: express.Response, next: express.
   next();
 };
 
-const ADMIN_ROLES = ['admin', 'master_admin', 'club_admin'];
-
+// ADMIN_ROLES defined at top of file
 const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (!(req as any).user || !ADMIN_ROLES.includes((req as any).user.role)) {
     return res.status(403).json({ error: 'Acesso restrito para administradores do G&G.' });
@@ -2654,7 +2704,8 @@ app.get('/api/uploads/:kind', requireAuth, async (req, res) => {
 // 1c. Progressive profile completion — "Meu cadastro". Lets an athlete or club
 // admin fill in and save the registration data they skipped, one section at a
 // time, across multiple visits, instead of requiring it all up front.
-const USER_PROFILE_COLUMNS: Record<string, string> = {
+// Colunas cadastrais que o próprio atleta pode preencher e atualizar em "Meu Cadastro"
+const MEMBER_SELF_PROFILE_COLUMNS: Record<string, string> = {
   fullName: 'full_name',
   avatarUrl: 'avatar_url',
   birthDate: 'birth_date',
@@ -2677,6 +2728,11 @@ const USER_PROFILE_COLUMNS: Record<string, string> = {
   city: 'city',
   state: 'state',
   guiaTransitoExpiry: 'guia_transito_expiry',
+};
+
+// Colunas adicionais restritas a gestores e diretores de clube ("Cadastrar Membros" / "Novo Atleta")
+const ADMIN_MEMBER_PROFILE_COLUMNS: Record<string, string> = {
+  ...MEMBER_SELF_PROFILE_COLUMNS,
   signatureExpiry: 'signature_expiry',
   hasPaidSignature: 'has_paid_signature',
   annuityPlanId: 'annuity_plan_id',
@@ -2685,21 +2741,26 @@ const USER_PROFILE_COLUMNS: Record<string, string> = {
   clubAffiliationDate: 'club_affiliation_date',
 };
 
-// Shared by a member editing their own "Meu Cadastro" and a club admin
-// completing a member's profile on their behalf — same column whitelist,
-// same live-recomputed completeness.
-async function applyUserProfileFields(userId: string, body: Record<string, unknown>) {
+// Mantido para retrocompatibilidade interna
+const USER_PROFILE_COLUMNS = ADMIN_MEMBER_PROFILE_COLUMNS;
+
+// Atualização de perfil com controle estrito de whitelist por papel
+async function applyUserProfileFields(
+  userId: string,
+  body: Record<string, unknown>,
+  allowedColumns: Record<string, string> = MEMBER_SELF_PROFILE_COLUMNS
+) {
   const payload = { ...body };
-  if (typeof payload.signatureExpiry === 'string' && payload.signatureExpiry.trim() !== '') {
+  if (allowedColumns.signatureExpiry && typeof payload.signatureExpiry === 'string' && payload.signatureExpiry.trim() !== '') {
     payload.hasPaidSignature = true;
   }
 
   const updates: string[] = [];
   const values: unknown[] = [];
 
-  for (const [key, column] of Object.entries(USER_PROFILE_COLUMNS)) {
+  for (const [key, column] of Object.entries(allowedColumns)) {
     if (Object.prototype.hasOwnProperty.call(payload, key)) {
-      updates.push(`${column} = $${updates.length + 1}`);
+      updates.push(`${column} = ${updates.length + 1}`);
       values.push(payload[key] ?? null);
     }
   }
@@ -2707,7 +2768,7 @@ async function applyUserProfileFields(userId: string, body: Record<string, unkno
   if (updates.length === 0) return null;
 
   values.push(userId);
-  await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${values.length}`, values);
+  await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ${values.length}`, values);
   await recomputeUserProfileComplete(pool, userId);
 
   const fullUserRes = await pool.query(
@@ -2836,7 +2897,7 @@ app.post('/api/admin/athletes/:id/reset-password', requireFranchiseAdmin, async 
 app.patch('/api/users/me/profile', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
   try {
-    const user = await applyUserProfileFields(currentUser.id, req.body);
+    const user = await applyUserProfileFields(currentUser.id, req.body, MEMBER_SELF_PROFILE_COLUMNS);
     if (!user) return res.status(400).json({ error: 'Nenhum campo para atualizar.' });
     res.json({ user });
   } catch (err) {
@@ -2900,7 +2961,7 @@ app.patch('/api/admin/members/:id/profile', requireAdmin, async (req, res) => {
       await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hashPassword(newPass), memberId]);
     }
 
-    await applyUserProfileFields(memberId, profileFields);
+    await applyUserProfileFields(memberId, profileFields, ADMIN_MEMBER_PROFILE_COLUMNS);
 
     const fullUserRes = await pool.query(
       `SELECT u.*,
@@ -3257,7 +3318,8 @@ app.get('/api/users', async (req, res) => {
       WHERE u.club_id = ANY($1)`,
       [visibleClubIds]
     );
-    const users = usersRes.rows.map(mapUser);
+    const currentUser = (req as any).user as User | undefined;
+    const users = usersRes.rows.map(row => mapUserSanitized(row, currentUser));
     res.json({ users });
   } catch (err) {
     console.error('Fetch users database error:', err);
@@ -4527,22 +4589,58 @@ app.delete('/api/stages/:id', requireFranchiseAdmin, async (req, res) => {
   }
 });
 
-app.get('/api/weapons', async (req, res) => {
+app.get('/api/weapons', requireAuth, async (req, res) => {
   try {
+    const currentUser = (req as any).user as User;
     const { ownerId } = req.query;
     let weaponsRes;
-    if (ownerId) {
-      weaponsRes = await pool.query('SELECT * FROM weapons WHERE owner_id = $1', [ownerId]);
+    const tenant = (req as any).tenant as Club;
+    const visibleClubIds = await getVisibleClubIds(tenant);
+
+    if (currentUser.role === 'master_admin') {
+      if (ownerId) {
+        weaponsRes = await pool.query('SELECT * FROM weapons WHERE owner_id = $1', [ownerId]);
+      } else {
+        weaponsRes = await pool.query(
+          `SELECT * FROM weapons WHERE owner_id = ANY($1)
+             OR owner_id IN (SELECT id FROM users WHERE club_id = ANY($1))`,
+          [visibleClubIds]
+        );
+      }
+    } else if (ADMIN_ROLES.includes(currentUser.role) && currentUser.clubId) {
+      if (ownerId) {
+        weaponsRes = await pool.query(
+          `SELECT w.* FROM weapons w
+           LEFT JOIN users u ON u.id = w.owner_id
+           WHERE w.owner_id = $1 AND (w.owner_id = $2 OR u.club_id = $2)`,
+          [ownerId, currentUser.clubId]
+        );
+      } else {
+        weaponsRes = await pool.query(
+          `SELECT w.* FROM weapons w
+           LEFT JOIN users u ON u.id = w.owner_id
+           WHERE w.owner_id = $1 OR u.club_id = $1`,
+          [currentUser.clubId]
+        );
+      }
     } else {
-      // owner_id is either a user id (personal weapon) or a club id (club-owned
-      // weapon) — scope both cases to the tenant's visible clubs.
-      const tenant = (req as any).tenant as Club;
-      const visibleClubIds = await getVisibleClubIds(tenant);
-      weaponsRes = await pool.query(
-        `SELECT * FROM weapons WHERE owner_id = ANY($1)
-           OR owner_id IN (SELECT id FROM users WHERE club_id = ANY($1))`,
-        [visibleClubIds]
-      );
+      // Atletas comuns visualizam estritamente suas próprias armas e o acervo do seu clube
+      const allowedOwnerIds = [currentUser.id];
+      if (currentUser.clubId) {
+        allowedOwnerIds.push(currentUser.clubId);
+      }
+      if (ownerId) {
+        if (ownerId === currentUser.id || ownerId === currentUser.clubId) {
+          weaponsRes = await pool.query('SELECT * FROM weapons WHERE owner_id = $1', [ownerId]);
+        } else {
+          weaponsRes = { rows: [] };
+        }
+      } else {
+        weaponsRes = await pool.query(
+          `SELECT * FROM weapons WHERE owner_id = ANY($1)`,
+          [allowedOwnerIds]
+        );
+      }
     }
     res.json({ weapons: weaponsRes.rows.map(mapWeapon) });
   } catch (err) {
@@ -5985,7 +6083,7 @@ app.get('/api/public/validar/carteirinha/:userId', async (req, res) => {
     const isValid = expiryDate >= new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     const athlete = {
-      id: u.id,
+      id: `GG-AUT-${u.id.slice(-6).toUpperCase()}`,
       fullName: u.full_name,
       avatarUrl: u.avatar_url,
       crNumber: u.cr_number || 'Sem CR registrado',
