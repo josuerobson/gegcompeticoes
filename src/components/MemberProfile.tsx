@@ -1862,7 +1862,7 @@ export default function MemberProfile({
 
               {/* Name Container (3/4 on mobile, col-span-3) */}
               <div className="col-span-3 text-left md:text-center md:mt-4 leading-tight">
-                <h3 className="font-display font-extrabold text-base md:text-lg text-slate-900 leading-snug">{selectedUser.fullName}</h3>
+                <h3 className="font-display font-extrabold text-base md:text-lg text-slate-900 leading-snug">{isClubAdmin ? (myClub?.name || selectedUser.fullName) : selectedUser.fullName}</h3>
                 <span className="text-xs text-slate-400 font-mono block mt-0.5">@{selectedUser.username}</span>
                 {isMe && avatarSaving && <p className="text-[10px] text-slate-400 mt-1">Enviando foto...</p>}
                 {isMe && avatarError && <p className="text-[10px] text-red-500 mt-1">{avatarError}</p>}
