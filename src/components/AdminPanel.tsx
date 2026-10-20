@@ -7484,6 +7484,10 @@ export default function AdminPanel({
   const [savingPlan, setSavingPlan] = useState(false);
   const [planError, setPlanError] = useState('');
   const [planSuccess, setPlanSuccess] = useState('');
+  // Mini-gerenciador de planos embutido em Gerenciamento Clube > Cadastrar
+  // Membros — cada clube filiado cria/edita os próprios planos ali mesmo
+  // (não enxerga Gerenciamento Plataforma > Relatório Financeiro).
+  const [showClubPlanManager, setShowClubPlanManager] = useState(false);
 
   const loadAnnuityPlans = async () => {
     try {
@@ -9493,12 +9497,84 @@ export default function AdminPanel({
                         onChange={v => setMemberEditForm({ ...memberEditForm, annuityPlanId: v })}
                         options={[
                           { value: '', label: 'Nenhum plano específico (Anuidade Avulsa / Padrão R$ 360,00)' },
-                          ...annuityPlans.map(p => ({
-                            value: p.id,
-                            label: `${p.name} — R$ ${p.price.toFixed(2)}`
-                          }))
+                          ...annuityPlans
+                            .filter(p => !p.clubId || p.clubId === currentUser?.clubId)
+                            .map(p => ({
+                              value: p.id,
+                              label: `${p.name} — R$ ${p.price.toFixed(2)}`
+                            }))
                         ]}
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowClubPlanManager(v => !v)}
+                        className="mt-1.5 text-[11px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
+                      >
+                        {showClubPlanManager ? 'Ocultar planos de anuidade do clube' : '+ Criar ou editar planos de anuidade do clube'}
+                      </button>
+
+                      {showClubPlanManager && (
+                        <div className="mt-3 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                          <p className="text-[11px] text-slate-500">
+                            Planos criados aqui valem só para os atletas do seu clube — não usam nem afetam os planos do estande principal.
+                          </p>
+                          {planError && <div className="bg-rose-50 border border-rose-200 text-rose-800 p-2.5 rounded-lg text-[11px] font-semibold">{planError}</div>}
+                          {planSuccess && <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-2.5 rounded-lg text-[11px] font-semibold">{planSuccess}</div>}
+                          <form onSubmit={handleSaveAnnuityPlan} className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                            <div className="sm:col-span-5">
+                              <input
+                                type="text"
+                                placeholder="Nome do plano (ex: Sócio Ouro)"
+                                value={planName}
+                                onChange={e => setPlanName(e.target.value)}
+                                className="w-full bg-white border border-slate-200 outline-none p-2 rounded-lg text-xs font-semibold text-slate-800 focus:border-blue-500"
+                              />
+                            </div>
+                            <div className="sm:col-span-3">
+                              <input
+                                type="number"
+                                step="0.01"
+                                placeholder="Valor (R$)"
+                                value={planPrice}
+                                onChange={e => setPlanPrice(e.target.value)}
+                                className="w-full bg-white border border-slate-200 outline-none p-2 rounded-lg text-xs font-semibold text-slate-800 focus:border-blue-500 font-mono"
+                              />
+                            </div>
+                            <div className="sm:col-span-4 flex gap-1.5">
+                              <button
+                                type="submit"
+                                disabled={savingPlan}
+                                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold text-[11px] py-2 rounded-lg transition cursor-pointer"
+                              >
+                                {savingPlan ? 'Salvando...' : editingPlanId ? 'Atualizar' : 'Criar plano'}
+                              </button>
+                              {editingPlanId && (
+                                <button
+                                  type="button"
+                                  onClick={cancelEditingPlan}
+                                  className="px-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[11px] font-bold rounded-lg transition cursor-pointer"
+                                >
+                                  Cancelar
+                                </button>
+                              )}
+                            </div>
+                          </form>
+
+                          {annuityPlans.filter(p => p.clubId === currentUser?.clubId).length > 0 && (
+                            <div className="space-y-1.5 pt-1">
+                              {annuityPlans.filter(p => p.clubId === currentUser?.clubId).map(plan => (
+                                <div key={plan.id} className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-3 py-1.5 gap-2">
+                                  <span className="text-[11px] font-semibold text-slate-700 truncate">{plan.name} — R$ {plan.price.toFixed(2)}</span>
+                                  <div className="flex gap-2 shrink-0">
+                                    <button type="button" onClick={() => startEditingPlan(plan)} className="text-[10px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer">Editar</button>
+                                    <button type="button" onClick={() => handleDeletePlan(plan.id, plan.name)} className="text-[10px] font-bold text-rose-600 hover:text-rose-800 cursor-pointer">Excluir</button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <MemberField
                       label="Número de registro do livro físico"

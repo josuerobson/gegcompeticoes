@@ -876,10 +876,13 @@ const requireMasterAdmin = (req: express.Request, res: express.Response, next: e
 };
 
 // Estrutura de competições (campeonatos, etapas, modalidades, multicampeonatos)
-// e planos de anuidade só podem ser criados/editados pela franquia dona do
-// tenant (ou master_admin) — nunca por um clube filiado, mesmo sobre o que
-// seria "seus próprios" dados. Filiados só inscrevem atletas e consultam;
-// quem desenha a estrutura é sempre quem está em Gerenciamento Plataforma.
+// só pode ser criada/editada pela franquia dona do tenant (ou master_admin) —
+// nunca por um clube filiado, mesmo sobre o que seria "seus próprios" dados.
+// Filiados só inscrevem atletas e consultam; quem desenha a estrutura é
+// sempre quem está em Gerenciamento Plataforma. Planos de anuidade NÃO usam
+// mais este gate — cada clube filiado cadastra e gerencia os próprios planos
+// (ver POST/PUT/DELETE /api/annuity-plans), já que cada clube cobra valores
+// diferentes dos seus atletas.
 // getFranchiseClubId está definida mais abaixo no arquivo, mas como esta é
 // uma function declaration (hoisted) e só é chamada em tempo de requisição
 // (bem depois do módulo terminar de carregar), a ordem aqui não importa.
@@ -893,7 +896,7 @@ const requireFranchiseAdmin = async (req: express.Request, res: express.Response
     const franchiseId = await getFranchiseClubId(currentUser.clubId);
     if (franchiseId === currentUser.clubId) return next();
   }
-  return res.status(403).json({ error: 'Apenas a franquia dona do tenant ou o Administrador Master podem gerenciar campeonatos, etapas, modalidades, multicampeonatos e planos de anuidade.' });
+  return res.status(403).json({ error: 'Apenas a franquia dona do tenant ou o Administrador Master podem gerenciar campeonatos, etapas, modalidades e multicampeonatos.' });
 };
 
 // Mesmo critério de requireFranchiseAdmin, mas como função booleana reutilizável
@@ -7211,16 +7214,27 @@ app.get('/api/ammo/athlete-balances/:userId', requireAuth, async (req, res) => {
 // ANNUITY PLANS (Planos de Anuidade)
 // ==========================================
 
-// GET /api/annuity-plans — Lista os planos de anuidade do tenant (um
-// filiado precisa ler a lista pra vincular um plano a um atleta em
-// Cadastrar Membros, mesmo não podendo criar/editar planos).
+// GET /api/annuity-plans — Lista os planos de anuidade visíveis. Um clube
+// filiado comum (club_admin que não é dono da franquia) só vê os PRÓPRIOS
+// planos — nunca os da franquia nem de outro filiado, já que cada clube
+// cobra valores diferentes dos seus atletas (ver POST abaixo). A franquia
+// dona do tenant (ou master_admin) continua vendo o conjunto agrupado do
+// tenant, para a tela de Relatório Financeiro gerenciar/reportar tudo.
+// Requisição anônima (sem usuário autenticado, ex. fluxo público) também
+// cai no agrupado do tenant, como já era antes.
 app.get('/api/annuity-plans', async (req, res) => {
   try {
-    const tenant = (req as any).tenant as Club;
-    const visibleClubIds = await getVisibleClubIds(tenant);
+    const currentUser = (req as any).user as User | undefined;
+    let clubIds: string[];
+    if (currentUser && !(await isFranchiseRootAdmin(currentUser))) {
+      clubIds = currentUser.clubId ? [currentUser.clubId] : [];
+    } else {
+      const tenant = (req as any).tenant as Club;
+      clubIds = await getVisibleClubIds(tenant);
+    }
     const r = await pool.query(
       'SELECT * FROM annuity_plans WHERE club_id = ANY($1) OR club_id IS NULL ORDER BY price ASC, name ASC',
-      [visibleClubIds]
+      [clubIds]
     );
     const plans: AnnuityPlan[] = r.rows.map(mapAnnuityPlan);
     res.json({ plans });
@@ -7230,8 +7244,11 @@ app.get('/api/annuity-plans', async (req, res) => {
   }
 });
 
-// POST /api/annuity-plans — Cria novo plano de anuidade
-app.post('/api/annuity-plans', requireFranchiseAdmin, async (req, res) => {
+// POST /api/annuity-plans — Cria novo plano de anuidade, sempre vinculado ao
+// próprio clube de quem está logado (qualquer club_admin/admin/master_admin,
+// não só a franquia dona do tenant — cada clube filiado gerencia seus
+// próprios planos para seus próprios atletas).
+app.post('/api/annuity-plans', requireAuth, requireAdmin, async (req, res) => {
   const currentUser = (req as any).user as User;
   const { name, price, description } = req.body;
   if (!name || price === undefined || price === null || Number(price) < 0) {
@@ -7255,8 +7272,11 @@ app.post('/api/annuity-plans', requireFranchiseAdmin, async (req, res) => {
   }
 });
 
-// PUT /api/annuity-plans/:id — Atualiza plano de anuidade
-app.put('/api/annuity-plans/:id', requireFranchiseAdmin, async (req, res) => {
+// PUT /api/annuity-plans/:id — Atualiza plano de anuidade. Um clube filiado
+// só pode editar planos do próprio clube; a franquia dona do tenant (ou
+// master_admin) pode editar qualquer um.
+app.put('/api/annuity-plans/:id', requireAuth, requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
   const { id } = req.params;
   const { name, price, description } = req.body;
 
@@ -7265,13 +7285,18 @@ app.put('/api/annuity-plans/:id', requireFranchiseAdmin, async (req, res) => {
   }
 
   try {
+    const existing = await pool.query('SELECT club_id FROM annuity_plans WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Plano de anuidade não encontrado.' });
+    }
+    if (existing.rows[0].club_id !== currentUser.clubId && !(await isFranchiseRootAdmin(currentUser))) {
+      return res.status(403).json({ error: 'Você só pode editar planos de anuidade do seu próprio clube.' });
+    }
+
     const r = await pool.query(
       `UPDATE annuity_plans SET name = $1, price = $2, description = $3 WHERE id = $4 RETURNING *`,
       [name.trim(), Number(price), description || null, id]
     );
-    if (r.rows.length === 0) {
-      return res.status(404).json({ error: 'Plano de anuidade não encontrado.' });
-    }
     res.json({ plan: mapAnnuityPlan(r.rows[0]), message: 'Plano de anuidade atualizado com sucesso!' });
   } catch (err) {
     console.error('Update annuity plan error:', err);
@@ -7279,15 +7304,22 @@ app.put('/api/annuity-plans/:id', requireFranchiseAdmin, async (req, res) => {
   }
 });
 
-// DELETE /api/annuity-plans/:id — Exclui plano de anuidade
-app.delete('/api/annuity-plans/:id', requireFranchiseAdmin, async (req, res) => {
+// DELETE /api/annuity-plans/:id — Exclui plano de anuidade, mesma regra de
+// titularidade do PUT acima.
+app.delete('/api/annuity-plans/:id', requireAuth, requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
   const { id } = req.params;
   try {
-    await pool.query('UPDATE users SET annuity_plan_id = NULL WHERE annuity_plan_id = $1', [id]);
-    const r = await pool.query('DELETE FROM annuity_plans WHERE id = $1', [id]);
-    if (r.rowCount === 0) {
+    const existing = await pool.query('SELECT club_id FROM annuity_plans WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Plano de anuidade não encontrado.' });
     }
+    if (existing.rows[0].club_id !== currentUser.clubId && !(await isFranchiseRootAdmin(currentUser))) {
+      return res.status(403).json({ error: 'Você só pode excluir planos de anuidade do seu próprio clube.' });
+    }
+
+    await pool.query('UPDATE users SET annuity_plan_id = NULL WHERE annuity_plan_id = $1', [id]);
+    await pool.query('DELETE FROM annuity_plans WHERE id = $1', [id]);
     res.json({ success: true, message: 'Plano de anuidade excluído com sucesso.' });
   } catch (err) {
     console.error('Delete annuity plan error:', err);
