@@ -1257,6 +1257,13 @@ export default function App() {
           if (u.id === currentUser.id) return { ...u, following: data.myFollowing };
           return u;
         }));
+        setCurrentUser(prev => (prev ? { ...prev, following: data.myFollowing } : prev));
+        setSelectedProfileUser(prev => {
+          if (!prev) return prev;
+          if (prev.id === userId) return { ...prev, followers: data.targetFollowers };
+          if (prev.id === currentUser.id) return { ...prev, following: data.myFollowing };
+          return prev;
+        });
       }
     } catch (err) {
       console.error(err);
