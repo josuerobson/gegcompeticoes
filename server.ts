@@ -3076,6 +3076,31 @@ app.patch('/api/users/me/profile', requireAuth, async (req, res) => {
   }
 });
 
+// O próprio atleta/usuário troca sua senha informando a senha atual.
+app.post('/api/users/me/change-password', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Informe a senha atual e a nova senha.' });
+  }
+  const newPass = String(newPassword).trim();
+  if (newPass.length < 4) {
+    return res.status(400).json({ error: 'A nova senha deve ter no mínimo 4 caracteres.' });
+  }
+  try {
+    const userRes = await pool.query('SELECT password_hash FROM users WHERE id = $1', [currentUser.id]);
+    const storedHash = userRes.rows[0]?.password_hash;
+    if (!storedHash || !verifyPassword(String(currentPassword), storedHash)) {
+      return res.status(401).json({ error: 'Senha atual incorreta.' });
+    }
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hashPassword(newPass), currentUser.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Change password error:', err);
+    res.status(500).json({ error: 'Erro ao alterar senha.' });
+  }
+});
+
 app.patch('/api/admin/members/:id/profile', requireAdmin, async (req, res) => {
   const currentUser = (req as any).user as User;
   const memberId = req.params.id;

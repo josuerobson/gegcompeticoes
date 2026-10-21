@@ -885,6 +885,23 @@ export default function App() {
     }
   };
 
+  const handleChangePassword = async (currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
+    if (!currentUser) return { success: false, error: 'Usuário não autenticado.' };
+    try {
+      const res = await fetch('/api/users/me/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) return { success: true };
+      return { success: false, error: data.error || 'Erro ao alterar senha.' };
+    } catch (err) {
+      console.error('Erro ao alterar senha:', err);
+      return { success: false, error: 'Erro ao alterar senha.' };
+    }
+  };
+
   const handleUpdateClub = async (clubId: string, fields: Record<string, unknown>): Promise<boolean> => {
     if (!currentUser) return false;
     try {
@@ -2700,6 +2717,7 @@ export default function App() {
               }}
               onNavigateToChampionships={() => setActiveTab('championships')}
               onUpdateProfile={handleUpdateProfile}
+              onChangePassword={handleChangePassword}
               onUpdateClub={handleUpdateClub}
               onUploadDocument={handleUploadDocument}
               defaultImage={settings.default_image}

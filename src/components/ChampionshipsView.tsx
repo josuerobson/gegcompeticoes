@@ -503,7 +503,7 @@ export default function ChampionshipsView({
                 <div className="space-y-2 sm:space-y-3 border-b border-slate-100 pb-3 sm:pb-4">
                   <button
                     onClick={() => setViewingChampionship(null)}
-                    className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg transition font-bold flex items-center gap-1.5 cursor-pointer"
+                    className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg transition font-bold flex items-center gap-1.5 cursor-pointer"
                   >
                     ← Voltar para Campeonatos
                   </button>

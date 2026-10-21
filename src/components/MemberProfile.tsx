@@ -41,6 +41,7 @@ interface MemberProfileProps {
   onViewProfile?: (username: string) => void;
   onNavigateToChampionships: () => void;
   onUpdateProfile: (fields: Record<string, unknown>) => Promise<boolean>;
+  onChangePassword?: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   onUpdateClub: (clubId: string, fields: Record<string, unknown>) => Promise<boolean>;
   onUploadDocument: (kind: string, file: File, target: 'user' | 'club') => Promise<boolean>;
   defaultImage?: string;
@@ -292,6 +293,7 @@ export default function MemberProfile({
   onViewProfile,
   onNavigateToChampionships,
   onUpdateProfile,
+  onChangePassword,
   onUpdateClub,
   onUploadDocument,
   defaultImage
@@ -558,6 +560,40 @@ export default function MemberProfile({
 
   const uploadProfileDoc = async (kind: string, file: File) => {
     await onUploadDocument(kind, file, isClubAdmin ? 'club' : 'user');
+  };
+
+  // Troca de senha — o próprio usuário informa a senha atual para confirmar
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+  const handleChangePasswordSubmit = async () => {
+    setPasswordError('');
+    setPasswordSuccess(false);
+    if (!passwordForm.currentPassword || !passwordForm.newPassword) {
+      setPasswordError('Preencha a senha atual e a nova senha.');
+      return;
+    }
+    if (passwordForm.newPassword.length < 4) {
+      setPasswordError('A nova senha deve ter no mínimo 4 caracteres.');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('A confirmação não corresponde à nova senha.');
+      return;
+    }
+    if (!onChangePassword) return;
+    setChangingPassword(true);
+    const result = await onChangePassword(passwordForm.currentPassword, passwordForm.newPassword);
+    setChangingPassword(false);
+    if (result.success) {
+      setPasswordSuccess(true);
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setTimeout(() => setPasswordSuccess(false), 2500);
+    } else {
+      setPasswordError(result.error || 'Erro ao alterar senha.');
+    }
   };
 
   // Guia de Trânsito direct edit state
@@ -2348,6 +2384,34 @@ export default function MemberProfile({
                         </>
                       )}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {onChangePassword && (
+                <div className="bg-slate-50 p-4 rounded-xl space-y-3 border border-slate-100">
+                  <h5 className="text-[10px] font-bold uppercase tracking-wider text-slate-450">Segurança — Alterar Senha</h5>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <ProfileField label="Senha atual" type="password" value={passwordForm.currentPassword} onChange={v => setPasswordForm({ ...passwordForm, currentPassword: v })} />
+                    <div />
+                    <ProfileField label="Nova senha" type="password" value={passwordForm.newPassword} onChange={v => setPasswordForm({ ...passwordForm, newPassword: v })} />
+                    <ProfileField label="Confirmar nova senha" type="password" value={passwordForm.confirmPassword} onChange={v => setPasswordForm({ ...passwordForm, confirmPassword: v })} />
+                  </div>
+                  {passwordError && <p className="text-[11px] text-red-500 font-semibold">{passwordError}</p>}
+                  <div className="flex items-center gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleChangePasswordSubmit}
+                      disabled={changingPassword}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold px-4 py-2 rounded-lg transition cursor-pointer"
+                    >
+                      {changingPassword ? 'Alterando...' : 'Alterar senha'}
+                    </button>
+                    {passwordSuccess && (
+                      <span className="text-emerald-600 text-[11px] font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Senha alterada
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
