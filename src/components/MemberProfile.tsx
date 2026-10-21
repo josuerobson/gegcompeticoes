@@ -2003,7 +2003,11 @@ export default function MemberProfile({
                     </span>
                   )}
                   {(() => {
-                    const status = annuityStatus(selectedUser.hasPaidSignature, selectedUser.signatureExpiry);
+                    // Checkbox "Anuidade paga / em dia" do cadastro é a marcação manual do
+                    // admin e prevalece sobre a data: se marcado, mantém Regular mesmo com
+                    // o vencimento já passado (admin só desmarca quando de fato não pagou).
+                    const rawStatus = annuityStatus(selectedUser.hasPaidSignature, selectedUser.signatureExpiry);
+                    const status = rawStatus === 'vencida' && selectedUser.hasPaidSignature ? 'regular' : rawStatus;
                     const style = status === 'regular' ? 'text-emerald-600'
                       : status === 'a_vencer' ? 'text-sky-600'
                       : status === 'vencida' ? 'text-rose-500'
