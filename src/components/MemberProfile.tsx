@@ -5,6 +5,7 @@ import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import { QRCodeView } from './QRCodeView';
 import { PixPaymentModal } from './PixPaymentModal';
 import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel } from '../utils/textSearch';
+import { annuityStatus, ANNUITY_STATUS_LABELS } from '../utils/financeReports';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
@@ -2001,13 +2002,21 @@ export default function MemberProfile({
                       Venc: {selectedUser.signatureExpiry.includes('-') ? selectedUser.signatureExpiry.split('-').reverse().join('/') : selectedUser.signatureExpiry}
                     </span>
                   )}
-                  {selectedUser.hasPaidSignature ? (
-                    <span className="font-bold text-emerald-600 flex items-center gap-1">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" /> REGULAR
-                    </span>
-                  ) : (
-                    <span className="font-bold text-rose-500">PENDENTE</span>
-                  )}
+                  {(() => {
+                    const status = annuityStatus(selectedUser.hasPaidSignature, selectedUser.signatureExpiry);
+                    const style = status === 'regular' ? 'text-emerald-600'
+                      : status === 'a_vencer' ? 'text-sky-600'
+                      : status === 'vencida' ? 'text-rose-500'
+                      : 'text-amber-600';
+                    return (
+                      <span className={`font-bold flex items-center gap-1 uppercase ${style}`}>
+                        {status === 'regular' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                        {status === 'a_vencer' && <Clock className="w-4 h-4 text-sky-500" />}
+                        {status === 'vencida' && <ShieldAlert className="w-4 h-4 text-rose-500" />}
+                        {ANNUITY_STATUS_LABELS[status]}
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
 
