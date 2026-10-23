@@ -414,7 +414,7 @@ export function AnnuityRoster({ users, clubs, annuityPlans }: AnnuityRosterProps
     return users
       .filter(u => u.role === 'member')
       .map(u => {
-        const status = annuityStatus(u.hasPaidSignature, u.signatureExpiry);
+        const status = annuityStatus(u.signatureExpiry);
         const plan = u.annuityPlanId ? annuityPlans.find(p => p.id === u.annuityPlanId) : undefined;
         return {
           id: u.id,

@@ -126,13 +126,15 @@ export function parseExpiry(raw?: string | null): string | null {
   return null;
 }
 
-export function annuityStatus(hasPaid: boolean, expiryRaw?: string | null, now = new Date()): AnnuityStatus {
+// A data de vencimento é a única referência da situação da anuidade (o
+// campo manual "Anuidade paga / em dia" foi removido do cadastro).
+export function annuityStatus(expiryRaw?: string | null, now = new Date()): AnnuityStatus {
   const today = ymd(now);
   const limit = ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30));
   const expiry = parseExpiry(expiryRaw);
-  const valid = expiry ? expiry >= today : hasPaid;
-  if (valid) return expiry && expiry <= limit ? 'a_vencer' : 'regular';
-  return expiry ? 'vencida' : 'sem_anuidade';
+  if (!expiry) return 'sem_anuidade';
+  if (expiry < today) return 'vencida';
+  return expiry <= limit ? 'a_vencer' : 'regular';
 }
 
 export function annuityPriceFor(user: User, plans: AnnuityPlan[]): number {

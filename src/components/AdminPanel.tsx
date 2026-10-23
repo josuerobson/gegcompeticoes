@@ -8260,7 +8260,6 @@ export default function AdminPanel({
   };
   const [editingAthlete, setEditingAthlete] = useState<User | null>(null);
   const [editAthleteForm, setEditAthleteForm] = useState(EMPTY_EDIT_ATHLETE_FORM);
-  const [editAthleteHasPaidSignature, setEditAthleteHasPaidSignature] = useState(false);
   const [editAthleteIsCac, setEditAthleteIsCac] = useState(false);
   const [savingEditAthlete, setSavingEditAthlete] = useState(false);
   const [editAthleteError, setEditAthleteError] = useState('');
@@ -8284,7 +8283,6 @@ export default function AdminPanel({
       annuityPlanId: athlete.annuityPlanId || '', bookNumber: athlete.bookNumber || '',
       clubAffiliationDate: athlete.clubAffiliationDate || '',
     });
-    setEditAthleteHasPaidSignature(Boolean(athlete.hasPaidSignature));
     setEditAthleteIsCac(Boolean(athlete.isCac));
     setEditAthleteError('');
     setEditAthleteSuccess(false);
@@ -8297,7 +8295,7 @@ export default function AdminPanel({
     setEditAthleteError('');
     // Datas/texto em branco viram null (não string vazia) para não quebrar as
     // colunas DATE no banco quando o diretor deixa um campo sem preencher.
-    const payload: Record<string, unknown> = { hasPaidSignature: editAthleteHasPaidSignature, isCac: editAthleteIsCac };
+    const payload: Record<string, unknown> = { isCac: editAthleteIsCac };
     for (const [key, value] of Object.entries(editAthleteForm) as [string, string][]) {
       payload[key] = value.trim() === '' ? null : value;
     }
@@ -8887,7 +8885,7 @@ export default function AdminPanel({
         const ownClubRegs = registrations.filter(r => r.clubId === currentUser?.clubId);
         const confirmedRegs = ownClubRegs.filter(r => r.paymentStatus === 'approved');
         const totalFees = confirmedRegs.reduce((sum, r) => sum + netValue(r), 0);
-        const signedUsersCount = users.filter(u => u.hasPaidSignature && u.clubId === currentUser?.clubId).length;
+        const signedUsersCount = users.filter(u => u.clubId === currentUser?.clubId && ['regular', 'a_vencer'].includes(annuityStatus(u.signatureExpiry))).length;
 
         // Agrupado por campeonato do Aranãs: quantas/quanto já pago (fatura
         // quitada) x pendente de pagamento (ainda não entrou em fatura, ou
@@ -10899,15 +10897,6 @@ export default function AdminPanel({
                           />
                         </div>
                         <MemberField label="Número de registro do livro físico" value={editAthleteForm.bookNumber} onChange={v => setEditAthleteForm({ ...editAthleteForm, bookNumber: v })} />
-                        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer sm:col-span-2">
-                          <input
-                            type="checkbox"
-                            checked={editAthleteHasPaidSignature}
-                            onChange={e => setEditAthleteHasPaidSignature(e.target.checked)}
-                            className="w-4 h-4 accent-blue-600 cursor-pointer"
-                          />
-                          Anuidade paga / em dia
-                        </label>
                       </div>
                     </div>
 
@@ -11380,7 +11369,7 @@ export default function AdminPanel({
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {filiadoClubs.map(club => {
-                        const clubStatus = annuityStatus(false, club.annuityDueDate);
+                        const clubStatus = annuityStatus(club.annuityDueDate);
                         const dueIso = parseExpiry(club.annuityDueDate);
                         const clubStatusStyle = clubStatus === 'regular' ? 'bg-emerald-100 text-emerald-800'
                           : clubStatus === 'a_vencer' ? 'bg-sky-100 text-sky-800'

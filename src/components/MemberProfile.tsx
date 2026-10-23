@@ -1380,6 +1380,8 @@ export default function MemberProfile({
 
   const isMe = currentUser?.id === selectedUser.id;
   const isFollowing = currentUser?.following.includes(selectedUser.id) || false;
+  // Vencimento da anuidade é a única referência de situação do atleta.
+  const annuitySituation = annuityStatus(selectedUser.signatureExpiry);
 
   // Filter posts created by this selected user
   const userPosts = posts.filter(p => p.userId === selectedUser.id);
@@ -2003,21 +2005,16 @@ export default function MemberProfile({
                     </span>
                   )}
                   {(() => {
-                    // Checkbox "Anuidade paga / em dia" do cadastro é a marcação manual do
-                    // admin e prevalece sobre a data: se marcado, mantém Regular mesmo com
-                    // o vencimento já passado (admin só desmarca quando de fato não pagou).
-                    const rawStatus = annuityStatus(selectedUser.hasPaidSignature, selectedUser.signatureExpiry);
-                    const status = rawStatus === 'vencida' && selectedUser.hasPaidSignature ? 'regular' : rawStatus;
-                    const style = status === 'regular' ? 'text-emerald-600'
-                      : status === 'a_vencer' ? 'text-sky-600'
-                      : status === 'vencida' ? 'text-rose-500'
+                    const style = annuitySituation === 'regular' ? 'text-emerald-600'
+                      : annuitySituation === 'a_vencer' ? 'text-sky-600'
+                      : annuitySituation === 'vencida' ? 'text-rose-500'
                       : 'text-amber-600';
                     return (
                       <span className={`font-bold flex items-center gap-1 uppercase ${style}`}>
-                        {status === 'regular' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-                        {status === 'a_vencer' && <Clock className="w-4 h-4 text-sky-500" />}
-                        {status === 'vencida' && <ShieldAlert className="w-4 h-4 text-rose-500" />}
-                        {ANNUITY_STATUS_LABELS[status]}
+                        {annuitySituation === 'regular' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                        {annuitySituation === 'a_vencer' && <Clock className="w-4 h-4 text-sky-500" />}
+                        {annuitySituation === 'vencida' && <ShieldAlert className="w-4 h-4 text-rose-500" />}
+                        {ANNUITY_STATUS_LABELS[annuitySituation]}
                       </span>
                     );
                   })()}
@@ -2128,7 +2125,7 @@ export default function MemberProfile({
               )}
             </div>
 
-            {isMe && !selectedUser.hasPaidSignature && (
+            {isMe && annuitySituation !== 'regular' && annuitySituation !== 'a_vencer' && (
               <button
                 onClick={() => setIsSignModalOpen(true)}
                 className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs py-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-amber-100 cursor-pointer"
