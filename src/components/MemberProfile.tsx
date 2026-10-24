@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { User, Post, Registration, StageScore, Championship, Modality, Club, Stage, Weapon, TrainingSession, WeaponLookupOption, AmmoAthleteBalance } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
@@ -642,6 +643,18 @@ export default function MemberProfile({
   // Print & Declaration States
   const [printMode, setPrintMode] = useState<'certificate' | 'club_card' | 'gg_card' | 'declaration_filiacao' | 'declaration_habitualidade' | null>(null);
   const [printData, setPrintData] = useState<any>(null);
+
+  // Isolate print mode for clean document printing
+  useEffect(() => {
+    if (printMode) {
+      document.body.classList.add('document-print-open');
+    } else {
+      document.body.classList.remove('document-print-open');
+    }
+    return () => {
+      document.body.classList.remove('document-print-open');
+    };
+  }, [printMode]);
 
   // Club Custom Templates State
   const [clubTemplates, setClubTemplates] = useState<Record<string, any>>({});
@@ -4690,8 +4703,8 @@ export default function MemberProfile({
 
       {/* FULL SCREEN WEB PRINT VIEW OVERLAY */}
       <AnimatePresence>
-        {printMode && printData && (
-          <div className="absolute inset-x-0 top-0 z-[9999] bg-slate-900 p-4 md:p-8 flex flex-col items-center justify-start print:p-0 print:bg-white print:static print:block select-none">
+        {printMode && printData && createPortal(
+          <div id="print-portal-root" className="fixed inset-0 z-[9999] overflow-y-auto bg-slate-900/95 p-4 md:p-8 flex flex-col items-center justify-start print:p-0 print:bg-white print:static print:block select-none">
 
             {/* Control bar - Hidden during paper print */}
             <div className="no-print w-full max-w-4xl bg-slate-800 text-white rounded-xl p-4 mb-6 flex justify-between items-center shadow-lg border border-slate-700">
@@ -5068,7 +5081,7 @@ export default function MemberProfile({
                     ))}
 
                     {/* Signatures & Footer */}
-                    <div className="w-full bg-white p-4">
+                    <div className="w-full bg-white p-4 page-break-inside-avoid">
                       <div className="mt-4 space-y-8">
                         <div className="text-center text-slate-800 text-[11px]">
                           <p>Atestamos a veracidade e exatidão dos registros de habitualidade acima especificados.</p>
@@ -5088,7 +5101,8 @@ export default function MemberProfile({
               })()}
 
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </AnimatePresence>
 

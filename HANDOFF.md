@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(security): fase 2 tokens jwt assinados com hmac-sha256, rate limiting no login e security headers` |
-| Data/hora | 2026-10-19T22:35:00-03:00 |
+| Mensagem | `fix(print): isola impressao de declaracoes e remove elementos do sistema no pdf` |
+| Data/hora | 2026-10-24T16:25:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,14 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Isolamento de Impressão de Documentos e Declarações (`src/components/MemberProfile.tsx`, `src/index.css`)**:
+  - *O que foi decidido*:
+    1. **Isolamento do DOM de Impressão via Portal React (`createPortal`)**: O modal de pré-visualização de documentos (`printMode && printData`) em `MemberProfile.tsx` foi desacoplado da hierarquia `#root` do aplicativo através de um portal (`createPortal(..., document.body)`), sob a tag `<div id="print-portal-root">`.
+    2. **Ocultação Completa da Interface do Sistema no `@media print`**: Ao abrir a pré-visualização de qualquer documento (habitualidade, filiação, certificado, carteirinhas), a classe `document-print-open` é aplicada ao `<body>`. No `@media print` em `src/index.css`, `#root` recebe `display: none !important;`, eliminando 100% dos elementos da aplicação web (banner de modo suporte, foto de perfil, estatísticas, botões, menus, rodapé e abas) da saída de impressão/PDF.
+    3. **Paginação e Quebra de Página Limpa**: O `#print-portal-root` assume o controle total da impressão (`position: static !important; width: 100% !important; margin: 0 !important; background: #ffffff !important; color: #0f172a !important;`), forçando `content-visibility: visible !important;` em todos os blocos e aplicando `break-inside: avoid !important; page-break-inside: avoid !important;` nas tabelas individuais de habitualidade e no bloco de assinaturas para impedir cortes ao meio ou geração excessiva de páginas.
+  - *Por que*: Ao clicar em "Imprimir / Salvar PDF" na declaração de habitualidade, o navegador renderizava a tela inteira do sistema antes do documento timbrado, gerando dezenas de páginas com a interface do sistema antes da declaração.
+  - *O que NÃO fazer*: Não renderizar telas de impressão de documentos dentro da árvore direta do `#root` sem as regras de `@media print` que garantam a ocultação dos elementos de navegação do sistema.
 
 - **Fase 2 de Segurança: Tokens Assinados (JWT/HMAC-SHA256), Rate Limiting no Login e Cabeçalhos de Segurança HTTP (`src/auth.ts`, `server.ts`, `src/App.tsx`, `src/db.ts`)**:
   - *O que foi decidido*:

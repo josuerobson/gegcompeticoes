@@ -138,4 +138,42 @@ header, main, footer, div, section, button, span, a, input, select, textarea {
   .no-print {
     display: none !important;
   }
+
+  /* Document Print Isolation (Habitualidade, Filiação, Certificados, Carteirinhas) */
+  body.document-print-open {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.document-print-open #root {
+    display: none !important;
+  }
+
+  body.document-print-open #print-portal-root {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    overflow: visible !important;
+  }
+
+  body.document-print-open * {
+    content-visibility: visible !important;
+  }
+
+  .page-break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 10mm 8mm;
+  }
 }
