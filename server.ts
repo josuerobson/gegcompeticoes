@@ -3535,6 +3535,7 @@ app.get('/api/admin/athletes', requireFranchiseAdmin, async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 30, 1), 100);
     const offset = (page - 1) * limit;
     const q = ((req.query.q as string) || '').trim();
+    const clubIdFilter = ((req.query.clubId as string) || '').trim();
 
     const baseParams: any[] = [visibleClubIds];
     let whereExtra = '';
@@ -3542,7 +3543,11 @@ app.get('/api/admin/athletes', requireFranchiseAdmin, async (req, res) => {
       const digits = q.replace(/\D/g, '');
       baseParams.push(`%${digits || q}%`);
       baseParams.push(`%${q}%`);
-      whereExtra = ` AND (regexp_replace(u.cpf, '[^0-9]', '', 'g') ILIKE $2 OR unaccent_lower(u.full_name) LIKE unaccent_lower($3))`;
+      whereExtra += ` AND (regexp_replace(u.cpf, '[^0-9]', '', 'g') ILIKE $2 OR unaccent_lower(u.full_name) LIKE unaccent_lower($3))`;
+    }
+    if (clubIdFilter && visibleClubIds.includes(clubIdFilter)) {
+      baseParams.push(clubIdFilter);
+      whereExtra += ` AND u.club_id = $${baseParams.length}`;
     }
 
     const countRes = await pool.query(

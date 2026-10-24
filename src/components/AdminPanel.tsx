@@ -8076,6 +8076,7 @@ export default function AdminPanel({
   const [createAthleteError, setCreateAthleteError] = useState('');
   const [createAthleteSuccess, setCreateAthleteSuccess] = useState(false);
   const [athleteSearchQuery, setAthleteSearchQuery] = useState('');
+  const [athleteClubFilter, setAthleteClubFilter] = useState('');
 
   // Paginação real (server-side) da lista "Atletas Cadastrados" — diferente do
   // resto do painel, que opera sobre o array `users` já carregado inteiro no
@@ -8087,12 +8088,13 @@ export default function AdminPanel({
   const [pagedAthletesTotal, setPagedAthletesTotal] = useState(0);
   const [loadingAthletes, setLoadingAthletes] = useState(false);
 
-  const loadPagedAthletes = async (page: number, q: string) => {
+  const loadPagedAthletes = async (page: number, q: string, clubId: string) => {
     if (!currentUser) return;
     setLoadingAthletes(true);
     try {
       const params = new URLSearchParams({ page: String(page), limit: String(ATHLETES_PAGE_SIZE) });
       if (q.trim()) params.set('q', q.trim());
+      if (clubId) params.set('clubId', clubId);
       const r = await fetch(`/api/admin/athletes?${params.toString()}`, {
         headers: { 'x-user-id': currentUser.id }
       });
@@ -8113,16 +8115,16 @@ export default function AdminPanel({
   useEffect(() => {
     if (plataformaMenu !== 'novo_atleta') return;
     const handle = setTimeout(() => {
-      loadPagedAthletes(athletePage, athleteSearchQuery);
+      loadPagedAthletes(athletePage, athleteSearchQuery, athleteClubFilter);
     }, athleteSearchQuery ? 350 : 0);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plataformaMenu, athletePage, athleteSearchQuery, currentUser?.id]);
+  }, [plataformaMenu, athletePage, athleteSearchQuery, athleteClubFilter, currentUser?.id]);
 
   useEffect(() => {
     setAthletePage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [athleteSearchQuery]);
+  }, [athleteSearchQuery, athleteClubFilter]);
 
   const handleCreateAthleteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -8139,7 +8141,7 @@ export default function AdminPanel({
       setCreateAthleteSuccess(true);
       setTimeout(() => setCreateAthleteSuccess(false), 2500);
       if (onRefreshData) await onRefreshData();
-      await loadPagedAthletes(athletePage, athleteSearchQuery);
+      await loadPagedAthletes(athletePage, athleteSearchQuery, athleteClubFilter);
     } else {
       setCreateAthleteError(result.error || 'Erro ao cadastrar atleta.');
     }
@@ -8204,7 +8206,7 @@ export default function AdminPanel({
       setAthleteActionMsg(`Atleta "${name}" excluído definitivamente.`);
       setTimeout(() => setAthleteActionMsg(''), 6000);
       if (onRefreshData) await onRefreshData();
-      await loadPagedAthletes(athletePage, athleteSearchQuery);
+      await loadPagedAthletes(athletePage, athleteSearchQuery, athleteClubFilter);
     } catch (err: any) {
       setDeleteAthleteError(err.message || 'Erro ao excluir o atleta.');
     } finally {
@@ -8312,7 +8314,7 @@ export default function AdminPanel({
     if (ok) {
       setEditAthleteSuccess(true);
       if (onRefreshData) await onRefreshData();
-      await loadPagedAthletes(athletePage, athleteSearchQuery);
+      await loadPagedAthletes(athletePage, athleteSearchQuery, athleteClubFilter);
       setTimeout(() => {
         setEditAthleteSuccess(false);
         setEditingAthlete(null);
@@ -10512,13 +10514,25 @@ export default function AdminPanel({
             <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs text-left">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <h4 className="font-display font-bold text-slate-900 text-sm">Atletas Cadastrados ({pagedAthletesTotal})</h4>
-                <input
-                  type="text"
-                  value={athleteSearchQuery}
-                  onChange={e => setAthleteSearchQuery(e.target.value)}
-                  placeholder="Buscar por nome, CPF ou clube..."
-                  className="bg-slate-50 border border-slate-200 outline-none px-3 py-2 rounded-xl focus:border-blue-500 text-xs text-slate-700 w-full sm:w-64"
-                />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <select
+                    value={athleteClubFilter}
+                    onChange={e => setAthleteClubFilter(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 outline-none px-3 py-2 rounded-xl focus:border-blue-500 text-xs text-slate-700 w-full sm:w-48"
+                  >
+                    <option value="">Todos os clubes</option>
+                    {clubs.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={athleteSearchQuery}
+                    onChange={e => setAthleteSearchQuery(e.target.value)}
+                    placeholder="Buscar por nome ou CPF..."
+                    className="bg-slate-50 border border-slate-200 outline-none px-3 py-2 rounded-xl focus:border-blue-500 text-xs text-slate-700 w-full sm:w-64"
+                  />
+                </div>
               </div>
               <p className="text-[11px] text-slate-400">
                 Página {athletePage} de {athleteTotalPages} — navegue pelas páginas para ver todos os cadastros, mesmo sem saber o CPF.
@@ -10531,10 +10545,20 @@ export default function AdminPanel({
                 <div className="grid grid-cols-1 gap-2">
                   {pagedAthletes.map(u => {
                     const club = clubs.find(c => c.id === u.clubId);
+                    const athleteStatus = annuityStatus(u.signatureExpiry);
+                    const athleteStatusStyle = athleteStatus === 'regular' ? 'bg-emerald-100 text-emerald-800'
+                      : athleteStatus === 'a_vencer' ? 'bg-sky-100 text-sky-800'
+                      : athleteStatus === 'vencida' ? 'bg-rose-100 text-rose-800'
+                      : 'bg-amber-100 text-amber-800';
                     return (
                       <div key={u.id} className="border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row justify-between sm:items-center gap-2 bg-slate-50/50 hover:border-slate-300 transition">
                         <div>
-                          <h4 className="font-bold text-slate-900 text-xs">{u.fullName}</h4>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-bold text-slate-900 text-xs">{u.fullName}</h4>
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase shrink-0 ${athleteStatusStyle}`}>
+                              {ANNUITY_STATUS_LABELS[athleteStatus]}
+                            </span>
+                          </div>
                           <p className="text-[11px] text-slate-500">CPF: {u.cpf || 'N/I'} • Clube: {club?.name || 'Não vinculado'}</p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
