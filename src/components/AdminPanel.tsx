@@ -8077,6 +8077,7 @@ export default function AdminPanel({
   const [createAthleteSuccess, setCreateAthleteSuccess] = useState(false);
   const [athleteSearchQuery, setAthleteSearchQuery] = useState('');
   const [athleteClubFilter, setAthleteClubFilter] = useState('');
+  const [athleteAnnuityFilter, setAthleteAnnuityFilter] = useState('');
 
   // Paginação real (server-side) da lista "Atletas Cadastrados" — diferente do
   // resto do painel, que opera sobre o array `users` já carregado inteiro no
@@ -8088,13 +8089,14 @@ export default function AdminPanel({
   const [pagedAthletesTotal, setPagedAthletesTotal] = useState(0);
   const [loadingAthletes, setLoadingAthletes] = useState(false);
 
-  const loadPagedAthletes = async (page: number, q: string, clubId: string) => {
+  const loadPagedAthletes = async (page: number, q: string, clubId: string, annuityStatusFilter: string) => {
     if (!currentUser) return;
     setLoadingAthletes(true);
     try {
       const params = new URLSearchParams({ page: String(page), limit: String(ATHLETES_PAGE_SIZE) });
       if (q.trim()) params.set('q', q.trim());
       if (clubId) params.set('clubId', clubId);
+      if (annuityStatusFilter) params.set('annuityStatus', annuityStatusFilter);
       const r = await fetch(`/api/admin/athletes?${params.toString()}`, {
         headers: { 'x-user-id': currentUser.id }
       });
@@ -8115,16 +8117,16 @@ export default function AdminPanel({
   useEffect(() => {
     if (plataformaMenu !== 'novo_atleta') return;
     const handle = setTimeout(() => {
-      loadPagedAthletes(athletePage, athleteSearchQuery, athleteClubFilter);
+      loadPagedAthletes(athletePage, athleteSearchQuery, athleteClubFilter, athleteAnnuityFilter);
     }, athleteSearchQuery ? 350 : 0);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plataformaMenu, athletePage, athleteSearchQuery, athleteClubFilter, currentUser?.id]);
+  }, [plataformaMenu, athletePage, athleteSearchQuery, athleteClubFilter, athleteAnnuityFilter, currentUser?.id]);
 
   useEffect(() => {
     setAthletePage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [athleteSearchQuery, athleteClubFilter]);
+  }, [athleteSearchQuery, athleteClubFilter, athleteAnnuityFilter]);
 
   const handleCreateAthleteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -8141,7 +8143,7 @@ export default function AdminPanel({
       setCreateAthleteSuccess(true);
       setTimeout(() => setCreateAthleteSuccess(false), 2500);
       if (onRefreshData) await onRefreshData();
-      await loadPagedAthletes(athletePage, athleteSearchQuery, athleteClubFilter);
+      await loadPagedAthletes(athletePage, athleteSearchQuery, athleteClubFilter, athleteAnnuityFilter);
     } else {
       setCreateAthleteError(result.error || 'Erro ao cadastrar atleta.');
     }
@@ -8206,7 +8208,7 @@ export default function AdminPanel({
       setAthleteActionMsg(`Atleta "${name}" excluído definitivamente.`);
       setTimeout(() => setAthleteActionMsg(''), 6000);
       if (onRefreshData) await onRefreshData();
-      await loadPagedAthletes(athletePage, athleteSearchQuery, athleteClubFilter);
+      await loadPagedAthletes(athletePage, athleteSearchQuery, athleteClubFilter, athleteAnnuityFilter);
     } catch (err: any) {
       setDeleteAthleteError(err.message || 'Erro ao excluir o atleta.');
     } finally {
@@ -8314,7 +8316,7 @@ export default function AdminPanel({
     if (ok) {
       setEditAthleteSuccess(true);
       if (onRefreshData) await onRefreshData();
-      await loadPagedAthletes(athletePage, athleteSearchQuery, athleteClubFilter);
+      await loadPagedAthletes(athletePage, athleteSearchQuery, athleteClubFilter, athleteAnnuityFilter);
       setTimeout(() => {
         setEditAthleteSuccess(false);
         setEditingAthlete(null);
@@ -10523,6 +10525,16 @@ export default function AdminPanel({
                     <option value="">Todos os clubes</option>
                     {clubs.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => (
                       <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={athleteAnnuityFilter}
+                    onChange={e => setAthleteAnnuityFilter(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 outline-none px-3 py-2 rounded-xl focus:border-blue-500 text-xs text-slate-700 w-full sm:w-44"
+                  >
+                    <option value="">Status de anuidade: todos</option>
+                    {(Object.keys(ANNUITY_STATUS_LABELS) as Array<keyof typeof ANNUITY_STATUS_LABELS>).map(status => (
+                      <option key={status} value={status}>{ANNUITY_STATUS_LABELS[status]}</option>
                     ))}
                   </select>
                   <input

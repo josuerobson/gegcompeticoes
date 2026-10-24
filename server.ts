@@ -3536,6 +3536,7 @@ app.get('/api/admin/athletes', requireFranchiseAdmin, async (req, res) => {
     const offset = (page - 1) * limit;
     const q = ((req.query.q as string) || '').trim();
     const clubIdFilter = ((req.query.clubId as string) || '').trim();
+    const annuityFilter = ((req.query.annuityStatus as string) || '').trim();
 
     const baseParams: any[] = [visibleClubIds];
     let whereExtra = '';
@@ -3548,6 +3549,24 @@ app.get('/api/admin/athletes', requireFranchiseAdmin, async (req, res) => {
     if (clubIdFilter && visibleClubIds.includes(clubIdFilter)) {
       baseParams.push(clubIdFilter);
       whereExtra += ` AND u.club_id = $${baseParams.length}`;
+    }
+    // Mesma lógica de annuityStatus() em src/utils/financeReports.ts (ISO
+    // primeiro, DD/MM/YYYY como fallback, janela de 30 dias para "a vencer").
+    const parsedExpiryExpr = `(CASE
+      WHEN u.signature_expiry ~ '^\\d{4}-\\d{2}-\\d{2}' THEN substring(u.signature_expiry from 1 for 10)::date
+      WHEN u.signature_expiry ~ '^\\d{2}/\\d{2}/\\d{4}' THEN to_date(substring(u.signature_expiry from 1 for 10), 'DD/MM/YYYY')
+      ELSE NULL
+    END)`;
+    if (['regular', 'a_vencer', 'vencida', 'sem_anuidade'].includes(annuityFilter)) {
+      if (annuityFilter === 'sem_anuidade') {
+        whereExtra += ` AND ${parsedExpiryExpr} IS NULL`;
+      } else if (annuityFilter === 'vencida') {
+        whereExtra += ` AND ${parsedExpiryExpr} < CURRENT_DATE`;
+      } else if (annuityFilter === 'a_vencer') {
+        whereExtra += ` AND ${parsedExpiryExpr} >= CURRENT_DATE AND ${parsedExpiryExpr} <= CURRENT_DATE + 30`;
+      } else {
+        whereExtra += ` AND ${parsedExpiryExpr} > CURRENT_DATE + 30`;
+      }
     }
 
     const countRes = await pool.query(
