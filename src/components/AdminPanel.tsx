@@ -10517,16 +10517,18 @@ export default function AdminPanel({
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <h4 className="font-display font-bold text-slate-900 text-sm">Atletas Cadastrados ({pagedAthletesTotal})</h4>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <select
-                    value={athleteClubFilter}
-                    onChange={e => setAthleteClubFilter(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 outline-none px-3 py-2 rounded-xl focus:border-blue-500 text-xs text-slate-700 w-full sm:w-48"
-                  >
-                    <option value="">Todos os clubes</option>
-                    {clubs.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                  <div className="w-full sm:w-56">
+                    <SearchableSelect
+                      label=""
+                      value={athleteClubFilter}
+                      onChange={setAthleteClubFilter}
+                      placeholder="Todos os clubes"
+                      options={[
+                        { value: '', label: 'Todos os clubes' },
+                        ...clubs.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => ({ value: c.id, label: c.name }))
+                      ]}
+                    />
+                  </div>
                   <select
                     value={athleteAnnuityFilter}
                     onChange={e => setAthleteAnnuityFilter(e.target.value)}
