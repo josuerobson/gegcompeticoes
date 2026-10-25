@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(print): remove AnimatePresence ao redor do createPortal para restaurar abertura da habitualidade` |
-| Data/hora | 2026-10-24T23:52:00-03:00 |
+| Mensagem | `fix(habitualidade): elimina fallbacks ficticios de tiros e armas e descarta registros incompletos universalmente` |
+| Data/hora | 2026-10-25T12:35:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,14 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Conformidade Estrita na Habitualidade — Eliminação de Armas e Tiros Fictícios (`MemberProfile.tsx`, `server.ts`, `types.ts`)**:
+  - *O que foi decidido*:
+    1. **Arma Utilizada Nunca Inventada**: Se o treinamento ou a competição não possuir arma real devidamente cadastrada e identificada vinculada (`!w` ou modelo genérico como 'Arma não identificada'/'Arma Cadastrada'), o registro é estritamente DESCARTADO da habitualidade, sem inventar modelos, números de série ou fabricantes.
+    2. **Quantidade de Tiros Fidedigna**: Eliminados todos os fallbacks fixos de código (`|| 50` em treinos e `|| 20` em competições). Para treinos, utiliza o registro real de disparos (`t.totalShots` ou `ownAmmoShots + clubAmmoShots`), preservando inclusive 0 tiros quando aplicável; se não houver tiros válidos, o registro é descartado. Para competições, a quantidade de tiros é obtida da soma dos disparos computados da prova (`scoreX + scoreP10 + ... + scoreP0`) ou das séries da modalidade cadastrada (`seriesCount * shotsPerSeries` — ex: 10 tiros no Brasileiro, 8 tiros na Univales, 5 tiros em modalidades menores); se não houver informação válida, o registro é descartado.
+    3. **Ordenação e Escopo Universal**: Aplicado universalmente para todos os atletas da plataforma, ordenando todos os treinamentos cronologicamente primeiro, seguidos por todas as competições.
+  - *Por que*: O usuário solicitou que a habitualidade nunca invente arma nem quantidade de tiros para nenhum atleta, descartando registros sem a informação completa, garantindo fidelidade com o sistema legado e com as exigências do Exército.
+  - *O que NÃO fazer*: Nunca adicionar fallbacks fictícios de tiros (como `|| 20` ou `|| 50`) ou nomes genéricos de armas ("Arma Cadastrada", "Arma de Competição") na habitualidade.
 
 - **Remoção de `<AnimatePresence>` ao redor de `createPortal` (`src/components/MemberProfile.tsx`)**:
   - *O que foi decidido*: Remover as tags `<AnimatePresence>` e `</AnimatePresence>` que envolviam o `createPortal` da pré-visualização de documentos. O Framer Motion / Motion executa `onlyElements` nos filhos diretos de `AnimatePresence`, o que lançava uma exceção silenciosa `Objects are not valid as a React child (found: object with keys {typeof, key, children, containerInfo, implementation})` ao clicar em "Gerar Habitualidade" devido ao tipo de objeto de portal do React, impedindo a exibição do documento.

@@ -785,6 +785,18 @@ function mapTraining(t: any): TrainingSession {
     notes: t.notes || undefined,
     hidden: Boolean(t.hidden),
     createdAt: t.created_at,
+    selectedWeapon: t.w_model ? {
+      id: t.weapon_id,
+      model: t.w_model,
+      weaponNumber: t.w_weapon_number || undefined,
+      serialNumber: t.w_serial_number || undefined,
+      sigmaNumber: t.w_sigma_number || undefined,
+      caliber: t.w_caliber || undefined,
+      manufacturer: t.w_manufacturer || undefined,
+      weaponClass: t.w_weapon_class || undefined,
+      permissionStatus: t.w_permission_status || undefined,
+      ownerId: t.w_owner_id || undefined,
+    } as any : undefined,
   };
 }
 
@@ -7607,9 +7619,13 @@ app.get('/api/trainings', requireAuth, async (req, res) => {
   const fetchAll = req.query.all === 'true' && ['admin', 'master_admin', 'club_admin'].includes(currentUser.role);
   try {
     let query = `
-      SELECT t.*, u.full_name as athlete_name, u.cr_number as athlete_cr
+      SELECT t.*, u.full_name as athlete_name, u.cr_number as athlete_cr,
+             w.model as w_model, w.weapon_number as w_weapon_number, w.serial_number as w_serial_number,
+             w.sigma_number as w_sigma_number, w.caliber as w_caliber, w.manufacturer as w_manufacturer,
+             w.weapon_class as w_weapon_class, w.permission_status as w_permission_status, w.owner_id as w_owner_id
       FROM trainings t
       LEFT JOIN users u ON u.id = t.user_id
+      LEFT JOIN weapons w ON w.id = t.weapon_id
     `;
     const params: any[] = [];
     if (!fetchAll) {

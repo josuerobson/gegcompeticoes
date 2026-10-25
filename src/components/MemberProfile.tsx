@@ -1629,21 +1629,42 @@ export default function MemberProfile({
       if (isNaN(rawDate.getTime())) return;
       if (rawDate < startDate || rawDate > endDate) return;
 
+      // Arma REAL obrigatória — NUNCA INVENTAR
+      // Se não houver arma real cadastrada vinculada, o registro é descartado
       const w = t.selectedWeapon
-        || weapons.find(wpn => wpn.id === t.weaponId)
-        || (t.weaponName ? weapons.find(wpn => wpn.model && t.weaponName.toLowerCase().includes(wpn.model.toLowerCase())) : undefined);
+        || (t.weaponId ? weapons.find(wpn => wpn.id === t.weaponId) : undefined);
+
+      if (!w || !w.model || w.model.toLowerCase().includes('não identificada') || w.model.toLowerCase().includes('arma cadastrada')) {
+        return;
+      }
+
+      // Quantidade de tiros REAL obrigatória — NUNCA INVENTAR
+      let shotsCount: number | null = null;
+      if (typeof t.totalShots === 'number' && !isNaN(t.totalShots)) {
+        shotsCount = t.totalShots;
+      } else if (t.totalShots !== undefined && t.totalShots !== null && t.totalShots !== '' && !isNaN(Number(t.totalShots))) {
+        shotsCount = Number(t.totalShots);
+      } else if (t.ownAmmoShots !== undefined || t.clubAmmoShots !== undefined) {
+        shotsCount = (Number(t.ownAmmoShots) || 0) + (Number(t.clubAmmoShots) || 0);
+      } else if (typeof t.shots === 'number' && !isNaN(t.shots)) {
+        shotsCount = t.shots;
+      }
+
+      if (shotsCount === null || isNaN(shotsCount)) {
+        return;
+      }
 
       const dateFormatted = rawDate.toLocaleDateString('pt-BR');
       const timeFormatted = t.dateTime ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:00';
 
-      const weaponClass = w?.weaponClass || t.weaponClass || 'Pistola';
-      const model = w?.model || t.weaponName || t.weapon || 'Arma Cadastrada';
-      const weaponNumber = w?.weaponNumber || w?.serialNumber || t.weaponNumber || 'N/A';
-      const manufacturer = w?.manufacturer || 'Fabricante';
-      const caliber = t.weaponCaliber || w?.caliber || t.caliber || '9mm';
-      const permissionStatus = w?.permissionStatus || 'Permitido';
-      const sigma = w?.sigmaNumber || w?.serialNumber || selectedUser.crNumber || 'N/A';
-      const shotsCount = Number(t.totalShots) || ((Number(t.ownAmmoShots) || 0) + (Number(t.clubAmmoShots) || 0)) || t.shots || 50;
+      const weaponClass = w.weaponClass || 'Pistola';
+      const model = w.model;
+      const weaponNumber = w.weaponNumber || w.serialNumber || 'N/A';
+      const manufacturer = w.manufacturer || 'Não informado';
+      const caliber = w.caliber || t.weaponCaliber || 'N/A';
+      const permissionStatus = w.permissionStatus || (caliber?.includes('45') || caliber?.includes('9mm') ? 'Restrita' : 'Permitida');
+      const sigma = w.sigmaNumber || w.serialNumber || selectedUser.crNumber || 'N/A';
+      const isClubWeapon = w.ownerId === selectedUser.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false) || t.weaponOwnerType === 'clube';
 
       items.push({
         id: `tr_${t.id}`,
@@ -1662,7 +1683,7 @@ export default function MemberProfile({
         sigma,
         shotsCount,
         score: t.score !== undefined && t.score !== null && t.score !== '' ? t.score : '-',
-        weaponOwnerText: t.weaponOwnerType === 'clube' ? 'Clube' : 'Própria',
+        weaponOwnerText: isClubWeapon ? 'Clube' : 'Própria',
         ammoOwnerText: (Number(t.clubAmmoShots) || 0) > 0 ? 'Clube' : 'Própria',
         originId: t.id,
       });
@@ -1679,7 +1700,6 @@ export default function MemberProfile({
       const stage = stages.find(st => (reg?.stageId && st.id === reg.stageId) || (st.championshipId === s.championshipId && (s.stageNum ? st.stageNum === s.stageNum : false)));
       const champ = championships.find(c => c.id === s.championshipId || c.id === reg?.championshipId);
 
-      // Usar a data real da execução da prova (dataExecucao) ou a data da etapa no calendário oficial
       const rawDateStr = reg?.dataExecucao
         ? `${reg.dataExecucao}T${reg.horaExecucao || '00:00:00'}`
         : (stage?.date
@@ -1691,21 +1711,52 @@ export default function MemberProfile({
       if (isNaN(rawDate.getTime())) return;
       if (rawDate < startDate || rawDate > endDate) return;
 
-      const w = weapons.find(wpn => wpn.id === reg?.weaponId)
-        || (reg?.weaponId ? weapons.find(wpn => wpn.legacyId === (reg as any).weaponLegacyId) : undefined)
-        || (s.modality ? weapons.find(wpn => wpn.model && s.modality.toLowerCase().includes(wpn.model.toLowerCase())) : undefined);
+      // Arma REAL obrigatória — NUNCA INVENTAR
+      const w = reg?.weaponId
+        ? (weapons.find(wpn => wpn.id === reg.weaponId) || weapons.find(wpn => wpn.legacyId === (reg as any).weaponLegacyId))
+        : undefined;
+
+      if (!w || !w.model || w.model.toLowerCase().includes('não identificada') || w.model.toLowerCase().includes('arma cadastrada')) {
+        return;
+      }
+
+      // Quantidade de tiros REAL obrigatória — NUNCA INVENTAR
+      let shotsCount: number | null = null;
+      const scoreShotsSum = (Number(reg?.scoreX) || 0) + (Number(reg?.scoreP10) || 0) + (Number(reg?.scoreP9) || 0) +
+        (Number(reg?.scoreP8) || 0) + (Number(reg?.scoreP7) || 0) + (Number(reg?.scoreP6) || 0) +
+        (Number(reg?.scoreP5) || 0) + (Number(reg?.scoreP4) || 0) + (Number(reg?.scoreP3) || 0) +
+        (Number(reg?.scoreP2) || 0) + (Number(reg?.scoreP1) || 0) + (Number(reg?.scoreP0) || 0);
+
+      if (scoreShotsSum > 0) {
+        shotsCount = scoreShotsSum;
+      } else {
+        const mod = (reg?.modalityId ? modalities.find(m => m.id === reg.modalityId) : undefined)
+          || (s.modalityId ? modalities.find(m => m.id === s.modalityId) : undefined)
+          || modalities.find(m => m.name === s.modality);
+        if (mod && mod.seriesCount && mod.shotsPerSeries && (Number(mod.seriesCount) * Number(mod.shotsPerSeries) > 0)) {
+          shotsCount = Number(mod.seriesCount) * Number(mod.shotsPerSeries);
+        } else if (typeof (s as any)?.shotsCount === 'number' && (s as any).shotsCount > 0) {
+          shotsCount = (s as any).shotsCount;
+        } else if (typeof (reg as any)?.shotsCount === 'number' && (reg as any).shotsCount > 0) {
+          shotsCount = (reg as any).shotsCount;
+        }
+      }
+
+      if (shotsCount === null || isNaN(shotsCount) || shotsCount <= 0) {
+        return;
+      }
 
       const dateFormatted = rawDate.toLocaleDateString('pt-BR');
       const timeFormatted = reg?.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:54';
 
-      const weaponClass = w?.weaponClass || 'Pistola';
-      const model = w?.model || (reg as any)?.gunModel || s.modality || 'Arma de Competição';
-      const weaponNumber = w?.weaponNumber || w?.serialNumber || 'N/A';
-      const manufacturer = w?.manufacturer || 'IMBEL';
-      const caliber = w?.caliber || (reg as any)?.caliber || (s.modality?.includes('380') ? '.380' : s.modality?.includes('45') ? '.45' : '9mm');
-      const permissionStatus = w?.permissionStatus || (caliber?.includes('45') ? 'Restrita' : 'Permitida');
-      const sigma = w?.sigmaNumber || w?.serialNumber || selectedUser.crNumber || 'N/A';
-      const shotsCount = (s as any).shotsCount || (s as any).totalShots || 20;
+      const weaponClass = w.weaponClass || 'Pistola';
+      const model = w.model;
+      const weaponNumber = w.weaponNumber || w.serialNumber || 'N/A';
+      const manufacturer = w.manufacturer || 'Não informado';
+      const caliber = w.caliber || 'N/A';
+      const permissionStatus = w.permissionStatus || (caliber?.includes('45') || caliber?.includes('9mm') ? 'Restrita' : 'Permitida');
+      const sigma = w.sigmaNumber || w.serialNumber || selectedUser.crNumber || 'N/A';
+      const isClubWeapon = w.ownerId === selectedUser.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false);
 
       items.push({
         id: `cmp_${s.id}`,
@@ -1725,8 +1776,8 @@ export default function MemberProfile({
         permissionStatus,
         sigma,
         shotsCount,
-        weaponOwnerText: 'Própria',
-        ammoOwnerText: 'Própria',
+        weaponOwnerText: isClubWeapon ? 'Clube' : 'Própria',
+        ammoOwnerText: (Number(reg?.clubAmmoShots) || 0) > 0 ? 'Clube' : 'Própria',
         originId: s.id,
       });
     });
@@ -1743,19 +1794,46 @@ export default function MemberProfile({
 
       const champ = championships.find(c => c.id === reg.championshipId);
       const stage = stages.find(st => st.id === reg.stageId);
-      const w = weapons.find(wpn => wpn.id === reg.weaponId);
+
+      // Arma REAL obrigatória — NUNCA INVENTAR
+      const w = reg.weaponId ? weapons.find(wpn => wpn.id === reg.weaponId) : undefined;
+      if (!w || !w.model || w.model.toLowerCase().includes('não identificada') || w.model.toLowerCase().includes('arma cadastrada')) {
+        return;
+      }
+
+      // Quantidade de tiros REAL obrigatória — NUNCA INVENTAR
+      let shotsCount: number | null = null;
+      const scoreShotsSum = (Number(reg.scoreX) || 0) + (Number(reg.scoreP10) || 0) + (Number(reg.scoreP9) || 0) +
+        (Number(reg.scoreP8) || 0) + (Number(reg.scoreP7) || 0) + (Number(reg.scoreP6) || 0) +
+        (Number(reg.scoreP5) || 0) + (Number(reg.scoreP4) || 0) + (Number(reg.scoreP3) || 0) +
+        (Number(reg.scoreP2) || 0) + (Number(reg.scoreP1) || 0) + (Number(reg.scoreP0) || 0);
+
+      if (scoreShotsSum > 0) {
+        shotsCount = scoreShotsSum;
+      } else {
+        const mod = reg.modalityId ? modalities.find(m => m.id === reg.modalityId) : undefined;
+        if (mod && mod.seriesCount && mod.shotsPerSeries && (Number(mod.seriesCount) * Number(mod.shotsPerSeries) > 0)) {
+          shotsCount = Number(mod.seriesCount) * Number(mod.shotsPerSeries);
+        } else if (typeof (reg as any)?.shotsCount === 'number' && (reg as any).shotsCount > 0) {
+          shotsCount = (reg as any).shotsCount;
+        }
+      }
+
+      if (shotsCount === null || isNaN(shotsCount) || shotsCount <= 0) {
+        return;
+      }
 
       const dateFormatted = rawDate.toLocaleDateString('pt-BR');
       const timeFormatted = reg.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:54';
 
-      const weaponClass = w?.weaponClass || 'Pistola';
-      const model = w?.model || (reg as any)?.gunModel || 'Arma de Competição';
-      const weaponNumber = w?.weaponNumber || w?.serialNumber || 'N/A';
-      const manufacturer = w?.manufacturer || 'IMBEL';
-      const caliber = w?.caliber || (reg as any)?.caliber || '.380';
-      const permissionStatus = w?.permissionStatus || (caliber?.includes('45') ? 'Restrita' : 'Permitida');
-      const sigma = w?.sigmaNumber || w?.serialNumber || selectedUser.crNumber || 'N/A';
-      const shotsCount = reg.totalPoints || 20;
+      const weaponClass = w.weaponClass || 'Pistola';
+      const model = w.model;
+      const weaponNumber = w.weaponNumber || w.serialNumber || 'N/A';
+      const manufacturer = w.manufacturer || 'Não informado';
+      const caliber = w.caliber || 'N/A';
+      const permissionStatus = w.permissionStatus || (caliber?.includes('45') || caliber?.includes('9mm') ? 'Restrita' : 'Permitida');
+      const sigma = w.sigmaNumber || w.serialNumber || selectedUser.crNumber || 'N/A';
+      const isClubWeapon = w.ownerId === selectedUser.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false);
 
       items.push({
         id: `reg_${reg.id}`,
@@ -1775,13 +1853,15 @@ export default function MemberProfile({
         permissionStatus,
         sigma,
         shotsCount,
-        weaponOwnerText: 'Própria',
-        ammoOwnerText: 'Própria',
+        weaponOwnerText: isClubWeapon ? 'Clube' : 'Própria',
+        ammoOwnerText: (Number(reg?.clubAmmoShots) || 0) > 0 ? 'Clube' : 'Própria',
         originId: reg.id,
       });
     });
 
-    return items.sort((a, b) => b.rawDate.getTime() - a.rawDate.getTime());
+    const trainItems = items.filter(it => it.eventType === 'Treinamento').sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime());
+    const compItems = items.filter(it => it.eventType === 'Competição').sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime());
+    return [...trainItems, ...compItems];
   }, [trainings, userScores, registrations, selectedUser.id, stages, championships, weapons, selectedUser.crNumber, modalities]);
 
   // Lista para a Declaração de Habitualidade (período selecionado nos filtros)

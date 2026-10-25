@@ -453,6 +453,7 @@ export interface TrainingSession {
   score?: number;
   notes?: string;
   hidden?: boolean;
+  selectedWeapon?: Weapon;
   createdAt?: string;
 }
 
