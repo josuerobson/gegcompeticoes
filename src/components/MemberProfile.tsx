@@ -4702,8 +4702,7 @@ export default function MemberProfile({
       )}
 
       {/* FULL SCREEN WEB PRINT VIEW OVERLAY */}
-      <AnimatePresence>
-        {printMode && printData && createPortal(
+      {printMode && printData && createPortal(
           <div id="print-portal-root" className="fixed inset-0 z-[9999] overflow-y-auto bg-slate-900/95 p-4 md:p-8 flex flex-col items-center justify-start print:p-0 print:bg-white print:static print:block select-none">
 
             {/* Control bar - Hidden during paper print */}
@@ -5104,7 +5103,6 @@ export default function MemberProfile({
           </div>,
           document.body
         )}
-      </AnimatePresence>
 
       {/* RECEIPT MODAL */}
       <AnimatePresence>

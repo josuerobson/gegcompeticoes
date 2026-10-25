@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(print): isola impressao de declaracoes e remove elementos do sistema no pdf` |
-| Data/hora | 2026-10-24T16:25:00-03:00 |
+| Mensagem | `fix(print): remove AnimatePresence ao redor do createPortal para restaurar abertura da habitualidade` |
+| Data/hora | 2026-10-24T23:52:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,11 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Remoção de `<AnimatePresence>` ao redor de `createPortal` (`src/components/MemberProfile.tsx`)**:
+  - *O que foi decidido*: Remover as tags `<AnimatePresence>` e `</AnimatePresence>` que envolviam o `createPortal` da pré-visualização de documentos. O Framer Motion / Motion executa `onlyElements` nos filhos diretos de `AnimatePresence`, o que lançava uma exceção silenciosa `Objects are not valid as a React child (found: object with keys {typeof, key, children, containerInfo, implementation})` ao clicar em "Gerar Habitualidade" devido ao tipo de objeto de portal do React, impedindo a exibição do documento.
+  - *Por que*: O clique em "Gerar Habitualidade" parecia não fazer nada na interface porque a renderização do portal dentro do `AnimatePresence` quebrava no primeiro render.
+  - *O que NÃO fazer*: Nunca envolver `createPortal` diretamente como filho de `<AnimatePresence>`.
 
 - **Isolamento de Impressão de Documentos e Declarações (`src/components/MemberProfile.tsx`, `src/index.css`)**:
   - *O que foi decidido*:
