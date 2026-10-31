@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Championship, Stage, Modality, Registration, StageScore, Club, User } from '../types';
-import { Trophy, Calendar, Activity, ArrowLeft } from 'lucide-react';
+import { Trophy, Calendar, Activity, ArrowLeft, FileSpreadsheet, FileText } from 'lucide-react';
 import { computeRevenueBreakdown, computeTodasEtapasPrize } from '../utils/championshipFinance';
+import { exportResultsToExcel, exportResultsToPdf } from '../utils/resultsExport';
 
 export interface CompetitionResultsViewerProps {
   championships: Championship[];
@@ -520,6 +521,84 @@ export function CompetitionResultsViewer({
     };
     const fmtBRL = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+    const handleExportConsolidatedExcel = () => {
+      const headers = [
+        'Pos',
+        'Atleta',
+        'Clube',
+        ...targetStages.map(stg => stg.title || `${stg.stageNum}ª ET`),
+        'Resultado Acumulado',
+        'Desempates',
+        'Premiação'
+      ];
+      const rows = consolidatedList.map((item, index) => {
+        const prizeVal = prizeForPosition(index);
+        return [
+          `${index + 1}º`,
+          item.shooterName,
+          item.clubName,
+          ...targetStages.map(stg => (item.stageScores[stg.stageNum] !== undefined ? item.stageScores[stg.stageNum] : '-')),
+          currentMod?.evaluationType === 'tempo'
+            ? `${item.totalTime}s`
+            : currentMod?.evaluationType === 'pontuacao_tempo'
+            ? `Fator ${item.hitFactor.toFixed(4)}`
+            : `${item.totalScore} pts`,
+          `X:${item.scoreX} • 10:${item.scoreP10} • 9:${item.scoreP9}`,
+          prizeVal > 0 ? fmtBRL(prizeVal) : '-'
+        ];
+      });
+
+      const slug = (str: string) => str.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 35);
+      const filename = `resultado_acumulado_${slug(currentChamp?.title || 'campeonato')}_${slug(currentMod?.name || 'modalidade')}.xls`;
+
+      exportResultsToExcel({
+        title: 'Resultado Geral Acumulado',
+        championshipTitle: currentChamp?.title || 'Campeonato',
+        stageTitle: stageTitle,
+        modalityName: currentMod?.name || 'Modalidade',
+        headers,
+        rows
+      }, filename);
+    };
+
+    const handleExportConsolidatedPdf = () => {
+      const headers = [
+        'Pos',
+        'Atleta',
+        'Clube',
+        ...targetStages.map(stg => stg.title || `${stg.stageNum}ª ET`),
+        'Resultado Acumulado',
+        'Desempates',
+        'Premiação'
+      ];
+      const rows = consolidatedList.map((item, index) => {
+        const prizeVal = prizeForPosition(index);
+        return [
+          `${index + 1}º`,
+          item.shooterName,
+          item.clubName,
+          ...targetStages.map(stg => (item.stageScores[stg.stageNum] !== undefined ? item.stageScores[stg.stageNum] : '-')),
+          currentMod?.evaluationType === 'tempo'
+            ? `${item.totalTime}s`
+            : currentMod?.evaluationType === 'pontuacao_tempo'
+            ? `Fator ${item.hitFactor.toFixed(4)}`
+            : `${item.totalScore} pts`,
+          `X:${item.scoreX} • 10:${item.scoreP10} • 9:${item.scoreP9}`,
+          prizeVal > 0 ? fmtBRL(prizeVal) : '-'
+        ];
+      });
+
+      exportResultsToPdf({
+        title: 'Resultado Geral Acumulado',
+        championshipTitle: currentChamp?.title || 'Campeonato',
+        stageTitle: stageTitle,
+        modalityName: currentMod?.name || 'Modalidade',
+        headers,
+        rows,
+        isLandscape: true
+      });
+    };
+
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
         {/* Header / Breadcrumb navigation */}
@@ -543,14 +622,30 @@ export function CompetitionResultsViewer({
               </div>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleExportConsolidatedExcel}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+              title="Exportar planilha formatada para Excel"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Exportar Excel</span>
+            </button>
+            <button
+              onClick={handleExportConsolidatedPdf}
+              className="bg-red-600 hover:bg-red-700 text-white text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+              title="Exportar / Imprimir relatório em PDF"
+            >
+              <FileText className="w-4 h-4" />
+              <span>Exportar PDF</span>
+            </button>
             <button
               onClick={() => {
                 setSelectedResultChampId(null);
                 setSelectedResultStageId(null);
                 setSelectedResultModalityId(null);
               }}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer"
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer"
             >
               Limpar Filtros
             </button>
@@ -676,6 +771,122 @@ export function CompetitionResultsViewer({
     finalScores = finalScores.filter(s => getAthleteMedal(s.score) === 'bronze');
   }
 
+  const handleExportStageExcel = () => {
+    const medalLabel = selectedMedalFilter === 'ouro'
+      ? 'Categoria Ouro'
+      : selectedMedalFilter === 'prata'
+      ? 'Categoria Prata'
+      : selectedMedalFilter === 'bronze'
+      ? 'Categoria Bronze'
+      : 'Classificação Geral';
+
+    const headers = [
+      'Pos',
+      'Medalha',
+      'Atleta',
+      'Clube',
+      ...(currentMod?.evaluationType !== 'pontuacao' ? ['Tempo'] : []),
+      'Pontos',
+      ...(currentMod?.evaluationType === 'pontuacao_tempo' ? ['Fator'] : []),
+      'Desempates'
+    ];
+
+    const rows = finalScores.map((score, index) => {
+      const reg = registrations.find(r => r.id === score.registrationId);
+      const overallIndex = sortedScores.findIndex(s => s.id === score.id);
+      const displayPosIndex = selectedMedalFilter === 'geral' ? overallIndex : index;
+      const athleteMedal = getAthleteMedal(score.score);
+      const medalha = athleteMedal === 'ouro' ? '🥇 Ouro' : athleteMedal === 'prata' ? '🥈 Prata' : athleteMedal === 'bronze' ? '🥉 Bronze' : '-';
+      const atleta = score.shooterName;
+      const clube = clubs.find(c => c.id === (users.find(u => u.id === score.userId)?.clubId))?.name || '-';
+      const tempo = score.timeSeconds ? `${score.timeSeconds}s` : '-';
+      const pontos = `${score.score}${reg && (reg.penalty || 0) > 0 ? ` (-${reg.penalty} pen)` : ''}`;
+      const fator = score.hitFactor ? score.hitFactor.toFixed(4) : '-';
+      const desempates = reg ? `X:${reg.scoreX || 0} • 10:${reg.scoreP10 || 0} • 9:${reg.scoreP9 || 0}` : '-';
+
+      return [
+        `${displayPosIndex + 1}º`,
+        medalha,
+        atleta,
+        clube,
+        ...(currentMod?.evaluationType !== 'pontuacao' ? [tempo] : []),
+        pontos,
+        ...(currentMod?.evaluationType === 'pontuacao_tempo' ? [fator] : []),
+        desempates
+      ];
+    });
+
+    const slug = (str: string) => str.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 35);
+    const filename = `resultado_${slug(currentChamp?.title || 'campeonato')}_${slug(currentStage?.title || 'etapa')}_${slug(currentMod?.name || 'modalidade')}.xls`;
+
+    exportResultsToExcel({
+      title: 'Resultados da Competição',
+      championshipTitle: currentChamp?.title || 'Campeonato',
+      stageTitle: currentStage?.title || `Etapa ${currentStage?.stageNum}`,
+      modalityName: currentMod?.name || 'Modalidade',
+      categoryFilter: medalLabel,
+      headers,
+      rows
+    }, filename);
+  };
+
+  const handleExportStagePdf = () => {
+    const medalLabel = selectedMedalFilter === 'ouro'
+      ? 'Categoria Ouro'
+      : selectedMedalFilter === 'prata'
+      ? 'Categoria Prata'
+      : selectedMedalFilter === 'bronze'
+      ? 'Categoria Bronze'
+      : 'Classificação Geral';
+
+    const headers = [
+      'Pos',
+      'Medalha',
+      'Atleta',
+      'Clube',
+      ...(currentMod?.evaluationType !== 'pontuacao' ? ['Tempo'] : []),
+      'Pontos',
+      ...(currentMod?.evaluationType === 'pontuacao_tempo' ? ['Fator'] : []),
+      'Desempates'
+    ];
+
+    const rows = finalScores.map((score, index) => {
+      const reg = registrations.find(r => r.id === score.registrationId);
+      const overallIndex = sortedScores.findIndex(s => s.id === score.id);
+      const displayPosIndex = selectedMedalFilter === 'geral' ? overallIndex : index;
+      const athleteMedal = getAthleteMedal(score.score);
+      const medalha = athleteMedal === 'ouro' ? '🥇 Ouro' : athleteMedal === 'prata' ? '🥈 Prata' : athleteMedal === 'bronze' ? '🥉 Bronze' : '-';
+      const atleta = score.shooterName;
+      const clube = clubs.find(c => c.id === (users.find(u => u.id === score.userId)?.clubId))?.name || '-';
+      const tempo = score.timeSeconds ? `${score.timeSeconds}s` : '-';
+      const pontos = `${score.score}${reg && (reg.penalty || 0) > 0 ? ` (-${reg.penalty} pen)` : ''}`;
+      const fator = score.hitFactor ? score.hitFactor.toFixed(4) : '-';
+      const desempates = reg ? `X:${reg.scoreX || 0} • 10:${reg.scoreP10 || 0} • 9:${reg.scoreP9 || 0}` : '-';
+
+      return [
+        `${displayPosIndex + 1}º`,
+        medalha,
+        atleta,
+        clube,
+        ...(currentMod?.evaluationType !== 'pontuacao' ? [tempo] : []),
+        pontos,
+        ...(currentMod?.evaluationType === 'pontuacao_tempo' ? [fator] : []),
+        desempates
+      ];
+    });
+
+    exportResultsToPdf({
+      title: 'Resultados da Competição',
+      championshipTitle: currentChamp?.title || 'Campeonato',
+      stageTitle: currentStage?.title || `Etapa ${currentStage?.stageNum}`,
+      modalityName: currentMod?.name || 'Modalidade',
+      categoryFilter: medalLabel,
+      headers,
+      rows,
+      isLandscape: false
+    });
+  };
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
       {/* Header / Breadcrumb navigation */}
@@ -699,14 +910,30 @@ export function CompetitionResultsViewer({
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleExportStageExcel}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+            title="Exportar planilha formatada para Excel"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Exportar Excel</span>
+          </button>
+          <button
+            onClick={handleExportStagePdf}
+            className="bg-red-600 hover:bg-red-700 text-white text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+            title="Exportar / Imprimir relatório em PDF"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Exportar PDF</span>
+          </button>
           <button
             onClick={() => {
               setSelectedResultChampId(null);
               setSelectedResultStageId(null);
               setSelectedResultModalityId(null);
             }}
-            className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer"
+            className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer"
           >
             Limpar Filtros
           </button>

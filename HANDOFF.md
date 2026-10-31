@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(clubes): conecta onUpdateClub no AdminPanel e migra coluna fantasy_name no banco` |
-| Data/hora | 2026-10-31T16:10:00-03:00 |
+| Mensagem | `feat(resultados): exportacao de resultados para excel e pdf em todas as telas e perfis` |
+| Data/hora | 2026-10-31T16:20:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -303,6 +303,10 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
     1. Injetada a propriedade `onUpdateClub={handleUpdateClub}` no `<AdminPanel>` em `App.tsx`.
     2. Atualizada a função `handleUpdateClub` para utilizar `headers: buildAuthHeaders()` garantindo autenticação completa (`Authorization: Bearer <token>` e `x-user-id`).
     3. Executada migração aditiva `ALTER TABLE clubs ADD COLUMN IF NOT EXISTS fantasy_name TEXT;` no PostgreSQL e garantida a permissão em `PATCH /api/clubs/:id` para administradores e gestores de plataforma.
+
+- **Exportação de Resultados para Excel e PDF (`CompetitionResultsViewer.tsx`, `resultsExport.ts`)**:
+  - **Implementação Centralizada**: Criado o utilitário `src/utils/resultsExport.ts` contendo as funções `exportResultsToExcel` (gera planilha `.xls` estruturada com metadados do Excel, cabeçalhos estilizados, linhas zebradas e alinhamentos tipográficos) e `exportResultsToPdf` (gera documento oficial de impressão em alta resolução vetorial com cabeçalho institucional G&G Competições, tabela zebrada, repetição de cabeçalho em múltiplas páginas via `thead` e alternância inteligente de orientação Paisagem/Retrato).
+  - **Cobertura Universal em Todos os Logins e Telas**: Adicionados os botões "Exportar Excel" e "Exportar PDF" no componente padrão `CompetitionResultsViewer.tsx`. Com isso, a exportação fica disponível automaticamente em todas as telas de resultados do sistema (Perfil do Atleta, Perfil do Clube, Painel Diretor), em qualquer tipo de login (atleta, clube, diretor, master_admin) e para ambas as visualizações (Resultado Geral Acumulado e Resultados por Etapa com filtros de medalha Ouro/Prata/Bronze).
 
 ## Infra / deploy
 
