@@ -907,7 +907,7 @@ export default function App() {
     try {
       const res = await fetch(`/api/clubs/${clubId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        headers: buildAuthHeaders(),
         body: JSON.stringify(fields)
       });
       const data = await res.json().catch(() => ({}));
@@ -2675,6 +2675,7 @@ export default function App() {
               onUploadMemberDocument={handleUploadMemberDocument}
               clubs={clubs}
               onCreateClub={handleCreateClub}
+              onUpdateClub={handleUpdateClub}
               onActivateClubTenant={handleActivateClubTenant}
               onSetClubAdminCredentials={handleSetClubAdminCredentials}
               onGetClubAdmin={handleGetClubAdmin}

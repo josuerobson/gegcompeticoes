@@ -3216,8 +3216,9 @@ app.patch('/api/clubs/:id', requireAuth, async (req, res) => {
   // abaixo para annuityPrice.
   const isFranchiseAdminOfThisClub = currentUser.role === 'club_admin' && !!currentUser.clubId
     && (await getFranchiseClubId(clubId)) === currentUser.clubId;
+  const isTenantManager = currentUser.role === 'club_admin' && (await isFranchiseRootAdmin(currentUser));
 
-  if (!isAdmin && !isClubAdminOfThisClub && !isFranchiseAdminOfThisClub) {
+  if (!isAdmin && !isClubAdminOfThisClub && !isFranchiseAdminOfThisClub && !isTenantManager) {
     return res.status(403).json({ error: 'Apenas administradores podem editar este clube.' });
   }
 

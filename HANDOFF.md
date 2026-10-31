@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(habitualidade): restaura participacoes reais em campeonatos com arma e tiros comprovados` |
-| Data/hora | 2026-10-31T12:05:00-03:00 |
+| Mensagem | `fix(clubes): conecta onUpdateClub no AdminPanel e migra coluna fantasy_name no banco` |
+| Data/hora | 2026-10-31T16:10:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -296,6 +296,13 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
     1. **Arma real obrigatória e identificada**: A arma deve existir na base (`weapons`) e possuir modelo válido (não genérico/não identificada). Resolvida tanto pelo ID direto quanto pelo `legacyId`.
     2. **Quantidade de tiros real e comprovada**: `shotsCount > 0`, obtido da contagem real de acertos nos alvos (`scoreX + scoreP10 + ...`) ou pela regra oficial da modalidade (`seriesCount * shotsPerSeries`).
     3. Registros de competições com arma e tiros comprovados são computados integralmente tanto na habitualidade individual do perfil quanto no relatório global do clube.
+
+- **Correção da Edição de Clubes e Nome Fantasia (`AdminPanel.tsx`, `App.tsx`, `server.ts`)**:
+  - **Causa Raiz Identificada**: No componente `AdminPanel.tsx`, a função `handleSaveEditClub` continha a verificação de guarda `if (!editingClub || !onUpdateClub) return;`. Porém, em `App.tsx`, a propriedade `onUpdateClub={handleUpdateClub}` não estava sendo injetada na tag `<AdminPanel ... />`. Como `onUpdateClub` era `undefined`, ao clicar em "Salvar Alterações", a função retornava silenciosamente sem disparar requisição nem exibir mensagem.
+  - **Correções Aplicadas**:
+    1. Injetada a propriedade `onUpdateClub={handleUpdateClub}` no `<AdminPanel>` em `App.tsx`.
+    2. Atualizada a função `handleUpdateClub` para utilizar `headers: buildAuthHeaders()` garantindo autenticação completa (`Authorization: Bearer <token>` e `x-user-id`).
+    3. Executada migração aditiva `ALTER TABLE clubs ADD COLUMN IF NOT EXISTS fantasy_name TEXT;` no PostgreSQL e garantida a permissão em `PATCH /api/clubs/:id` para administradores e gestores de plataforma.
 
 ## Infra / deploy
 
