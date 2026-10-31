@@ -513,6 +513,7 @@ function mapRegistration(r: any): Registration {
     modalityId: r.modality_id,
     stageId: r.stage_id,
     weaponId: r.weapon_id,
+    weaponSource: (r.weapon_source as 'propria' | 'clube') || 'propria',
     crNumber: r.cr_number,
     paymentMethod: r.payment_method as 'pix' | 'credit_card',
     paymentStatus: r.payment_status as 'pending' | 'approved',
@@ -650,6 +651,7 @@ function mapIdscRegistration(r: any): IdscRegistration {
     userId: r.user_id,
     clubId: r.club_id || undefined,
     weaponId: r.weapon_id || undefined,
+    weaponSource: (r.weapon_source as 'propria' | 'clube') || undefined,
     crNumber: r.cr_number || undefined,
     registeredByUserId: r.registered_by_user_id || undefined,
     registrationType: (r.registration_type as 'normal' | 'reinscrição') || 'normal',
@@ -1182,11 +1184,11 @@ app.delete('/api/legacy-multi-discounts/:id', requireAdmin, async (req, res) => 
 // POST /api/multi-championships/:id/register — inscreve atleta em todos os campeonatos do pacote
 app.post('/api/multi-championships/:id/register', requireAuth, async (req, res) => {
   const multiId = req.params.id;
-  const { stageId: bodyStageId, modalityId, weaponId, crNumber, paymentMethod } = req.body;
+  const { stageId: bodyStageId, modalityId, weaponId, crNumber, paymentMethod, weaponSource } = req.body;
   const currentUser = (req as any).user as User;
 
-  if (!modalityId || !weaponId || !crNumber || !paymentMethod) {
-    return res.status(400).json({ error: 'Modalidade, arma, CR e método de pagamento são obrigatórios.' });
+  if (!modalityId || !weaponId || !crNumber || !paymentMethod || !weaponSource) {
+    return res.status(400).json({ error: 'Modalidade, arma, origem da arma (própria ou clube), CR e método de pagamento são obrigatórios.' });
   }
   if (!(await isRegistrationEligible(currentUser))) {
     return res.status(403).json({ error: 'Complete seu cadastro antes de se inscrever.' });
@@ -1325,7 +1327,7 @@ app.post('/api/multi-championships/:id/register-bulk', requireAdmin, async (req,
   const multiId = req.params.id;
   const { modalityId, athletes } = req.body as {
     modalityId: string;
-    athletes: Array<{ userId: string; weaponId: string; crNumber: string }>;
+    athletes: Array<{ userId: string; weaponId: string; crNumber: string; weaponSource?: string }>;
   };
   const currentUser = (req as any).user as User;
 
@@ -1694,9 +1696,9 @@ app.get('/api/idsc/registrations', async (req, res) => {
 // POST /api/idsc/courses/:id/register — inscrição individual do próprio atleta
 app.post('/api/idsc/courses/:id/register', requireAuth, async (req, res) => {
   const courseId = req.params.id;
-  const { weaponId, crNumber, paymentMethod } = req.body;
+  const { weaponId, crNumber, paymentMethod, weaponSource } = req.body;
   const currentUser = (req as any).user as User;
-  if (!weaponId) return res.status(400).json({ error: 'Selecione a arma que será utilizada.' });
+  if (!weaponId || !weaponSource) return res.status(400).json({ error: 'Selecione a arma e se é "Arma própria" ou "Arma do clube".' });
 
   try {
     const courseRes = await pool.query('SELECT c.*, s.championship_id FROM idsc_courses c JOIN idsc_stages s ON s.id = c.stage_id WHERE c.id = $1', [courseId]);
@@ -1716,9 +1718,9 @@ app.post('/api/idsc/courses/:id/register', requireAuth, async (req, res) => {
     const valorPago = champ ? Number(champ.individual_registration_fee) : 0;
     const txId = generateSicoobTxId();
     const result = await pool.query(
-      `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status, tx_id, payment_gateway)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,'sicoob') RETURNING *`,
-      [id, courseId, currentUser.id, currentUser.clubId || null, weaponId, crNumber || currentUser.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago, paymentMethod || 'pix', txId]
+      `INSERT INTO idsc_registrations (id, course_id, user_id, club_id, weapon_id, weapon_source, cr_number, registered_by_user_id, registration_type, valor_pago, payment_method, payment_status, tx_id, payment_gateway)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending',$12,'sicoob') RETURNING *`,
+      [id, courseId, currentUser.id, currentUser.clubId || null, weaponId, weaponSource === 'clube' ? 'clube' : 'propria', crNumber || currentUser.crNumber || 'N/A', currentUser.id, isReinscricao ? 'reinscrição' : 'normal', valorPago, paymentMethod || 'pix', txId]
     );
 
     const cob = await createOrUpdateCob(sicoobConfig, {
@@ -1740,7 +1742,7 @@ app.post('/api/idsc/courses/:id/register', requireAuth, async (req, res) => {
 // POST /api/idsc/courses/:id/register-bulk — inscrição em lote pelo clube
 app.post('/api/idsc/courses/:id/register-bulk', requireAdmin, async (req, res) => {
   const courseId = req.params.id;
-  const { athletes } = req.body as { athletes: Array<{ userId: string; weaponId: string; crNumber: string }> };
+  const { athletes } = req.body as { athletes: Array<{ userId: string; weaponId: string; crNumber: string; weaponSource?: string }> };
   const currentUser = (req as any).user as User;
   if (!Array.isArray(athletes) || athletes.length === 0) return res.status(400).json({ error: 'athletes é obrigatório.' });
 
@@ -4419,11 +4421,11 @@ async function computeLegacyMultiDiscountPercent(userId: string, championshipId:
 
 app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
   const championshipId = req.params.id;
-  const { modalityId, stageId, weaponId, crNumber, paymentMethod } = req.body;
+  const { modalityId, stageId, weaponId, crNumber, paymentMethod, weaponSource } = req.body;
   const currentUser = (req as any).user as User;
 
-  if (!modalityId || !stageId || !weaponId || !crNumber || !paymentMethod) {
-    return res.status(400).json({ error: 'Inscrição requer modalidade, etapa, arma, CR válido e meio de pagamento.' });
+  if (!modalityId || !stageId || !weaponId || !crNumber || !paymentMethod || !weaponSource) {
+    return res.status(400).json({ error: 'Inscrição requer modalidade, etapa, arma, origem da arma (própria ou clube), CR válido e meio de pagamento.' });
   }
 
   if (!(await isRegistrationEligible(currentUser))) {
@@ -4478,6 +4480,7 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
       modalityId,
       stageId,
       weaponId,
+      weaponSource: weaponSource === 'clube' ? 'clube' : 'propria',
       crNumber,
       paymentMethod,
       paymentStatus: 'pending',
@@ -4498,12 +4501,12 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
       await client.query('BEGIN');
       await client.query(
         `INSERT INTO registrations (
-          id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
+          id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, weapon_source, cr_number,
           payment_method, payment_status, completion_status, registered_at, tx_id,
           disqualified, penalty, registered_by_user_id, registration_type, valor_pago, data_pagamento,
           payment_gateway
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
         [
           newReg.id,
           newReg.championshipId,
@@ -4512,6 +4515,7 @@ app.post('/api/championships/:id/register', requireAuth, async (req, res) => {
           newReg.modalityId,
           newReg.stageId,
           newReg.weaponId,
+          newReg.weaponSource || 'propria',
           newReg.crNumber,
           newReg.paymentMethod,
           newReg.paymentStatus,
@@ -5240,7 +5244,7 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
   const { stageId, modalityId, athletes } = req.body as {
     stageId: string;
     modalityId: string;
-    athletes: Array<{ userId: string; weaponId: string; crNumber: string }>;
+    athletes: Array<{ userId: string; weaponId: string; crNumber: string; weaponSource?: string }>;
   };
   const currentUser = (req as any).user as User;
 
@@ -5304,14 +5308,14 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
           const clubOwedAmount = Number(valorPago) * (1 - (Number(champ.percentualClube) || 0) / 100);
           await client.query(
             `INSERT INTO registrations
-              (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
+              (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, weapon_source, cr_number,
                payment_method, payment_status, completion_status, registered_at,
                registered_by_user_id, registration_type, valor_pago, data_pagamento, disqualified, penalty,
                payment_gateway, club_owed_amount)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,$11,$12,$13,false,0,'club_invoice',$14)`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pix','pending','pending',$10,$11,$12,$13,$14,false,0,'club_invoice',$15)`,
             [
               regId, championshipId, athlete.userId, clubId, modalityId, stageId, athlete.weaponId,
-              athlete.crNumber, new Date().toISOString(), currentUser.id, regType, valorPago, dataPagamento,
+              athlete.weaponSource === 'clube' ? 'clube' : 'propria', athlete.crNumber, new Date().toISOString(), currentUser.id, regType, valorPago, dataPagamento,
               clubOwedAmount.toFixed(2)
             ]
           );
@@ -5324,13 +5328,13 @@ app.post('/api/championships/:id/register-bulk', requireAdmin, async (req, res) 
           // (POST /api/registrations/pay-batch).
           await client.query(
             `INSERT INTO registrations
-              (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, cr_number,
+              (id, championship_id, user_id, club_id, modality_id, stage_id, weapon_id, weapon_source, cr_number,
                payment_method, payment_status, completion_status, registered_at,
                registered_by_user_id, registration_type, valor_pago, data_pagamento, disqualified, penalty)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pix','pending','pending',$9,$10,$11,$12,$13,false,0)`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pix','pending','pending',$10,$11,$12,$13,$14,false,0)`,
             [
               regId, championshipId, athlete.userId, clubId, modalityId, stageId, athlete.weaponId,
-              athlete.crNumber, new Date().toISOString(), currentUser.id, regType, valorPago, dataPagamento
+              athlete.weaponSource === 'clube' ? 'clube' : 'propria', athlete.crNumber, new Date().toISOString(), currentUser.id, regType, valorPago, dataPagamento
             ]
           );
           ownClubPendingCount++;

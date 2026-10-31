@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(pdf): download direto de pdfs nomeados em todas as telas sem dialogo de impressao` |
-| Data/hora | 2026-10-31T18:50:00-03:00 |
+| Mensagem | `feat(inscricao): selecao obrigatoria de arma propria ou do clube em todas as inscricoes` |
+| Data/hora | 2026-10-31T20:55:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,11 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Seleção Obrigatória de Origem da Arma ("Arma própria" ou "Arma do clube") em Inscrições (`ChampionshipsView.tsx`, `AdminPanel.tsx`, `server.ts`, `db.ts`, `types.ts`)**:
+  - *O que foi decidido*: Em todas as telas e formulários de inscrição de atletas em campeonatos — tanto na inscrição individual do atleta (`ChampionshipsView.tsx` em campeonatos regulares, multicampeonatos e IDSC) quanto na inscrição em lote pelo clube parceiro (`AdminPanel.tsx` em Inscrição Clube e IDSC) —, foi incluído o seletor obrigatório de origem da arma entre "Arma própria" e "Arma do clube". A validação bloqueia o avanço da inscrição caso a origem não tenha sido selecionada. O valor é validado no backend e persistido na coluna `weapon_source` (`'propria'` | `'clube'`) das tabelas `registrations` e `idsc_registrations`. Além disso, ao trocar a modalidade selecionada na Inscrição Clube, os campos de armas dos atletas são resetados em branco para prevenir persistência indevida de armas entre modalidades diferentes.
+  - *Por que*: Instrução explícita do usuário para que o sistema registre obrigatoriamente se a arma utilizada na competição é de propriedade do atleta ou do acervo do clube para fins de controle e conformidade legal.
+  - *O que NÃO fazer*: Nunca permitir cadastrar inscrição sem selecionar a origem da arma, nem manter armas pré-selecionadas ao alternar a modalidade na inscrição pelo clube.
 
 - **Download Direto de Arquivos PDF Nomeados (Eliminação Universal de `window.print()`)**:
   - *O que foi decidido*: Em todas as telas do sistema que geram documentos oficiais, relatórios, comprovantes, carteirinhas ou resultados em PDF, foi eliminado o diálogo de impressão nativo do navegador (`window.print()`). Em seu lugar, foi implementado o download binário direto do arquivo `.pdf` para a pasta de Downloads do usuário via `html2pdf.js` dinâmico (`pdfDownloader.ts`). Cada arquivo é nomeado dinamicamente e de forma limpa/sem acentos com base no seu conteúdo e escopo (ex: `declaracao_habitualidade_gilson_aparecido_2025_a_2026.pdf`, `relatorio_global_habitualidades_clube_aranas_2025_a_2026.pdf`, `resultado_acumulado_brasileiro_2026_pistola_9mm.pdf`, `termo_cessao_armas_001.pdf`).

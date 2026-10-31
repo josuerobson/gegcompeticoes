@@ -753,7 +753,8 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS codigo_inscricao INTEGER,
         -- Ammo origin (tiros própria / tiros clube)
         ADD COLUMN IF NOT EXISTS own_ammo_shots INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS club_ammo_shots INTEGER DEFAULT 0;
+        ADD COLUMN IF NOT EXISTS club_ammo_shots INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS weapon_source TEXT DEFAULT 'propria';
     `);
 
     // Relax completion_status CHECK to accept 'absent' (Não Participou) in addition to
@@ -1500,6 +1501,7 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS mp_preference_id TEXT,
         ADD COLUMN IF NOT EXISTS mp_payment_id TEXT,
         ADD COLUMN IF NOT EXISTS pix_copia_e_cola TEXT,
+        ADD COLUMN IF NOT EXISTS weapon_source TEXT DEFAULT 'propria',
         ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
     `);
 

@@ -1082,7 +1082,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
   const [members, setMembers] = React.useState<User[]>([]);
   const [clubWeapons, setClubWeapons] = React.useState<Weapon[]>([]);
   const [loadingMembers, setLoadingMembers] = React.useState(false);
-  const [selectedAthletes, setSelectedAthletes] = React.useState<Record<string, { weaponId: string; checked: boolean }>>({});
+  const [selectedAthletes, setSelectedAthletes] = React.useState<Record<string, { weaponId: string; weaponSource: 'propria' | 'clube' | ''; checked: boolean }>>({});
   const [searchQueries, setSearchQueries] = React.useState<Record<string, string>>({});
   const [searchResults, setSearchResults] = React.useState<Record<string, Weapon[]>>({});
   const [searchingWeapon, setSearchingWeapon] = React.useState<Record<string, boolean>>({});
@@ -1237,12 +1237,22 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
     }
   };
 
-  const handleSelectWeapon = (userId: string, weaponId: string) => {
+  const handleSelectWeaponSource = (userId: string, weaponSource: 'propria' | 'clube') => {
     setSelectedAthletes(prev => {
-      const current = prev[userId] || { weaponId: '', checked: false };
+      const current = prev[userId] || { weaponId: '', weaponSource: '', checked: false };
       return {
         ...prev,
-        [userId]: { ...current, weaponId }
+        [userId]: { ...current, weaponSource, checked: true }
+      };
+    });
+  };
+
+  const handleSelectWeapon = (userId: string, weaponId: string) => {
+    setSelectedAthletes(prev => {
+      const current = prev[userId] || { weaponId: '', weaponSource: '', checked: false };
+      return {
+        ...prev,
+        [userId]: { ...current, weaponId, checked: true }
       };
     });
   };
@@ -1278,6 +1288,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
         return {
           userId,
           weaponId: (data as any).weaponId,
+          weaponSource: (data as any).weaponSource,
           crNumber: member?.crNumber || 'N/A'
         };
       });
@@ -1287,9 +1298,9 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
       return;
     }
 
-    const missingWeapon = selectedList.some(item => !item.weaponId);
+    const missingWeapon = selectedList.some(item => !item.weaponId || !item.weaponSource);
     if (missingWeapon) {
-      setError('Selecione uma arma para cada atleta marcado.');
+      setError('Para cada atleta marcado, selecione a arma e se é "Arma própria" ou "Arma do clube".');
       return;
     }
 
@@ -1333,7 +1344,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
   };
 
   // Compartilhado entre a célula inline (desktop) e o popup de arma (mobile)
-  const renderWeaponFields = (member: User, state: { weaponId: string; checked: boolean }, athleteWeapons: Weapon[], searchInput: string, results: Weapon[], searching: boolean) => {
+  const renderWeaponFields = (member: User, state: { weaponId: string; weaponSource: 'propria' | 'clube' | ''; checked: boolean }, athleteWeapons: Weapon[], searchInput: string, results: Weapon[], searching: boolean) => {
     const isOpen = openWeaponFieldId === member.id;
     const query = normalizeSearchText((searchInput || '').trim());
     const filteredOwn = athleteWeapons.filter(w =>
@@ -1349,10 +1360,37 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
     };
 
     return (
-      <div className="relative">
-        <input
-          type="text"
-          placeholder="Selecione a arma..."
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => handleSelectWeaponSource(member.id, 'propria')}
+            className={`flex-1 py-1 px-1.5 rounded-lg border text-[10px] font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+              state.weaponSource === 'propria'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <span>🎯</span>
+            <span>Própria</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSelectWeaponSource(member.id, 'clube')}
+            className={`flex-1 py-1 px-1.5 rounded-lg border text-[10px] font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+              state.weaponSource === 'clube'
+                ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <span>🏛️</span>
+            <span>Clube</span>
+          </button>
+        </div>
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Selecione a arma..."
           value={searchInput}
           onFocus={() => setOpenWeaponFieldId(member.id)}
           onChange={e => handleSearchWeapon(member.id, e.target.value)}
@@ -1443,6 +1481,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
             </div>
           </div>
         )}
+        </div>
       </div>
     );
   };
@@ -1494,7 +1533,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade</label>
-            <select value={modalityId} onChange={e => setModalityId(e.target.value)}
+            <select value={modalityId} onChange={e => { setModalityId(e.target.value); setSelectedAthletes({}); setSearchQueries({}); setSearchResults({}); }}
               className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!stageId}>
               <option value="">Selecione...</option>
               {champAvailableModalities.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -1575,7 +1614,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
                   <th className="py-2.5 px-3 w-10 whitespace-nowrap">Sel</th>
                   <th className="py-2.5 px-3 whitespace-nowrap">Atleta</th>
-                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[260px]">Arma do Atleta / Busca por Sigma</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[280px]">Arma & Origem (Própria ou Clube) *</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1607,7 +1646,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
                               onClick={() => setWeaponModalMemberId(member.id)}
                               className={`text-[11px] font-bold underline underline-offset-2 cursor-pointer ${state.weaponId ? 'text-emerald-600' : 'text-blue-600'}`}
                             >
-                              {state.weaponId ? 'Arma selecionada ✓ (trocar)' : 'Selecionar arma'}
+                              {state.weaponId && state.weaponSource ? `Arma: ${state.weaponSource === 'clube' ? 'Clube' : 'Própria'} ✓` : 'Selecionar arma & origem *'}
                             </button>
                           ) : (
                             <div className="max-w-xs">
@@ -1675,7 +1714,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
               <button
                 type="button"
                 onClick={() => setWeaponModalMemberId(null)}
-                disabled={!modalState.weaponId}
+                disabled={!modalState.weaponId || !modalState.weaponSource}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white text-xs py-2.5 rounded-xl font-bold transition cursor-pointer"
               >
                 Confirmar
@@ -3787,7 +3826,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
   const [members, setMembers] = React.useState<User[]>([]);
   const [clubWeapons, setClubWeapons] = React.useState<Weapon[]>([]);
   const [loadingMembers, setLoadingMembers] = React.useState(false);
-  const [selectedAthletes, setSelectedAthletes] = React.useState<Record<string, { weaponId: string; checked: boolean }>>({});
+  const [selectedAthletes, setSelectedAthletes] = React.useState<Record<string, { weaponId: string; weaponSource: 'propria' | 'clube' | ''; checked: boolean }>>({});
   const [searchQueries, setSearchQueries] = React.useState<Record<string, string>>({});
   const [searchResults, setSearchResults] = React.useState<Record<string, Weapon[]>>({});
   const [searchingWeapon, setSearchingWeapon] = React.useState<Record<string, boolean>>({});
@@ -3893,10 +3932,17 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
       setWeaponModalMemberId(userId);
     }
   };
+  const handleIdscWeaponSource = (userId: string, weaponSource: 'propria' | 'clube') => {
+    setSelectedAthletes(prev => {
+      const cur = prev[userId] || { weaponId: '', weaponSource: '', checked: false };
+      return { ...prev, [userId]: { ...cur, weaponSource, checked: true } };
+    });
+  };
+
   const handleWeapon = (userId: string, weaponId: string) => {
     setSelectedAthletes(prev => {
-      const cur = prev[userId] || { weaponId: '', checked: false };
-      return { ...prev, [userId]: { ...cur, weaponId } };
+      const cur = prev[userId] || { weaponId: '', weaponSource: '', checked: false };
+      return { ...prev, [userId]: { ...cur, weaponId, checked: true } };
     });
   };
 
@@ -3921,7 +3967,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
   };
 
   // Compartilhado entre a célula inline (desktop) e o popup de arma (mobile)
-  const renderWeaponFields = (member: User, state: { weaponId: string; checked: boolean }, athleteWeapons: Weapon[], searchInput: string, results: Weapon[], searching: boolean) => {
+  const renderWeaponFields = (member: User, state: { weaponId: string; weaponSource: 'propria' | 'clube' | ''; checked: boolean }, athleteWeapons: Weapon[], searchInput: string, results: Weapon[], searching: boolean) => {
     const isOpen = openWeaponFieldId === member.id;
     const query = normalizeSearchText((searchInput || '').trim());
     const filteredOwn = athleteWeapons.filter(w =>
@@ -3937,16 +3983,43 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
     };
 
     return (
-      <div className="relative">
-        <input
-          type="text"
-          placeholder="Selecione a arma..."
-          value={searchInput}
-          onFocus={() => setOpenWeaponFieldId(member.id)}
-          onChange={e => handleSearchWeapon(member.id, e.target.value)}
-          onBlur={() => setTimeout(() => setOpenWeaponFieldId(prev => prev === member.id ? null : prev), 150)}
-          className="w-full bg-white border border-slate-200 p-2 rounded-xl text-xs text-slate-700 font-semibold outline-none focus:border-blue-400"
-        />
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => handleIdscWeaponSource(member.id, 'propria')}
+            className={`flex-1 py-1 px-1.5 rounded-lg border text-[10px] font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+              state.weaponSource === 'propria'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <span>🎯</span>
+            <span>Própria</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleIdscWeaponSource(member.id, 'clube')}
+            className={`flex-1 py-1 px-1.5 rounded-lg border text-[10px] font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+              state.weaponSource === 'clube'
+                ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <span>🏛️</span>
+            <span>Clube</span>
+          </button>
+        </div>
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Selecione a arma..."
+            value={searchInput}
+            onFocus={() => setOpenWeaponFieldId(member.id)}
+            onChange={e => handleSearchWeapon(member.id, e.target.value)}
+            onBlur={() => setTimeout(() => setOpenWeaponFieldId(prev => prev === member.id ? null : prev), 150)}
+            className="w-full bg-white border border-slate-200 p-2 rounded-xl text-xs text-slate-700 font-semibold outline-none focus:border-blue-400"
+          />
         {searching && <span className="absolute right-3 top-2.5 text-[9px] text-slate-400 font-semibold">Buscando...</span>}
 
         {isOpen && (
@@ -4031,20 +4104,21 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
             </div>
           </div>
         )}
+        </div>
       </div>
     );
   };
 
   const handleSubmit = async () => {
     if (!courseId || !currentUser) return;
-    const list = (Object.entries(selectedAthletes) as [string, { weaponId: string; checked: boolean }][])
+    const list = (Object.entries(selectedAthletes) as [string, { weaponId: string; weaponSource: 'propria' | 'clube' | ''; checked: boolean }][])
       .filter(([, d]) => d.checked)
       .map(([userId, d]) => {
         const m = members.find(mm => mm.id === userId);
-        return { userId, weaponId: d.weaponId, crNumber: m?.crNumber || 'N/A' };
+        return { userId, weaponId: d.weaponId, weaponSource: d.weaponSource, crNumber: m?.crNumber || 'N/A' };
       });
     if (list.length === 0) { setError('Selecione pelo menos um atleta.'); return; }
-    if (list.some(a => !a.weaponId)) { setError('Selecione uma arma para cada atleta marcado.'); return; }
+    if (list.some(a => !a.weaponId || !a.weaponSource)) { setError('Para cada atleta marcado, selecione a arma e se é "Arma própria" ou "Arma do clube".'); return; }
 
     setSaving(true); setError(''); setSuccess(null);
     try {
@@ -4142,7 +4216,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
                   <th className="py-2.5 px-3 w-10 whitespace-nowrap">Sel</th>
                   <th className="py-2.5 px-3 whitespace-nowrap">Atleta</th>
-                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[260px]">Arma do Atleta / Busca por Sigma</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap min-w-[280px]">Arma & Origem (Própria ou Clube) *</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">

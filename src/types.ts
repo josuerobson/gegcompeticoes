@@ -345,6 +345,7 @@ export interface Registration {
   modalityId: string;
   stageId: string;
   weaponId: string;
+  weaponSource?: 'propria' | 'clube' | string;
   crNumber: string;
   paymentMethod: 'pix' | 'credit_card' | 'debit_card' | 'ticket' | 'account_money' | 'bank_transfer';
   paymentStatus: 'pending' | 'approved' | 'rejected';
@@ -535,6 +536,7 @@ export interface IdscRegistration {
   userId: string;
   clubId?: string;
   weaponId?: string;
+  weaponSource?: 'propria' | 'clube' | string;
   crNumber?: string;
   registeredByUserId?: string;
   registrationType: 'normal' | 'reinscrição';

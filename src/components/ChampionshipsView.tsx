@@ -15,7 +15,7 @@ interface ChampionshipsProps {
   stages: Stage[];
   weapons: Weapon[];
   weaponLookupOptions?: WeaponLookupOption[];
-  onRegister: (championshipId: string, modalityId: string, stageId: string, weaponId: string, crNumber: string, paymentMethod: 'pix' | 'credit_card') => Promise<{ pixCopiaECola?: string; txId?: string }>;
+  onRegister: (championshipId: string, modalityId: string, stageId: string, weaponId: string, crNumber: string, paymentMethod: 'pix' | 'credit_card', weaponSource?: 'propria' | 'clube') => Promise<{ pixCopiaECola?: string; txId?: string }>;
   onAddWeapon: (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; serialNumber?: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string; weaponType?: string }) => Promise<void>;
   globalRankings: RankingItem[];
   onSelectModalityRanking: (modality: string) => void;
@@ -133,6 +133,7 @@ export default function ChampionshipsView({
     setMultiModalityId('');
     setMultiWeaponId('');
     setSelectedWeaponId('');
+    setWeaponSource('');
     setWeaponSearchQuery('');
     setWeaponSearchResults([]);
     setSearchingWeapon(false);
@@ -146,6 +147,9 @@ export default function ChampionshipsView({
   const [selectedModalityId, setSelectedModalityId] = useState('');
   const [selectedStageId, setSelectedStageId] = useState('');
   const [selectedWeaponId, setSelectedWeaponId] = useState('');
+  const [weaponSource, setWeaponSource] = useState<'propria' | 'clube' | ''>('');
+  const [multiWeaponSource, setMultiWeaponSource] = useState<'propria' | 'clube' | ''>('');
+  const [idscWeaponSource, setIdscWeaponSource] = useState<'propria' | 'clube' | ''>('');
   const [crInput, setCrInput] = useState(currentUser?.crNumber || '');
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card'>('pix');
   const [paymentStep, setPaymentStep] = useState<'form' | 'processing'>('form');
@@ -391,7 +395,7 @@ export default function ChampionshipsView({
       const res = await fetch(`/api/idsc/courses/${selectedIdscCourse.course.id}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' },
-        body: JSON.stringify({ weaponId: selectedWeaponId, crNumber: idscCrInput || currentUser?.crNumber || 'N/A', paymentMethod: 'pix' })
+        body: JSON.stringify({ weaponId: selectedWeaponId, weaponSource: idscWeaponSource, crNumber: idscCrInput || currentUser?.crNumber || 'N/A', paymentMethod: 'pix' })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao realizar inscrição IDSC.');
@@ -425,7 +429,7 @@ export default function ChampionshipsView({
     setPaymentStep('processing');
 
     try {
-      const { pixCopiaECola, txId } = await onRegister(selectedChampReg.id, selectedModalityId, selectedStageId, selectedWeaponId, finalCr, 'pix');
+      const { pixCopiaECola, txId } = await onRegister(selectedChampReg.id, selectedModalityId, selectedStageId, selectedWeaponId, finalCr, 'pix', weaponSource as 'propria' | 'clube');
       if (!pixCopiaECola || !txId) throw new Error('Não foi possível gerar a cobrança PIX.');
       setPixModal({
         pixCopiaECola,
@@ -1135,6 +1139,44 @@ export default function ChampionshipsView({
                         </option>
                       ))}
                     </select>
+                  </div>
+
+                  {/* Origem da Arma: Própria vs Clube (Obrigatório) */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-slate-500 uppercase block font-semibold">
+                      Origem da Arma <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setWeaponSource('propria')}
+                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                          weaponSource === 'propria'
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>🎯</span>
+                        <span>Arma própria</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWeaponSource('clube')}
+                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                          weaponSource === 'clube'
+                            ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>🏛️</span>
+                        <span>Arma do clube</span>
+                      </button>
+                    </div>
+                    {!weaponSource && (
+                      <p className="text-[10px] text-amber-600 font-medium">
+                        Selecione se usará arma própria ou arma do clube.
+                      </p>
+                    )}
                   </div>
 
                   {/* 3. Seleção de Arma via Pesquisa + Cadastrar Nova Arma */}

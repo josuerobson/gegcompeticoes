@@ -1270,7 +1270,7 @@ export default function App() {
     }
   };
 
-  const handleRegisterChamp = async (championshipId: string, modalityId: string, stageId: string, weaponId: string, crNumber: string, paymentMethod: 'pix' | 'credit_card') => {
+  const handleRegisterChamp = async (championshipId: string, modalityId: string, stageId: string, weaponId: string, crNumber: string, paymentMethod: 'pix' | 'credit_card', weaponSource: 'propria' | 'clube' = 'propria') => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {
       authHeaders['x-user-id'] = currentUser.id;
@@ -1280,7 +1280,7 @@ export default function App() {
       const res = await fetch(`/api/championships/${championshipId}/register`, {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ modalityId, stageId, weaponId, crNumber, paymentMethod })
+        body: JSON.stringify({ modalityId, stageId, weaponId, crNumber, paymentMethod, weaponSource })
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
