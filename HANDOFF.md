@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(relatorios): relatorio global de habitualidades do clube, novo cabecalho oficial, nome fantasia e remocao de campos de rg` |
-| Data/hora | 2026-10-31T11:15:00-03:00 |
+| Mensagem | `fix(habitualidade): restaura participacoes reais em campeonatos com arma e tiros comprovados` |
+| Data/hora | 2026-10-31T12:05:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -289,6 +289,13 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
     - Criada a tabela `annuity_plans` com suporte a CRUD completo (endpoints `/api/annuity-plans`) no menu `Painel diretor > Gerenciamento Plataforma > Clubes > Relatório financeiro`.
     - Adicionado o campo `annuityPlanId` (`annuity_plan_id` no Postgres) na edição do membro em `Gerenciamento Clube > Cadastrar Membros` (seção *Validades & Plano de Anuidade*).
     - Criados os resumos de arrecadação em tempo real nos relatórios financeiros: **Resumo de Arrecadação por Anuidade** (detalhado por plano de anuidade e quantidade de filiados), **Resumo de Arrecadação por Campeonatos** (detalhado por campeonato e quantidade de inscrições confirmadas) e **Consolidado Geral de Faturamento**.
+
+- **Restauração de Participações em Competições na Habitualidade (`MemberProfile.tsx`, `ClubReportsViewer.tsx`)**:
+  - **Causa Raiz Identificada**: No commit anterior, um filtro cego descartava qualquer registro onde `legacyId != null` ou `id.includes('legacy')`. Como todos os campeonatos, etapas e inscrições de 2025/2026 foram migrados com prefixos `champ_legacy_*`, `stage_legacy_*`, `reg_legacy_*`, esse bloqueio descartou 100% das participações legítimas em competições, zerando as habitualidades de atletas ativos (ex: Gilcimar Alves Cordeiro, que possuía 7 competições e 4 treinos válidos no período).
+  - **Correção Implementada**: O critério de descarte por atributo/ID legacy foi substituído pela regra estrita solicitada pelo usuário:
+    1. **Arma real obrigatória e identificada**: A arma deve existir na base (`weapons`) e possuir modelo válido (não genérico/não identificada). Resolvida tanto pelo ID direto quanto pelo `legacyId`.
+    2. **Quantidade de tiros real e comprovada**: `shotsCount > 0`, obtido da contagem real de acertos nos alvos (`scoreX + scoreP10 + ...`) ou pela regra oficial da modalidade (`seriesCount * shotsPerSeries`).
+    3. Registros de competições com arma e tiros comprovados são computados integralmente tanto na habitualidade individual do perfil quanto no relatório global do clube.
 
 ## Infra / deploy
 

@@ -1624,7 +1624,6 @@ export default function MemberProfile({
 
     // 1. Process Real Training Sessions in range
     (trainings || []).forEach(t => {
-      if ((t as any).legacyId != null || t.id.startsWith('training_legacy_') || t.id.includes('legacy') || (t as any).isLegacy) return;
       const rawDateStr = t.dateTime || (t.date ? `${t.date}T15:00:00` : '') || t.createdAt || '';
       if (!rawDateStr) return;
       const rawDate = new Date(rawDateStr);
@@ -1634,7 +1633,7 @@ export default function MemberProfile({
       // Arma REAL obrigatória — NUNCA INVENTAR
       // Se não houver arma real cadastrada vinculada, o registro é descartado
       const w = t.selectedWeapon
-        || (t.weaponId ? weapons.find(wpn => wpn.id === t.weaponId) : undefined);
+        || (t.weaponId ? (weapons.find(wpn => wpn.id === t.weaponId) || weapons.find(wpn => (wpn as any).legacyId === (t as any).weaponLegacyId)) : undefined);
 
       if (!w || !w.model || w.model.toLowerCase().includes('não identificada') || w.model.toLowerCase().includes('arma cadastrada')) {
         return;
@@ -1696,15 +1695,11 @@ export default function MemberProfile({
 
     // A. From registered stage scores
     (userScores || []).forEach(s => {
-      if (s.legacyId != null || s.id.startsWith('score_legacy_') || s.id.includes('legacy') || (s as any).isLegacy) return;
       const reg = s.registrationId ? userRegMap.get(s.registrationId) : undefined;
-      if (reg && (reg.legacyId != null || reg.id.startsWith('reg_legacy_') || reg.id.includes('legacy') || (reg as any).isLegacy)) return;
       if (reg) includedRegIds.add(reg.id);
 
       const stage = stages.find(st => (reg?.stageId && st.id === reg.stageId) || (st.championshipId === s.championshipId && (s.stageNum ? st.stageNum === s.stageNum : false)));
       const champ = championships.find(c => c.id === s.championshipId || c.id === reg?.championshipId);
-      if (champ && (champ.legacyId != null || champ.id.startsWith('champ_legacy_') || champ.id.includes('legacy'))) return;
-      if (stage && (stage.legacyId != null || stage.id.startsWith('stage_legacy_') || stage.id.includes('legacy'))) return;
 
       const rawDateStr = reg?.dataExecucao
         ? `${reg.dataExecucao}T${reg.horaExecucao || '00:00:00'}`
@@ -1791,7 +1786,6 @@ export default function MemberProfile({
     // B. Completed registrations that do not have a duplicate score in userScores
     userRegs.forEach(reg => {
       if (includedRegIds.has(reg.id)) return;
-      if (reg.legacyId != null || reg.id.startsWith('reg_legacy_') || reg.id.includes('legacy') || (reg as any).isLegacy) return;
       if (reg.completionStatus !== 'completed' && !reg.dataExecucao) return;
       if (!reg.dataExecucao) return;
 
@@ -1803,7 +1797,9 @@ export default function MemberProfile({
       const stage = stages.find(st => st.id === reg.stageId);
 
       // Arma REAL obrigatória — NUNCA INVENTAR
-      const w = reg.weaponId ? weapons.find(wpn => wpn.id === reg.weaponId) : undefined;
+      const w = reg.weaponId
+        ? (weapons.find(wpn => wpn.id === reg.weaponId) || weapons.find(wpn => (wpn as any).legacyId === (reg as any).weaponLegacyId))
+        : undefined;
       if (!w || !w.model || w.model.toLowerCase().includes('não identificada') || w.model.toLowerCase().includes('arma cadastrada')) {
         return;
       }
