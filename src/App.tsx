@@ -955,7 +955,7 @@ export default function App() {
     }
   };
 
-  const handleCreateClub = async (fields: { name: string; cnpj: string; responsibleName: string; email: string; password: string; phone?: string; crNumber?: string; crValidity?: string; annuityDueDate?: string; annuityPrice?: string; city?: string; state?: string; cep?: string; address?: string; addressNumber?: string; complement?: string; neighborhood?: string }): Promise<{ club?: Club; error?: string }> => {
+  const handleCreateClub = async (fields: { name: string; fantasyName?: string; cnpj: string; responsibleName: string; email: string; password: string; phone?: string; crNumber?: string; crValidity?: string; annuityDueDate?: string; annuityPrice?: string; city?: string; state?: string; cep?: string; address?: string; addressNumber?: string; complement?: string; neighborhood?: string }): Promise<{ club?: Club; error?: string }> => {
     if (!currentUser) return { error: 'Não autenticado.' };
     try {
       const res = await fetch('/api/admin/clubs', {
@@ -2275,9 +2275,6 @@ export default function App() {
                         { value: 'feminino', label: 'Feminino' }
                       ]}
                      />
-                    <AuthField label="RG" theme={theme} value={membroForm.rg} onChange={(e) => setMembroForm({ ...membroForm, rg: e.target.value })} />
-                    <AuthField label="Órgão emissor RG" theme={theme} value={membroForm.rgIssuer} onChange={(e) => setMembroForm({ ...membroForm, rgIssuer: e.target.value })} />
-                    <AuthField label="Data emissão RG" theme={theme} type="date" value={membroForm.rgIssueDate} onChange={(e) => setMembroForm({ ...membroForm, rgIssueDate: e.target.value })} />
                     <AuthField label="Nome do pai" theme={theme} value={membroForm.fatherName} onChange={(e) => setMembroForm({ ...membroForm, fatherName: e.target.value })} />
                     <AuthField label="Nome da mãe" theme={theme} value={membroForm.motherName} onChange={(e) => setMembroForm({ ...membroForm, motherName: e.target.value })} />
                     <AuthField label="Nacionalidade" theme={theme} value={membroForm.nationality} onChange={(e) => setMembroForm({ ...membroForm, nationality: e.target.value })} />

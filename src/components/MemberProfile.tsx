@@ -435,7 +435,7 @@ export default function MemberProfile({
     phone: '', cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
   });
   const [clubForm, setClubForm] = useState({
-    name: '', crNumber: '', crValidity: '', responsibleName: '', phone: '', email: '',
+    name: '', fantasyName: '', crNumber: '', crValidity: '', responsibleName: '', phone: '', email: '',
     cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
   });
   const [savingSection, setSavingSection] = useState<string | null>(null);
@@ -522,6 +522,7 @@ export default function MemberProfile({
     if (!myClub) return;
     setClubForm({
       name: myClub.name || '',
+      fantasyName: myClub.fantasyName || '',
       crNumber: myClub.crNumber || '',
       crValidity: myClub.crValidity || '',
       responsibleName: myClub.responsibleName || '',
@@ -1623,6 +1624,7 @@ export default function MemberProfile({
 
     // 1. Process Real Training Sessions in range
     (trainings || []).forEach(t => {
+      if ((t as any).legacyId != null || t.id.startsWith('training_legacy_') || t.id.includes('legacy') || (t as any).isLegacy) return;
       const rawDateStr = t.dateTime || (t.date ? `${t.date}T15:00:00` : '') || t.createdAt || '';
       if (!rawDateStr) return;
       const rawDate = new Date(rawDateStr);
@@ -1694,11 +1696,15 @@ export default function MemberProfile({
 
     // A. From registered stage scores
     (userScores || []).forEach(s => {
+      if (s.legacyId != null || s.id.startsWith('score_legacy_') || s.id.includes('legacy') || (s as any).isLegacy) return;
       const reg = s.registrationId ? userRegMap.get(s.registrationId) : undefined;
+      if (reg && (reg.legacyId != null || reg.id.startsWith('reg_legacy_') || reg.id.includes('legacy') || (reg as any).isLegacy)) return;
       if (reg) includedRegIds.add(reg.id);
 
       const stage = stages.find(st => (reg?.stageId && st.id === reg.stageId) || (st.championshipId === s.championshipId && (s.stageNum ? st.stageNum === s.stageNum : false)));
       const champ = championships.find(c => c.id === s.championshipId || c.id === reg?.championshipId);
+      if (champ && (champ.legacyId != null || champ.id.startsWith('champ_legacy_') || champ.id.includes('legacy'))) return;
+      if (stage && (stage.legacyId != null || stage.id.startsWith('stage_legacy_') || stage.id.includes('legacy'))) return;
 
       const rawDateStr = reg?.dataExecucao
         ? `${reg.dataExecucao}T${reg.horaExecucao || '00:00:00'}`
@@ -1785,6 +1791,7 @@ export default function MemberProfile({
     // B. Completed registrations that do not have a duplicate score in userScores
     userRegs.forEach(reg => {
       if (includedRegIds.has(reg.id)) return;
+      if (reg.legacyId != null || reg.id.startsWith('reg_legacy_') || reg.id.includes('legacy') || (reg as any).isLegacy) return;
       if (reg.completionStatus !== 'completed' && !reg.dataExecucao) return;
       if (!reg.dataExecucao) return;
 
@@ -2337,11 +2344,11 @@ export default function MemberProfile({
                   <div className="space-y-4">
                     <ProfileSection
                       title="Dados Cadastrais do Clube"
-                      onSave={() => saveClubSection('club_data', { name: clubForm.name, crNumber: clubForm.crNumber, crValidity: clubForm.crValidity, responsibleName: clubForm.responsibleName })}
+                      onSave={() => saveClubSection('club_data', { name: clubForm.name, fantasyName: clubForm.fantasyName, crNumber: clubForm.crNumber, crValidity: clubForm.crValidity, responsibleName: clubForm.responsibleName })}
                       saving={savingSection === 'club_data'}
                       saved={savedSection === 'club_data'}
                     >
-                      <div className="sm:col-span-2"><ProfileField label="Razão Social" value={clubForm.name} onChange={v => setClubForm({ ...clubForm, name: v })} /></div>
+                      <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3"><ProfileField label="Razão Social" value={clubForm.name} onChange={v => setClubForm({ ...clubForm, name: v })} /><ProfileField label="Nome Fantasia" value={clubForm.fantasyName} onChange={v => setClubForm({ ...clubForm, fantasyName: v })} placeholder="Ex: G&G Competições" /></div>
                       <ProfileField label="CR" value={clubForm.crNumber} onChange={v => setClubForm({ ...clubForm, crNumber: v })} />
                       <ProfileField label="Validade do CR" type="date" value={clubForm.crValidity} onChange={v => setClubForm({ ...clubForm, crValidity: v })} />
                       <ProfileField label="Nome do responsável" value={clubForm.responsibleName} onChange={v => setClubForm({ ...clubForm, responsibleName: v })} />
@@ -2432,9 +2439,6 @@ export default function MemberProfile({
                         { value: 'feminino', label: 'Feminino' }
                       ]}
                     />
-                    <ProfileField label="RG" value={profileForm.rg} onChange={v => setProfileForm({ ...profileForm, rg: v })} />
-                    <ProfileField label="Órgão emissor RG" value={profileForm.rgIssuer} onChange={v => setProfileForm({ ...profileForm, rgIssuer: v })} />
-                    <ProfileField label="Data emissão RG" type="date" value={profileForm.rgIssueDate} onChange={v => setProfileForm({ ...profileForm, rgIssueDate: v })} />
                     <ProfileField label="Nome do pai" value={profileForm.fatherName} onChange={v => setProfileForm({ ...profileForm, fatherName: v })} />
                     <ProfileField label="Nome da mãe" value={profileForm.motherName} onChange={v => setProfileForm({ ...profileForm, motherName: v })} />
                     <ProfileField label="Vencimento Guia de Trânsito" type="date" value={profileForm.guiaTransitoExpiry} onChange={v => setProfileForm({ ...profileForm, guiaTransitoExpiry: v })} />
@@ -5066,27 +5070,68 @@ export default function MemberProfile({
                 }
                 return (
                   <>
-                    {/* Timbre Header + Intro */}
-                    <div className="w-full bg-white font-sans text-slate-900 p-4">
-                      <div className="text-center border-b-2 border-slate-900 pb-3">
-                        <h2 className="font-display font-extrabold text-xl text-slate-900 tracking-wider">G&G CLUBE DE TIRO E COMPETIÇÕES</h2>
-                        <p className="text-[10px] font-sans text-slate-600 uppercase tracking-widest mt-0.5">
-                          Filiado ao SFPC/11ª RM - Registro de Entidade nº 9410 - CNPJ: 45.981.042/0001-12
-                        </p>
-                      </div>
+                    {/* Timbre Header + Intro Oficial */}
+                    {(() => {
+                      const athleteClub = clubs.find(c => c.id === selectedUser.clubId) || clubs.find(c => c.id === 'club_aranas') || clubs[0];
+                      const clubName = athleteClub?.name || 'Clube de Tiro & Caça Aranãs Ltda';
+                      const clubFantasy = athleteClub?.fantasyName || athleteClub?.name || 'G&G Competições';
+                      const clubCr = athleteClub?.crNumber || '572103';
+                      const clubCnpj = athleteClub?.cnpj || '37138741000143';
+                      const clubAddress = [
+                        athleteClub?.address,
+                        athleteClub?.addressNumber,
+                        athleteClub?.neighborhood,
+                        athleteClub?.city && athleteClub?.state ? `${athleteClub.city}, ${athleteClub.state}` : (athleteClub?.city || athleteClub?.state || ''),
+                        athleteClub?.cep ? `CEP: ${athleteClub.cep}` : ''
+                      ].filter(Boolean).join(', ') || 'Estrada que liga Capelinha Novo Cruzeiro, 9999999999, Curral Velho, Capelinha, MG, CEP: 39680000';
 
-                      <div className="text-center my-4">
-                        <h1 className="text-base font-bold uppercase underline tracking-wider text-slate-900">
-                          Declaração de Habitualidade e Treinamentos
-                        </h1>
-                      </div>
+                      const athleteName = selectedUser.fullName;
+                      const athleteCpf = selectedUser.cpf || 'Não informado';
+                      const athleteCr = selectedUser.crNumber || '000.330.311-00';
+                      const athleteAddress = [
+                        selectedUser.address,
+                        selectedUser.addressNumber,
+                        selectedUser.neighborhood,
+                        selectedUser.city && selectedUser.state ? `${selectedUser.city}, ${selectedUser.state}` : (selectedUser.city || selectedUser.state || ''),
+                        selectedUser.cep ? `CEP: ${selectedUser.cep}` : ''
+                      ].filter(Boolean).join(', ') || 'Não informado';
 
-                      <div className="text-justify text-xs text-slate-800 leading-relaxed px-2">
-                        <p>
-                          Declaramos, sob as penas da lei e em cumprimento às diretrizes legais estabelecidas pelo Exército Brasileiro para fins de manutenção, revalidação ou aquisição de armamentos desportivos, que o(a) atleta <strong>{printData.fullName}</strong>, titular do CR nº <strong>{printData.crNumber}</strong>, realizou treinamentos e/ou participou de etapas oficiais de competição neste estabelecimento no período de <strong>{printData.startDate?.split('-').reverse().join('/')}</strong> a <strong>{printData.endDate?.split('-').reverse().join('/')}</strong>, conforme os registros oficiais abaixo detalhados:
-                        </p>
-                      </div>
-                    </div>
+                      const athleteRegNum = selectedUser.bookNumber || (selectedUser.legacyId ? String(selectedUser.legacyId).padStart(4, '0') : (selectedUser.id ? selectedUser.id.replace(/\D/g, '').slice(-4).padStart(4, '0') : '0002'));
+
+                      const formatExtensive = (dStr?: string) => {
+                        if (!dStr) return '01 de Setembro de 2021';
+                        const clean = dStr.includes('T') ? dStr.split('T')[0] : dStr;
+                        const parts = clean.split('-');
+                        if (parts.length === 3) {
+                          const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+                          if (!isNaN(d.getTime())) {
+                            const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+                            return `${String(d.getDate()).padStart(2, '0')} de ${months[d.getMonth()]} de ${d.getFullYear()}`;
+                          }
+                        }
+                        return dStr;
+                      };
+                      const affiliationDateExtensive = formatExtensive(selectedUser.clubAffiliationDate || selectedUser.memberSince || (selectedUser as any).createdAt);
+
+                      return (
+                        <div className="w-full bg-white font-sans text-slate-900 p-4 border-b border-slate-300 mb-2">
+                          <div className="text-center pb-2">
+                            <h1 className="font-display font-extrabold text-sm md:text-base uppercase tracking-wider text-slate-900">
+                              Declaração de habitualidade COMPROVAÇÃO DE PARTICIPAÇÕES EM TREINAMENTOS E/OU COMPETIÇÕES DE TIRO
+                            </h1>
+                            <p className="text-[11px] font-bold text-slate-700 mt-0.5">
+                              (art. 35 do Decreto nº 11.615/2023)
+                            </p>
+                          </div>
+
+                          <div className="text-justify text-xs text-slate-800 leading-relaxed mt-3">
+                            <p>
+                              <strong>{clubName}</strong>, Nome Fantasia: <strong>{clubFantasy}</strong>, CR: Nº <strong>{clubCr}</strong> inscrito no CNPJ sob o nº <strong>{clubCnpj}</strong>, com endereço sede, na <strong>{clubAddress}</strong>, <strong>DECLARA</strong>, para fim de comprovação junto ao Exército Brasileiro e a Polícia Federal, que, <strong>{athleteName}</strong>, CPF <strong>{athleteCpf}</strong>, CR <strong>{athleteCr}</strong>, com endereço: <strong>{athleteAddress}</strong> está regularmente inscrito nesta entidade sob o nº <strong>{athleteRegNum}</strong>, datado de <strong>{affiliationDateExtensive}</strong> e que participou de treinamentos/competições que justificam a aquisição de munição/insumos pleiteada/pleiteados. <strong>O TREINAMENTO FOI REALIZADO CONFORME DESCRIÇÕES</strong>
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Individual Event Tables, paginadas em blocos independentes */}
                     {chunks.map((chunk, chunkIdx) => (
@@ -5164,7 +5209,7 @@ export default function MemberProfile({
                       <div className="mt-4 space-y-8">
                         <div className="text-center text-slate-800 text-[11px]">
                           <p>Atestamos a veracidade e exatidão dos registros de habitualidade acima especificados.</p>
-                          <p className="mt-1">Brasília - DF, {new Date(printData.date).toLocaleDateString('pt-BR')}.</p>
+                          <p className="mt-1">{(clubs.find(c => c.id === selectedUser.clubId)?.city || 'Capelinha')} - {(clubs.find(c => c.id === selectedUser.clubId)?.state || 'MG')}, {new Date(printData.date).toLocaleDateString('pt-BR')}.</p>
                         </div>
 
                         <div className="text-center text-[10px] space-y-1">

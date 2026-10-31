@@ -104,6 +104,7 @@ export interface LegacyMultiDiscount {
 export interface Club {
   id: string;
   name: string;
+  fantasyName?: string;
   logoUrl?: string;
   subDomain?: string;
   cnpj?: string;

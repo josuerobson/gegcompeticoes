@@ -172,6 +172,11 @@ header, main, footer, div, section, button, span, a, input, select, textarea {
     page-break-inside: avoid !important;
   }
 
+  .page-break-after-always {
+    break-after: page !important;
+    page-break-after: always !important;
+  }
+
   @page {
     size: A4 portrait;
     margin: 10mm 8mm;

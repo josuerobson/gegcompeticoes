@@ -3,6 +3,7 @@ import { Championship, ChampionshipInput, Registration, User, StageScore, Stage,
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
+import ClubReportsViewer from './ClubReportsViewer';
 import { SicoobPixManager } from './SicoobPixManager';
 import { MercadoPagoManager } from './MercadoPagoManager';
 import { PixPaymentModal } from './PixPaymentModal';
@@ -74,7 +75,7 @@ interface AdminPanelProps {
   onUpdateMemberProfile: (memberId: string, fields: Record<string, unknown>) => Promise<boolean>;
   onUploadMemberDocument: (memberId: string, kind: string, file: File) => Promise<boolean>;
   clubs: Club[];
-  onCreateClub: (fields: { name: string; cnpj: string; responsibleName: string; email: string; password: string; phone?: string; crNumber?: string; crValidity?: string; annuityDueDate?: string; city?: string; state?: string; cep?: string; address?: string; addressNumber?: string; complement?: string; neighborhood?: string }) => Promise<{ club?: Club; error?: string }>;
+  onCreateClub: (fields: { name: string; fantasyName?: string; cnpj: string; responsibleName: string; email: string; password: string; phone?: string; crNumber?: string; crValidity?: string; annuityDueDate?: string; city?: string; state?: string; cep?: string; address?: string; addressNumber?: string; complement?: string; neighborhood?: string }) => Promise<{ club?: Club; error?: string }>;
   onUpdateClub?: (clubId: string, fields: Record<string, unknown>) => Promise<boolean>;
   onActivateClubTenant?: (clubId: string, subDomain: string) => Promise<{ club?: Club; error?: string }>;
   onSetClubAdminCredentials?: (clubId: string, fields: { fullName?: string; email: string; password: string }) => Promise<{ user?: User; error?: string }>;
@@ -1148,6 +1149,11 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
   }, [members, currentStage, mode, multiSexConstraint]);
 
   const [athleteFilterQuery, setAthleteFilterQuery] = React.useState('');
+  React.useEffect(() => {
+    setSelectedAthletes({});
+    setSearchQueries({});
+    setSearchResults({});
+  }, [modalityId]);
   const displayedMembers = React.useMemo(() => {
     const q = normalizeSearchText(athleteFilterQuery.trim());
     if (!q) return filteredMembers;
@@ -1315,6 +1321,8 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
       setShowPixModal(Boolean(pix));
       setClubInvoiceCount(data.clubInvoiceCount || 0);
       setSelectedAthletes({});
+      setSearchQueries({});
+      setSearchResults({});
       if (onRefreshData) await onRefreshData(); // atualiza as inscrições (e a etiqueta Re-inscrição)
     } catch (err: any) {
       setError(err.message);
@@ -4052,6 +4060,8 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
       setShowPixModal(Boolean(pix));
       setClubInvoiceCount(data.clubInvoiceCount || 0);
       setSelectedAthletes({});
+      setSearchQueries({});
+      setSearchResults({});
       loadCourseRegistrations(); // atualiza a etiqueta Re-inscrição
     } catch (err: any) {
       setError(err.message);
@@ -8035,7 +8045,7 @@ export default function AdminPanel({
   // "Novo Clube" (Gerenciamento Plataforma) — create & edit clubs
   const [novoClubeListSearchQuery, setNovoClubeListSearchQuery] = useState('');
   const [createClubForm, setCreateClubForm] = useState({
-    name: '', cnpj: '', responsibleName: '', email: '', password: '', phone: '', crNumber: '',
+    name: '', fantasyName: '', cnpj: '', responsibleName: '', email: '', password: '', phone: '', crNumber: '',
     crValidity: '', annuityDueDate: '', annuityPrice: '',
     cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
   });
@@ -8045,7 +8055,7 @@ export default function AdminPanel({
 
   const [editingClub, setEditingClub] = useState<Club | null>(null);
   const [editingClubForm, setEditingClubForm] = useState({
-    name: '', cnpj: '', crNumber: '', crValidity: '', annuityDueDate: '', annuityPrice: '', responsibleName: '', email: '', phone: '',
+    name: '', fantasyName: '', cnpj: '', crNumber: '', crValidity: '', annuityDueDate: '', annuityPrice: '', responsibleName: '', email: '', phone: '',
     cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
   });
   const [savingEditClub, setSavingEditClub] = useState(false);
@@ -8332,6 +8342,7 @@ export default function AdminPanel({
     setEditClubSuccess(false);
     setEditingClubForm({
       name: club.name || '',
+      fantasyName: club.fantasyName || '',
       cnpj: club.cnpj || '',
       crNumber: club.crNumber || '',
       crValidity: club.crValidity || '',
@@ -9452,9 +9463,6 @@ export default function AdminPanel({
                         { value: 'feminino', label: 'Feminino' }
                       ]}
                     />
-                    <MemberField label="RG" value={memberEditForm.rg} onChange={v => setMemberEditForm({ ...memberEditForm, rg: v })} />
-                    <MemberField label="Órgão emissor RG" value={memberEditForm.rgIssuer} onChange={v => setMemberEditForm({ ...memberEditForm, rgIssuer: v })} />
-                    <MemberField label="Data emissão RG" type="date" value={memberEditForm.rgIssueDate} onChange={v => setMemberEditForm({ ...memberEditForm, rgIssueDate: v })} />
                     <MemberField label="Nome do pai" value={memberEditForm.fatherName} onChange={v => setMemberEditForm({ ...memberEditForm, fatherName: v })} />
                     <MemberField label="Nome da mãe" value={memberEditForm.motherName} onChange={v => setMemberEditForm({ ...memberEditForm, motherName: v })} />
                     <MemberField label="Nacionalidade" value={memberEditForm.nationality} onChange={v => setMemberEditForm({ ...memberEditForm, nationality: v })} />
@@ -10110,99 +10118,18 @@ export default function AdminPanel({
 
       case 'relatorios_declaracoes':
         return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-display font-bold text-slate-900 text-base">Relatórios & Declarações Regulamentares</h3>
-                <p className="text-xs text-slate-400">Emissão de atestados de filiação ativa e habitualidade esportiva para o Exército.</p>
-              </div>
-              <FileText className="w-5 h-5 text-blue-600" />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Selecione o Atleta</label>
-                  <select
-                    value={decAthleteId}
-                    onChange={(e) => setDecAthleteId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold"
-                  >
-                    <option value="">Selecione o Atleta...</option>
-                    {users.map(u => (
-                      <option key={u.id} value={u.id}>{u.fullName}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Tipo de Declaração</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => setDecType('filiacao')}
-                      className={`p-3 border rounded-xl flex flex-col items-center justify-center gap-1 font-bold text-xs transition ${decType === 'filiacao' ? 'border-blue-600 bg-blue-50 text-blue-900' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
-                    >
-                      <Landmark className="w-4 h-4" />
-                      Filiação
-                    </button>
-                    <button
-                      onClick={() => setDecType('habitualidade')}
-                      className={`p-3 border rounded-xl flex flex-col items-center justify-center gap-1 font-bold text-xs transition ${decType === 'habitualidade' ? 'border-blue-600 bg-blue-50 text-blue-900' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
-                    >
-                      <Activity className="w-4 h-4" />
-                      Habitualidade
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setIsDecPreviewOpen(true)}
-                  disabled={!decAthleteId}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 text-white text-xs py-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-md"
-                >
-                  <Printer className="w-4 h-4" />
-                  Emitir e Visualizar Declaração
-                </button>
-              </div>
-
-              {/* Declaration Document Preview */}
-              {decAthleteId && (
-                <div className="border border-slate-250 p-6 rounded-xl bg-slate-50 font-serif text-[10px] text-slate-800 space-y-6">
-                  <div className="text-center space-y-1">
-                    <h4 className="font-bold text-xs">DECLARAÇÃO DE TIRO ESPORTIVO REGULAR</h4>
-                    <p className="text-[8px] font-sans text-slate-500">FEDERAÇÃO E CLUBE G&G COMPETIÇÕES • BRASÍLIA/DF</p>
-                  </div>
-
-                  {decType === 'filiacao' ? (
-                    <p className="leading-relaxed">
-                      Declaramos, para os devidos fins de direito junto ao Sistema de Fiscalização de Produtos Controlados (SFPC) do Exército Brasileiro, que o atleta desportista desfruta de filiação ativa regular sob o registro nº 918 no Clube G&G, estando adimplente e habilitado com as normas reguladoras de segurança vigentes.
-                    </p>
-                  ) : (
-                    <p className="leading-relaxed">
-                      Declaramos para os devidos fins de aquisição de insumos, renovação de registro e importação regulamentar de munições que o atleta possui habitualidade esportiva regular no estande G&G, registrando participações oficiais de pistas nas etapas federais.
-                    </p>
-                  )}
-
-                  <div className="space-y-1 font-mono text-[9px] bg-white p-3 border border-slate-200 rounded-lg">
-                    <div><strong>Atleta:</strong> {users.find(u => u.id === decAthleteId)?.fullName}</div>
-                    <div><strong>CR Cadastrado:</strong> {users.find(u => u.id === decAthleteId)?.crNumber || 'Emissão pendente...'}</div>
-                    <div><strong>Associação:</strong> {users.find(u => u.id === decAthleteId)?.isClubMember ? 'Regularizada' : 'Convidado'}</div>
-                  </div>
-
-                  <div className="pt-6 border-t border-slate-200/80 flex justify-between items-end text-center font-sans text-[8px]">
-                    <div>
-                      <p>Brasília-DF, {new Date().toLocaleDateString('pt-BR')}</p>
-                    </div>
-                    <div className="w-28 space-y-1">
-                      <div className="h-0.5 bg-slate-400 w-full"></div>
-                      <span className="font-bold block">Secretaria Geral G&G</span>
-                      <span className="text-slate-400 block font-mono">REG-GG-DEC-{decAthleteId.slice(0, 5).toUpperCase()}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          <ClubReportsViewer
+            currentUser={currentUser}
+            clubs={clubs}
+            users={users}
+            
+            registrations={registrations}
+            stageScores={stageScores}
+            stages={stages}
+            championships={championships}
+            weapons={weapons}
+            modalities={modalities}
+          />
         );
 
       default:
@@ -10240,8 +10167,9 @@ export default function AdminPanel({
               <form onSubmit={handleCreateClubSubmit} className="space-y-4 text-slate-800">
                 <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">Dados Principais</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2">
+                  <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <MemberField label="Nome do Estande/Clube" value={createClubForm.name} onChange={v => setCreateClubForm({ ...createClubForm, name: v })} placeholder="Ex: G&G Sobradinho Estande de Precisão" />
+                    <MemberField label="Nome Fantasia" value={createClubForm.fantasyName} onChange={v => setCreateClubForm({ ...createClubForm, fantasyName: v })} placeholder="Ex: G&G Competições" />
                   </div>
                   <MemberField label="CNPJ Entidade" value={createClubForm.cnpj} onChange={v => setCreateClubForm({ ...createClubForm, cnpj: v })} placeholder="Ex: 45.981.042/0002-99" />
                   <MemberField label="Diretor Presidente Responsável" value={createClubForm.responsibleName} onChange={v => setCreateClubForm({ ...createClubForm, responsibleName: v })} placeholder="Ex: Gabriel Guedes" />
@@ -10406,8 +10334,9 @@ export default function AdminPanel({
 
                     <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">Dados Principais</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="sm:col-span-2">
+                      <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <MemberField label="Nome do Estande/Clube" value={editingClubForm.name} onChange={v => setEditingClubForm({ ...editingClubForm, name: v })} />
+                        <MemberField label="Nome Fantasia" value={editingClubForm.fantasyName} onChange={v => setEditingClubForm({ ...editingClubForm, fantasyName: v })} placeholder="Ex: G&G Competições" />
                       </div>
                       <MemberField label="CNPJ Entidade" value={editingClubForm.cnpj} onChange={v => setEditingClubForm({ ...editingClubForm, cnpj: v })} />
                       <MemberField label="CR do Clube" value={editingClubForm.crNumber} onChange={v => setEditingClubForm({ ...editingClubForm, crNumber: v })} />
@@ -10887,9 +10816,6 @@ export default function AdminPanel({
                           onChange={v => setEditAthleteForm({ ...editAthleteForm, sex: v })}
                           options={[{ value: 'masculino', label: 'Masculino' }, { value: 'feminino', label: 'Feminino' }]}
                         />
-                        <MemberField label="RG" value={editAthleteForm.rg} onChange={v => setEditAthleteForm({ ...editAthleteForm, rg: v })} />
-                        <MemberField label="Órgão emissor RG" value={editAthleteForm.rgIssuer} onChange={v => setEditAthleteForm({ ...editAthleteForm, rgIssuer: v })} />
-                        <MemberField label="Data emissão RG" type="date" value={editAthleteForm.rgIssueDate} onChange={v => setEditAthleteForm({ ...editAthleteForm, rgIssueDate: v })} />
                         <MemberField label="Nome do pai" value={editAthleteForm.fatherName} onChange={v => setEditAthleteForm({ ...editAthleteForm, fatherName: v })} />
                         <MemberField label="Nome da mãe" value={editAthleteForm.motherName} onChange={v => setEditAthleteForm({ ...editAthleteForm, motherName: v })} />
                         <MemberField label="Nacionalidade" value={editAthleteForm.nationality} onChange={v => setEditAthleteForm({ ...editAthleteForm, nationality: v })} />
@@ -10933,6 +10859,77 @@ export default function AdminPanel({
                               ...annuityPlans.map(p => ({ value: p.id, label: `${p.name} — R$ ${p.price.toFixed(2)}` }))
                             ]}
                           />
+                          <button
+                            type="button"
+                            onClick={() => setShowClubPlanManager(v => !v)}
+                            className="mt-1.5 text-[11px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
+                          >
+                            {showClubPlanManager ? 'Ocultar planos de anuidade' : '+ Criar ou editar planos de anuidade'}
+                          </button>
+
+                          {showClubPlanManager && (
+                            <div className="mt-3 p-4 bg-white border border-slate-200 rounded-xl space-y-3">
+                              <p className="text-[11px] text-slate-500">
+                                Crie ou edite planos de anuidade para associar aos atletas da plataforma.
+                              </p>
+                              {planError && <div className="bg-rose-50 border border-rose-200 text-rose-800 p-2.5 rounded-lg text-[11px] font-semibold">{planError}</div>}
+                              {planSuccess && <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-2.5 rounded-lg text-[11px] font-semibold">{planSuccess}</div>}
+                              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                                <div className="sm:col-span-5">
+                                  <input
+                                    type="text"
+                                    placeholder="Nome do plano (ex: Sócio Ouro)"
+                                    value={planName}
+                                    onChange={e => setPlanName(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2 rounded-lg text-xs font-semibold text-slate-800 focus:border-blue-500"
+                                  />
+                                </div>
+                                <div className="sm:col-span-3">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="Valor (R$)"
+                                    value={planPrice}
+                                    onChange={e => setPlanPrice(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2 rounded-lg text-xs font-semibold text-slate-800 focus:border-blue-500 font-mono"
+                                  />
+                                </div>
+                                <div className="sm:col-span-4 flex gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={handleSaveAnnuityPlan}
+                                    disabled={savingPlan}
+                                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold text-[11px] py-2 rounded-lg transition cursor-pointer"
+                                  >
+                                    {savingPlan ? 'Salvando...' : editingPlanId ? 'Atualizar' : 'Criar plano'}
+                                  </button>
+                                  {editingPlanId && (
+                                    <button
+                                      type="button"
+                                      onClick={cancelEditingPlan}
+                                      className="px-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[11px] font-bold rounded-lg transition cursor-pointer"
+                                    >
+                                      Cancelar
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {annuityPlans.length > 0 && (
+                                <div className="space-y-1.5 pt-1">
+                                  {annuityPlans.map(plan => (
+                                    <div key={plan.id} className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 gap-2">
+                                      <span className="text-[11px] font-semibold text-slate-700 truncate">{plan.name} — R$ {plan.price.toFixed(2)}</span>
+                                      <div className="flex gap-2 shrink-0">
+                                        <button type="button" onClick={() => startEditingPlan(plan)} className="text-[10px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer">Editar</button>
+                                        <button type="button" onClick={() => handleDeletePlan(plan.id, plan.name)} className="text-[10px] font-bold text-rose-600 hover:text-rose-800 cursor-pointer">Excluir</button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <MemberField label="Número de registro do livro físico" value={editAthleteForm.bookNumber} onChange={v => setEditAthleteForm({ ...editAthleteForm, bookNumber: v })} />
                       </div>

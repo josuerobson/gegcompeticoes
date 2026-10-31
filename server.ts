@@ -334,6 +334,7 @@ function mapClub(c: any): Club {
   return {
     id: c.id,
     name: c.name,
+    fantasyName: c.fantasy_name || undefined,
     logoUrl: logoUrlFor(c.id, c.logo_url),
     subDomain: c.sub_domain || undefined,
     cnpj: c.cnpj || undefined,
@@ -2020,7 +2021,7 @@ app.post('/api/auth/register', async (req, res) => {
   try {
     if (type === 'clube') {
       const {
-        name, crNumber, responsibleName, phone, email,
+        name, fantasyName, crNumber, responsibleName, phone, email,
         cep, address, addressNumber, complement, neighborhood, city, state,
         cnpj, password
       } = req.body;
@@ -2044,9 +2045,9 @@ app.post('/api/auth/register', async (req, res) => {
         await client.query('BEGIN');
         const clubId = `club_${Date.now()}`;
         await client.query(
-          `INSERT INTO clubs (id, name, cnpj, phone, is_premium, created_at, cr_number, responsible_name, email, cep, address, address_number, complement, neighborhood, city, state, parent_club_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
-          [clubId, name, cnpj, phone || null, false, new Date().toISOString().split('T')[0], crNumber || null, responsibleName, email, cep || null, address || null, addressNumber || null, complement || null, neighborhood || null, city || null, state || null, tenant.id]
+          `INSERT INTO clubs (id, name, fantasy_name, cnpj, phone, is_premium, created_at, cr_number, responsible_name, email, cep, address, address_number, complement, neighborhood, city, state, parent_club_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+          [clubId, name, fantasyName || null, cnpj, phone || null, false, new Date().toISOString().split('T')[0], crNumber || null, responsibleName, email, cep || null, address || null, addressNumber || null, complement || null, neighborhood || null, city || null, state || null, tenant.id]
         );
 
         const userId = `user_${Date.now()}`;
@@ -2205,7 +2206,7 @@ app.post('/api/admin/members', requireAdmin, async (req, res) => {
 // the club's profile (endereço, documentos) is completed afterwards through
 // PATCH /api/clubs/:id, same as a club editing its own data.
 app.post('/api/admin/clubs', requireAdmin, async (req, res) => {
-  const { name, cnpj, responsibleName, email, password, phone, crNumber, crValidity, annuityDueDate, annuityPrice, city, state, cep, address, addressNumber, complement, neighborhood } = req.body;
+  const { name, fantasyName, cnpj, responsibleName, email, password, phone, crNumber, crValidity, annuityDueDate, annuityPrice, city, state, cep, address, addressNumber, complement, neighborhood } = req.body;
   const currentUser = (req as any).user as User;
 
   if (!name || !cnpj || !responsibleName || !email || !password) {
@@ -2226,10 +2227,10 @@ app.post('/api/admin/clubs', requireAdmin, async (req, res) => {
     await client.query('BEGIN');
     const clubId = `club_${Date.now()}`;
     await client.query(
-      `INSERT INTO clubs (id, name, cnpj, phone, is_premium, created_at, cr_number, cr_validity, annuity_due_date, annuity_price, responsible_name, email, city, state, cep, address, address_number, complement, neighborhood, parent_club_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+      `INSERT INTO clubs (id, name, fantasy_name, cnpj, phone, is_premium, created_at, cr_number, cr_validity, annuity_due_date, annuity_price, responsible_name, email, city, state, cep, address, address_number, complement, neighborhood, parent_club_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
       [
-        clubId, name, cnpj, phone || null, false, new Date().toISOString().split('T')[0],
+        clubId, name, fantasyName || null, cnpj, phone || null, false, new Date().toISOString().split('T')[0],
         crNumber || null, crValidity || null, annuityDueDate || null, annuityPrice || null, responsibleName, email, city || null, state || null,
         cep || null, address || null, addressNumber || null, complement || null, neighborhood || null,
         currentUser.clubId || DEFAULT_TENANT_ID
@@ -3187,6 +3188,7 @@ app.patch('/api/admin/members/:id/profile', requireAdmin, async (req, res) => {
 
 const CLUB_PROFILE_COLUMNS: Record<string, string> = {
   name: 'name',
+  fantasyName: 'fantasy_name',
   cnpj: 'cnpj',
   crNumber: 'cr_number',
   crValidity: 'cr_validity',

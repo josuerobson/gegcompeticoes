@@ -101,7 +101,8 @@ export async function initDB() {
     // horário do node-postgres em cima de um objeto Date.
     await client.query(`
       ALTER TABLE clubs
-        ADD COLUMN IF NOT EXISTS annuity_due_date TEXT;
+        ADD COLUMN IF NOT EXISTS annuity_due_date TEXT,
+        ADD COLUMN IF NOT EXISTS fantasy_name TEXT;
     `);
 
     // Multi-tenancy: every club (except the master itself) belongs to a "parent" tenant —

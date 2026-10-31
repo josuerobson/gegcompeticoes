@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(habitualidade): elimina fallbacks ficticios de tiros e armas e descarta registros incompletos universalmente` |
-| Data/hora | 2026-10-25T12:35:00-03:00 |
+| Mensagem | `feat(relatorios): relatorio global de habitualidades do clube, novo cabecalho oficial, nome fantasia e remocao de campos de rg` |
+| Data/hora | 2026-10-31T11:15:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
