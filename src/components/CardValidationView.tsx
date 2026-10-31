@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, CheckCircle2, XCircle, AlertTriangle, Building2, User, Calendar, ShieldAlert, Award, ArrowLeft, Printer, RefreshCw } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, XCircle, AlertTriangle, Building2, User, Calendar, ShieldAlert, Award, ArrowLeft, Printer, RefreshCw, Download } from 'lucide-react';
 import logoGgCompeticoes from '@/assets/logo_gg_competicoes.png';
+import { downloadPdfFromElement } from '../utils/pdfDownloader';
 
 interface CardValidationViewProps {
   userId: string;
@@ -69,8 +70,14 @@ export default function CardValidationView({ userId, onGoHome }: CardValidationV
     fetchValidation();
   }, [userId]);
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    const el = document.querySelector('main') as HTMLElement;
+    if (!el) return;
+    const slug = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    await downloadPdfFromElement(el, {
+      filename: `comprovante_auditoria_carteirinha_${slug(data?.athlete?.name || 'atleta')}.pdf`,
+      orientation: 'portrait'
+    });
   };
 
   return (
@@ -271,11 +278,12 @@ export default function CardValidationView({ userId, onGoHome }: CardValidationV
               </div>
 
               <button
+                type="button"
                 onClick={handlePrint}
                 className="bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center gap-1.5 font-bold cursor-pointer"
               >
-                <Printer className="w-3.5 h-3.5" />
-                Imprimir Comprovante de Auditoria
+                <Download className="w-3.5 h-3.5" />
+                Baixar Comprovante de Auditoria (PDF)
               </button>
             </div>
           </div>

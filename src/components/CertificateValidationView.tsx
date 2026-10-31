@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Award, CheckCircle2, XCircle, AlertTriangle, Building2, User, Calendar, ShieldCheck, ArrowLeft, Printer, RefreshCw, Trophy, Target } from 'lucide-react';
+import { Award, CheckCircle2, XCircle, AlertTriangle, Building2, User, Calendar, ShieldCheck, ArrowLeft, Printer, RefreshCw, Trophy, Target, Download } from 'lucide-react';
 import logoGgCompeticoes from '@/assets/logo_gg_competicoes.png';
+import { downloadPdfFromElement } from '../utils/pdfDownloader';
 
 interface CertificateValidationViewProps {
   certId: string;
@@ -65,8 +66,14 @@ export default function CertificateValidationView({ certId, onGoHome }: Certific
     fetchValidation();
   }, [certId]);
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    const el = document.querySelector('main') as HTMLElement;
+    if (!el) return;
+    const slug = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    await downloadPdfFromElement(el, {
+      filename: `comprovante_auditoria_certificado_${slug(data?.athlete?.name || 'atleta')}.pdf`,
+      orientation: 'portrait'
+    });
   };
 
   return (
@@ -240,11 +247,12 @@ export default function CertificateValidationView({ certId, onGoHome }: Certific
             {/* Actions */}
             <div className="flex gap-3 justify-center pt-2">
               <button
+                type="button"
                 onClick={handlePrint}
                 className="bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 font-bold text-xs px-5 py-3 rounded-2xl transition flex items-center gap-2 cursor-pointer shadow-md"
               >
-                <Printer className="w-4 h-4 text-cyan-400" />
-                Imprimir Comprovante de Auditoria
+                <Download className="w-4 h-4 text-cyan-400" />
+                Baixar Comprovante de Auditoria (PDF)
               </button>
             </div>
           </div>

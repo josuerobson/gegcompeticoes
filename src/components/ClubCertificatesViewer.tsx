@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Club, Registration, Championship, StageScore, Stage, Modality } from '../types';
-import { Award, Search, Printer, CheckCircle2, QrCode, FileText, X, Filter } from 'lucide-react';
+import { Award, Search, Printer, CheckCircle2, QrCode, FileText, X, Filter, Download, Loader2 } from 'lucide-react';
+import { downloadPdfFromElement } from '../utils/pdfDownloader';
 import { TextElement } from './ClubTemplatesManager';
 import { QRCodeView } from './QRCodeView';
 import { normalizeSearchText } from '../utils/textSearch';
@@ -483,44 +484,24 @@ export function ClubCertificatesViewer({
 
   const eligibleRegistrations = Object.values(groupedBest).map(item => item.reg);
 
-  const handlePrintCertificate = () => {
-    let styleElem = document.getElementById('cert-print-style');
-    if (!styleElem) {
-      styleElem = document.createElement('style');
-      styleElem.id = 'cert-print-style';
-      styleElem.innerHTML = `
-        @media print {
-          @page {
-            size: A4 portrait;
-            margin: 0;
-          }
-          body * {
-            visibility: hidden !important;
-          }
-          #printable-certificate-area, #printable-certificate-area * {
-            visibility: visible !important;
-          }
-          #printable-certificate-area {
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 210mm !important;
-            height: 297mm !important;
-            max-width: none !important;
-            max-height: none !important;
-            box-shadow: none !important;
-            border: none !important;
-            border-radius: 0 !important;
-            margin: 0 !important;
-            z-index: 999999 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-        }
-      `;
-      document.head.appendChild(styleElem);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  const handlePrintCertificate = async () => {
+    const el = document.getElementById('printable-certificate-area') || document.getElementById('certificate-print-area');
+    if (!el || !activeCert) return;
+    setIsDownloadingPdf(true);
+    try {
+      const slug = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      const filename = `certificado_${slug(activeCert.athleteName)}_${slug(activeCert.championshipTitle)}.pdf`;
+      await downloadPdfFromElement(el, {
+        filename,
+        orientation: 'portrait'
+      });
+    } catch (err) {
+      console.error('Erro ao baixar certificado PDF:', err);
+    } finally {
+      setIsDownloadingPdf(false);
     }
-    window.print();
   };
 
   // Dynamic token replacement for active certificate
@@ -818,10 +799,20 @@ export function ClubCertificatesViewer({
                   <button
                     type="button"
                     onClick={handlePrintCertificate}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl transition text-xs flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                    disabled={isDownloadingPdf}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold py-2.5 rounded-xl transition text-xs flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                   >
-                    <Printer className="w-4 h-4" />
-                    Imprimir Certificado PDF (A4)
+                    {isDownloadingPdf ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Gerando PDF...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4" />
+                        Baixar Certificado (PDF)
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

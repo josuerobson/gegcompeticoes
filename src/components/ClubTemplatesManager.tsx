@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Club } from '../types';
 import { QRCodeView } from './QRCodeView';
+import { downloadPdfFromElement } from '../utils/pdfDownloader';
 import {
   FileUp, Save, RefreshCw, CheckCircle2, QrCode, FileText, CreditCard, Sparkles,
   Trophy, Target, Eye, Plus, Trash2, Bold, Italic, AlignLeft, AlignCenter, AlignRight,
-  Move, Printer, Palette, Type, Camera
+  Move, Printer, Palette, Type, Camera, Download, Loader2
 } from 'lucide-react';
 
 export interface TextElement {
@@ -556,7 +557,7 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
         },
         body: JSON.stringify({
           clubId: selectedClubId,
-          templateType: activeTab,
+          activeTab: activeTab,
           backgroundUrl: bgUrl,
           bodyTemplate: JSON.stringify(elements),
           layoutConfig: { elements }
@@ -685,76 +686,24 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
   const isCardTab = activeTab.includes('card');
   const isA4Format = !isCardTab || cardFormat === 'a4';
 
-  // Print Test PDF
-  const handlePrintTest = () => {
-    let styleElem = document.getElementById('editor-print-style');
-    if (!styleElem) {
-      styleElem = document.createElement('style');
-      styleElem.id = 'editor-print-style';
-      styleElem.innerHTML = `
-        @media print {
-          @page {
-            size: ${isA4Format ? 'A4 portrait' : 'landscape'};
-            margin: 0;
-          }
-          body * {
-            visibility: hidden !important;
-          }
-          #editor-canvas-print-area, #editor-canvas-print-area * {
-            visibility: visible !important;
-          }
-          #editor-canvas-print-area {
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: ${isA4Format ? '210mm' : '85.6mm'} !important;
-            height: ${isA4Format ? '297mm' : '54mm'} !important;
-            max-width: none !important;
-            max-height: none !important;
-            box-shadow: none !important;
-            border: none !important;
-            border-radius: 0 !important;
-            margin: 0 !important;
-            z-index: 999999 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-        }
-      `;
-      document.head.appendChild(styleElem);
-    } else {
-      styleElem.innerHTML = `
-        @media print {
-          @page {
-            size: ${isA4Format ? 'A4 portrait' : 'landscape'};
-            margin: 0;
-          }
-          body * {
-            visibility: hidden !important;
-          }
-          #editor-canvas-print-area, #editor-canvas-print-area * {
-            visibility: visible !important;
-          }
-          #editor-canvas-print-area {
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: ${isA4Format ? '210mm' : '85.6mm'} !important;
-            height: ${isA4Format ? '297mm' : '54mm'} !important;
-            max-width: none !important;
-            max-height: none !important;
-            box-shadow: none !important;
-            border: none !important;
-            border-radius: 0 !important;
-            margin: 0 !important;
-            z-index: 999999 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-        }
-      `;
+  // Download Test PDF
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  const handlePrintTest = async () => {
+    const el = document.getElementById('editor-canvas-print-area');
+    if (!el) return;
+    setIsDownloadingPdf(true);
+    try {
+      const isHorizontalA4 = activeTab === 'certificate';
+      await downloadPdfFromElement(el, {
+        filename: `teste_modelo_${activeTab}.pdf`,
+        orientation: isHorizontalA4 ? 'landscape' : 'portrait'
+      });
+    } catch (err) {
+      console.error('Erro ao baixar teste PDF:', err);
+    } finally {
+      setIsDownloadingPdf(false);
     }
-    window.print();
   };
 
   return (
@@ -790,10 +739,20 @@ export function ClubTemplatesManager({ currentUser, clubs }: ClubTemplatesManage
           <button
             type="button"
             onClick={handlePrintTest}
-            className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+            disabled={isDownloadingPdf}
+            className="bg-slate-800 hover:bg-slate-900 disabled:opacity-60 text-white font-bold text-xs px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs"
           >
-            <Printer className="w-4 h-4" />
-            Imprimir Teste PDF
+            {isDownloadingPdf ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Gerando PDF...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                Baixar Teste PDF
+              </>
+            )}
           </button>
         </div>
       </div>

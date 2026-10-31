@@ -1,6 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FileText, Printer, Calendar, Users, Filter, X, CheckCircle, ShieldAlert, Award, ArrowLeft } from 'lucide-react';
+import { FileText, Printer, Calendar, Users, Filter, X, CheckCircle, ShieldAlert, Award, ArrowLeft, Download, Loader2 } from 'lucide-react';
+import { downloadPdfFromElement } from '../utils/pdfDownloader';
 import { User, Club, TrainingSession, Registration, StageScore, Stage, Championship, Weapon, Modality } from '../types';
 
 interface ClubReportsViewerProps {
@@ -334,8 +335,31 @@ export default function ClubReportsViewer({
     };
   }, [isPrintPreviewOpen]);
 
+  const documentPagesRef = useRef<HTMLDivElement>(null);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (!documentPagesRef.current) return;
+    setIsDownloadingPdf(true);
+    try {
+      const slug = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      const filename = activeTab === 'global_habitualidade'
+        ? `relatorio_global_habitualidades_${slug(clubFantasy)}_${startDate}_a_${endDate}.pdf`
+        : `declaracao_${declarationType}_${slug(singleAthlete?.fullName || 'atleta')}_${startDate}_a_${endDate}.pdf`;
+
+      await downloadPdfFromElement(documentPagesRef.current, {
+        filename,
+        orientation: 'portrait'
+      });
+    } catch (err) {
+      console.error('Erro ao baixar PDF:', err);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
   const handlePrint = () => {
-    window.print();
+    handleDownloadPdf();
   };
 
   // Format extensive date
@@ -502,8 +526,8 @@ export default function ClubReportsViewer({
               disabled={globalData.length === 0}
               className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs py-2.5 px-5 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer shrink-0"
             >
-              <Printer className="w-4 h-4" />
-              Gerar & Imprimir Relatório Global
+              <Download className="w-4 h-4" />
+              Visualizar & Baixar Relatório Global
             </button>
           </div>
 
@@ -608,8 +632,8 @@ export default function ClubReportsViewer({
                   onClick={() => setIsPrintPreviewOpen(true)}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2 px-4 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  Imprimir Declaração
+                  <Download className="w-3.5 h-3.5" />
+                  Visualizar & Baixar Declaração
                 </button>
               </div>
 
@@ -664,11 +688,21 @@ export default function ClubReportsViewer({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={handlePrint}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-5 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer"
+                onClick={handleDownloadPdf}
+                disabled={isDownloadingPdf}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold text-xs py-2.5 px-5 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer"
               >
-                <Printer className="w-4 h-4" />
-                Imprimir / Salvar PDF
+                {isDownloadingPdf ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Gerando PDF...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    Baixar PDF
+                  </>
+                )}
               </button>
               <button
                 type="button"
@@ -681,7 +715,7 @@ export default function ClubReportsViewer({
           </div>
 
           {/* DOCUMENT PAGES CONTAINER */}
-          <div className="w-full max-w-4xl space-y-6 print:space-y-0 print:w-full print:max-w-none">
+          <div ref={documentPagesRef} className="w-full max-w-4xl space-y-6 print:space-y-0 print:w-full print:max-w-none">
             {activeTab === 'global_habitualidade' ? (
               // RENDER EACH ATHLETE'S DECLARATION
               globalData.map(({ athlete, activities }, athleteIdx) => {

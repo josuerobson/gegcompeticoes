@@ -4,6 +4,8 @@ import { Trophy, Calendar, Activity, ArrowLeft, FileSpreadsheet, FileText } from
 import { computeRevenueBreakdown, computeTodasEtapasPrize } from '../utils/championshipFinance';
 import { exportResultsToExcel, exportResultsToPdf } from '../utils/resultsExport';
 
+const sanitizeSlug = (str: string) => (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').slice(0, 35);
+
 export interface CompetitionResultsViewerProps {
   championships: Championship[];
   stages: Stage[];
@@ -549,7 +551,7 @@ export function CompetitionResultsViewer({
       });
 
       const slug = (str: string) => str.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 35);
-      const filename = `resultado_acumulado_${slug(currentChamp?.title || 'campeonato')}_${slug(currentMod?.name || 'modalidade')}.xls`;
+      const filename = `resultado_acumulado_${sanitizeSlug(currentChamp?.title || 'campeonato')}_${sanitizeSlug(currentMod?.name || 'modalidade')}.xls`;
 
       exportResultsToExcel({
         title: 'Resultado Geral Acumulado',
@@ -588,6 +590,9 @@ export function CompetitionResultsViewer({
         ];
       });
 
+      const slug = (str: string) => str.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 35);
+      const pdfFilename = `resultado_acumulado_${sanitizeSlug(currentChamp?.title || 'campeonato')}_${sanitizeSlug(currentMod?.name || 'modalidade')}.pdf`;
+
       exportResultsToPdf({
         title: 'Resultado Geral Acumulado',
         championshipTitle: currentChamp?.title || 'Campeonato',
@@ -596,7 +601,7 @@ export function CompetitionResultsViewer({
         headers,
         rows,
         isLandscape: true
-      });
+      }, pdfFilename);
     };
 
     return (
@@ -634,10 +639,10 @@ export function CompetitionResultsViewer({
             <button
               onClick={handleExportConsolidatedPdf}
               className="bg-red-600 hover:bg-red-700 text-white text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
-              title="Exportar / Imprimir relatório em PDF"
+              title="Baixar arquivo PDF direto na pasta de downloads"
             >
               <FileText className="w-4 h-4" />
-              <span>Exportar PDF</span>
+              <span>Baixar PDF</span>
             </button>
             <button
               onClick={() => {
@@ -817,7 +822,7 @@ export function CompetitionResultsViewer({
     });
 
     const slug = (str: string) => str.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 35);
-    const filename = `resultado_${slug(currentChamp?.title || 'campeonato')}_${slug(currentStage?.title || 'etapa')}_${slug(currentMod?.name || 'modalidade')}.xls`;
+    const filename = `resultado_${sanitizeSlug(currentChamp?.title || 'campeonato')}_${sanitizeSlug(currentStage?.title || 'etapa')}_${sanitizeSlug(currentMod?.name || 'modalidade')}.xls`;
 
     exportResultsToExcel({
       title: 'Resultados da Competição',
@@ -875,6 +880,8 @@ export function CompetitionResultsViewer({
       ];
     });
 
+    const pdfFilename = `resultado_${sanitizeSlug(currentChamp?.title || 'campeonato')}_${sanitizeSlug(currentStage?.title || 'etapa')}_${sanitizeSlug(currentMod?.name || 'modalidade')}.pdf`;
+
     exportResultsToPdf({
       title: 'Resultados da Competição',
       championshipTitle: currentChamp?.title || 'Campeonato',
@@ -884,7 +891,7 @@ export function CompetitionResultsViewer({
       headers,
       rows,
       isLandscape: false
-    });
+    }, pdfFilename);
   };
 
   return (
@@ -922,10 +929,10 @@ export function CompetitionResultsViewer({
           <button
             onClick={handleExportStagePdf}
             className="bg-red-600 hover:bg-red-700 text-white text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
-            title="Exportar / Imprimir relatório em PDF"
+            title="Baixar arquivo PDF direto na pasta de downloads"
           >
             <FileText className="w-4 h-4" />
-            <span>Exportar PDF</span>
+            <span>Baixar PDF</span>
           </button>
           <button
             onClick={() => {

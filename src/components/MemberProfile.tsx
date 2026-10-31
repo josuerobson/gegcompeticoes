@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, Post, Registration, StageScore, Championship, Modality, Club, Stage, Weapon, TrainingSession, WeaponLookupOption, AmmoAthleteBalance } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
@@ -7,11 +7,12 @@ import { QRCodeView } from './QRCodeView';
 import { PixPaymentModal } from './PixPaymentModal';
 import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel } from '../utils/textSearch';
 import { annuityStatus, ANNUITY_STATUS_LABELS } from '../utils/financeReports';
+import { downloadPdfFromElement } from '../utils/pdfDownloader';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
   Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronLeft, ChevronDown, Info, PlusCircle, X, UserCog, Camera, Pencil,
-  Clock, Copy, QrCode, Images, Heart, MessageCircle, Send, Bookmark, Maximize2, Share2, Repeat, Loader2, Menu, Search, Eye
+  Clock, Copy, QrCode, Images, Heart, MessageCircle, Send, Bookmark, Maximize2, Share2, Repeat, Loader2, Menu, Search, Eye, Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { compressUploadImage } from '../utils/imageCompressor';
@@ -644,6 +645,40 @@ export default function MemberProfile({
   // Print & Declaration States
   const [printMode, setPrintMode] = useState<'certificate' | 'club_card' | 'gg_card' | 'declaration_filiacao' | 'declaration_habitualidade' | null>(null);
   const [printData, setPrintData] = useState<any>(null);
+  const printSheetRef = useRef<HTMLDivElement>(null);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  const handleDownloadDocumentPdf = async () => {
+    if (!printSheetRef.current) return;
+    setIsDownloadingPdf(true);
+    try {
+      const slug = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      const athleteName = slug(selectedUser?.fullName || 'atleta');
+      let filename = `documento_${athleteName}.pdf`;
+      let orientation: 'portrait' | 'landscape' = 'portrait';
+
+      if (printMode === 'declaration_habitualidade') {
+        filename = `declaracao_habitualidade_${athleteName}_${habStartDate}_a_${habEndDate}.pdf`;
+      } else if (printMode === 'declaration_filiacao') {
+        filename = `declaracao_filiacao_${athleteName}.pdf`;
+      } else if (printMode === 'certificate') {
+        orientation = 'landscape';
+        filename = `certificado_${athleteName}_${slug(printData?.championshipTitle || printData?.title || 'campeonato')}.pdf`;
+      } else if (printMode === 'club_card' || printMode === 'gg_card') {
+        const clubName = clubs.find(c => c.id === selectedUser.clubId)?.name || 'clube';
+        filename = `carteirinha_${athleteName}_${printMode === 'gg_card' ? 'gg_competicoes' : slug(clubName)}.pdf`;
+      }
+
+      await downloadPdfFromElement(printSheetRef.current, {
+        filename,
+        orientation
+      });
+    } catch (err) {
+      console.error('Erro ao baixar documento PDF:', err);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
 
   // Isolate print mode for clean document printing
   useEffect(() => {
@@ -4793,11 +4828,22 @@ export default function MemberProfile({
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => window.print()}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md"
+                  type="button"
+                  onClick={handleDownloadDocumentPdf}
+                  disabled={isDownloadingPdf}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md"
                 >
-                  <Printer className="w-4 h-4" />
-                  Imprimir / Salvar PDF
+                  {isDownloadingPdf ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Gerando PDF...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      Baixar PDF
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={() => setPrintMode(null)}
@@ -4810,6 +4856,7 @@ export default function MemberProfile({
 
             {/* Document sheet */}
             <div
+              ref={printSheetRef}
               style={printMode === 'declaration_habitualidade' ? { color: '#0f172a' } : { backgroundColor: '#ffffff', color: '#0f172a' }}
               className={`print-content ${printMode.includes('card') ? 'max-w-[360px] min-h-auto p-6 rounded-2xl shadow-2xl border border-slate-200 flex flex-col gap-6 items-center justify-center' : printMode === 'declaration_habitualidade' ? 'max-w-4xl p-[20mm] flex flex-col justify-between gap-3' : 'max-w-4xl min-h-[297mm] p-[20mm] rounded-none shadow-none flex flex-col justify-between border border-slate-150'} font-sans relative print:shadow-none print:rounded-none print:p-0 print:border-none print:w-full`}
             >
@@ -5288,20 +5335,20 @@ export default function MemberProfile({
                   Fechar
                 </button>
                 <button
-                  onClick={() => {
-                    const printContent = document.getElementById('printable-receipt')?.innerHTML;
-                    const originalContent = document.body.innerHTML;
-                    if (printContent) {
-                      document.body.innerHTML = `<div style="font-family: monospace; padding: 20px; max-width: 400px; margin: auto;">${printContent}</div>`;
-                      window.print();
-                      document.body.innerHTML = originalContent;
-                      window.location.reload();
-                    }
+                  type="button"
+                  onClick={async () => {
+                    const el = document.getElementById('printable-receipt');
+                    if (!el) return;
+                    const slug = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+                    await downloadPdfFromElement(el, {
+                      filename: `comprovante_anuidade_${slug(selectedUser?.fullName || 'atleta')}.pdf`,
+                      orientation: 'portrait'
+                    });
                   }}
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold text-xs transition flex items-center justify-center gap-1 cursor-pointer"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  Imprimir
+                  <Download className="w-3.5 h-3.5" />
+                  Baixar Comprovante (PDF)
                 </button>
               </div>
             </motion.div>

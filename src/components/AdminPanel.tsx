@@ -5,6 +5,7 @@ import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import ClubReportsViewer from './ClubReportsViewer';
 import { SicoobPixManager } from './SicoobPixManager';
+import { downloadPdfFromElement } from '../utils/pdfDownloader';
 import { MercadoPagoManager } from './MercadoPagoManager';
 import { PixPaymentModal } from './PixPaymentModal';
 import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel } from '../utils/textSearch';
@@ -16,7 +17,7 @@ import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, EyeOff, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn, QrCode, KeyRound, Copy, AlertTriangle, ChevronLeft, ChevronRight
+  Eye, EyeOff, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn, QrCode, KeyRound, Copy, AlertTriangle, ChevronLeft, ChevronRight, Download
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -10026,16 +10027,17 @@ export default function AdminPanel({
                     <h4 className="font-bold text-slate-800 text-sm">Pré-visualização — Cessão Nº {cessaoSalva.concessionNumber}</h4>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => {
+                        type="button"
+                        onClick={async () => {
                           const el = document.getElementById('cessao-pdf-content');
-                          if (!el) return;
-                          const w = window.open('', '_blank');
-                          if (!w) return;
-                          w.document.write(`<!DOCTYPE html><html><head><title>Cessão Nº ${cessaoSalva.concessionNumber}</title><style>body{font-family:Arial,sans-serif;font-size:11px;line-height:1.6;margin:30px}h1,h2,h3{text-align:center}table{width:100%;border-collapse:collapse;margin:8px 0}td,th{border:1px solid #333;padding:6px 10px}hr{margin:16px 0}@media print{button{display:none}}</style></head><body>${el.innerHTML}<script>window.print();<\/script></body></html>`);
-                          w.document.close();
+                          if (!el || !cessaoSalva) return;
+                          await downloadPdfFromElement(el, {
+                            filename: `termo_cessao_armas_${cessaoSalva.concessionNumber}.pdf`,
+                            orientation: 'portrait'
+                          });
                         }}
-                        className="flex items-center gap-1 text-xs bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition cursor-pointer"
-                      ><Printer className="w-3.5 h-3.5" /> Imprimir / Salvar PDF</button>
+                        className="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition cursor-pointer shadow-xs"
+                      ><Download className="w-3.5 h-3.5" /> Baixar Termo (PDF)</button>
                       <button onClick={() => setCessaoPdfOpen(false)} className="text-slate-400 hover:text-slate-600 transition"><X className="w-5 h-5" /></button>
                     </div>
                   </div>

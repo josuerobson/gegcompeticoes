@@ -1,3 +1,5 @@
+import { downloadPdfFromHtml, sanitizePdfFilename } from './pdfDownloader';
+
 export interface ResultsExportData {
   title: string;
   championshipTitle: string;
@@ -86,18 +88,12 @@ export function exportResultsToExcel(data: ResultsExportData, filename: string) 
   URL.revokeObjectURL(url);
 }
 
-export function exportResultsToPdf(data: ResultsExportData) {
+export async function exportResultsToPdf(data: ResultsExportData, filename?: string): Promise<void> {
   const { title, championshipTitle, stageTitle, modalityName, categoryFilter, headers, rows, isLandscape = false } = data;
   const now = new Date().toLocaleString('pt-BR');
 
-  const w = window.open('', '_blank');
-  if (!w) {
-    alert('Por favor, permita pop-ups nesta página para abrir a visualização e impressão do PDF.');
-    return;
-  }
-
   const tableHeaders = headers
-    .map(h => `<th style="background-color:#1e293b;color:#ffffff;font-size:10px;font-weight:bold;padding:6px 6px;border:1px solid #475569;text-align:center;text-transform:uppercase;letter-spacing:0.3px;">${h}</th>`)
+    .map(h => `<th style="background-color:#1e293b;color:#ffffff;font-size:10px;font-weight:bold;padding:7px 6px;border:1px solid #475569;text-align:center;text-transform:uppercase;letter-spacing:0.3px;">${h}</th>`)
     .join('');
 
   const tableRows = rows
@@ -110,131 +106,44 @@ export function exportResultsToPdf(data: ResultsExportData) {
           const isAtleta = colIdx === 1 || (headers[1] === 'Medalha' && colIdx === 2);
           const align = isPos ? 'center' : isAtleta ? 'left' : 'center';
           const weight = isPos || isAtleta ? 'font-weight:bold;' : '';
-          return `<td style="padding:5px 6px;border:1px solid #cbd5e1;text-align:${align};background-color:${bg};${weight}font-size:10px;">${val}</td>`;
+          return `<td style="padding:6px 6px;border:1px solid #cbd5e1;text-align:${align};background-color:${bg};${weight}font-size:10px;">${val}</td>`;
         })
         .join('');
       return `<tr>${cells}</tr>`;
     })
     .join('');
 
-  const content = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>${title} - ${championshipTitle}</title>
-  <style>
-    @page {
-      size: ${isLandscape ? 'landscape' : 'portrait'};
-      margin: 10mm 12mm;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-      font-size: 10.5px;
-      color: #0f172a;
-      line-height: 1.35;
-      margin: 0;
-      padding: 0;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
-    .header-box {
-      border-bottom: 2px solid #2563eb;
-      padding-bottom: 8px;
-      margin-bottom: 12px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-    }
-    .brand {
-      font-size: 13px;
-      font-weight: 800;
-      color: #1e3a8a;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .main-title {
-      font-size: 14px;
-      font-weight: 800;
-      color: #0f172a;
-      margin: 3px 0 2px 0;
-      text-transform: uppercase;
-    }
-    .sub-title {
-      font-size: 11px;
-      color: #334155;
-      font-weight: 600;
-    }
-    .meta-box {
-      text-align: right;
-      font-size: 9.5px;
-      color: #64748b;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      page-break-inside: auto;
-    }
-    thead {
-      display: table-header-group;
-    }
-    tr {
-      page-break-inside: avoid;
-      page-break-after: auto;
-    }
-    th, td {
-      border: 1px solid #cbd5e1;
-    }
-    .footer-box {
-      margin-top: 14px;
-      padding-top: 8px;
-      border-top: 1px solid #e2e8f0;
-      display: flex;
-      justify-content: space-between;
-      font-size: 8.5px;
-      color: #64748b;
-    }
-    @media print {
-      body {
-        margin: 0;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="header-box">
-    <div>
-      <div class="brand">G&G Competições — ${title}</div>
-      <div class="main-title">${championshipTitle}</div>
-      <div class="sub-title">${stageTitle} • Modalidade: ${modalityName}${categoryFilter ? ` • ${categoryFilter}` : ''}</div>
+  const html = `
+  <div style="padding:15px 20px;background:#ffffff;color:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+    <div style="border-bottom:2px solid #2563eb;padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <div style="font-size:13px;font-weight:800;color:#1e3a8a;text-transform:uppercase;letter-spacing:0.5px;">G&G Competições — ${title}</div>
+        <div style="font-size:14px;font-weight:800;color:#0f172a;margin:3px 0 2px 0;text-transform:uppercase;">${championshipTitle}</div>
+        <div style="font-size:11px;color:#334155;font-weight:600;">${stageTitle} • Modalidade: ${modalityName}${categoryFilter ? ` • ${categoryFilter}` : ''}</div>
+      </div>
+      <div style="text-align:right;font-size:9.5px;color:#64748b;">
+        <div style="font-weight:bold;color:#1e3a8a;">Relatório Oficial Homologado</div>
+        <div>Emitido em: ${now}</div>
+      </div>
     </div>
-    <div class="meta-box">
-      <div style="font-weight:bold;color:#1e3a8a;">Relatório Oficial Homologado</div>
-      <div>Emitido em: ${now}</div>
+
+    <table style="width:100%;border-collapse:collapse;font-size:10px;">
+      <thead><tr>${tableHeaders}</tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+
+    <div style="margin-top:14px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:8.5px;color:#64748b;">
+      <span>Documento gerado oficialmente pela plataforma G&G Competições.</span>
+      <span>Emissão: ${now}</span>
     </div>
-  </div>
+  </div>`;
 
-  <table>
-    <thead><tr>${tableHeaders}</tr></thead>
-    <tbody>${tableRows}</tbody>
-  </table>
+  const fallbackName = `${title}_${championshipTitle}_${stageTitle}_${modalityName}`;
+  const targetFilename = filename || sanitizePdfFilename(fallbackName);
 
-  <div class="footer-box">
-    <span>Documento gerado oficialmente pela plataforma G&G Competições.</span>
-    <span>Emissão: ${now}</span>
-  </div>
-
-  <script>
-    window.onload = function() {
-      setTimeout(function() {
-        window.focus();
-        window.print();
-      }, 350);
-    };
-  <\/script>
-</body>
-</html>`;
-
-  w.document.open();
-  w.document.write(content);
-  w.document.close();
+  await downloadPdfFromHtml(html, {
+    filename: targetFilename,
+    orientation: isLandscape ? 'landscape' : 'portrait',
+    margin: [6, 6, 6, 6]
+  });
 }

@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(resultados): exportacao de resultados para excel e pdf em todas as telas e perfis` |
-| Data/hora | 2026-10-31T16:20:00-03:00 |
+| Mensagem | `feat(pdf): download direto de pdfs nomeados em todas as telas sem dialogo de impressao` |
+| Data/hora | 2026-10-31T18:50:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,11 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Download Direto de Arquivos PDF Nomeados (Eliminação Universal de `window.print()`)**:
+  - *O que foi decidido*: Em todas as telas do sistema que geram documentos oficiais, relatórios, comprovantes, carteirinhas ou resultados em PDF, foi eliminado o diálogo de impressão nativo do navegador (`window.print()`). Em seu lugar, foi implementado o download binário direto do arquivo `.pdf` para a pasta de Downloads do usuário via `html2pdf.js` dinâmico (`pdfDownloader.ts`). Cada arquivo é nomeado dinamicamente e de forma limpa/sem acentos com base no seu conteúdo e escopo (ex: `declaracao_habitualidade_gilson_aparecido_2025_a_2026.pdf`, `relatorio_global_habitualidades_clube_aranas_2025_a_2026.pdf`, `resultado_acumulado_brasileiro_2026_pistola_9mm.pdf`, `termo_cessao_armas_001.pdf`).
+  - *Por que*: Solicitação explícita do usuário para que o sistema salve o arquivo diretamente no dispositivo sem exigir passar pelo diálogo de "Imprimir / Salvar como PDF" do navegador, e com nomenclatura descritiva de acordo com a informação contida.
+  - *O que NÃO fazer*: Nunca reintroduzir `window.print()` nem nomes genéricos como `documento.pdf` ou `relatorio.pdf`.
 
 - **Conformidade Estrita na Habitualidade — Eliminação de Armas e Tiros Fictícios (`MemberProfile.tsx`, `server.ts`, `types.ts`)**:
   - *O que foi decidido*:
