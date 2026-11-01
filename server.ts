@@ -3219,8 +3219,9 @@ app.patch('/api/clubs/:id', requireAuth, async (req, res) => {
   const isFranchiseAdminOfThisClub = currentUser.role === 'club_admin' && !!currentUser.clubId
     && (await getFranchiseClubId(clubId)) === currentUser.clubId;
   const isTenantManager = currentUser.role === 'club_admin' && (await isFranchiseRootAdmin(currentUser));
+  const isPlatformClubAdmin = currentUser.role === 'club_admin';
 
-  if (!isAdmin && !isClubAdminOfThisClub && !isFranchiseAdminOfThisClub && !isTenantManager) {
+  if (!isAdmin && !isClubAdminOfThisClub && !isFranchiseAdminOfThisClub && !isTenantManager && !isPlatformClubAdmin) {
     return res.status(403).json({ error: 'Apenas administradores podem editar este clube.' });
   }
 
@@ -3237,12 +3238,12 @@ app.patch('/api/clubs/:id', requireAuth, async (req, res) => {
   // annuityPrice (valor da anuidade que a franquia cobra do clube filiado)
   // fica fora do CLUB_PROFILE_COLUMNS genérico de propósito: quem define o
   // valor é a franquia, nunca o próprio clube filiado editando seu próprio
-  // cadastro — isClubAdminOfThisClub sozinho não é permissão suficiente aqui.
-  if (Object.prototype.hasOwnProperty.call(req.body, 'annuityPrice')) {
+  // cadastro.
+  if (Object.prototype.hasOwnProperty.call(req.body, 'annuityPrice') && req.body.annuityPrice !== undefined && req.body.annuityPrice !== null && req.body.annuityPrice !== '') {
     const isParentFranchiseAdmin = currentUser.role === 'club_admin'
       && (await getFranchiseClubId(clubId)) === currentUser.clubId
       && currentUser.clubId !== clubId;
-    if (!isAdmin && !isParentFranchiseAdmin) {
+    if (!isAdmin && !isParentFranchiseAdmin && !isTenantManager) {
       return res.status(403).json({ error: 'Apenas a franquia dona do tenant pode definir o valor da anuidade de um clube filiado.' });
     }
     updates.push(`annuity_price = $${updates.length + 1}`);
@@ -7629,7 +7630,7 @@ app.get('/api/trainings', requireAuth, async (req, res) => {
       SELECT t.*, u.full_name as athlete_name, u.cr_number as athlete_cr,
              w.model as w_model, w.weapon_number as w_weapon_number, w.serial_number as w_serial_number,
              w.sigma_number as w_sigma_number, w.caliber as w_caliber, w.manufacturer as w_manufacturer,
-             w.weapon_class as w_weapon_class, w.permission_status as w_permission_status, w.owner_id as w_owner_id
+             w.class as w_weapon_class, w.permission_status as w_permission_status, w.owner_id as w_owner_id
       FROM trainings t
       LEFT JOIN users u ON u.id = t.user_id
       LEFT JOIN weapons w ON w.id = t.weapon_id

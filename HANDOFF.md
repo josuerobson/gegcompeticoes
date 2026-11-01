@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(resultados): exportacao de pdf consolidado com todas as modalidades em etapa e acumulado` |
-| Data/hora | 2026-10-31T21:07:00-03:00 |
+| Mensagem | `fix(clubes e habitualidades): correcao de coluna weapon_class e salvamento de clube filiado com nome fantasia` |
+| Data/hora | 2026-10-31T21:23:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,14 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Correção da Consulta de Treinamentos e Salvamento de Edição de Clubes (`server.ts`, `AdminPanel.tsx`)**:
+  - *O que foi decidido*:
+    1. **Correção de Coluna Inexistente `w.weapon_class`**: No endpoint `/api/trainings` (`server.ts:7632`), a query SQL referenciava `w.weapon_class as w_weapon_class`, causando erro 500 (`column w.weapon_class does not exist`) no PostgreSQL, o que impedia o carregamento de treinamentos em relatórios de habitualidade e no painel do clube. Corrigido para `w.class as w_weapon_class` (nome real da coluna na tabela `weapons`).
+    2. **Desbloqueio de Salvamento de Clubes com Nome Fantasia (`/api/clubs/:id` e `AdminPanel.tsx`)**: No modal "Editar Clube", o formulário enviava `annuityPrice: ''`, o que acionava indevidamente uma trava estrita de permissão da franquia mesmo quando o usuário estava apenas editando o nome fantasia ou dados cadastrais. No backend, permitiu-se a administradores que gerenciam a plataforma salvarem alterações do clube e ignorou-se `annuityPrice` quando vazio/nulo; no frontend, o campo `annuityPrice` só é enviado quando explicitamente preenchido.
+    3. **Feedback Visual Imediato no Modal de Edição**: Adicionados os banners de erro e sucesso logo acima dos botões de ação ("Salvar Alterações" / "Cancelar") no rodapé do modal, garantindo que o usuário veja imediatamente o status mesmo com o modal rolado até o final.
+  - *Por que*: O usuário relatou erro de tela ao tentar salvar alterações de clube com nome fantasia (nada acontecia devido à falta de feedback visível no rodapé e rejeição do backend) e divergência na contagem de habitualidades causada pelo erro 500 no carregamento de treinamentos.
+  - *O que NÃO fazer*: Nunca referenciar `w.weapon_class` no banco de dados; a coluna se chama `class`.
 
 - **Exportação Consolidada de Todas as Modalidades em um Único PDF (`CompetitionResultsViewer.tsx`, `resultsExport.ts`)**:
   - *O que foi decidido*:

@@ -8446,7 +8446,7 @@ export default function AdminPanel({
     // campo ao editar o próprio clube (evita 403 do backend, que só aceita
     // essa alteração vinda da franquia editando um filiado, nunca self-edit).
     const fieldsToSend: Record<string, unknown> = { ...editingClubForm };
-    if (editingClub.id === currentUser?.clubId) {
+    if (editingClub.id === currentUser?.clubId || !editingClubForm.annuityPrice || String(editingClubForm.annuityPrice).trim() === '') {
       delete fieldsToSend.annuityPrice;
     }
     const ok = await onUpdateClub(editingClub.id, fieldsToSend);
@@ -10439,6 +10439,15 @@ export default function AdminPanel({
                       <MemberField label="UF" value={editingClubForm.state} onChange={v => setEditingClubForm({ ...editingClubForm, state: v })} />
                     </div>
 
+                    {editClubSuccess && (
+                      <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl flex items-center gap-2 text-xs font-semibold">
+                        <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                        Cadastro do clube atualizado com sucesso!
+                      </div>
+                    )}
+                    {editClubError && (
+                      <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{editClubError}</div>
+                    )}
                     <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                       <button
                         type="button"
