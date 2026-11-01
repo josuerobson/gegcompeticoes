@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(inscricao): selecao obrigatoria de arma propria ou do clube em todas as inscricoes` |
-| Data/hora | 2026-10-31T20:55:00-03:00 |
+| Mensagem | `feat(resultados): exportacao de pdf consolidado com todas as modalidades em etapa e acumulado` |
+| Data/hora | 2026-10-31T21:07:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,15 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Exportação Consolidada de Todas as Modalidades em um Único PDF (`CompetitionResultsViewer.tsx`, `resultsExport.ts`)**:
+  - *O que foi decidido*:
+    1. Implementada a geração e exportação de PDF consolidado contendo todas as modalidades de uma etapa ou do campeonato acumulado ("Todas as etapas Mistas") em um único arquivo PDF.
+    2. Cada modalidade é renderizada de forma sequencial com suas classificações oficiais completas (Posição, Medalha, Atleta, Clube, Pontuação/Tempo/Fator, Séries e Desempates X/10/9), precedida pelo banner com cabeçalho oficial da modalidade.
+    3. Quebras de página limpas são forçadas entre cada modalidade (`page-break-after: always; break-after: page;`), garantindo que cada modalidade inicie no topo de uma nova página sem sobreposições.
+    4. O botão "Baixar PDF (Todas as Modalidades)" foi posicionado tanto na tela de seleção de modalidades (ao lado do título e do link de limpar filtros) quanto na barra de ações dos resultados de cada modalidade ("PDF (Todas as Modalidades)"), com download binário direto para a pasta de Downloads sem caixas de impressão do navegador e com nomenclatura automática (`resultado_todas_modalidades_<campeonato>_<etapa>.pdf` ou `resultado_acumulado_todas_modalidades_<campeonato>.pdf`).
+  - *Por que*: O usuário solicitou que fosse adicionada a opção de gerar um PDF com todas as modalidades em um único arquivo, exibindo o resultado completo de uma modalidade seguido da próxima, tanto para etapa por etapa quanto para todas as etapas mistas.
+  - *O que NÃO fazer*: Não emitir janelas de impressão nativas do navegador (`window.print()`); manter sempre download direto com `html2pdf.js`.
 
 - **Seleção Obrigatória de Origem da Arma ("Arma própria" ou "Arma do clube") em Inscrições (`ChampionshipsView.tsx`, `AdminPanel.tsx`, `server.ts`, `db.ts`, `types.ts`)**:
   - *O que foi decidido*: Em todas as telas e formulários de inscrição de atletas em campeonatos — tanto na inscrição individual do atleta (`ChampionshipsView.tsx` em campeonatos regulares, multicampeonatos e IDSC) quanto na inscrição em lote pelo clube parceiro (`AdminPanel.tsx` em Inscrição Clube e IDSC) —, foi incluído o seletor obrigatório de origem da arma entre "Arma própria" e "Arma do clube". A validação bloqueia o avanço da inscrição caso a origem não tenha sido selecionada. O valor é validado no backend e persistido na coluna `weapon_source` (`'propria'` | `'clube'`) das tabelas `registrations` e `idsc_registrations`. Além disso, ao trocar a modalidade selecionada na Inscrição Clube, os campos de armas dos atletas são resetados em branco para prevenir persistência indevida de armas entre modalidades diferentes.

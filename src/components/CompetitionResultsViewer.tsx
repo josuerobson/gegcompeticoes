@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Championship, Stage, Modality, Registration, StageScore, Club, User } from '../types';
-import { Trophy, Calendar, Activity, ArrowLeft, FileSpreadsheet, FileText } from 'lucide-react';
+import { Trophy, Calendar, Activity, ArrowLeft, FileSpreadsheet, FileText, Loader2 } from 'lucide-react';
 import { computeRevenueBreakdown, computeTodasEtapasPrize } from '../utils/championshipFinance';
-import { exportResultsToExcel, exportResultsToPdf } from '../utils/resultsExport';
+import { exportResultsToExcel, exportResultsToPdf, exportAllModalitiesResultsToPdf, ModalityPdfSection } from '../utils/resultsExport';
 
 const sanitizeSlug = (str: string) => (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').slice(0, 35);
 
@@ -245,7 +245,7 @@ export function CompetitionResultsViewer({
     );
   }
 
-  // 3. Com campeonato e etapa selecionados, mas sem modalidade: exibe a lista de modalidades
+  // 3. Com campeonato e etapa selecionados: lógica de etapas e modalidades
   const isAllOption = selectedResultStageId?.startsWith('all');
   const stageTitle = selectedResultStageId === 'all_masculino'
     ? 'Todas as etapas Masculinas'
@@ -257,46 +257,290 @@ export function CompetitionResultsViewer({
     ? 'Todas as etapas'
     : currentStage?.title || `Etapa ${currentStage?.stageNum}`;
 
-  if (!selectedResultModalityId) {
-    let champModIds: string[] = [];
-    if (currentChamp?.modalities) {
-      if (Array.isArray(currentChamp.modalities)) {
-        champModIds = currentChamp.modalities;
-      } else if (typeof currentChamp.modalities === 'string') {
-        try {
-          champModIds = JSON.parse(currentChamp.modalities);
-        } catch (_) {}
+  const champStages = stages.filter(s => s.championshipId === selectedResultChampId);
+  let targetStages: Stage[] = [];
+  if (selectedResultStageId === 'all_masculino') {
+    targetStages = champStages.filter(s => (s.sexo || 'misto') === 'masculino');
+  } else if (selectedResultStageId === 'all_feminino') {
+    targetStages = champStages.filter(s => (s.sexo || 'misto') === 'feminino');
+  } else if (selectedResultStageId === 'all_misto') {
+    targetStages = champStages.filter(s => (s.sexo || 'misto') === 'misto');
+  } else if (selectedResultStageId === 'all') {
+    targetStages = champStages;
+  } else if (currentStage) {
+    targetStages = [currentStage];
+  }
+  const targetStageNums = new Set(targetStages.map(s => s.stageNum));
+
+  // Medal determination
+// getAthleteMedal definido acima no escopo compartilhado
+
+  // Performance comparator
+  const compareScorePerformance = (a: StageScore, b: StageScore, evalType?: string): number => {
+    const eType = evalType || currentMod?.evaluationType || 'pontuacao';
+    if (eType === 'tempo') {
+      return (a.timeSeconds || 0) - (b.timeSeconds || 0);
+    } else if (eType === 'pontuacao_tempo') {
+      return (b.hitFactor || 0) - (a.hitFactor || 0);
+    } else {
+      if (b.score !== a.score) {
+        return b.score - a.score;
       }
+      const regA = registrations.find(r => r.id === a.registrationId);
+      const regB = registrations.find(r => r.id === b.registrationId);
+      if (regA && regB) {
+        if ((regB.scoreX || 0) !== (regA.scoreX || 0)) {
+          return (regB.scoreX || 0) - (regA.scoreX || 0);
+        }
+        if ((regB.scoreP10 || 0) !== (regA.scoreP10 || 0)) {
+          return (regB.scoreP10 || 0) - (regA.scoreP10 || 0);
+        }
+        if ((regB.scoreP9 || 0) !== (regA.scoreP9 || 0)) {
+          return (regB.scoreP9 || 0) - (regA.scoreP9 || 0);
+        }
+      }
+      return 0;
     }
-    // Só lista as modalidades que têm resultado lançado na(s) etapa(s) selecionada(s).
-    // Etapas antigas (ex.: importadas do legado) usaram modalidades que não estão mais na
-    // configuração atual do campeonato, então a configuração sozinha não serve de filtro:
-    // vale a modalidade configurada OU a que teve inscrições na etapa, desde que haja resultado.
-    const scopeStages = stages
-      .filter(s => s.championshipId === selectedResultChampId)
-      .filter(s => {
-        if (selectedResultStageId === 'all') return true;
-        if (selectedResultStageId === 'all_masculino') return (s.sexo || 'misto') === 'masculino';
-        if (selectedResultStageId === 'all_feminino') return (s.sexo || 'misto') === 'feminino';
-        if (selectedResultStageId === 'all_misto') return (s.sexo || 'misto') === 'misto';
-        return s.id === selectedResultStageId;
-      });
-    const scopeStageIds = new Set(scopeStages.map(s => s.id));
-    const scopeStageNums = new Set(scopeStages.map(s => s.stageNum));
-    const scopedScores = stageScores.filter(sc => sc.championshipId === selectedResultChampId && scopeStageNums.has(sc.stageNum));
-    // modalityId é o vínculo estável (a modalidade pode ter sido renomeada
-    // desde que o resultado foi lançado); modalityNamesWithResults só cobre
-    // resultados antigos que nunca tiveram modalityId gravado.
-    const modalityIdsWithResults = new Set(scopedScores.map(sc => sc.modalityId).filter(Boolean));
-    const modalityNamesWithResults = new Set(scopedScores.filter(sc => !sc.modalityId).map(sc => sc.modality));
-    const usedModIds = new Set(
-      registrations
-        .filter(r => r.championshipId === selectedResultChampId && scopeStageIds.has(r.stageId))
-        .map(r => r.modalityId)
-    );
-    const champModalities = modalities.filter(
-      m => (modalityIdsWithResults.has(m.id) || modalityNamesWithResults.has(m.name)) && (champModIds.includes(m.id) || usedModIds.has(m.id))
-    );
+  };
+
+  // Modalidades ativas com resultado na(s) etapa(s)
+  let champModIds: string[] = [];
+  if (currentChamp?.modalities) {
+    if (Array.isArray(currentChamp.modalities)) {
+      champModIds = currentChamp.modalities;
+    } else if (typeof currentChamp.modalities === 'string') {
+      try {
+        champModIds = JSON.parse(currentChamp.modalities);
+      } catch (_) {}
+    }
+  }
+  const scopeStages = stages
+    .filter(s => s.championshipId === selectedResultChampId)
+    .filter(s => {
+      if (selectedResultStageId === 'all') return true;
+      if (selectedResultStageId === 'all_masculino') return (s.sexo || 'misto') === 'masculino';
+      if (selectedResultStageId === 'all_feminino') return (s.sexo || 'misto') === 'feminino';
+      if (selectedResultStageId === 'all_misto') return (s.sexo || 'misto') === 'misto';
+      return s.id === selectedResultStageId;
+    });
+  const scopeStageIds = new Set(scopeStages.map(s => s.id));
+  const scopeStageNums = new Set(scopeStages.map(s => s.stageNum));
+  const scopedScores = stageScores.filter(sc => sc.championshipId === selectedResultChampId && scopeStageNums.has(sc.stageNum));
+  const modalityIdsWithResults = new Set(scopedScores.map(sc => sc.modalityId).filter(Boolean));
+  const modalityNamesWithResults = new Set(scopedScores.filter(sc => !sc.modalityId).map(sc => sc.modality));
+  const usedModIds = new Set(
+    registrations
+      .filter(r => r.championshipId === selectedResultChampId && scopeStageIds.has(r.stageId))
+      .map(r => r.modalityId)
+  );
+  const champModalities = modalities.filter(
+    m => (modalityIdsWithResults.has(m.id) || modalityNamesWithResults.has(m.name)) && (champModIds.includes(m.id) || usedModIds.has(m.id))
+  );
+
+  const [isExportingAllPdf, setIsExportingAllPdf] = useState(false);
+
+  const handleExportAllModalitiesPdf = async () => {
+    if (!currentChamp || champModalities.length === 0) return;
+    setIsExportingAllPdf(true);
+    try {
+      const isLandscape = Boolean(isAllOption);
+      const sections: ModalityPdfSection[] = [];
+
+      for (const mod of champModalities) {
+        if (isAllOption) {
+          // Lógica acumulada para esta modalidade
+          const scoresForMod = stageScores.filter(score =>
+            score.championshipId === selectedResultChampId &&
+            (score.modalityId ? score.modalityId === mod.id : score.modality === mod.name) &&
+            targetStageNums.has(score.stageNum)
+          );
+
+          const athleteStageBestMap: Record<string, Record<number, StageScore>> = {};
+          for (const score of scoresForMod) {
+            const uId = score.userId || (score.shooterName ? score.shooterName.trim().toLowerCase() : 'unknown');
+            if (!athleteStageBestMap[uId]) athleteStageBestMap[uId] = {};
+            const existing = athleteStageBestMap[uId][score.stageNum];
+            if (!existing || compareScorePerformance(score, existing, mod.evaluationType) < 0) {
+              athleteStageBestMap[uId][score.stageNum] = score;
+            }
+          }
+
+          const userMap: Record<string, any> = {};
+          for (const [uId, stageMap] of Object.entries(athleteStageBestMap)) {
+            const bestStageList = Object.values(stageMap);
+            if (bestStageList.length === 0) continue;
+            const firstScore = bestStageList[0];
+            const u = users.find(usr => usr.id === firstScore.userId);
+            const cName = clubs.find(c => c.id === u?.clubId)?.name || '-';
+
+            userMap[uId] = {
+              userId: firstScore.userId,
+              shooterName: firstScore.shooterName,
+              clubName: cName,
+              totalScore: 0,
+              totalTime: 0,
+              hitFactor: 0,
+              scoreX: 0,
+              scoreP10: 0,
+              scoreP9: 0,
+              stageScores: {},
+            };
+
+            for (const score of bestStageList) {
+              userMap[uId].stageScores[score.stageNum] = score.score;
+              userMap[uId].totalScore += (score.score || 0);
+              userMap[uId].totalTime += (score.timeSeconds || 0);
+              if (score.hitFactor) {
+                userMap[uId].hitFactor = Math.max(userMap[uId].hitFactor, score.hitFactor);
+              }
+              const reg = registrations.find(r => r.id === score.registrationId);
+              if (reg) {
+                userMap[uId].scoreX += (reg.scoreX || 0);
+                userMap[uId].scoreP10 += (reg.scoreP10 || 0);
+                userMap[uId].scoreP9 += (reg.scoreP9 || 0);
+              }
+            }
+          }
+
+          const consolidatedList = Object.values(userMap).sort((a, b) => {
+            if (mod.evaluationType === 'tempo') {
+              return a.totalTime - b.totalTime;
+            } else if (mod.evaluationType === 'pontuacao_tempo') {
+              return b.hitFactor - a.hitFactor;
+            } else {
+              if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+              if (b.scoreX !== a.scoreX) return b.scoreX - a.scoreX;
+              if (b.scoreP10 !== a.scoreP10) return b.scoreP10 - a.scoreP10;
+              if (b.scoreP9 !== a.scoreP9) return b.scoreP9 - a.scoreP9;
+              return 0;
+            }
+          });
+
+          const targetStageIds = targetStages.map(s => s.id);
+          const stageModRegs = registrations.filter(
+            r => r.championshipId === selectedResultChampId && r.modalityId === mod.id && targetStageIds.includes(r.stageId)
+          );
+          const { vPremiacaoAtleta } = computeRevenueBreakdown(currentChamp, stageModRegs);
+          const todasEtapasPrize = computeTodasEtapasPrize(currentChamp, vPremiacaoAtleta);
+          const modPrizeStats = mod.id ? prizeStats[mod.id] : undefined;
+          const prizeForPos = (idx: number) => {
+            if (modPrizeStats?.prizes && idx >= 0 && idx < modPrizeStats.prizes.length) return modPrizeStats.prizes[idx];
+            return idx >= 0 && idx < todasEtapasPrize.prizes.length ? todasEtapasPrize.prizes[idx].value : 0;
+          };
+          const fmtBRL = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+          const headers = [
+            'Pos',
+            'Atleta',
+            'Clube',
+            ...targetStages.map(stg => stg.title || `${stg.stageNum}ª ET`),
+            'Resultado Acumulado',
+            'Desempates',
+            'Premiação'
+          ];
+
+          const rows = consolidatedList.map((item, index) => {
+            const prizeVal = prizeForPos(index);
+            return [
+              `${index + 1}º`,
+              item.shooterName,
+              item.clubName,
+              ...targetStages.map(stg => (item.stageScores[stg.stageNum] !== undefined ? item.stageScores[stg.stageNum] : '-')),
+              mod.evaluationType === 'tempo'
+                ? `${item.totalTime}s`
+                : mod.evaluationType === 'pontuacao_tempo'
+                ? `Fator ${item.hitFactor.toFixed(4)}`
+                : `${item.totalScore} pts`,
+              `X:${item.scoreX} • 10:${item.scoreP10} • 9:${item.scoreP9}`,
+              prizeVal > 0 ? fmtBRL(prizeVal) : '-'
+            ];
+          });
+
+          sections.push({
+            modalityName: mod.name,
+            headers,
+            rows
+          });
+        } else {
+          // Lógica de etapa individual para esta modalidade
+          const filteredScores = stageScores.filter(score =>
+            score.championshipId === selectedResultChampId &&
+            score.stageNum === currentStage?.stageNum &&
+            (score.modalityId ? score.modalityId === mod.id : score.modality === mod.name)
+          );
+
+          const athleteBestScoresMap: Record<string, StageScore> = {};
+          for (const score of filteredScores) {
+            const uId = score.userId || (score.shooterName ? score.shooterName.trim().toLowerCase() : 'unknown');
+            const existing = athleteBestScoresMap[uId];
+            if (!existing || compareScorePerformance(score, existing, mod.evaluationType) < 0) {
+              athleteBestScoresMap[uId] = score;
+            }
+          }
+
+          const sortedScores = Object.values(athleteBestScoresMap).sort((a, b) => compareScorePerformance(a, b, mod.evaluationType));
+
+          const headers = [
+            'Pos',
+            'Medalha',
+            'Atleta',
+            'Clube',
+            ...(mod.evaluationType !== 'pontuacao' ? ['Tempo'] : []),
+            'Pontos',
+            ...(mod.evaluationType === 'pontuacao_tempo' ? ['Fator'] : []),
+            'Desempates'
+          ];
+
+          const rows = sortedScores.map((score, index) => {
+            const reg = registrations.find(r => r.id === score.registrationId);
+            const athleteMedal = getAthleteMedal(score.score);
+            const medalha = athleteMedal === 'ouro' ? '🥇 Ouro' : athleteMedal === 'prata' ? '🥈 Prata' : athleteMedal === 'bronze' ? '🥉 Bronze' : '-';
+            const atleta = score.shooterName;
+            const clube = clubs.find(c => c.id === (users.find(u => u.id === score.userId)?.clubId))?.name || '-';
+            const tempo = score.timeSeconds ? `${score.timeSeconds}s` : '-';
+            const pontos = `${score.score}${reg && (reg.penalty || 0) > 0 ? ` (-${reg.penalty} pen)` : ''}`;
+            const fator = score.hitFactor ? score.hitFactor.toFixed(4) : '-';
+            const desempates = reg ? `X:${reg.scoreX || 0} • 10:${reg.scoreP10 || 0} • 9:${reg.scoreP9 || 0}` : '-';
+
+            return [
+              `${index + 1}º`,
+              medalha,
+              atleta,
+              clube,
+              ...(mod.evaluationType !== 'pontuacao' ? [tempo] : []),
+              pontos,
+              ...(mod.evaluationType === 'pontuacao_tempo' ? [fator] : []),
+              desempates
+            ];
+          });
+
+          sections.push({
+            modalityName: mod.name,
+            headers,
+            rows
+          });
+        }
+      }
+
+      const pdfFilename = isAllOption
+        ? `resultado_acumulado_todas_modalidades_${sanitizeSlug(currentChamp.title)}_${sanitizeSlug(stageTitle)}.pdf`
+        : `resultado_todas_modalidades_${sanitizeSlug(currentChamp.title)}_${sanitizeSlug(stageTitle)}.pdf`;
+
+      await exportAllModalitiesResultsToPdf({
+        title: isAllOption ? 'Resultado Geral Acumulado — Todas as Modalidades' : 'Resultados da Competição — Todas as Modalidades',
+        championshipTitle: currentChamp.title,
+        stageTitle,
+        sections,
+        isLandscape
+      }, pdfFilename);
+    } catch (err) {
+      console.error('Erro ao gerar PDF de todas as modalidades:', err);
+    } finally {
+      setIsExportingAllPdf(false);
+    }
+  };
+
+  if (!selectedResultModalityId) {
 
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
@@ -315,7 +559,28 @@ export function CompetitionResultsViewer({
               </p>
             </div>
           </div>
-          <Activity className="w-5 h-5 text-blue-600" />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportAllModalitiesPdf}
+              disabled={isExportingAllPdf || champModalities.length === 0}
+              className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold text-xs py-2 px-3.5 rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+              title="Baixar arquivo PDF com todas as modalidades em um único arquivo"
+            >
+              {isExportingAllPdf ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Gerando PDF...</span>
+                </>
+              ) : (
+                <>
+                  <FileText className="w-4 h-4" />
+                  <span>Baixar PDF (Todas as Modalidades)</span>
+                </>
+              )}
+            </button>
+            <Activity className="w-5 h-5 text-blue-600 hidden sm:block" />
+          </div>
         </div>
 
         {champModalities.length === 0 ? (
@@ -365,48 +630,6 @@ export function CompetitionResultsViewer({
   }
 
   // 4. Com tudo selecionado: exibe a tabela de resultados (Individual ou Acumulada "Todas as Etapas")
-  const champStages = stages.filter(s => s.championshipId === selectedResultChampId);
-  let targetStages: Stage[] = [];
-  if (selectedResultStageId === 'all_masculino') {
-    targetStages = champStages.filter(s => (s.sexo || 'misto') === 'masculino');
-  } else if (selectedResultStageId === 'all_feminino') {
-    targetStages = champStages.filter(s => (s.sexo || 'misto') === 'feminino');
-  } else if (selectedResultStageId === 'all_misto') {
-    targetStages = champStages.filter(s => (s.sexo || 'misto') === 'misto');
-  } else if (selectedResultStageId === 'all') {
-    targetStages = champStages;
-  } else if (currentStage) {
-    targetStages = [currentStage];
-  }
-
-  const targetStageNums = new Set(targetStages.map(s => s.stageNum));
-
-  // Helper to compare two scores for ranking/tie-breakers
-  const compareScorePerformance = (a: StageScore, b: StageScore): number => {
-    if (currentMod?.evaluationType === 'tempo') {
-      return (a.timeSeconds || 0) - (b.timeSeconds || 0);
-    } else if (currentMod?.evaluationType === 'pontuacao_tempo') {
-      return (b.hitFactor || 0) - (a.hitFactor || 0);
-    } else {
-      if (b.score !== a.score) {
-        return b.score - a.score;
-      }
-      const regA = registrations.find(r => r.id === a.registrationId);
-      const regB = registrations.find(r => r.id === b.registrationId);
-      if (regA && regB) {
-        if ((regB.scoreX || 0) !== (regA.scoreX || 0)) {
-          return (regB.scoreX || 0) - (regA.scoreX || 0);
-        }
-        if ((regB.scoreP10 || 0) !== (regA.scoreP10 || 0)) {
-          return (regB.scoreP10 || 0) - (regA.scoreP10 || 0);
-        }
-        if ((regB.scoreP9 || 0) !== (regA.scoreP9 || 0)) {
-          return (regB.scoreP9 || 0) - (regA.scoreP9 || 0);
-        }
-      }
-      return 0;
-    }
-  };
 
   // --- Lógica para opção Acumulada "Todas as Etapas" ---
   if (isAllOption) {
@@ -639,10 +862,19 @@ export function CompetitionResultsViewer({
             <button
               onClick={handleExportConsolidatedPdf}
               className="bg-red-600 hover:bg-red-700 text-white text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
-              title="Baixar arquivo PDF direto na pasta de downloads"
+              title="Baixar arquivo PDF da modalidade atual direto na pasta de downloads"
             >
               <FileText className="w-4 h-4" />
-              <span>Baixar PDF</span>
+              <span>Baixar PDF (Esta Modalidade)</span>
+            </button>
+            <button
+              onClick={handleExportAllModalitiesPdf}
+              disabled={isExportingAllPdf}
+              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+              title="Baixar arquivo PDF com todas as modalidades juntas"
+            >
+              {isExportingAllPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+              <span>PDF (Todas as Modalidades)</span>
             </button>
             <button
               onClick={() => {
@@ -929,10 +1161,19 @@ export function CompetitionResultsViewer({
           <button
             onClick={handleExportStagePdf}
             className="bg-red-600 hover:bg-red-700 text-white text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
-            title="Baixar arquivo PDF direto na pasta de downloads"
+            title="Baixar arquivo PDF da modalidade atual direto na pasta de downloads"
           >
             <FileText className="w-4 h-4" />
-            <span>Baixar PDF</span>
+            <span>Baixar PDF (Esta Modalidade)</span>
+          </button>
+          <button
+            onClick={handleExportAllModalitiesPdf}
+            disabled={isExportingAllPdf}
+            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+            title="Baixar arquivo PDF com todas as modalidades juntas"
+          >
+            {isExportingAllPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+            <span>PDF (Todas as Modalidades)</span>
           </button>
           <button
             onClick={() => {
