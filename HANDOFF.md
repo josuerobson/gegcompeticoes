@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(pdf): correcao de renderizacao de offscreen canvas no downloadPdfFromHtml prevenindo pdf em branco` |
-| Data/hora | 2026-10-31T21:48:00-03:00 |
+| Mensagem | `style(resultados): alteracao da cor dos botoes de exportacao de pdf de vermelho para amarelo` |
+| Data/hora | 2026-10-31T22:02:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,11 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Padronização Visual Amarela nos Botões de PDF de Resultados (`CompetitionResultsViewer.tsx`)**:
+  - *O que foi decidido*: Todos os botões de download e exportação de PDF de resultados que antes utilizavam a cor vermelha (`bg-red-600 hover:bg-red-700`) foram atualizados para amarelo vibrante com tipografia escura de alto contraste (`bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-bold`). A alteração foi aplicada tanto no seletor de modalidades (Etapa 3 - "Baixar PDF (Todas as Modalidades)") quanto na visualização dos resultados individuais e acumulados (Etapa 4 - "Baixar PDF (Esta Modalidade)").
+  - *Por que*: Solicitação explícita do usuário para que o botão vermelho fosse trocado para amarelo em todas as telas de resultados.
+  - *O que NÃO fazer*: Não utilizar `text-white` sobre fundos amarelos claros para não comprometer a acessibilidade e contraste visual.
 
 - **Correção da Renderização de Canvas Offscreen no `downloadPdfFromHtml` (`pdfDownloader.ts`, `resultsExport.ts`)**:
   - *O que foi decidido*: No utilitário `downloadPdfFromHtml`, o elemento temporário era inserido com `position: fixed; left: -99999px;`. Quando o `html2pdf.js` clonava o elemento para a árvore de renderização do `html2canvas`, essas coordenadas negativas extremas eram copiadas junto, fazendo com que o `html2canvas` desenhasse a tabela fora da área visível do canvas gerado, produzindo PDFs com páginas completamente em branco. A arquitetura foi ajustada para utilizar um `wrapper` com `position: fixed; top: 0; left: 0; z-index: -99999; pointer-events: none;` (invisível ao usuário e sem interferir na tela), enquanto o `container` interno mantém coordenadas de fluxo normais (`position: static; width: 100%`). Além disso, foi adicionado o elemento de quebra de página explícito `<div class="html2pdf__page-break"></div>` entre as seções de modalidades em `resultsExport.ts`.

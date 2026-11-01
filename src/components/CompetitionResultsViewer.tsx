@@ -563,7 +563,7 @@ export function CompetitionResultsViewer({
               type="button"
               onClick={handleExportAllModalitiesPdf}
               disabled={isExportingAllPdf || champModalities.length === 0}
-              className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold text-xs py-2 px-3.5 rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+              className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-slate-950 font-bold text-xs py-2 px-3.5 rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
               title="Baixar arquivo PDF com todas as modalidades em um único arquivo"
             >
               {isExportingAllPdf ? (
@@ -860,7 +860,7 @@ export function CompetitionResultsViewer({
             </button>
             <button
               onClick={handleExportConsolidatedPdf}
-              className="bg-red-600 hover:bg-red-700 text-white text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+              className="bg-yellow-500 hover:bg-yellow-600 text-slate-950 text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
               title="Baixar arquivo PDF da modalidade atual direto na pasta de downloads"
             >
               <FileText className="w-4 h-4" />
@@ -1159,7 +1159,7 @@ export function CompetitionResultsViewer({
           </button>
           <button
             onClick={handleExportStagePdf}
-            className="bg-red-600 hover:bg-red-700 text-white text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+            className="bg-yellow-500 hover:bg-yellow-600 text-slate-950 text-[11px] px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
             title="Baixar arquivo PDF da modalidade atual direto na pasta de downloads"
           >
             <FileText className="w-4 h-4" />
