@@ -39,6 +39,7 @@ export function CompetitionResultsViewer({
   const [selectedMedalFilter, setSelectedMedalFilter] = useState<'geral' | 'ouro' | 'prata' | 'bronze'>('geral');
   const [selectedYearFilter, setSelectedYearFilter] = useState<string>(() => String(new Date().getFullYear()));
   const [prizeStats, setPrizeStats] = useState<Record<string, { totalArrecadado: number; pool: number; prizes: number[] }>>({});
+  const [isExportingAllPdf, setIsExportingAllPdf] = useState(false);
 
   // Reset medal filter when selection changes
   useEffect(() => {
@@ -336,8 +337,6 @@ export function CompetitionResultsViewer({
   const champModalities = modalities.filter(
     m => (modalityIdsWithResults.has(m.id) || modalityNamesWithResults.has(m.name)) && (champModIds.includes(m.id) || usedModIds.has(m.id))
   );
-
-  const [isExportingAllPdf, setIsExportingAllPdf] = useState(false);
 
   const handleExportAllModalitiesPdf = async () => {
     if (!currentChamp || champModalities.length === 0) return;

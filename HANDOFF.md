@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(clubes e habitualidades): correcao de coluna weapon_class e salvamento de clube filiado com nome fantasia` |
-| Data/hora | 2026-10-31T21:23:00-03:00 |
+| Mensagem | `fix(resultados): correcao de rules of hooks no CompetitionResultsViewer prevenindo tela branca ao selecionar etapa` |
+| Data/hora | 2026-10-31T21:38:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,11 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Correção de Rules of Hooks no `CompetitionResultsViewer.tsx` (Prevenção de Tela Branca / React Error #310)**:
+  - *O que foi decidido*: O hook `useState` para controle do carregamento de exportação (`isExportingAllPdf`) havia sido posicionado após os retornos condicionais (`if (!selectedResultChampId)` e `if (!selectedResultStageId)`), violando as regras fundamentais dos Hooks do React e disparando `Minified React error #310` ("Rendered more hooks than during the previous render") quando o usuário selecionava uma etapa. O hook foi movido para o topo do componente junto aos demais `useState`, garantindo contagem e ordem de execução rigorosamente estáveis em qualquer etapa da navegação.
+  - *Por que*: O usuário relatou tela branca ao clicar em Resultados > Campeonatos > Selecionar Etapa, com erro `#310` no console do navegador.
+  - *O que NÃO fazer*: Nunca declarar `useState`, `useEffect` ou qualquer hook após retornos condicionais (`if (...) return ...`).
 
 - **Correção da Consulta de Treinamentos e Salvamento de Edição de Clubes (`server.ts`, `AdminPanel.tsx`)**:
   - *O que foi decidido*:
