@@ -169,7 +169,7 @@ export async function exportAllModalitiesResultsToPdf(data: AllModalitiesExportD
 
   const sectionsHtml = sections.map((sec, secIdx) => {
     const isLast = secIdx === sections.length - 1;
-    const pageBreak = isLast ? '' : 'page-break-after: always; break-after: page;';
+    const pageBreak = isLast ? '' : '<div class="html2pdf__page-break" style="page-break-after: always; break-after: page; height: 0; line-height: 0; margin: 0; padding: 0;"></div>';
 
     const tableHeaders = sec.headers
       .map(h => `<th style="background-color:#1e293b;color:#ffffff;font-size:9.5px;font-weight:bold;padding:6px 5px;border:1px solid #475569;text-align:center;text-transform:uppercase;letter-spacing:0.3px;">${h}</th>`)
@@ -193,7 +193,7 @@ export async function exportAllModalitiesResultsToPdf(data: AllModalitiesExportD
         }).join('');
 
     return `
-    <div style="padding:16px 20px;background:#ffffff;color:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;${pageBreak}">
+    <div style="padding:16px 20px;background:#ffffff;color:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;box-sizing:border-box;">
       <div style="border-bottom:2px solid #2563eb;padding-bottom:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;">
         <div>
           <div style="font-size:11px;font-weight:800;color:#1e3a8a;text-transform:uppercase;letter-spacing:0.5px;">G&G Competições — ${title}</div>
@@ -224,7 +224,8 @@ export async function exportAllModalitiesResultsToPdf(data: AllModalitiesExportD
         <span>Documento gerado oficialmente pela plataforma G&G Competições.</span>
         <span>Modalidade: ${sec.modalityName} • Emissão: ${now}</span>
       </div>
-    </div>`;
+    </div>
+    ${pageBreak}`;
   }).join('');
 
   const targetFilename = filename || sanitizePdfFilename(`${title}_${championshipTitle}_${stageTitle}_todas_modalidades`);

@@ -29,7 +29,7 @@ export async function downloadPdfFromElement(element: HTMLElement, options: PdfD
       useCORS: true,
       logging: false,
       scrollY: 0,
-      windowWidth: options.orientation === 'landscape' ? 1400 : 1000
+      scrollX: 0
     },
     jsPDF: {
       unit: 'mm',
@@ -43,17 +43,33 @@ export async function downloadPdfFromElement(element: HTMLElement, options: PdfD
 }
 
 export async function downloadPdfFromHtml(html: string, options: PdfDownloadOptions): Promise<void> {
+  const isLandscape = options.orientation === 'landscape';
+
+  // Wrapper posicionado fora do alcance visual via z-index negativo mas no topo absoluto (0, 0)
+  // garantindo que o html2canvas renderize o elemento perfeitamente sem cortes ou deslocamentos
+  const wrapper = document.createElement('div');
+  wrapper.className = 'temp-pdf-export-wrapper';
+  wrapper.style.position = 'fixed';
+  wrapper.style.top = '0';
+  wrapper.style.left = '0';
+  wrapper.style.width = isLandscape ? '287mm' : '198mm';
+  wrapper.style.zIndex = '-99999';
+  wrapper.style.pointerEvents = 'none';
+  wrapper.style.opacity = '1';
+  wrapper.style.overflow = 'visible';
+
+  // Container interno com os estilos do documento, sem posições fixas ou coordenadas negativas
   const container = document.createElement('div');
   container.className = 'temp-pdf-export-container';
-  container.style.position = 'fixed';
-  container.style.left = '-99999px';
-  container.style.top = '0';
-  container.style.width = options.orientation === 'landscape' ? '280mm' : '195mm';
+  container.style.width = '100%';
   container.style.backgroundColor = '#ffffff';
   container.style.color = '#0f172a';
+  container.style.boxSizing = 'border-box';
   container.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
   container.innerHTML = html;
-  document.body.appendChild(container);
+
+  wrapper.appendChild(container);
+  document.body.appendChild(wrapper);
 
   try {
     const images = Array.from(container.querySelectorAll('img'));
@@ -68,8 +84,8 @@ export async function downloadPdfFromHtml(html: string, options: PdfDownloadOpti
     );
     await downloadPdfFromElement(container, options);
   } finally {
-    if (document.body.contains(container)) {
-      document.body.removeChild(container);
+    if (document.body.contains(wrapper)) {
+      document.body.removeChild(wrapper);
     }
   }
 }

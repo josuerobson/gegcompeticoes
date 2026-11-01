@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(resultados): correcao de rules of hooks no CompetitionResultsViewer prevenindo tela branca ao selecionar etapa` |
-| Data/hora | 2026-10-31T21:38:00-03:00 |
+| Mensagem | `fix(pdf): correcao de renderizacao de offscreen canvas no downloadPdfFromHtml prevenindo pdf em branco` |
+| Data/hora | 2026-10-31T21:48:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,11 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Correção da Renderização de Canvas Offscreen no `downloadPdfFromHtml` (`pdfDownloader.ts`, `resultsExport.ts`)**:
+  - *O que foi decidido*: No utilitário `downloadPdfFromHtml`, o elemento temporário era inserido com `position: fixed; left: -99999px;`. Quando o `html2pdf.js` clonava o elemento para a árvore de renderização do `html2canvas`, essas coordenadas negativas extremas eram copiadas junto, fazendo com que o `html2canvas` desenhasse a tabela fora da área visível do canvas gerado, produzindo PDFs com páginas completamente em branco. A arquitetura foi ajustada para utilizar um `wrapper` com `position: fixed; top: 0; left: 0; z-index: -99999; pointer-events: none;` (invisível ao usuário e sem interferir na tela), enquanto o `container` interno mantém coordenadas de fluxo normais (`position: static; width: 100%`). Além disso, foi adicionado o elemento de quebra de página explícito `<div class="html2pdf__page-break"></div>` entre as seções de modalidades em `resultsExport.ts`.
+  - *Por que*: O usuário relatou que os PDFs gerados nos resultados estavam saindo completamente em branco (1 página vazia).
+  - *O que NÃO fazer*: Nunca aplicar `left: -99999px` em elementos que serão processados por `html2canvas` / `html2pdf`.
 
 - **Correção de Rules of Hooks no `CompetitionResultsViewer.tsx` (Prevenção de Tela Branca / React Error #310)**:
   - *O que foi decidido*: O hook `useState` para controle do carregamento de exportação (`isExportingAllPdf`) havia sido posicionado após os retornos condicionais (`if (!selectedResultChampId)` e `if (!selectedResultStageId)`), violando as regras fundamentais dos Hooks do React e disparando `Minified React error #310` ("Rendered more hooks than during the previous render") quando o usuário selecionava uma etapa. O hook foi movido para o topo do componente junto aos demais `useState`, garantindo contagem e ordem de execução rigorosamente estáveis em qualquer etapa da navegação.
