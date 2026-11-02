@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(relatorios): exportacao para excel nos relatorios consolidados e individuais de habitualidades` |
-| Data/hora | 2026-11-02T12:12:00-03:00 |
+| Mensagem | `fix(habitualidades): correcao de extracao de arma propria vs clube a partir da inscricao do atleta` |
+| Data/hora | 2026-11-02T13:20:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -368,6 +368,13 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
     1. Criado utilitário de exportação `src/utils/habitualitiesExport.ts` com suporte a download direto `.xls` em formato XML estruturado com metadados do Excel, cabeçalhos institucionais, gridlines, tipografia estilizada e codificação UTF-8 com BOM.
     2. Na aba **Relatório Global do Clube**: adicionados os botões **"Exportar Excel (Resumo)"** (exporta a listagem com atletas, CPF, CR, quantidade de habitualidades e status de regularidade 8+ frequências) e **"Exportar Excel (Completo)"** (exporta o detalhamento de todos os registros de habitualidade no período com Data, Hora, Atleta, CPF, CR, Tipo de Evento, Evento, Modalidade, Arma/Modelo, Calibre, Nº Série, SIGMA, Tiros, Pontos, Origem da Arma e Origem da Munição).
     3. Na aba **Declaração Individual**: adicionado o botão **"Exportar Excel"** ao visualizar as habitualidades do atleta selecionado.
+
+- **Correção da Origem da Arma ("Arma própria" vs "Arma do clube") nos Relatórios de Habitualidades (`ClubReportsViewer.tsx`, `MemberProfile.tsx`)**:
+  - **Causa Raiz Identificada**: A verificação da origem da arma estava utilizando cegamente `w.ownerId === athlete.clubId || w.ownerId.startsWith('club_')`. Como a maioria das armas cadastradas no sistema estão alocadas sob o ID do clube no banco de dados (`weapons.owner_id = 'club_aranas'`), essa checagem sempre retornava `true` para competições, ignorando completamente o campo da inscrição do atleta (`reg.weaponSource`). Em treinamentos, a expressão com operador `||` também forçava `isClubWeapon = true` sempre que a arma pertencia ao acervo geral do clube, desconsiderando a opção do atleta.
+  - **Correções Aplicadas**:
+    1. Para **Competições**: A origem da arma é extraída com prioridade máxima a partir da inscrição oficial do atleta (`reg.weaponSource === 'clube' ? true : false`). Se for `'propria'`, é exibido "Arma própria"; se for `'clube'`, é exibido "Arma do clube".
+    2. Para **Treinamentos**: A opção `t.weaponOwnerType` (`'propria'` | `'clube'`) passa a ter prioridade absoluta.
+    3. Atualizadas tanto a visualização em tela quanto as declarações oficiais em PDF e as planilhas Excel em `ClubReportsViewer.tsx` e `MemberProfile.tsx`.
 
 ## Infra / deploy
 

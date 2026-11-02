@@ -1655,7 +1655,12 @@ export default function MemberProfile({
 
     const userRegs = (registrations || []).filter(r => r.userId === selectedUser.id);
     const userRegMap = new Map<string, Registration>();
-    userRegs.forEach(r => userRegMap.set(r.id, r));
+    userRegs.forEach(r => {
+      userRegMap.set(r.id, r);
+      if ((r as any).legacyId) {
+        userRegMap.set(String((r as any).legacyId), r);
+      }
+    });
 
     // 1. Process Real Training Sessions in range
     (trainings || []).forEach(t => {
@@ -1700,7 +1705,11 @@ export default function MemberProfile({
       const caliber = w.caliber || t.weaponCaliber || 'N/A';
       const permissionStatus = w.permissionStatus || (caliber?.includes('45') || caliber?.includes('9mm') ? 'Restrita' : 'Permitida');
       const sigma = w.sigmaNumber || w.serialNumber || selectedUser.crNumber || 'N/A';
-      const isClubWeapon = w.ownerId === selectedUser.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false) || t.weaponOwnerType === 'clube';
+
+      // Origem da arma do treino: prioridade máxima para a seleção informada ('propria' | 'clube')
+      const isClubWeapon = t.weaponOwnerType
+        ? t.weaponOwnerType === 'clube'
+        : (w.ownerId === selectedUser.id ? false : (w.ownerId === selectedUser.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false)));
 
       items.push({
         id: `tr_${t.id}`,
@@ -1730,7 +1739,13 @@ export default function MemberProfile({
 
     // A. From registered stage scores
     (userScores || []).forEach(s => {
-      const reg = s.registrationId ? userRegMap.get(s.registrationId) : undefined;
+      let reg = s.registrationId ? userRegMap.get(s.registrationId) : undefined;
+      if (!reg && (s as any).legacyRegistrationId) {
+        reg = userRegs.find(r => (r as any).legacyId === (s as any).legacyRegistrationId);
+      }
+      if (!reg && s.championshipId) {
+        reg = userRegs.find(r => r.championshipId === s.championshipId && (s.stageNum ? (r as any).stageNum === s.stageNum : true));
+      }
       if (reg) includedRegIds.add(reg.id);
 
       const stage = stages.find(st => (reg?.stageId && st.id === reg.stageId) || (st.championshipId === s.championshipId && (s.stageNum ? st.stageNum === s.stageNum : false)));
@@ -1792,7 +1807,11 @@ export default function MemberProfile({
       const caliber = w.caliber || 'N/A';
       const permissionStatus = w.permissionStatus || (caliber?.includes('45') || caliber?.includes('9mm') ? 'Restrita' : 'Permitida');
       const sigma = w.sigmaNumber || w.serialNumber || selectedUser.crNumber || 'N/A';
-      const isClubWeapon = w.ownerId === selectedUser.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false);
+
+      // Origem da arma da competição: se definida na inscrição do atleta ('propria' | 'clube'), tem prioridade absoluta
+      const isClubWeapon = reg?.weaponSource
+        ? reg.weaponSource === 'clube'
+        : (w.ownerId === selectedUser.id ? false : (w.ownerId === selectedUser.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false)));
 
       items.push({
         id: `cmp_${s.id}`,
@@ -1871,7 +1890,11 @@ export default function MemberProfile({
       const caliber = w.caliber || 'N/A';
       const permissionStatus = w.permissionStatus || (caliber?.includes('45') || caliber?.includes('9mm') ? 'Restrita' : 'Permitida');
       const sigma = w.sigmaNumber || w.serialNumber || selectedUser.crNumber || 'N/A';
-      const isClubWeapon = w.ownerId === selectedUser.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false);
+
+      // Origem da arma da competição: se definida na inscrição do atleta ('propria' | 'clube'), tem prioridade absoluta
+      const isClubWeapon = reg?.weaponSource
+        ? reg.weaponSource === 'clube'
+        : (w.ownerId === selectedUser.id ? false : (w.ownerId === selectedUser.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false)));
 
       items.push({
         id: `reg_${reg.id}`,

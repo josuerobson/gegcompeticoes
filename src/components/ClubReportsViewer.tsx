@@ -122,7 +122,12 @@ export default function ClubReportsViewer({
     const items: HabitualityItem[] = [];
     const userRegs = (registrations || []).filter(r => r.userId === athlete.id);
     const userRegMap = new Map<string, Registration>();
-    userRegs.forEach(r => userRegMap.set(r.id, r));
+    userRegs.forEach(r => {
+      userRegMap.set(r.id, r);
+      if ((r as any).legacyId) {
+        userRegMap.set(String((r as any).legacyId), r);
+      }
+    });
 
     // 1. Real Trainings (comprovados com arma e tiros válidos)
     (loadedTrainings || []).forEach(t => {
@@ -151,7 +156,10 @@ export default function ClubReportsViewer({
 
       if (shotsCount === null || isNaN(shotsCount) || shotsCount <= 0) return;
 
-      const isClubWeapon = w.ownerId === athlete.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false) || t.weaponOwnerType === 'clube';
+      // Origem da arma do treino: prioridade máxima para a seleção informada ('propria' | 'clube')
+      const isClubWeapon = t.weaponOwnerType
+        ? t.weaponOwnerType === 'clube'
+        : (w.ownerId === athlete.id ? false : (w.ownerId === athlete.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false)));
 
       items.push({
         id: `tr_${t.id}`,
@@ -180,7 +188,13 @@ export default function ClubReportsViewer({
 
     (stageScores || []).forEach(s => {
       if (s.userId !== athlete.id) return;
-      const reg = s.registrationId ? userRegMap.get(s.registrationId) : undefined;
+      let reg = s.registrationId ? userRegMap.get(s.registrationId) : undefined;
+      if (!reg && (s as any).legacyRegistrationId) {
+        reg = userRegs.find(r => (r as any).legacyId === (s as any).legacyRegistrationId);
+      }
+      if (!reg && s.championshipId) {
+        reg = userRegs.find(r => r.championshipId === s.championshipId && (s.stageNum ? (r as any).stageNum === s.stageNum : true));
+      }
       if (reg) includedRegIds.add(reg.id);
 
       const stage = stages.find(st => (reg?.stageId && st.id === reg.stageId) || (st.championshipId === s.championshipId && (s.stageNum ? st.stageNum === s.stageNum : false)));
@@ -220,7 +234,10 @@ export default function ClubReportsViewer({
 
       if (shotsCount === null || isNaN(shotsCount) || shotsCount <= 0) return;
 
-      const isClubWeapon = w.ownerId === athlete.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false);
+      // Origem da arma da competição: se definida na inscrição do atleta ('propria' | 'clube'), tem prioridade absoluta
+      const isClubWeapon = reg?.weaponSource
+        ? reg.weaponSource === 'clube'
+        : (w.ownerId === athlete.id ? false : (w.ownerId === athlete.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false)));
 
       items.push({
         id: `cmp_${s.id}`,
@@ -279,7 +296,10 @@ export default function ClubReportsViewer({
 
       if (shotsCount === null || isNaN(shotsCount) || shotsCount <= 0) return;
 
-      const isClubWeapon = w.ownerId === athlete.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false);
+      // Origem da arma da competição: se definida na inscrição do atleta ('propria' | 'clube'), tem prioridade absoluta
+      const isClubWeapon = reg.weaponSource
+        ? reg.weaponSource === 'clube'
+        : (w.ownerId === athlete.id ? false : (w.ownerId === athlete.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false)));
 
       items.push({
         id: `reg_${reg.id}`,
