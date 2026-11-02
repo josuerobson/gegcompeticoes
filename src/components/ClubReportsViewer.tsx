@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar, Users, Filter, Download, Loader2, CheckCircle, ShieldAlert } from 'lucide-react';
+import { Calendar, Users, Filter, Download, Loader2, CheckCircle, ShieldAlert, FileSpreadsheet } from 'lucide-react';
 import { downloadPdfFromHtml, sanitizePdfFilename } from '../utils/pdfDownloader';
+import { exportClubHabitualitiesSummaryToExcel, exportClubHabitualitiesCompleteToExcel, exportIndividualHabitualityToExcel } from '../utils/habitualitiesExport';
 import { User, Club, TrainingSession, Registration, StageScore, Stage, Championship, Weapon, Modality } from '../types';
 
 interface ClubReportsViewerProps {
@@ -575,6 +576,56 @@ export default function ClubReportsViewer({
     }
   };
 
+  // Direct Excel Export Handlers
+  const handleExportSummaryExcel = () => {
+    if (globalData.length === 0) return;
+    exportClubHabitualitiesSummaryToExcel({
+      club: {
+        name: clubName,
+        fantasyName: clubFantasy,
+        crNumber: clubCr,
+        cnpj: clubCnpj,
+        cityState: clubCityState
+      },
+      startDate,
+      endDate,
+      globalData
+    });
+  };
+
+  const handleExportCompleteExcel = () => {
+    if (globalData.length === 0) return;
+    exportClubHabitualitiesCompleteToExcel({
+      club: {
+        name: clubName,
+        fantasyName: clubFantasy,
+        crNumber: clubCr,
+        cnpj: clubCnpj,
+        cityState: clubCityState
+      },
+      startDate,
+      endDate,
+      globalData
+    });
+  };
+
+  const handleExportIndividualExcel = () => {
+    if (!singleAthlete || singleAthleteActivities.length === 0) return;
+    exportIndividualHabitualityToExcel({
+      club: {
+        name: clubName,
+        fantasyName: clubFantasy,
+        crNumber: clubCr,
+        cnpj: clubCnpj,
+        cityState: clubCityState
+      },
+      startDate,
+      endDate,
+      athlete: singleAthlete,
+      activities: singleAthleteActivities
+    });
+  };
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
       {/* Top Header */}
@@ -689,24 +740,46 @@ export default function ClubReportsViewer({
                 {totalClubActivities} registro(s) de habitualidade válido(s) encontrados no período.
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleDirectDownloadGlobal}
-              disabled={globalData.length === 0 || isDownloadingPdf}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs py-2.5 px-5 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer shrink-0"
-            >
-              {isDownloadingPdf ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Gerando PDF ({globalData.length} atletas)...
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4" />
-                  Baixar Relatório Global (PDF)
-                </>
-              )}
-            </button>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleExportSummaryExcel}
+                disabled={globalData.length === 0}
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                title="Exportar planilha resumo com atletas, CPF, CR, total de habitualidades e status de regularidade"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Exportar Excel (Resumo)
+              </button>
+              <button
+                type="button"
+                onClick={handleExportCompleteExcel}
+                disabled={globalData.length === 0}
+                className="bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                title="Exportar planilha detalhada com todos os registros individuais de habitualidades, armas, calibres, tiros e eventos"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Exportar Excel (Completo)
+              </button>
+              <button
+                type="button"
+                onClick={handleDirectDownloadGlobal}
+                disabled={globalData.length === 0 || isDownloadingPdf}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs py-2.5 px-4 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer"
+              >
+                {isDownloadingPdf ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Gerando PDF ({globalData.length} atletas)...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    Baixar Relatório Global (PDF)
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Athletes List Summary Table */}
@@ -805,24 +878,38 @@ export default function ClubReportsViewer({
                     CPF: {singleAthlete.cpf || 'Não informado'} • CR: {singleAthlete.crNumber || 'Não informado'}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleDirectDownloadIndividual}
-                  disabled={isDownloadingPdf}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs py-2 px-4 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer"
-                >
-                  {isDownloadingPdf ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Gerando PDF...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="w-3.5 h-3.5" />
-                      Baixar Declaração (PDF)
-                    </>
+                <div className="flex items-center gap-2">
+                  {declarationType === 'habitualidade' && (
+                    <button
+                      type="button"
+                      onClick={handleExportIndividualExcel}
+                      disabled={singleAthleteActivities.length === 0}
+                      className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs py-2 px-3.5 rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                      title="Exportar comprovações de habitualidade deste atleta em planilha Excel"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      Exportar Excel
+                    </button>
                   )}
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleDirectDownloadIndividual}
+                    disabled={isDownloadingPdf}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs py-2 px-4 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer"
+                  >
+                    {isDownloadingPdf ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Gerando PDF...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-3.5 h-3.5" />
+                        Baixar Declaração (PDF)
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {declarationType === 'habitualidade' ? (

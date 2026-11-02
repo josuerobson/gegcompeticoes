@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(resultados): exibicao da arma e edicao de arma propria ou do clube no cadastro de resultados` |
-| Data/hora | 2026-11-02T11:53:00-03:00 |
+| Mensagem | `feat(relatorios): exportacao para excel nos relatorios consolidados e individuais de habitualidades` |
+| Data/hora | 2026-11-02T12:12:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -361,6 +361,13 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
     1. No modal de cadastro e edição de resultados (`CadastrarResultadosPanel` e `IdscResultadosPanel`): adicionado card dedicado *"Arma Utilizada e Origem da Arma"* com botões alternadores estilizados (`👤 Arma própria` / `🏛️ Arma do clube`), seletor dropdown para troca rápida de arma caso necessário, e badge indicativo da origem da arma no cabeçalho do modal e nos cards da listagem de inscritos.
     2. No backend (`server.ts`): os endpoints `POST /api/championships/:id/scores` e `POST /api/idsc/registrations/:id/result` agora recebem `weaponId` e `weaponSource` (`'propria'` | `'clube'`) e atualizam as respectivas colunas no banco de dados (`registrations` e `idsc_registrations`).
     3. Garantida a injeção do acervo de armas (`weapons={weapons}`) para os painéis de resultados em todas as rotas do Painel Diretor.
+
+- **Exportação para Excel nos Relatórios de Habitualidades do Clube (`ClubReportsViewer.tsx`, `habitualitiesExport.ts`)**:
+  - **Exigência**: Adicionar opção para exportar também para Excel no relatório consolidado de habitualidades do clube (`Painel Diretor > Gerenciamento Clube > Relatórios e Declarações`).
+  - **Implementação**:
+    1. Criado utilitário de exportação `src/utils/habitualitiesExport.ts` com suporte a download direto `.xls` em formato XML estruturado com metadados do Excel, cabeçalhos institucionais, gridlines, tipografia estilizada e codificação UTF-8 com BOM.
+    2. Na aba **Relatório Global do Clube**: adicionados os botões **"Exportar Excel (Resumo)"** (exporta a listagem com atletas, CPF, CR, quantidade de habitualidades e status de regularidade 8+ frequências) e **"Exportar Excel (Completo)"** (exporta o detalhamento de todos os registros de habitualidade no período com Data, Hora, Atleta, CPF, CR, Tipo de Evento, Evento, Modalidade, Arma/Modelo, Calibre, Nº Série, SIGMA, Tiros, Pontos, Origem da Arma e Origem da Munição).
+    3. Na aba **Declaração Individual**: adicionado o botão **"Exportar Excel"** ao visualizar as habitualidades do atleta selecionado.
 
 ## Infra / deploy
 
