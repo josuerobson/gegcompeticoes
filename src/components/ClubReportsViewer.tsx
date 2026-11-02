@@ -1,7 +1,6 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { FileText, Printer, Calendar, Users, Filter, X, CheckCircle, ShieldAlert, Award, ArrowLeft, Download, Loader2 } from 'lucide-react';
-import { downloadPdfFromElement } from '../utils/pdfDownloader';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Calendar, Users, Filter, Download, Loader2, CheckCircle, ShieldAlert } from 'lucide-react';
+import { downloadPdfFromHtml, sanitizePdfFilename } from '../utils/pdfDownloader';
 import { User, Club, TrainingSession, Registration, StageScore, Stage, Championship, Weapon, Modality } from '../types';
 
 interface ClubReportsViewerProps {
@@ -73,7 +72,7 @@ export default function ClubReportsViewer({
   // Global filters
   const [onlyWithActivities, setOnlyWithActivities] = useState(false);
   const [athleteSearchQuery, setAthleteSearchQuery] = useState('');
-  const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   // Individual declaration state
   const [selectedAthleteId, setSelectedAthleteId] = useState('');
@@ -323,45 +322,6 @@ export default function ClubReportsViewer({
     });
   }, [clubAthletes, startD, endD, onlyWithActivities, loadedTrainings, registrations, stageScores, stages, championships, weapons, modalities]);
 
-  // Isolate print mode via document-print-open class on body
-  useEffect(() => {
-    if (isPrintPreviewOpen) {
-      document.body.classList.add('document-print-open');
-    } else {
-      document.body.classList.remove('document-print-open');
-    }
-    return () => {
-      document.body.classList.remove('document-print-open');
-    };
-  }, [isPrintPreviewOpen]);
-
-  const documentPagesRef = useRef<HTMLDivElement>(null);
-  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
-
-  const handleDownloadPdf = async () => {
-    if (!documentPagesRef.current) return;
-    setIsDownloadingPdf(true);
-    try {
-      const slug = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-      const filename = activeTab === 'global_habitualidade'
-        ? `relatorio_global_habitualidades_${slug(clubFantasy)}_${startDate}_a_${endDate}.pdf`
-        : `declaracao_${declarationType}_${slug(singleAthlete?.fullName || 'atleta')}_${startDate}_a_${endDate}.pdf`;
-
-      await downloadPdfFromElement(documentPagesRef.current, {
-        filename,
-        orientation: 'portrait'
-      });
-    } catch (err) {
-      console.error('Erro ao baixar PDF:', err);
-    } finally {
-      setIsDownloadingPdf(false);
-    }
-  };
-
-  const handlePrint = () => {
-    handleDownloadPdf();
-  };
-
   // Format extensive date
   const formatExtensiveDate = (dStr?: string) => {
     if (!dStr) return '01 de Setembro de 2021';
@@ -400,11 +360,220 @@ export default function ClubReportsViewer({
   const singleAthleteActivities = useMemo(() => {
     if (!singleAthlete) return [];
     return computeAthleteHabitualities(singleAthlete, startD, endD);
-  }, [singleAthlete, startD, endD, trainings, registrations, stageScores, stages, championships, weapons, modalities]);
+  }, [singleAthlete, startD, endD, loadedTrainings, registrations, stageScores, stages, championships, weapons, modalities]);
 
   const totalClubActivities = useMemo(() => {
     return globalData.reduce((acc, curr) => acc + curr.activities.length, 0);
   }, [globalData]);
+
+  const getAthleteAddress = (athlete: User) => {
+    return [
+      athlete.address,
+      athlete.addressNumber,
+      athlete.neighborhood,
+      athlete.city && athlete.state ? `${athlete.city}, ${athlete.state}` : (athlete.city || athlete.state || ''),
+      athlete.cep ? `CEP: ${athlete.cep}` : ''
+    ].filter(Boolean).join(', ') || 'Não informado';
+  };
+
+  const getAthleteRegNum = (athlete: User) => {
+    return athlete.bookNumber || (athlete.legacyId ? String(athlete.legacyId).padStart(4, '0') : (athlete.id ? athlete.id.replace(/\D/g, '').slice(-4).padStart(4, '0') : '0002'));
+  };
+
+  const slug = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+  // HTML Template Generators for direct PDF export
+  const generateAthleteDeclarationHtml = (athlete: User, activities: HabitualityItem[]): string => {
+    const athleteAddr = getAthleteAddress(athlete);
+    const athleteRegNum = getAthleteRegNum(athlete);
+    const affiliationDateExtensive = formatExtensiveDate(athlete.clubAffiliationDate || athlete.memberSince || (athlete as any).createdAt);
+
+    const activitiesHtml = activities.length > 0
+      ? activities.map((item, idx) => `
+        <div style="border: 1px solid #0f172a; margin-bottom: 8px; page-break-inside: avoid; overflow: hidden; background-color: #ffffff;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 9.5px; color: #0f172a;">
+            <tbody>
+              <tr style="border-bottom: 1px solid #0f172a; background-color: #f8fafc;">
+                <td colspan="6" style="padding: 4px 8px; font-weight: bold; text-transform: uppercase; font-size: 10px; text-align: left;">
+                  Nome do evento: ${item.eventName}
+                </td>
+              </tr>
+              <tr style="border-bottom: 1px solid #0f172a;">
+                <td colspan="6" style="padding: 4px 8px; font-weight: 500; font-size: 9px; text-align: left; color: #334155;">
+                  Arma utilizada: ${item.weaponClass} - ${item.model} - N° ${item.weaponNumber} - ${item.manufacturer} - Calibre: ${item.caliber} - ${item.permissionStatus}
+                </td>
+              </tr>
+              <tr style="background-color: #f1f5f9; font-weight: bold; font-size: 8.5px; text-align: center; border-bottom: 1px solid #0f172a; text-transform: uppercase;">
+                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 45px;">Ordem</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 80px;">Data</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 60px;">Hora</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 100px;">Sigma</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 85px;">Qtd Munições</td>
+                <td style="padding: 4px;">Tipo de Evento</td>
+              </tr>
+              <tr style="text-align: center; font-family: monospace; font-size: 9.5px; border-bottom: 1px solid #0f172a;">
+                <td style="border-right: 1px solid #0f172a; padding: 4px; font-weight: bold;">${String(idx + 1).padStart(2, '0')}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px;">${item.dateFormatted}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px;">${item.timeFormatted}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px;">${item.sigma}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px; font-weight: bold;">${item.shotsCount}</td>
+                <td style="padding: 4px; font-family: Arial, sans-serif; font-weight: 600; color: #1e293b;">${item.eventType}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #0f172a; font-size: 9px;">
+                <td colspan="3" style="border-right: 1px solid #0f172a; padding: 3px 8px; font-weight: 500; text-align: left;">
+                  Arma: ${item.weaponOwnerText}
+                </td>
+                <td colspan="3" style="padding: 3px 8px; font-weight: 500; text-align: left;">
+                  Munições: ${item.ammoOwnerText}
+                </td>
+              </tr>
+              <tr>
+                <td colspan="6" style="padding: 3px 8px; font-weight: 500; text-transform: uppercase; font-size: 9px; text-align: left;">
+                  Evento: ${item.eventName}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      `).join('')
+      : `
+        <div style="padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px; text-align: center; font-size: 10.5px; color: #64748b; background-color: #f8fafc; margin-bottom: 12px;">
+          Nenhum treinamento ou participação em competição registrado no período de ${startDate.split('-').reverse().join('/')} a ${endDate.split('-').reverse().join('/')}.
+        </div>
+      `;
+
+    return `
+      <div style="padding: 20px 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #0f172a; background: #ffffff; box-sizing: border-box;">
+        <!-- Official Timbre Header -->
+        <div style="text-align: center; border-bottom: 2px solid #cbd5e1; padding-bottom: 8px; margin-bottom: 10px;">
+          <h1 style="font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; margin: 0; line-height: 1.3;">
+            Declaração de habitualidade COMPROVAÇÃO DE PARTICIPAÇÕES EM TREINAMENTOS E/OU COMPETIÇÕES DE TIRO
+          </h1>
+          <p style="font-size: 10.5px; font-weight: bold; color: #334155; margin: 2px 0 0 0;">
+            (art. 35 do Decreto nº 11.615/2023)
+          </p>
+        </div>
+
+        <!-- Official Declaration Text -->
+        <div style="text-align: justify; font-size: 10.5px; line-height: 1.5; color: #1e293b; margin-bottom: 12px;">
+          <p style="margin: 0;">
+            <strong>${clubName}</strong>, Nome Fantasia: <strong>${clubFantasy}</strong>, CR: Nº <strong>${clubCr}</strong> inscrito no CNPJ sob o nº <strong>${clubCnpj}</strong>, com endereço sede, na <strong>${clubAddress}</strong>, <strong>DECLARA</strong>, para fim de comprovação junto ao Exército Brasileiro e a Polícia Federal, que, <strong>${athlete.fullName}</strong>, CPF <strong>${athlete.cpf || 'Não informado'}</strong>, CR <strong>${athlete.crNumber || '000.330.311-00'}</strong>, com endereço: <strong>${athleteAddr}</strong> está regularmente inscrito nesta entidade sob o nº <strong>${athleteRegNum}</strong>, datado de <strong>${affiliationDateExtensive}</strong> e que participou de treinamentos/competições que justificam a aquisição de munição/insumos pleiteada/pleiteados. <strong>O TREINAMENTO FOI REALIZADO CONFORME DESCRIÇÕES</strong>
+          </p>
+        </div>
+
+        <!-- Habituality Cards -->
+        ${activitiesHtml}
+
+        <!-- Signatures & Footer -->
+        <div style="margin-top: 16px; padding-top: 10px; border-top: 1px solid #cbd5e1; page-break-inside: avoid; text-align: center;">
+          <p style="font-size: 10px; color: #1e293b; margin: 0 0 3px 0;">Atestamos a veracidade e exatidão dos registros de habitualidade acima especificados.</p>
+          <p style="font-size: 10px; color: #334155; margin: 0 0 16px 0;">${clubCityState}, ${new Date().toLocaleDateString('pt-BR')}.</p>
+
+          <div style="display: inline-block; text-align: center; font-size: 9.5px; margin-top: 6px;">
+            <div style="height: 1px; background-color: #475569; width: 250px; margin: 0 auto 5px auto;"></div>
+            <span style="font-weight: bold; color: #0f172a; display: block;">Oficial de Segurança de Estande / Controle de Frequência</span>
+            <span style="color: #64748b; display: block; margin-top: 2px;">Homologação de Frequência ${clubFantasy}</span>
+            <span style="color: #94a3b8; font-family: monospace; font-size: 8px; display: block; margin-top: 3px;">
+              Registro de Autenticidade: REG-GG-HAB-${currentClub?.id?.replace(/\D/g, '') || '01'}-${athlete.id.slice(0, 6).toUpperCase()}
+            </span>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  const generateFiliacaoDeclarationHtml = (athlete: User): string => {
+    const athleteAddr = getAthleteAddress(athlete);
+    const athleteRegNum = getAthleteRegNum(athlete);
+
+    return `
+      <div style="padding: 24px 28px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #0f172a; background: #ffffff; box-sizing: border-box;">
+        <!-- Header -->
+        <div style="text-align: center; border-bottom: 2px solid #cbd5e1; padding-bottom: 10px; margin-bottom: 20px;">
+          <h1 style="font-size: 13.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; margin: 0; line-height: 1.3;">
+            DECLARAÇÃO DE FILIAÇÃO AO CLUBE DE TIRO
+          </h1>
+          <p style="font-size: 11px; font-weight: bold; color: #334155; margin: 4px 0 0 0;">
+            Comprovação de Associação Ativa Regular
+          </p>
+        </div>
+
+        <!-- Declaration Body -->
+        <div style="text-align: justify; font-size: 11.5px; line-height: 1.8; color: #1e293b; margin: 24px 0 32px 0;">
+          <p style="margin-bottom: 16px;">
+            Declaramos, para os devidos fins de direito junto ao Sistema de Fiscalização de Produtos Controlados (SFPC) do Exército Brasileiro e à Polícia Federal, que <strong>${athlete.fullName}</strong>, inscrito no CPF sob o nº <strong>${athlete.cpf || 'Não informado'}</strong> e portador do Certificado de Registro (CR) nº <strong>${athlete.crNumber || 'Emissão pendente'}</strong>, é filiado ativo regular sob o registro nº <strong>${athleteRegNum}</strong> nesta entidade de tiro desportivo <strong>${clubName}</strong> (Nome Fantasia: <strong>${clubFantasy}</strong>), CNPJ: <strong>${clubCnpj}</strong>, CR nº <strong>${clubCr}</strong>.
+          </p>
+          <p style="margin-bottom: 16px;">
+            O referido atleta encontra-se em dia com suas obrigações estatutárias, anuidade e normas de segurança estabelecidas pela legislação vigente.
+          </p>
+        </div>
+
+        <!-- Signatures -->
+        <div style="margin-top: 40px; padding-top: 16px; border-top: 1px solid #cbd5e1; page-break-inside: avoid; text-align: center;">
+          <p style="font-size: 11px; color: #1e293b; margin: 0 0 4px 0;">Atestamos a veracidade e exatidão das informações acima especificadas.</p>
+          <p style="font-size: 11px; color: #334155; margin: 0 0 24px 0;">${clubCityState}, ${new Date().toLocaleDateString('pt-BR')}.</p>
+
+          <div style="display: inline-block; text-align: center; font-size: 10px; margin-top: 10px;">
+            <div style="height: 1px; background-color: #475569; width: 260px; margin: 0 auto 6px auto;"></div>
+            <span style="font-weight: bold; color: #0f172a; display: block;">Diretoria / Oficial de Segurança do Clube</span>
+            <span style="color: #64748b; display: block; margin-top: 2px;">Homologação Oficial ${clubFantasy}</span>
+            <span style="color: #94a3b8; font-family: monospace; font-size: 8px; display: block; margin-top: 4px;">
+              Registro de Autenticidade: REG-GG-DEC-${currentClub?.id?.replace(/\D/g, '') || '01'}-${athlete.id.slice(0, 6).toUpperCase()}
+            </span>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  // Direct PDF Download Handlers (No preview modal, direct binary download to Downloads folder)
+  const handleDirectDownloadGlobal = async () => {
+    if (globalData.length === 0 || isDownloadingPdf) return;
+    setIsDownloadingPdf(true);
+    try {
+      const pagesHtml = globalData.map(({ athlete, activities }, idx) => {
+        const isLast = idx === globalData.length - 1;
+        const pageBreak = isLast ? '' : '<div class="html2pdf__page-break" style="page-break-after: always; break-after: page; height: 0; line-height: 0; margin: 0; padding: 0;"></div>';
+        return generateAthleteDeclarationHtml(athlete, activities) + pageBreak;
+      }).join('');
+
+      const filename = sanitizePdfFilename(`relatorio_global_habitualidades_${slug(clubFantasy)}_${startDate}_a_${endDate}`);
+
+      await downloadPdfFromHtml(pagesHtml, {
+        filename,
+        orientation: 'portrait',
+        margin: [6, 6, 6, 6]
+      });
+    } catch (err) {
+      console.error('Erro ao gerar relatório global em PDF:', err);
+      alert('Erro ao gerar o arquivo PDF. Por favor tente novamente.');
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
+  const handleDirectDownloadIndividual = async () => {
+    if (!singleAthlete || isDownloadingPdf) return;
+    setIsDownloadingPdf(true);
+    try {
+      const pageHtml = declarationType === 'habitualidade'
+        ? generateAthleteDeclarationHtml(singleAthlete, singleAthleteActivities)
+        : generateFiliacaoDeclarationHtml(singleAthlete);
+
+      const filename = sanitizePdfFilename(`declaracao_${declarationType}_${slug(singleAthlete.fullName || 'atleta')}_${startDate}_a_${endDate}`);
+
+      await downloadPdfFromHtml(pageHtml, {
+        filename,
+        orientation: 'portrait',
+        margin: [6, 6, 6, 6]
+      });
+    } catch (err) {
+      console.error('Erro ao gerar declaração em PDF:', err);
+      alert('Erro ao gerar o arquivo PDF. Por favor tente novamente.');
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-800">
@@ -522,12 +691,21 @@ export default function ClubReportsViewer({
             </div>
             <button
               type="button"
-              onClick={() => setIsPrintPreviewOpen(true)}
-              disabled={globalData.length === 0}
+              onClick={handleDirectDownloadGlobal}
+              disabled={globalData.length === 0 || isDownloadingPdf}
               className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs py-2.5 px-5 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer shrink-0"
             >
-              <Download className="w-4 h-4" />
-              Visualizar & Baixar Relatório Global
+              {isDownloadingPdf ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Gerando PDF ({globalData.length} atletas)...
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  Baixar Relatório Global (PDF)
+                </>
+              )}
             </button>
           </div>
 
@@ -629,11 +807,21 @@ export default function ClubReportsViewer({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsPrintPreviewOpen(true)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2 px-4 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer"
+                  onClick={handleDirectDownloadIndividual}
+                  disabled={isDownloadingPdf}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs py-2 px-4 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  Visualizar & Baixar Declaração
+                  {isDownloadingPdf ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Gerando PDF...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5" />
+                      Baixar Declaração (PDF)
+                    </>
+                  )}
                 </button>
               </div>
 
@@ -656,305 +844,6 @@ export default function ClubReportsViewer({
             </div>
           )}
         </div>
-      )}
-
-      {/* MODAL / PORTAL DE IMPRESSÃO ISOLADA */}
-      {isPrintPreviewOpen && createPortal(
-        <div id="print-portal-root" className="fixed inset-0 z-9999 bg-slate-900/80 backdrop-blur-xs flex flex-col items-center justify-start overflow-y-auto p-4 sm:p-6 print:p-0 print:m-0 print:bg-white print:static print:overflow-visible">
-          {/* Print Toolbar (Hidden during print) */}
-          <div className="w-full max-w-4xl bg-white rounded-xl shadow-lg border border-slate-200 p-4 mb-4 flex items-center justify-between gap-4 print:hidden sticky top-4 z-50">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsPrintPreviewOpen(false)}
-                className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition cursor-pointer"
-                title="Voltar"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              <div>
-                <h4 className="font-bold text-sm text-slate-900">
-                  {activeTab === 'global_habitualidade'
-                    ? `Relatório Global de Habitualidades — ${clubFantasy}`
-                    : `Declaração Individual — ${singleAthlete?.fullName}`}
-                </h4>
-                <p className="text-xs text-slate-500">
-                  {activeTab === 'global_habitualidade'
-                    ? `${globalData.length} atleta(s) incluído(s) • ${startDate.split('-').reverse().join('/')} a ${endDate.split('-').reverse().join('/')}`
-                    : `${startDate.split('-').reverse().join('/')} a ${endDate.split('-').reverse().join('/')}`}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleDownloadPdf}
-                disabled={isDownloadingPdf}
-                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold text-xs py-2.5 px-5 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer"
-              >
-                {isDownloadingPdf ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Gerando PDF...
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-4 h-4" />
-                    Baixar PDF
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsPrintPreviewOpen(false)}
-                className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* DOCUMENT PAGES CONTAINER */}
-          <div ref={documentPagesRef} className="w-full max-w-4xl space-y-6 print:space-y-0 print:w-full print:max-w-none">
-            {activeTab === 'global_habitualidade' ? (
-              // RENDER EACH ATHLETE'S DECLARATION
-              globalData.map(({ athlete, activities }, athleteIdx) => {
-                const athleteAddr = [
-                  athlete.address,
-                  athlete.addressNumber,
-                  athlete.neighborhood,
-                  athlete.city && athlete.state ? `${athlete.city}, ${athlete.state}` : (athlete.city || athlete.state || ''),
-                  athlete.cep ? `CEP: ${athlete.cep}` : ''
-                ].filter(Boolean).join(', ') || 'Não informado';
-
-                const athleteRegNum = athlete.bookNumber || (athlete.legacyId ? String(athlete.legacyId).padStart(4, '0') : (athlete.id ? athlete.id.replace(/\D/g, '').slice(-4).padStart(4, '0') : '0002'));
-                const affiliationDateExtensive = formatExtensiveDate(athlete.clubAffiliationDate || athlete.memberSince || (athlete as any).createdAt);
-
-                return (
-                  <div
-                    key={athlete.id}
-                    className="bg-white p-8 rounded-2xl shadow-xl print:shadow-none print:rounded-none print:p-0 page-break-after-always print:break-after-page text-slate-900 font-sans border border-slate-200 print:border-none"
-                  >
-                    {/* Official Timbre Header */}
-                    <div className="text-center pb-2 border-b border-slate-300 mb-3">
-                      <h1 className="font-display font-extrabold text-sm uppercase tracking-wider text-slate-900 leading-snug">
-                        Declaração de habitualidade COMPROVAÇÃO DE PARTICIPAÇÕES EM TREINAMENTOS E/OU COMPETIÇÕES DE TIRO
-                      </h1>
-                      <p className="text-[11px] font-bold text-slate-700 mt-0.5">
-                        (art. 35 do Decreto nº 11.615/2023)
-                      </p>
-                    </div>
-
-                    {/* Official Declaration Text (Template Item 5) */}
-                    <div className="text-justify text-xs text-slate-800 leading-relaxed mb-4">
-                      <p>
-                        <strong>{clubName}</strong>, Nome Fantasia: <strong>{clubFantasy}</strong>, CR: Nº <strong>{clubCr}</strong> inscrito no CNPJ sob o nº <strong>{clubCnpj}</strong>, com endereço sede, na <strong>{clubAddress}</strong>, <strong>DECLARA</strong>, para fim de comprovação junto ao Exército Brasileiro e a Polícia Federal, que, <strong>{athlete.fullName}</strong>, CPF <strong>{athlete.cpf || 'Não informado'}</strong>, CR <strong>{athlete.crNumber || '000.330.311-00'}</strong>, com endereço: <strong>{athleteAddr}</strong> está regularmente inscrito nesta entidade sob o nº <strong>{athleteRegNum}</strong>, datado de <strong>{affiliationDateExtensive}</strong> e que participou de treinamentos/competições que justificam a aquisição de munição/insumos pleiteada/pleiteados. <strong>O TREINAMENTO FOI REALIZADO CONFORME DESCRIÇÕES</strong>
-                      </p>
-                    </div>
-
-                    {/* Habituality Tables */}
-                    {activities.length > 0 ? (
-                      <div className="space-y-3">
-                        {activities.map((item, idx) => (
-                          <div key={item.id} className="border border-slate-900 text-xs overflow-hidden page-break-inside-avoid">
-                            <table className="w-full border-collapse text-xs text-slate-900">
-                              <tbody>
-                                <tr className="border-b border-slate-900 bg-slate-50">
-                                  <td colSpan={6} className="px-3 py-1.5 font-bold uppercase text-left text-[10.5px]">
-                                    Nome do evento: {item.eventName}
-                                  </td>
-                                </tr>
-                                <tr className="border-b border-slate-900">
-                                  <td colSpan={6} className="px-3 py-1.5 font-medium text-[10px]">
-                                    Arma utilizada: {item.weaponClass} - {item.model} - N° {item.weaponNumber} - {item.manufacturer} - Calibre : {item.caliber} - {item.permissionStatus}
-                                  </td>
-                                </tr>
-                                <tr className="bg-slate-100 font-bold text-[9.5px] text-center border-b border-slate-900 uppercase tracking-wider">
-                                  <td className="border-r border-slate-900 py-1 px-2 w-12">Ordem</td>
-                                  <td className="border-r border-slate-900 py-1 px-2 w-24">Data</td>
-                                  <td className="border-r border-slate-900 py-1 px-2 w-16">Hora</td>
-                                  <td className="border-r border-slate-900 py-1 px-2 w-28">Sigma</td>
-                                  <td className="border-r border-slate-900 py-1 px-2 w-24">Qtd Munições</td>
-                                  <td className="py-1 px-2">Tipo de Evento</td>
-                                </tr>
-                                <tr className="text-center font-mono text-[10.5px] border-b border-slate-900">
-                                  <td className="border-r border-slate-900 py-1.5 px-2 font-bold">{String(idx + 1).padStart(2, '0')}</td>
-                                  <td className="border-r border-slate-900 py-1.5 px-2">{item.dateFormatted}</td>
-                                  <td className="border-r border-slate-900 py-1.5 px-2">{item.timeFormatted}</td>
-                                  <td className="border-r border-slate-900 py-1.5 px-2">{item.sigma}</td>
-                                  <td className="border-r border-slate-900 py-1.5 px-2 font-bold">{item.shotsCount}</td>
-                                  <td className="py-1.5 px-2 font-sans font-semibold text-slate-800">{item.eventType}</td>
-                                </tr>
-                                <tr className="border-b border-slate-900 text-[10px]">
-                                  <td colSpan={3} className="border-r border-slate-900 px-3 py-1 font-medium">
-                                    Arma: {item.weaponOwnerText}
-                                  </td>
-                                  <td colSpan={3} className="px-3 py-1 font-medium">
-                                    Munições: {item.ammoOwnerText}
-                                  </td>
-                                </tr>
-                                <tr>
-                                  <td colSpan={6} className="px-3 py-1 font-medium uppercase text-[10px]">
-                                    Evento: {item.eventName}
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-4 border border-slate-300 rounded-lg text-center text-xs text-slate-500 bg-slate-50">
-                        Nenhum treinamento ou participação em competição registrado no período de {startDate.split('-').reverse().join('/')} a {endDate.split('-').reverse().join('/')}.
-                      </div>
-                    )}
-
-                    {/* Signatures & Footer */}
-                    <div className="mt-6 pt-4 border-t border-slate-200 page-break-inside-avoid space-y-6">
-                      <div className="text-center text-slate-800 text-[11px]">
-                        <p>Atestamos a veracidade e exatidão dos registros de habitualidade acima especificados.</p>
-                        <p className="mt-1">{clubCityState}, {new Date().toLocaleDateString('pt-BR')}.</p>
-                      </div>
-
-                      <div className="text-center text-[10px] space-y-1">
-                        <div className="h-0.5 bg-slate-400 w-56 mx-auto"></div>
-                        <span className="font-bold text-slate-900 block mt-1">Oficial de Segurança de Estande / Controle de Frequência</span>
-                        <span className="text-slate-500 block">Homologação de Frequência {clubFantasy}</span>
-                        <span className="text-slate-400 font-mono text-[8px] block">
-                          Registro de Autenticidade: REG-GG-HAB-{currentClub?.id?.replace(/\D/g, '') || '01'}-{athlete.id.slice(0, 6).toUpperCase()}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              // RENDER SINGLE ATHLETE DECLARATION
-              singleAthlete && (() => {
-                const athleteAddr = [
-                  singleAthlete.address,
-                  singleAthlete.addressNumber,
-                  singleAthlete.neighborhood,
-                  singleAthlete.city && singleAthlete.state ? `${singleAthlete.city}, ${singleAthlete.state}` : (singleAthlete.city || singleAthlete.state || ''),
-                  singleAthlete.cep ? `CEP: ${singleAthlete.cep}` : ''
-                ].filter(Boolean).join(', ') || 'Não informado';
-
-                const athleteRegNum = singleAthlete.bookNumber || (singleAthlete.legacyId ? String(singleAthlete.legacyId).padStart(4, '0') : (singleAthlete.id ? singleAthlete.id.replace(/\D/g, '').slice(-4).padStart(4, '0') : '0002'));
-                const affiliationDateExtensive = formatExtensiveDate(singleAthlete.clubAffiliationDate || singleAthlete.memberSince || (singleAthlete as any).createdAt);
-
-                return (
-                  <div className="bg-white p-8 rounded-2xl shadow-xl print:shadow-none print:rounded-none print:p-0 text-slate-900 font-sans border border-slate-200 print:border-none">
-                    {/* Header */}
-                    <div className="text-center pb-2 border-b border-slate-300 mb-3">
-                      <h1 className="font-display font-extrabold text-sm uppercase tracking-wider text-slate-900 leading-snug">
-                        {declarationType === 'habitualidade'
-                          ? 'Declaração de habitualidade COMPROVAÇÃO DE PARTICIPAÇÕES EM TREINAMENTOS E/OU COMPETIÇÕES DE TIRO'
-                          : 'DECLARAÇÃO DE FILIAÇÃO AO CLUBE DE TIRO'}
-                      </h1>
-                      <p className="text-[11px] font-bold text-slate-700 mt-0.5">
-                        {declarationType === 'habitualidade' ? '(art. 35 do Decreto nº 11.615/2023)' : 'Comprovação de Associação Ativa Regular'}
-                      </p>
-                    </div>
-
-                    {/* Declaration Body */}
-                    {declarationType === 'habitualidade' ? (
-                      <>
-                        <div className="text-justify text-xs text-slate-800 leading-relaxed mb-4">
-                          <p>
-                            <strong>{clubName}</strong>, Nome Fantasia: <strong>{clubFantasy}</strong>, CR: Nº <strong>{clubCr}</strong> inscrito no CNPJ sob o nº <strong>{clubCnpj}</strong>, com endereço sede, na <strong>{clubAddress}</strong>, <strong>DECLARA</strong>, para fim de comprovação junto ao Exército Brasileiro e a Polícia Federal, que, <strong>{singleAthlete.fullName}</strong>, CPF <strong>{singleAthlete.cpf || 'Não informado'}</strong>, CR <strong>{singleAthlete.crNumber || '000.330.311-00'}</strong>, com endereço: <strong>{athleteAddr}</strong> está regularmente inscrito nesta entidade sob o nº <strong>{athleteRegNum}</strong>, datado de <strong>{affiliationDateExtensive}</strong> e que participou de treinamentos/competições que justificam a aquisição de munição/insumos pleiteada/pleiteados. <strong>O TREINAMENTO FOI REALIZADO CONFORME DESCRIÇÕES</strong>
-                          </p>
-                        </div>
-
-                        {singleAthleteActivities.length > 0 ? (
-                          <div className="space-y-3">
-                            {singleAthleteActivities.map((item, idx) => (
-                              <div key={item.id} className="border border-slate-900 text-xs overflow-hidden page-break-inside-avoid">
-                                <table className="w-full border-collapse text-xs text-slate-900">
-                                  <tbody>
-                                    <tr className="border-b border-slate-900 bg-slate-50">
-                                      <td colSpan={6} className="px-3 py-1.5 font-bold uppercase text-left text-[10.5px]">
-                                        Nome do evento: {item.eventName}
-                                      </td>
-                                    </tr>
-                                    <tr className="border-b border-slate-900">
-                                      <td colSpan={6} className="px-3 py-1.5 font-medium text-[10px]">
-                                        Arma utilizada: {item.weaponClass} - {item.model} - N° {item.weaponNumber} - {item.manufacturer} - Calibre : {item.caliber} - {item.permissionStatus}
-                                      </td>
-                                    </tr>
-                                    <tr className="bg-slate-100 font-bold text-[9.5px] text-center border-b border-slate-900 uppercase tracking-wider">
-                                      <td className="border-r border-slate-900 py-1 px-2 w-12">Ordem</td>
-                                      <td className="border-r border-slate-900 py-1 px-2 w-24">Data</td>
-                                      <td className="border-r border-slate-900 py-1 px-2 w-16">Hora</td>
-                                      <td className="border-r border-slate-900 py-1 px-2 w-28">Sigma</td>
-                                      <td className="border-r border-slate-900 py-1 px-2 w-24">Qtd Munições</td>
-                                      <td className="py-1 px-2">Tipo de Evento</td>
-                                    </tr>
-                                    <tr className="text-center font-mono text-[10.5px] border-b border-slate-900">
-                                      <td className="border-r border-slate-900 py-1.5 px-2 font-bold">{String(idx + 1).padStart(2, '0')}</td>
-                                      <td className="border-r border-slate-900 py-1.5 px-2">{item.dateFormatted}</td>
-                                      <td className="border-r border-slate-900 py-1.5 px-2">{item.timeFormatted}</td>
-                                      <td className="border-r border-slate-900 py-1.5 px-2">{item.sigma}</td>
-                                      <td className="border-r border-slate-900 py-1.5 px-2 font-bold">{item.shotsCount}</td>
-                                      <td className="py-1.5 px-2 font-sans font-semibold text-slate-800">{item.eventType}</td>
-                                    </tr>
-                                    <tr className="border-b border-slate-900 text-[10px]">
-                                      <td colSpan={3} className="border-r border-slate-900 px-3 py-1 font-medium">
-                                        Arma: {item.weaponOwnerText}
-                                      </td>
-                                      <td colSpan={3} className="px-3 py-1 font-medium">
-                                        Munições: {item.ammoOwnerText}
-                                      </td>
-                                    </tr>
-                                    <tr>
-                                      <td colSpan={6} className="px-3 py-1 font-medium uppercase text-[10px]">
-                                        Evento: {item.eventName}
-                                      </td>
-                                    </tr>
-                                  </tbody>
-                                </table>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="p-4 border border-slate-300 rounded-lg text-center text-xs text-slate-500 bg-slate-50">
-                            Nenhum treinamento ou participação em competição registrado no período de {startDate.split('-').reverse().join('/')} a {endDate.split('-').reverse().join('/')}.
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <div className="text-justify text-xs text-slate-850 leading-relaxed space-y-4 my-6">
-                        <p>
-                          Declaramos, para os devidos fins de direito junto ao Sistema de Fiscalização de Produtos Controlados (SFPC) do Exército Brasileiro e à Polícia Federal, que <strong>{singleAthlete.fullName}</strong>, inscrito no CPF sob o nº <strong>{singleAthlete.cpf || 'Não informado'}</strong> e portador do Certificado de Registro (CR) nº <strong>{singleAthlete.crNumber || 'Emissão pendente'}</strong>, é filiado ativo regular sob o registro nº <strong>{athleteRegNum}</strong> nesta entidade de tiro desportivo <strong>{clubName}</strong> (Nome Fantasia: <strong>{clubFantasy}</strong>), CNPJ: <strong>{clubCnpj}</strong>, CR nº <strong>{clubCr}</strong>.
-                        </p>
-                        <p>
-                          O referido atleta encontra-se em dia com suas obrigações estatutárias, anuidade e normas de segurança estabelecidas pela legislação vigente.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Signatures & Footer */}
-                    <div className="mt-8 pt-4 border-t border-slate-200 page-break-inside-avoid space-y-6">
-                      <div className="text-center text-slate-800 text-[11px]">
-                        <p>Atestamos a veracidade e exatidão das informações acima especificadas.</p>
-                        <p className="mt-1">{clubCityState}, {new Date().toLocaleDateString('pt-BR')}.</p>
-                      </div>
-
-                      <div className="text-center text-[10px] space-y-1">
-                        <div className="h-0.5 bg-slate-400 w-56 mx-auto"></div>
-                        <span className="font-bold text-slate-900 block mt-1">Diretoria / Oficial de Segurança do Clube</span>
-                        <span className="text-slate-500 block">Homologação Oficial {clubFantasy}</span>
-                        <span className="text-slate-400 font-mono text-[8px] block">
-                          Registro de Autenticidade: REG-GG-DEC-{currentClub?.id?.replace(/\D/g, '') || '01'}-{singleAthlete.id.slice(0, 6).toUpperCase()}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()
-            )}
-          </div>
-        </div>,
-        document.body
       )}
     </div>
   );

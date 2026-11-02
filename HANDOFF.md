@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `style(resultados): alteracao da cor dos botoes de exportacao de pdf de vermelho para amarelo` |
-| Data/hora | 2026-10-31T22:02:00-03:00 |
+| Mensagem | `feat(relatorios): download direto de pdf para relatorio global e declaracoes sem pre-visualizacao` |
+| Data/hora | 2026-11-02T10:45:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,11 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Download Direto de PDF em Relatórios e Declarações (`ClubReportsViewer.tsx`)**:
+  - *O que foi decidido*: Eliminada a dependência de janela modal de pré-visualização (`isPrintPreviewOpen`) e portal DOM ao clicar nos botões de download de relatórios e declarações. Agora os botões "Baixar Relatório Global (PDF)" e "Baixar Declaração (PDF)" chamam diretamente as funções `handleDirectDownloadGlobal` e `handleDirectDownloadIndividual`, que constroem a estrutura HTML do documento (com cabeçalho oficial do Decreto nº 11.615/2023, dados cadastrais, autenticidade e quebras de página `.html2pdf__page-break`) e acionam `downloadPdfFromHtml` de `src/utils/pdfDownloader.ts`. O arquivo binário é salvo imediatamente na pasta de Downloads do navegador, idêntico ao padrão adotado nos relatórios de resultados de competições.
+  - *Por que*: O botão anterior apenas abria uma pré-visualização em modal com `documentPagesRef`, que além de ser um passo redundante não solicitado pelo usuário, frequentemente falhava ou travava a geração com centenas de atletas em tela.
+  - *O que NÃO fazer*: Nunca forçar `window.print()` ou modais de pré-visualização para exportações de relatórios em PDF.
 
 - **Padronização Visual Amarela nos Botões de PDF de Resultados (`CompetitionResultsViewer.tsx`)**:
   - *O que foi decidido*: Todos os botões de download e exportação de PDF de resultados que antes utilizavam a cor vermelha (`bg-red-600 hover:bg-red-700`) foram atualizados para amarelo vibrante com tipografia escura de alto contraste (`bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-bold`). A alteração foi aplicada tanto no seletor de modalidades (Etapa 3 - "Baixar PDF (Todas as Modalidades)") quanto na visualização dos resultados individuais e acumulados (Etapa 4 - "Baixar PDF (Esta Modalidade)").
