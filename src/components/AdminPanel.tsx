@@ -2806,6 +2806,7 @@ interface CadastrarResultadosPanelProps {
   championships: Championship[];
   stages: Stage[];
   modalities: Modality[];
+  weapons?: Weapon[];
   currentUser: User | null;
   onRecordScore: (data: {
     championshipId: string;
@@ -2819,15 +2820,17 @@ interface CadastrarResultadosPanelProps {
 }
 
 type EnrichedRegistration = {
-  id: string; userId: string; modalityId: string; stageId: string;
+  id: string; userId: string; modalityId: string; stageId: string; clubId?: string;
   completionStatus: string; disqualified: boolean; penalty?: number;
   athleteName?: string; athleteCr?: string; clubName?: string;
   modalityName?: string; seriesCount?: number; shotsPerSeries?: number;
-  evaluationType?: string; weaponModel?: string; weaponSerial?: string;
+  evaluationType?: string; weaponId?: string; weaponModel?: string; weaponSerial?: string;
   weaponNumber?: string; weaponSigma?: string; weaponCaliber?: string;
+  weaponSource?: 'propria' | 'clube' | string;
   totalPoints?: number; dataExecucao?: string; horaExecucao?: string;
   seriesPontos?: any[]; seriesTempos?: any[];
   ownAmmoShots?: number; clubAmmoShots?: number; clubAmmoType?: 'nova' | 'recarga';
+  registeredByUserId?: string; registrationType?: string;
 };
 
 const ZONES = ['x','p10','p9','p8','p7','p6','p5','p4','p3','p2','p1','p0'] as const;
@@ -2839,7 +2842,7 @@ function calcSeriePts(s: Record<string,number>, xValue: number = 11): number {
   return ZONES.reduce((acc, z) => acc + (Number(s[z])||0) * points[z], 0);
 }
 
-function CadastrarResultadosPanel({ championships, stages, modalities, currentUser, onRecordScore, onRefreshData, isPlataformaScope }: CadastrarResultadosPanelProps) {
+function CadastrarResultadosPanel({ championships, stages, modalities, weapons = [], currentUser, onRecordScore, onRefreshData, isPlataformaScope }: CadastrarResultadosPanelProps) {
   const [champId, setChampId] = React.useState('');
   const [stageId, setStageId] = React.useState('');
   const [modalityId, setModalityId] = React.useState('');
@@ -2852,6 +2855,8 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
   const [ownAmmoShots, setOwnAmmoShots] = React.useState<number | string>('');
   const [clubAmmoShots, setClubAmmoShots] = React.useState<number | string>('');
   const [clubAmmoType, setClubAmmoType] = React.useState<'nova' | 'recarga'>('recarga');
+  const [weaponId, setWeaponId] = React.useState<string>('');
+  const [weaponSource, setWeaponSource] = React.useState<'propria' | 'clube'>('propria');
   const [seriesData, setSeriesData] = React.useState<Array<Record<string,string>>>([]);
   const [saving, setSaving] = React.useState(false);
   const [success, setSuccess] = React.useState('');
@@ -2871,6 +2876,29 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
   }, [registrations, searchAthlete]);
 
   const champStages = stages.filter(s => s.championshipId === champId);
+
+  const athleteWeapons = React.useMemo(() => {
+    if (!selectedReg) return [];
+    const list = (weapons || []).filter(w =>
+      w.ownerId === selectedReg.userId ||
+      w.ownerId === selectedReg.clubId ||
+      (w.ownerId ? w.ownerId.startsWith('club_') : false)
+    );
+    if (selectedReg.weaponId && !list.some(w => w.id === selectedReg.weaponId)) {
+      const current = (weapons || []).find(w => w.id === selectedReg.weaponId);
+      if (current) list.unshift(current);
+    }
+    return list;
+  }, [weapons, selectedReg]);
+
+  const selectedWeapon = React.useMemo(() => {
+    const currentId = weaponId || selectedReg?.weaponId;
+    if (currentId) {
+      const found = (weapons || []).find(w => w.id === currentId);
+      if (found) return found;
+    }
+    return null;
+  }, [weaponId, selectedReg?.weaponId, weapons]);
 
   React.useEffect(() => {
     if (!champId || !stageId) { setRegistrations([]); return; }
@@ -2919,6 +2947,8 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
     setOwnAmmoShots(reg.ownAmmoShots ? String(reg.ownAmmoShots) : '');
     setClubAmmoShots(reg.clubAmmoShots ? String(reg.clubAmmoShots) : '');
     setClubAmmoType(reg.clubAmmoType || 'recarga');
+    setWeaponId(reg.weaponId || '');
+    setWeaponSource((reg.weaponSource as 'propria' | 'clube') || 'propria');
   };
 
   const updateCell = (serieIdx: number, zone: string, val: string) => {
@@ -2978,6 +3008,8 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
           ownAmmoShots: Number(ownAmmoShots)||0,
           clubAmmoShots: Number(clubAmmoShots)||0,
           clubAmmoType,
+          weaponId: weaponId || selectedReg.weaponId || undefined,
+          weaponSource: weaponSource || 'propria',
           stageNum: champStages.find(s => s.id === stageId)?.stageNum || 1
         })
       });
@@ -3175,8 +3207,15 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
                           {r.modalityName}
                         </div>
                         {(r.weaponModel || r.weaponCaliber) && (
-                          <div className={`text-[9.5px] font-mono truncate ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
-                            Arma: {r.weaponModel || 'N/A'} {r.weaponCaliber ? `(${r.weaponCaliber})` : ''}
+                          <div className={`text-[9.5px] font-mono truncate flex items-center gap-1.5 ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                            <span>Arma: {r.weaponModel || 'N/A'} {r.weaponCaliber ? `(${r.weaponCaliber})` : ''}</span>
+                            <span className={`text-[8.5px] px-1.5 py-0.2 rounded font-sans font-bold uppercase ${
+                              r.weaponSource === 'clube'
+                                ? (isSelected ? 'bg-purple-200 text-purple-900' : 'bg-purple-50 text-purple-700 border border-purple-200')
+                                : (isSelected ? 'bg-blue-200 text-blue-900' : 'bg-blue-50 text-blue-700 border border-blue-200')
+                            }`}>
+                              {r.weaponSource === 'clube' ? 'Clube' : 'Própria'}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -3215,8 +3254,21 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
                         {selectedReg.shotsPerSeries ? `${selectedReg.seriesCount || 1} Série(s) de ${selectedReg.shotsPerSeries} tiros` : 'Pontuação Direta'}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-300 font-mono">
-                      Modalidade: <strong className="text-white">{selectedReg.modalityName}</strong> | Arma: <strong className="text-white">{selectedReg.weaponModel || 'N/A'} {selectedReg.weaponCaliber ? `(${selectedReg.weaponCaliber})` : ''}</strong>
+                    <p className="text-xs text-slate-300 font-mono flex items-center gap-2 flex-wrap">
+                      <span>Modalidade: <strong className="text-white">{selectedReg.modalityName}</strong></span>
+                      <span>|</span>
+                      <span>
+                        Arma: <strong className="text-white">
+                          {selectedWeapon?.model || selectedReg.weaponModel || 'N/A'} {selectedWeapon?.caliber || selectedReg.weaponCaliber ? `(${selectedWeapon?.caliber || selectedReg.weaponCaliber})` : ''}
+                        </strong>
+                      </span>
+                      <span className={`text-[9.5px] px-2 py-0.5 rounded-md font-sans font-bold uppercase ${
+                        weaponSource === 'clube'
+                          ? 'bg-purple-500/30 text-purple-200 border border-purple-400/30'
+                          : 'bg-blue-500/30 text-blue-200 border border-blue-400/30'
+                      }`}>
+                        {weaponSource === 'clube' ? '🏛️ Arma do clube' : '👤 Arma própria'}
+                      </span>
                     </p>
                   </div>
                   <button
@@ -3232,6 +3284,93 @@ function CadastrarResultadosPanel({ championships, stages, modalities, currentUs
 
                 {/* Scrollable Modal Body */}
                 <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+                  {/* Seção: Arma Utilizada e Origem da Arma */}
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2 text-slate-700 font-bold text-xs">
+                        <Target className="w-4 h-4 text-blue-600" />
+                        <span>Arma Utilizada e Origem da Arma</span>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                        weaponSource === 'clube'
+                          ? 'bg-purple-100 text-purple-800 border-purple-200'
+                          : 'bg-blue-100 text-blue-800 border-blue-200'
+                      }`}>
+                        {weaponSource === 'clube' ? '🏛️ Arma do Clube' : '👤 Arma Própria'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                      {/* Seleção / Troca de Arma */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">
+                          Arma Utilizada {athleteWeapons.length > 0 && <span className="text-slate-400 font-normal">({athleteWeapons.length} disponível(is))</span>}
+                        </label>
+                        {athleteWeapons.length > 0 ? (
+                          <select
+                            value={weaponId}
+                            onChange={e => {
+                              const newId = e.target.value;
+                              setWeaponId(newId);
+                              const foundW = (weapons || []).find(w => w.id === newId);
+                              if (foundW) {
+                                const isClub = foundW.ownerId === selectedReg.clubId || (foundW.ownerId ? foundW.ownerId.startsWith('club_') : false);
+                                setWeaponSource(isClub ? 'clube' : 'propria');
+                              }
+                            }}
+                            className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-800 font-semibold focus:border-blue-500 font-mono transition"
+                          >
+                            {athleteWeapons.map(w => {
+                              const isClub = w.ownerId === selectedReg.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false);
+                              return (
+                                <option key={w.id} value={w.id}>
+                                  {w.model} {w.caliber ? `(${w.caliber})` : ''} — Nº {w.weaponNumber || w.serialNumber || 'S/N'} {w.sigmaNumber ? `• SIGMA: ${w.sigmaNumber}` : ''} {isClub ? '[CLUBE]' : '[PRÓPRIA]'}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        ) : (
+                          <div className="bg-white border border-slate-200 p-2.5 rounded-xl text-xs text-slate-800 font-semibold font-mono">
+                            {selectedWeapon?.model || selectedReg.weaponModel || 'Arma Cadastrada'} {selectedWeapon?.caliber || selectedReg.weaponCaliber ? `(${selectedWeapon?.caliber || selectedReg.weaponCaliber})` : ''} {selectedWeapon?.weaponNumber || selectedWeapon?.serialNumber || selectedReg.weaponNumber || selectedReg.weaponSerial ? `— Nº ${selectedWeapon?.weaponNumber || selectedWeapon?.serialNumber || selectedReg.weaponNumber || selectedReg.weaponSerial}` : ''}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Seletor Obrigatório: Arma Própria vs Arma do Clube */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">
+                          Origem da Arma (Editar) <span className="text-red-500">*</span>
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setWeaponSource('propria')}
+                            className={`py-2 px-3 text-xs font-bold rounded-xl border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                              weaponSource === 'propria'
+                                ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            <UserIcon className="w-3.5 h-3.5" />
+                            <span>Arma própria</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setWeaponSource('clube')}
+                            className={`py-2 px-3 text-xs font-bold rounded-xl border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                              weaponSource === 'clube'
+                                ? 'bg-purple-700 border-purple-700 text-white shadow-xs'
+                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            <Landmark className="w-3.5 h-3.5" />
+                            <span>Arma do clube</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-500 uppercase block">Data da Prova</label>
@@ -4447,7 +4586,8 @@ function calcIdscTotalTimeClient(rawTimeSeconds: number, targets: IdscTargetResu
 }
 
 type IdscEnrichedRegistration = IdscRegistration & {
-  athleteName?: string; athleteCr?: string; clubName?: string; weaponModel?: string; weaponCaliber?: string;
+  athleteName?: string; athleteCr?: string; clubName?: string;
+  weaponModel?: string; weaponCaliber?: string; weaponNumber?: string; weaponSerial?: string; weaponSigma?: string;
   result: IdscResult | null; posicao: number | null;
 };
 
@@ -4461,9 +4601,10 @@ interface IdscResultadosPanelProps {
   // para que um clube filiado não veja/edite o resultado de outro clube. A
   // posição no ranking continua calculada sobre todos os inscritos da pista.
   scopeClubId?: string;
+  weapons?: Weapon[];
 }
 
-function IdscResultadosPanel({ currentUser, readOnly = false, scopeClubId }: IdscResultadosPanelProps) {
+function IdscResultadosPanel({ currentUser, readOnly = false, scopeClubId, weapons = [] }: IdscResultadosPanelProps) {
   const [championships, setChampionships] = React.useState<IdscChampionship[]>([]);
   const [championshipId, setChampionshipId] = React.useState('');
   const [stages, setStages] = React.useState<IdscStage[]>([]);
@@ -4473,12 +4614,37 @@ function IdscResultadosPanel({ currentUser, readOnly = false, scopeClubId }: Ids
   const [loadingRegs, setLoadingRegs] = React.useState(false);
   const [selectedReg, setSelectedReg] = React.useState<IdscEnrichedRegistration | null>(null);
 
+  const [weaponId, setWeaponId] = React.useState<string>('');
+  const [weaponSource, setWeaponSource] = React.useState<'propria' | 'clube'>('propria');
   const [executionDate, setExecutionDate] = React.useState('');
   const [executionTime, setExecutionTime] = React.useState('');
   const [rawTimeInput, setRawTimeInput] = React.useState('');
   const [targets, setTargets] = React.useState<IdscTargetResult[]>([]);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState('');
+
+  const idscAthleteWeapons = React.useMemo(() => {
+    if (!selectedReg) return [];
+    const list = (weapons || []).filter(w =>
+      w.ownerId === selectedReg.userId ||
+      w.ownerId === selectedReg.clubId ||
+      (w.ownerId ? w.ownerId.startsWith('club_') : false)
+    );
+    if (selectedReg.weaponId && !list.some(w => w.id === selectedReg.weaponId)) {
+      const current = (weapons || []).find(w => w.id === selectedReg.weaponId);
+      if (current) list.unshift(current);
+    }
+    return list;
+  }, [weapons, selectedReg]);
+
+  const selectedIdscWeapon = React.useMemo(() => {
+    const currentId = weaponId || selectedReg?.weaponId;
+    if (currentId) {
+      const found = (weapons || []).find(w => w.id === currentId);
+      if (found) return found;
+    }
+    return null;
+  }, [weaponId, selectedReg?.weaponId, weapons]);
 
   React.useEffect(() => {
     fetch('/api/idsc/championships', { headers: { 'x-user-id': currentUser?.id || '' } })
@@ -4520,6 +4686,8 @@ function IdscResultadosPanel({ currentUser, readOnly = false, scopeClubId }: Ids
     setExecutionDate(reg.result?.executionDate || '');
     setExecutionTime(reg.result?.executionTime || '');
     setRawTimeInput(reg.result?.rawTimeSeconds != null ? formatIdscTime(reg.result.rawTimeSeconds) : '');
+    setWeaponId(reg.weaponId || '');
+    setWeaponSource((reg.weaponSource as 'propria' | 'clube') || 'propria');
   };
 
   const updateTarget = (idx: number, field: keyof IdscTargetResult, value: string) => {
@@ -4552,7 +4720,13 @@ function IdscResultadosPanel({ currentUser, readOnly = false, scopeClubId }: Ids
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
         body: JSON.stringify({
-          acao, targets, rawTimeSeconds: parsedRawTime, executionDate: executionDate || null, executionTime: executionTime || null,
+          acao,
+          targets,
+          rawTimeSeconds: parsedRawTime,
+          executionDate: executionDate || null,
+          executionTime: executionTime || null,
+          weaponId: weaponId || selectedReg.weaponId || undefined,
+          weaponSource: weaponSource || 'propria',
         }),
       });
       const data = await res.json();
@@ -4638,7 +4812,14 @@ function IdscResultadosPanel({ currentUser, readOnly = false, scopeClubId }: Ids
                       <td className="py-2.5 px-3 font-mono font-bold text-slate-500">{r.posicao ? `${r.posicao}º` : '—'}</td>
                       <td className="py-2.5 px-3 font-bold text-slate-800">{r.athleteName || 'Atleta'}</td>
                       <td className="py-2.5 px-3 text-slate-500">{r.clubName || '—'}</td>
-                      <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px]">{r.weaponModel} {r.weaponCaliber}</td>
+                      <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px]">
+                        <div>{r.weaponModel} {r.weaponCaliber}</div>
+                        <span className={`inline-block mt-0.5 text-[8.5px] px-1.5 py-0.2 rounded font-sans font-bold uppercase ${
+                          r.weaponSource === 'clube' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
+                        }`}>
+                          {r.weaponSource === 'clube' ? 'Clube' : 'Própria'}
+                        </span>
+                      </td>
                       <td className="py-2.5 px-3">
                         <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border ${st.cls}`}>{st.text}</span>
                       </td>
@@ -4656,7 +4837,14 @@ function IdscResultadosPanel({ currentUser, readOnly = false, scopeClubId }: Ids
               <button key={r.id} type="button" onClick={() => openModal(r)}
                 className="p-3 rounded-xl text-left border border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50 transition cursor-pointer">
                 <div className="text-xs font-bold text-slate-800 truncate">{r.athleteName || 'Atleta'}</div>
-                <div className="text-[10px] text-slate-400 truncate">{r.weaponModel} {r.weaponCaliber}</div>
+                <div className="text-[10px] text-slate-400 truncate flex items-center gap-1.5 mt-0.5">
+                  <span>{r.weaponModel} {r.weaponCaliber}</span>
+                  <span className={`text-[8.5px] px-1.5 py-0.2 rounded font-sans font-bold uppercase ${
+                    r.weaponSource === 'clube' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
+                  }`}>
+                    {r.weaponSource === 'clube' ? 'Clube' : 'Própria'}
+                  </span>
+                </div>
                 <span className={`inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${st.cls}`}>{st.text}</span>
               </button>
             );
@@ -4671,12 +4859,103 @@ function IdscResultadosPanel({ currentUser, readOnly = false, scopeClubId }: Ids
               <div>
                 <h4 className="font-bold text-slate-900 text-sm">{selectedReg.athleteName}</h4>
                 <p className="text-[11px] text-slate-500">{selectedReg.clubName} · {selectedCourse.name} · {selectedCourse.targetCount} alvos × {selectedCourse.shotsPerTarget} tiros{selectedCourse.timeLimitSeconds ? ` · limite ${selectedCourse.timeLimitSeconds}s` : ''}</p>
+                <p className="text-[11px] text-slate-600 font-mono mt-1 flex items-center gap-1.5 flex-wrap">
+                  <span>Arma: <strong>{selectedIdscWeapon?.model || selectedReg.weaponModel || 'N/A'} {selectedIdscWeapon?.caliber || selectedReg.weaponCaliber ? `(${selectedIdscWeapon?.caliber || selectedReg.weaponCaliber})` : ''}</strong></span>
+                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-sans font-bold uppercase ${
+                    weaponSource === 'clube' ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-blue-100 text-blue-800 border border-blue-200'
+                  }`}>
+                    {weaponSource === 'clube' ? '🏛️ Arma do clube' : '👤 Arma própria'}
+                  </span>
+                </p>
               </div>
               <button onClick={() => setSelectedReg(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="px-5 space-y-4 overflow-y-auto">
               {error && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{error}</div>}
+
+              {/* Seção: Arma Utilizada e Origem da Arma */}
+              <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200 space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-1.5 text-slate-700 font-bold text-xs">
+                    <Target className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Arma Utilizada e Origem da Arma</span>
+                  </div>
+                  <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border ${
+                    weaponSource === 'clube' ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-blue-100 text-blue-800 border border-blue-200'
+                  }`}>
+                    {weaponSource === 'clube' ? '🏛️ Arma do Clube' : '👤 Arma Própria'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 items-end">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">
+                      Arma Utilizada {idscAthleteWeapons.length > 0 && <span className="text-slate-400 font-normal">({idscAthleteWeapons.length} disponível(is))</span>}
+                    </label>
+                    {idscAthleteWeapons.length > 0 ? (
+                      <select
+                        value={weaponId}
+                        onChange={e => {
+                          const newId = e.target.value;
+                          setWeaponId(newId);
+                          const foundW = (weapons || []).find(w => w.id === newId);
+                          if (foundW) {
+                            const isClub = foundW.ownerId === selectedReg.clubId || (foundW.ownerId ? foundW.ownerId.startsWith('club_') : false);
+                            setWeaponSource(isClub ? 'clube' : 'propria');
+                          }
+                        }}
+                        className="w-full bg-white border border-slate-200 outline-none p-2 rounded-xl text-xs text-slate-800 font-semibold focus:border-blue-500 font-mono transition"
+                      >
+                        {idscAthleteWeapons.map(w => {
+                          const isClub = w.ownerId === selectedReg.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false);
+                          return (
+                            <option key={w.id} value={w.id}>
+                              {w.model} {w.caliber ? `(${w.caliber})` : ''} — Nº {w.weaponNumber || w.serialNumber || 'S/N'} {w.sigmaNumber ? `• SIGMA: ${w.sigmaNumber}` : ''} {isClub ? '[CLUBE]' : '[PRÓPRIA]'}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    ) : (
+                      <div className="bg-white border border-slate-200 p-2 rounded-xl text-xs text-slate-800 font-semibold font-mono">
+                        {selectedIdscWeapon?.model || selectedReg.weaponModel || 'Arma Cadastrada'} {selectedIdscWeapon?.caliber || selectedReg.weaponCaliber ? `(${selectedIdscWeapon?.caliber || selectedReg.weaponCaliber})` : ''}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block">
+                      Origem da Arma (Editar) <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setWeaponSource('propria')}
+                        className={`py-1.5 px-2.5 text-xs font-bold rounded-xl border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                          weaponSource === 'propria'
+                            ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        <UserIcon className="w-3.5 h-3.5" />
+                        <span>Arma própria</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWeaponSource('clube')}
+                        className={`py-1.5 px-2.5 text-xs font-bold rounded-xl border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                          weaponSource === 'clube'
+                            ? 'bg-purple-700 border-purple-700 text-white shadow-xs'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        <Landmark className="w-3.5 h-3.5" />
+                        <span>Arma do clube</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <MemberField label="Data de execução" type="date" value={executionDate} onChange={setExecutionDate} />
@@ -9332,12 +9611,13 @@ export default function AdminPanel({
               </button>
             </div>
             {clubeCadastrarResultadosTab === 'idsc' ? (
-              <IdscResultadosPanel currentUser={currentUser} scopeClubId={currentUser?.clubId} />
+              <IdscResultadosPanel currentUser={currentUser} scopeClubId={currentUser?.clubId} weapons={weapons} />
             ) : (
               <CadastrarResultadosPanel
                 championships={championships}
                 stages={stages}
                 modalities={modalities}
+                weapons={weapons}
                 currentUser={currentUser}
                 onRecordScore={onRecordScore}
                 onRefreshData={onRefreshData}
@@ -12817,6 +13097,7 @@ export default function AdminPanel({
           championships={championships}
           stages={stages}
           modalities={modalities}
+          weapons={weapons}
           currentUser={currentUser}
           onRecordScore={onRecordScore}
           onRefreshData={onRefreshData}
@@ -13469,7 +13750,7 @@ export default function AdminPanel({
         />;
 
       case 'idsc_resultados':
-        return <IdscResultadosPanel currentUser={currentUser} />;
+        return <IdscResultadosPanel currentUser={currentUser} weapons={weapons} />;
 
       default:
         return (

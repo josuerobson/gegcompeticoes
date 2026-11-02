@@ -1658,7 +1658,7 @@ app.get('/api/idsc/registrations', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT r.*, u.full_name as athlete_name, u.cr_number as athlete_cr_default, c.name as club_name,
-        w.model as weapon_model, w.caliber as weapon_caliber,
+        w.model as weapon_model, w.caliber as weapon_caliber, w.weapon_number, w.serial_number as weapon_serial, w.sigma_number as weapon_sigma,
         res.id as result_id, res.targets, res.raw_time_seconds, res.total_time_seconds, res.completion_status, res.execution_date, res.execution_time
        FROM idsc_registrations r
        LEFT JOIN users u ON u.id = r.user_id
@@ -1676,6 +1676,9 @@ app.get('/api/idsc/registrations', async (req, res) => {
       clubName: r.club_name,
       weaponModel: r.weapon_model,
       weaponCaliber: r.weapon_caliber,
+      weaponNumber: r.weapon_number,
+      weaponSerial: r.weapon_serial,
+      weaponSigma: r.weapon_sigma,
       result: r.result_id ? mapIdscResult({ id: r.result_id, registration_id: r.id, targets: r.targets, raw_time_seconds: r.raw_time_seconds, total_time_seconds: r.total_time_seconds, completion_status: r.completion_status, execution_date: r.execution_date, execution_time: r.execution_time }) : null,
     }));
 
@@ -1816,12 +1819,22 @@ app.delete('/api/idsc/registrations/:id', requireAdmin, async (req, res) => {
 // POST /api/idsc/registrations/:id/result — lança/atualiza o resultado de uma pista
 app.post('/api/idsc/registrations/:id/result', requireAdmin, async (req, res) => {
   const registrationId = req.params.id;
-  const { acao, targets, rawTimeSeconds, executionDate, executionTime } = req.body as {
+  const {
+    acao,
+    targets,
+    rawTimeSeconds,
+    executionDate,
+    executionTime,
+    weaponId,
+    weaponSource,
+  } = req.body as {
     acao: 'salvar' | 'nao_participou' | 'desclassificar';
     targets?: IdscTargetResult[];
     rawTimeSeconds?: number;
     executionDate?: string;
     executionTime?: string;
+    weaponId?: string;
+    weaponSource?: string;
   };
   const currentUser = (req as any).user as User;
 
@@ -1861,6 +1874,23 @@ app.post('/api/idsc/registrations/:id/result', requireAdmin, async (req, res) =>
        RETURNING *`,
       [id, registrationId, JSON.stringify(targetsJson), rawTime, totalTime, completionStatus, executionDate || null, executionTime || null, currentUser.id]
     );
+
+    if (weaponSource || weaponId) {
+      const updates: string[] = [];
+      const params: any[] = [];
+      let pIdx = 1;
+      if (weaponSource) {
+        updates.push(`weapon_source = $${pIdx++}`);
+        params.push(weaponSource);
+      }
+      if (weaponId) {
+        updates.push(`weapon_id = $${pIdx++}`);
+        params.push(weaponId);
+      }
+      params.push(registrationId);
+      await pool.query(`UPDATE idsc_registrations SET ${updates.join(', ')} WHERE id = $${pIdx}`, params);
+    }
+
     res.status(201).json({ idscResult: mapIdscResult(result.rows[0]) });
   } catch (err) {
     console.error('Save idsc result error:', err);
@@ -5397,6 +5427,7 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
     dataExecucao, horaExecucao,
     series, penalidade,
     ownAmmoShots, clubAmmoShots, clubAmmoType,
+    weaponId, weaponSource,
     // Legacy single-score fallback (stageNum + score + timeSeconds)
     stageNum, score, timeSeconds
   } = req.body;
@@ -5448,8 +5479,13 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
         }
 
         await client.query(
-          `UPDATE registrations SET completion_status='absent', own_ammo_shots=0, club_ammo_shots=0, data_execucao=$1, hora_execucao=$2 WHERE id=$3`,
-          [dataExecucao || null, horaExecucao || null, registrationId]
+          `UPDATE registrations SET
+             completion_status='absent', own_ammo_shots=0, club_ammo_shots=0,
+             data_execucao=$1, hora_execucao=$2,
+             weapon_source = COALESCE($3, weapon_source),
+             weapon_id = COALESCE($4, weapon_id)
+           WHERE id=$5`,
+          [dataExecucao || null, horaExecucao || null, weaponSource || null, weaponId || null, registrationId]
         );
         await client.query('COMMIT');
         return res.json({ success: true, acao: 'nao_participou' });
@@ -5458,8 +5494,13 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
       // ---- Ação: Desclassificar ----
       if (acao === 'desclassificar') {
         await client.query(
-          `UPDATE registrations SET disqualified=true, completion_status='completed', data_execucao=$1, hora_execucao=$2 WHERE id=$3`,
-          [dataExecucao || null, horaExecucao || null, registrationId]
+          `UPDATE registrations SET
+             disqualified=true, completion_status='completed',
+             data_execucao=$1, hora_execucao=$2,
+             weapon_source = COALESCE($3, weapon_source),
+             weapon_id = COALESCE($4, weapon_id)
+           WHERE id=$5`,
+          [dataExecucao || null, horaExecucao || null, weaponSource || null, weaponId || null, registrationId]
         );
         await client.query('COMMIT');
         return res.json({ success: true, acao: 'desclassificar' });
@@ -5547,7 +5588,7 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
         });
       }
 
-      // Update registration with full score breakdown, ammo origin and ammo type (nova vs recarga)
+      // Update registration with full score breakdown, ammo origin, ammo type, weapon source and weapon id
       // total_points is the final score with penalty deducted (e.g. 101 - 2 = 99)
       await client.query(`
         UPDATE registrations SET
@@ -5561,8 +5602,10 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
           data_execucao = $16, hora_execucao = $17,
           series_pontos = $18, series_tempos = $19,
           own_ammo_shots = $20, club_ammo_shots = $21, club_ammo_type = $22,
+          weapon_source = COALESCE($23, weapon_source),
+          weapon_id = COALESCE($24, weapon_id),
           disqualified = false
-        WHERE id = $23`,
+        WHERE id = $25`,
         [
           finalPontos,
           bestSerie.x||0, bestSerie.p10||0, bestSerie.p9||0, bestSerie.p8||0, bestSerie.p7||0,
@@ -5574,14 +5617,17 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
           seriesPontos.length > 0 ? JSON.stringify(seriesPontos) : null,
           seriesTempos.length > 0 ? JSON.stringify(seriesTempos) : null,
           ownAmmo, clubAmmo, clubType,
+          weaponSource || null,
+          weaponId || null,
           registrationId
         ]
       );
 
       // Abate/ajuste automático do saldo de munições do clube alocado para o atleta
+      const effectiveWeaponId = weaponId || reg.weaponId;
       const diffClubShots = clubAmmo - prevClubShots;
-      if (diffClubShots !== 0 && reg.weaponId) {
-        const wRes = await client.query('SELECT caliber FROM weapons WHERE id = $1', [reg.weaponId]);
+      if (diffClubShots !== 0 && effectiveWeaponId) {
+        const wRes = await client.query('SELECT caliber FROM weapons WHERE id = $1', [effectiveWeaponId]);
         const caliber = wRes.rows[0]?.caliber;
         if (caliber) {
           if (diffClubShots > 0) {
