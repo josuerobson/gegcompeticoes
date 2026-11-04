@@ -1920,9 +1920,12 @@ export default function MemberProfile({
       });
     });
 
-    const trainItems = items.filter(it => it.eventType === 'Treinamento').sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime());
-    const compItems = items.filter(it => it.eventType === 'Competição').sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime());
-    return [...trainItems, ...compItems];
+    // Ordenação estritamente cronológica crescente por data e hora de participação
+    return items.sort((a, b) => {
+      const timeA = a.rawDate instanceof Date ? a.rawDate.getTime() : new Date(a.rawDate).getTime();
+      const timeB = b.rawDate instanceof Date ? b.rawDate.getTime() : new Date(b.rawDate).getTime();
+      return timeA - timeB;
+    });
   }, [trainings, userScores, registrations, selectedUser.id, stages, championships, weapons, selectedUser.crNumber, modalities]);
 
   // Lista para a Declaração de Habitualidade (período selecionado nos filtros)

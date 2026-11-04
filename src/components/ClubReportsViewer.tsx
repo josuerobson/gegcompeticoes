@@ -114,7 +114,7 @@ export default function ClubReportsViewer({
         (u.cpf || '').includes(q) ||
         (u.crNumber || '').toLowerCase().includes(q)
       );
-    });
+    }).sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
   }, [users, currentClub?.id, athleteSearchQuery]);
 
   // Helper to compute athlete habitualities (STRICTLY NO LEGACY DATA)
@@ -324,9 +324,12 @@ export default function ClubReportsViewer({
       });
     });
 
-    const trainItems = items.filter(it => it.eventType === 'Treinamento').sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime());
-    const compItems = items.filter(it => it.eventType === 'Competição').sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime());
-    return [...trainItems, ...compItems];
+    // Ordenação estritamente cronológica crescente por data e hora de participação
+    return items.sort((a, b) => {
+      const timeA = a.rawDate instanceof Date ? a.rawDate.getTime() : new Date(a.rawDate).getTime();
+      const timeB = b.rawDate instanceof Date ? b.rawDate.getTime() : new Date(b.rawDate).getTime();
+      return timeA - timeB;
+    });
   };
 
   // Pre-calculate habitualities for all club athletes
@@ -409,8 +412,15 @@ export default function ClubReportsViewer({
     const athleteRegNum = getAthleteRegNum(athlete);
     const affiliationDateExtensive = formatExtensiveDate(athlete.clubAffiliationDate || athlete.memberSince || (athlete as any).createdAt);
 
-    const activitiesHtml = activities.length > 0
-      ? activities.map((item, idx) => `
+    // Garante ordenação cronológica crescente em todas as páginas do PDF
+    const sortedActivities = [...activities].sort((a, b) => {
+      const timeA = a.rawDate instanceof Date ? a.rawDate.getTime() : new Date(a.rawDate).getTime();
+      const timeB = b.rawDate instanceof Date ? b.rawDate.getTime() : new Date(b.rawDate).getTime();
+      return timeA - timeB;
+    });
+
+    const activitiesHtml = sortedActivities.length > 0
+      ? sortedActivities.map((item, idx) => `
         <div style="border: 1px solid #0f172a; margin-bottom: 8px; page-break-inside: avoid; overflow: hidden; background-color: #ffffff;">
           <table style="width: 100%; border-collapse: collapse; font-size: 9.5px; color: #0f172a;">
             <tbody>
@@ -552,8 +562,12 @@ export default function ClubReportsViewer({
     if (globalData.length === 0 || isDownloadingPdf) return;
     setIsDownloadingPdf(true);
     try {
-      const pagesHtml = globalData.map(({ athlete, activities }, idx) => {
-        const isLast = idx === globalData.length - 1;
+      const sortedGlobalData = [...globalData].sort((a, b) =>
+        (a.athlete.fullName || '').localeCompare(b.athlete.fullName || '')
+      );
+
+      const pagesHtml = sortedGlobalData.map(({ athlete, activities }, idx) => {
+        const isLast = idx === sortedGlobalData.length - 1;
         const pageBreak = isLast ? '' : '<div class="html2pdf__page-break" style="page-break-after: always; break-after: page; height: 0; line-height: 0; margin: 0; padding: 0;"></div>';
         return generateAthleteDeclarationHtml(athlete, activities) + pageBreak;
       }).join('');

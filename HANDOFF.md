@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(habitualidades): correcao de extracao de arma propria vs clube a partir da inscricao do atleta` |
-| Data/hora | 2026-11-02T13:20:00-03:00 |
+| Mensagem | `fix(habitualidades): ordenacao cronologica crescente de datas no excel e pdf` |
+| Data/hora | 2026-11-04T09:32:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,15 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Ordenação Cronológica Crescente Rigorosa nos Relatórios e Exportações de Habitualidades (`src/utils/habitualitiesExport.ts`, `src/components/ClubReportsViewer.tsx`, `src/components/MemberProfile.tsx`)**:
+  - *O que foi decidido*:
+    1. **Eliminação da Separação Artificial por Tipo de Evento**: Anteriormente, `ClubReportsViewer.tsx` e `MemberProfile.tsx` separavam os itens em `trainItems` (treinamentos) e `compItems` (competições), retornando `[...trainItems, ...compItems]`. Isso fazia com que todos os treinos de um período (ex: 2025 a 2026) fossem listados primeiro e, logo em seguida, as competições recomeçassem em 2025, quebrando a ordem cronológica e dando a impressão de datas aleatórias/fora de ordem na declaração e no Excel. Agora, todos os eventos (treinos e competições) são unificados e ordenados estritamente pela data e hora de realização em ordem crescente (`items.sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime())`).
+    2. **Ordenação Cronológica no Excel Completo do Clube**: No utilitário `exportClubHabitualitiesCompleteToExcel`, a lista desnormalizada de atividades de todos os atletas (`flatActivities`) agora é ordenada estritamente pela data (`rawDate` crescente). Em caso de empate na mesma data, utiliza a ordenação alfabética pelo nome do atleta.
+    3. **Ordenação Alfabética A-Z de Atletas**: No Excel Resumo (`exportClubHabitualitiesSummaryToExcel`), na listagem do clube (`ClubReportsViewer.tsx`) e na geração do Relatório Global consolidado em PDF (`handleDirectDownloadGlobal`), os atletas são ordenados alfabeticamente pelo nome completo antes de gerar as declarações e quebras de página.
+    4. **Ordenação nos PDFs Individuais e Globais**: Tanto o PDF individual do atleta (`MemberProfile.tsx` e `ClubReportsViewer.tsx`) quanto o PDF consolidado global do clube (`generateAthleteDeclarationHtml`) garantem que a tabela de habitualidades de cada atirador liste seus eventos em ordem cronológica estritamente crescente.
+  - *Por que*: O usuário identificou que no Excel completo e nas declarações as datas estavam aparecendo fora de ordem (ex: uma linha em 2026 seguida por outra em 2025), solicitando que fossem ordenadas de forma estritamente crescente no Excel e no PDF.
+  - *O que NÃO fazer*: Nunca ordenar treinos e competições em blocos separados (`[...trainItems, ...compItems]`); a ordem cronológica do evento real deve ser preservada em todas as visualizações e exportações.
 
 - **Download Direto de PDF em Relatórios e Declarações (`ClubReportsViewer.tsx`)**:
   - *O que foi decidido*: Eliminada a dependência de janela modal de pré-visualização (`isPrintPreviewOpen`) e portal DOM ao clicar nos botões de download de relatórios e declarações. Agora os botões "Baixar Relatório Global (PDF)" e "Baixar Declaração (PDF)" chamam diretamente as funções `handleDirectDownloadGlobal` e `handleDirectDownloadIndividual`, que constroem a estrutura HTML do documento (com cabeçalho oficial do Decreto nº 11.615/2023, dados cadastrais, autenticidade e quebras de página `.html2pdf__page-break`) e acionam `downloadPdfFromHtml` de `src/utils/pdfDownloader.ts`. O arquivo binário é salvo imediatamente na pasta de Downloads do navegador, idêntico ao padrão adotado nos relatórios de resultados de competições.

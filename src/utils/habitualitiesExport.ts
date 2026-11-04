@@ -102,7 +102,11 @@ export function exportClubHabitualitiesSummaryToExcel(params: {
     .map(h => `<th style="background-color:#1e3a8a;color:#ffffff;font-weight:bold;padding:8px 10px;border:1px solid #94a3b8;text-align:center;font-size:11px;">${h}</th>`)
     .join('');
 
-  const rowCells = globalData
+  const sortedGlobalData = [...globalData].sort((a, b) =>
+    (a.athlete.fullName || '').localeCompare(b.athlete.fullName || '')
+  );
+
+  const rowCells = sortedGlobalData
     .map((item, idx) => {
       const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
       const statusText = item.activities.length >= 8
@@ -169,6 +173,14 @@ export function exportClubHabitualitiesCompleteToExcel(params: {
     activities.forEach(activity => {
       flatActivities.push({ athlete, activity });
     });
+  });
+
+  // Ordenação estritamente cronológica crescente por data e hora (desempate por nome do atleta)
+  flatActivities.sort((a, b) => {
+    const timeA = a.activity.rawDate instanceof Date ? a.activity.rawDate.getTime() : new Date(a.activity.rawDate).getTime();
+    const timeB = b.activity.rawDate instanceof Date ? b.activity.rawDate.getTime() : new Date(b.activity.rawDate).getTime();
+    if (timeA !== timeB) return timeA - timeB;
+    return (a.athlete.fullName || '').localeCompare(b.athlete.fullName || '');
   });
 
   const headers = [
@@ -284,7 +296,14 @@ export function exportIndividualHabitualityToExcel(params: {
     .map(h => `<th style="background-color:#1e3a8a;color:#ffffff;font-weight:bold;padding:8px 8px;border:1px solid #94a3b8;text-align:center;font-size:10.5px;white-space:nowrap;">${h}</th>`)
     .join('');
 
-  const rowCells = activities
+  // Ordenação estritamente cronológica crescente por data e hora
+  const sortedActivities = [...activities].sort((a, b) => {
+    const timeA = a.rawDate instanceof Date ? a.rawDate.getTime() : new Date(a.rawDate).getTime();
+    const timeB = b.rawDate instanceof Date ? b.rawDate.getTime() : new Date(b.rawDate).getTime();
+    return timeA - timeB;
+  });
+
+  const rowCells = sortedActivities
     .map((act, idx) => {
       const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
 
