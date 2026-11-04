@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Calendar, Users, Filter, Download, Loader2, CheckCircle, ShieldAlert, FileSpreadsheet } from 'lucide-react';
-import { downloadPdfFromHtml, sanitizePdfFilename } from '../utils/pdfDownloader';
+import { downloadPdfFromHtml, downloadMultiSectionPdfFromHtml, sanitizePdfFilename } from '../utils/pdfDownloader';
 import { exportClubHabitualitiesSummaryToExcel, exportClubHabitualitiesCompleteToExcel, exportIndividualHabitualityToExcel } from '../utils/habitualitiesExport';
 import { User, Club, TrainingSession, Registration, StageScore, Stage, Championship, Weapon, Modality } from '../types';
 
@@ -75,6 +75,7 @@ export default function ClubReportsViewer({
   const [onlyWithoutActivities, setOnlyWithoutActivities] = useState(false);
   const [athleteSearchQuery, setAthleteSearchQuery] = useState('');
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState('');
 
   // Individual declaration state
   const [selectedAthleteId, setSelectedAthleteId] = useState('');
@@ -563,29 +564,32 @@ export default function ClubReportsViewer({
   const handleDirectDownloadGlobal = async () => {
     if (globalData.length === 0 || isDownloadingPdf) return;
     setIsDownloadingPdf(true);
+    setPdfProgress('');
     try {
       const sortedGlobalData = [...globalData].sort((a, b) =>
         (a.athlete.fullName || '').localeCompare(b.athlete.fullName || '')
       );
 
-      const pagesHtml = sortedGlobalData.map(({ athlete, activities }, idx) => {
-        const isLast = idx === sortedGlobalData.length - 1;
-        const pageBreak = isLast ? '' : '<div class="html2pdf__page-break" style="page-break-after: always; break-after: page; height: 0; line-height: 0; margin: 0; padding: 0;"></div>';
-        return generateAthleteDeclarationHtml(athlete, activities) + pageBreak;
-      }).join('');
+      const sections = sortedGlobalData.map(({ athlete, activities }) =>
+        generateAthleteDeclarationHtml(athlete, activities)
+      );
 
       const filename = sanitizePdfFilename(`relatorio_global_habitualidades_${slug(clubFantasy)}_${startDate}_a_${endDate}`);
 
-      await downloadPdfFromHtml(pagesHtml, {
+      await downloadMultiSectionPdfFromHtml(sections, {
         filename,
         orientation: 'portrait',
-        margin: [6, 6, 6, 6]
+        margin: [6, 6, 6, 6],
+        onProgress: (current, total) => {
+          setPdfProgress(`Gerando PDF (${current}/${total} atletas)...`);
+        }
       });
     } catch (err) {
       console.error('Erro ao gerar relatório global em PDF:', err);
       alert('Erro ao gerar o arquivo PDF. Por favor tente novamente.');
     } finally {
       setIsDownloadingPdf(false);
+      setPdfProgress('');
     }
   };
 
@@ -823,7 +827,7 @@ export default function ClubReportsViewer({
                 {isDownloadingPdf ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Gerando PDF ({globalData.length} atletas)...
+                    {pdfProgress || `Gerando PDF (${globalData.length} atletas)...`}
                   </>
                 ) : (
                   <>

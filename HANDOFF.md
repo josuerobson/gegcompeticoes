@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(relatorios): filtro apenas sem habitualidade nos relatorios de habitualidades do clube` |
-| Data/hora | 2026-11-04T17:05:00-03:00 |
+| Mensagem | `fix(pdf): motor multi-secao para relatorio global prevenindo pdf em branco em periodos anuais` |
+| Data/hora | 2026-11-04T18:16:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,18 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Motor Multi-Seção de Geração de PDF (`pdfDownloader.ts`, `ClubReportsViewer.tsx`, `public/sw.js`)**:
+  - *Causa Raiz Identificada*: No Relatório Consolidado de Habitualidades em períodos anuais longos com centenas de atletas (ex: 320 atletas / 1803 registros), a concatenação de todas as declarações em um único elemento DOM gerava uma altura de página que ultrapassava de longe o limite rígido de canvas do Chrome/Chromium (máximo de 32.767 pixels). Ao exceder esse limite, o motor `html2canvas` falhava silenciosamente e gerava um canvas com dimensões zeradas ou conteúdo limpo, resultando em um arquivo PDF com centenas de páginas completamente em branco.
+  - *O que foi decidido*:
+    1. Criada a função modular `downloadMultiSectionPdfFromHtml(sections, options)` em `src/utils/pdfDownloader.ts`.
+    2. Cada declaração de atleta é processada e rasterizada em seu próprio canvas isolado (altura máxima de apenas ~1.500px, infinitamente abaixo do limite de 32.767px).
+    3. As páginas são adicionadas sequencialmente em uma única instância do `jsPDF` com compressão ativa (`compress: true`).
+    4. Se a declaração de um atleta exceder 1 página de altura (histórico longo com dezenas de tiros), o fatiamento vertical inteligente cria páginas adicionais sem cortes bruscos.
+    5. O botão "Baixar Relatório Global (PDF)" em `ClubReportsViewer.tsx` exibe feedback visual em tempo real do processamento: `"Gerando PDF (X/Y atletas)..."`.
+    6. Atualizado o cache do Service Worker (`public/sw.js`) para `gg-competicoes-v5`.
+  - *Por que*: O usuário relatou que ao carregar o período anual das habitualidades global, o PDF baixado saía completamente em branco.
+  - *O que NÃO fazer*: Nunca passar documentos HTML com centenas de páginas em um único bloco monolithic para `html2pdf.js`/`html2canvas`; sempre dividir em seções isoladas por página/atleta.
 
 - **Opção de Filtro "Apenas sem habitualidade" no Relatório do Clube (`ClubReportsViewer.tsx`, `public/sw.js`)**:
   - *O que foi decidido*:
