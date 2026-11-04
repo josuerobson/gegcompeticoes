@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(habitualidades): ordenacao cronologica crescente de datas no excel e pdf` |
-| Data/hora | 2026-11-04T09:32:00-03:00 |
+| Mensagem | `feat(relatorios): filtro apenas sem habitualidade nos relatorios de habitualidades do clube` |
+| Data/hora | 2026-11-04T17:05:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -59,6 +59,16 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 ## Decisions made this session, and why (don't re-litigate without new info)
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
+
+- **Opção de Filtro "Apenas sem habitualidade" no Relatório do Clube (`ClubReportsViewer.tsx`, `public/sw.js`)**:
+  - *O que foi decidido*:
+    1. Adicionado o seletor `onlyWithoutActivities` com o checkbox *"Apenas sem habitualidade"* na seção de filtros do Relatório Consolidado do Clube.
+    2. Quando marcado, filtra a lista de atletas (`globalData`) exibindo exclusivamente os atletas que possuem zero registros de habitualidade no período selecionado (`entry.activities.length === 0`).
+    3. As opções *"Apenas com habitualidades"* e *"Apenas sem habitualidade"* funcionam de forma mutuamente exclusiva (marcar uma desmarca a outra automaticamente; com ambas desmarcadas, exibe todos os atletas).
+    4. Tanto a visualização em tela quanto as exportações (Excel Resumo, Excel Completo e PDF Global) passam a respeitar rigorosamente o filtro selecionado.
+    5. A versão de cache do Service Worker (`public/sw.js`) foi atualizada para `gg-competicoes-v4` garantindo que clientes conectados carreguem o bundle mais recente sem bloqueios por cache local.
+  - *Por que*: Solicitação direta do usuário para facilitar a identificação e cobrança de atletas filiados que não possuem nenhuma participação/habitualidade registrada no período.
+  - *O que NÃO fazer*: Não permitir que ambas as opções ("com habitualidades" e "sem habitualidade") permaneçam marcadas simultaneamente, pois o resultado seria sempre vazio.
 
 - **Ordenação Cronológica Crescente Rigorosa nos Relatórios e Exportações de Habitualidades (`src/utils/habitualitiesExport.ts`, `src/components/ClubReportsViewer.tsx`, `src/components/MemberProfile.tsx`)**:
   - *O que foi decidido*:

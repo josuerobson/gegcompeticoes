@@ -72,6 +72,7 @@ export default function ClubReportsViewer({
 
   // Global filters
   const [onlyWithActivities, setOnlyWithActivities] = useState(false);
+  const [onlyWithoutActivities, setOnlyWithoutActivities] = useState(false);
   const [athleteSearchQuery, setAthleteSearchQuery] = useState('');
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
@@ -341,10 +342,11 @@ export default function ClubReportsViewer({
       const activities = computeAthleteHabitualities(athlete, startD, endD);
       return { athlete, activities };
     }).filter(entry => {
-      if (!onlyWithActivities) return true;
-      return entry.activities.length > 0;
+      if (onlyWithActivities) return entry.activities.length > 0;
+      if (onlyWithoutActivities) return entry.activities.length === 0;
+      return true;
     });
-  }, [clubAthletes, startD, endD, onlyWithActivities, loadedTrainings, registrations, stageScores, stages, championships, weapons, modalities]);
+  }, [clubAthletes, startD, endD, onlyWithActivities, onlyWithoutActivities, loadedTrainings, registrations, stageScores, stages, championships, weapons, modalities]);
 
   // Format extensive date
   const formatExtensiveDate = (dStr?: string) => {
@@ -746,15 +748,32 @@ export default function ClubReportsViewer({
             />
           </div>
           {activeTab === 'global_habitualidade' && (
-            <div className="flex items-center gap-2 pb-2">
-              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer font-medium">
+            <div className="flex flex-col gap-1.5 pb-1">
+              <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer font-medium select-none">
                 <input
                   type="checkbox"
                   checked={onlyWithActivities}
-                  onChange={e => setOnlyWithActivities(e.target.checked)}
+                  onChange={e => {
+                    const checked = e.target.checked;
+                    setOnlyWithActivities(checked);
+                    if (checked) setOnlyWithoutActivities(false);
+                  }}
                   className="rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
                 />
                 Apenas com habitualidades
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer font-medium select-none">
+                <input
+                  type="checkbox"
+                  checked={onlyWithoutActivities}
+                  onChange={e => {
+                    const checked = e.target.checked;
+                    setOnlyWithoutActivities(checked);
+                    if (checked) setOnlyWithActivities(false);
+                  }}
+                  className="rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                Apenas sem habitualidade
               </label>
             </div>
           )}
