@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(checkin): check-in no clube com biometria facial e geolocalizacao no perfil do atleta` |
-| Data/hora | 2026-11-05T14:30:00-03:00 |
+| Mensagem | `feat(checkin): ciclo de checkout com cronometro de permanencia e painel de gerenciamento de check-ins` |
+| Data/hora | 2026-11-05T14:58:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,27 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why (don't re-litigate without new info)
+
+- **Ciclo de Check-out com Tempo de Permanência e Módulo de Gerenciamento de Check-ins (`MemberProfile.tsx`, `CheckinsManager.tsx`, `AdminPanel.tsx`, `server.ts`, `src/db.ts`)**:
+  - **Exigência**:
+    1. Quando o Check-in for registrado, o botão do atleta muda para "Check-out Clube" e contabiliza em tempo real o tempo de permanência no clube; ao clicar em check-out, registra a data e hora de saída no mesmo registro do check-in.
+    2. Em Gerenciamento Plataforma, abaixo de Anuidades, adicionar o módulo "Gerenciamento de Check-ins" com filtros completos (por atleta, datas de entrada/saída, em aberto sem checkout) e opção de baixa manual escolhendo data e hora da saída.
+  - **Implementação**:
+    1. **Ciclo de Check-in/Check-out do Atleta (`MemberProfile.tsx`)**:
+       - Hook com consulta ao endpoint `GET /api/checkins/active` para restaurar automaticamente o estado de permanência do atleta ao carregar a tela.
+       - Botão com visual em degradê âmbar/laranja e indicador pulsante exibindo o cronômetro (`⏱️ 01h 24m 12s`).
+       - Modal de confirmação de saída do estande com resumo do tempo total de permanência.
+       - Disparo para `POST /api/checkins/:id/checkout`, persistindo `checkout_at`, `duration_minutes` e recalculando o estado para liberar um novo check-in.
+    2. **Módulo Administrativo de Gerenciamento de Check-ins (`CheckinsManager.tsx`, `AdminPanel.tsx`)**:
+       - Item de menu "Gerenciamento de Check-ins" adicionado em Gerenciamento Plataforma > Clubes, logo abaixo de "Anuidades".
+       - Painel com KPIs no topo (No Estande Agora com badge animado, Total de Registros e Média de Permanência).
+       - Filtros por Atleta (busca em tempo real por nome/CPF/CR), Data Inicial, Data Final, filtro "Apenas em aberto" e seletor de clube parceiro.
+       - Modal de **Check-out Manual**: permite ao administrador encerrar a presença selecionando data e hora de saída e preenchendo observação.
+       - Modal de zoom de foto e ação de exclusão de check-in.
+    3. **Backend e Banco de Dados (`server.ts`, `src/db.ts`)**:
+       - Adicionadas colunas `checkout_at`, `checkout_by_user_id`, `checkout_notes` e `duration_minutes` na tabela `club_checkins`.
+       - Criados endpoints `GET /api/checkins/active`, `POST /api/checkins/:id/checkout` e `DELETE /api/checkins/:id`, além de suporte a filtros combinados em `GET /api/checkins`.
+
 
 - **Sistema de Check-in no Clube com Biometria Facial e Geolocalização (`ClubCheckinModal.tsx`, `MemberProfile.tsx`, `server.ts`, `src/db.ts`)**:
   - **Exigência**: No menu do atleta (perfil), adicionar um botão "Check-in Clube" abaixo do botão de "Anuidade" que inicia a autenticação facial pela câmera do celular e registra data, hora e geolocalização exata no estande.

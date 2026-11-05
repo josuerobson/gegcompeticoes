@@ -7876,6 +7876,10 @@ function mapCheckin(r: any): ClubCheckin {
     facialNotes: r.facial_notes || undefined,
     photoData: r.photo_data || undefined,
     status: r.status || 'confirmed',
+    checkoutAt: r.checkout_at ? new Date(r.checkout_at).toISOString() : undefined,
+    checkoutByUserId: r.checkout_by_user_id || undefined,
+    checkoutNotes: r.checkout_notes || undefined,
+    durationMinutes: r.duration_minutes != null ? Number(r.duration_minutes) : undefined,
     createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
   };
 }
@@ -8090,7 +8094,89 @@ app.post('/api/checkins', requireAuth, async (req, res) => {
   }
 });
 
-// 2. Athlete check-in history
+// 2. Active open check-in for the athlete (without checkout)
+app.get('/api/checkins/active', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  try {
+    const r = await pool.query(
+      `SELECT c.*, cl.name as club_name, cl.fantasy_name as club_fantasy
+       FROM club_checkins c
+       LEFT JOIN clubs cl ON cl.id = c.club_id
+       WHERE c.user_id = $1 AND c.checkout_at IS NULL
+       ORDER BY c.checkin_at DESC
+       LIMIT 1`,
+      [currentUser.id]
+    );
+    if (r.rows.length === 0) {
+      return res.json({ activeCheckin: null });
+    }
+    const row = r.rows[0];
+    row.club_name = row.club_fantasy || row.club_name;
+    res.json({ activeCheckin: mapCheckin(row) });
+  } catch (err) {
+    console.error('Fetch active checkin error:', err);
+    res.status(500).json({ error: 'Erro ao verificar check-in ativo.' });
+  }
+});
+
+// 3. Register Check-out (athlete or manager manual checkout)
+app.post('/api/checkins/:id/checkout', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { id } = req.params;
+  const { checkoutAt, notes } = req.body;
+
+  try {
+    const chkRes = await pool.query(`SELECT * FROM club_checkins WHERE id = $1`, [id]);
+    if (chkRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Check-in não encontrado.' });
+    }
+
+    const checkin = chkRes.rows[0];
+    const isOwner = checkin.user_id === currentUser.id;
+    const isAdmin = ['admin', 'master_admin', 'club_admin'].includes(currentUser.role);
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: 'Você não tem permissão para dar check-out neste registro.' });
+    }
+
+    const effectiveCheckout = (isAdmin && checkoutAt) ? new Date(checkoutAt) : new Date();
+    const checkinTime = new Date(checkin.checkin_at);
+    const durationMinutes = Math.max(0, Math.round((effectiveCheckout.getTime() - checkinTime.getTime()) / 60000));
+    const finalNotes = notes || (isAdmin && !isOwner ? 'Baixa de check-out manual realizada pela administração.' : checkin.checkout_notes);
+
+    const updateRes = await pool.query(
+      `UPDATE club_checkins
+       SET checkout_at = $1,
+           checkout_by_user_id = $2,
+           checkout_notes = $3,
+           duration_minutes = $4
+       WHERE id = $5
+       RETURNING *`,
+      [effectiveCheckout.toISOString(), currentUser.id, finalNotes, durationMinutes, id]
+    );
+
+    const updated = updateRes.rows[0];
+
+    // Get club name & athlete name for returned payload
+    const extraRes = await pool.query(
+      `SELECT u.full_name as athlete_name, u.cpf as athlete_cpf, cl.name as club_name, cl.fantasy_name as club_fantasy
+       FROM users u, clubs cl WHERE u.id = $1 AND cl.id = $2`,
+      [updated.user_id, updated.club_id]
+    );
+    if (extraRes.rows.length > 0) {
+      updated.athlete_name = extraRes.rows[0].athlete_name;
+      updated.athlete_cpf = extraRes.rows[0].athlete_cpf;
+      updated.club_name = extraRes.rows[0].club_fantasy || extraRes.rows[0].club_name;
+    }
+
+    res.json({ success: true, checkin: mapCheckin(updated) });
+  } catch (err: any) {
+    console.error('Checkout error:', err);
+    res.status(500).json({ error: 'Erro ao registrar check-out: ' + (err.message || 'Falha interna.') });
+  }
+});
+
+// 4. Athlete check-in history
 app.get('/api/checkins/me', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
   try {
@@ -8114,7 +8200,7 @@ app.get('/api/checkins/me', requireAuth, async (req, res) => {
   }
 });
 
-// 3. Admin list check-ins for the club
+// 5. Admin / Manager list check-ins with rich filters (Athlete, Date range, Open/Active, Club)
 app.get('/api/checkins', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
   const isMaster = currentUser.role === 'admin' || currentUser.role === 'master_admin';
@@ -8124,8 +8210,8 @@ app.get('/api/checkins', requireAuth, async (req, res) => {
     return res.status(403).json({ error: 'Acesso restrito à diretoria do clube.' });
   }
 
-  const targetClubId = (isMaster && req.query.clubId) ? String(req.query.clubId) : currentUser.clubId;
-  const targetDate = req.query.date ? String(req.query.date) : null;
+  const { clubId, athleteQuery, startDate, endDate, isOpen } = req.query;
+  const targetClubId = (isMaster && clubId) ? String(clubId) : (isMaster ? null : currentUser.clubId);
 
   try {
     let query = `
@@ -8135,33 +8221,63 @@ app.get('/api/checkins', requireAuth, async (req, res) => {
       LEFT JOIN users u ON u.id = c.user_id
       LEFT JOIN clubs cl ON cl.id = c.club_id
     `;
-    const params = [];
+    const params: any[] = [];
+    const conditions: string[] = [];
 
-    const conditions = [];
     if (targetClubId) {
       params.push(targetClubId);
-      conditions.push(`c.club_id = ${params.length}`);
+      conditions.push(`c.club_id = $${params.length}`);
     }
-    if (targetDate) {
-      params.push(`${targetDate}%`);
-      conditions.push(`c.checkin_at::text LIKE ${params.length}`);
+
+    if (athleteQuery && String(athleteQuery).trim()) {
+      params.push(`%${String(athleteQuery).trim()}%`);
+      conditions.push(`(u.full_name ILIKE $${params.length} OR u.cpf ILIKE $${params.length} OR u.cr_number ILIKE $${params.length})`);
+    }
+
+    if (startDate) {
+      params.push(`${startDate}T00:00:00Z`);
+      conditions.push(`c.checkin_at >= $${params.length}`);
+    }
+
+    if (endDate) {
+      params.push(`${endDate}T23:59:59Z`);
+      conditions.push(`c.checkin_at <= $${params.length}`);
+    }
+
+    if (isOpen === 'true') {
+      conditions.push(`c.checkout_at IS NULL`);
+    } else if (isOpen === 'false') {
+      conditions.push(`c.checkout_at IS NOT NULL`);
     }
 
     if (conditions.length > 0) {
       query += ` WHERE ` + conditions.join(' AND ');
     }
 
-    query += ` ORDER BY c.checkin_at DESC LIMIT 100`;
+    query += ` ORDER BY c.checkin_at DESC LIMIT 300`;
 
     const r = await pool.query(query, params);
     const checkins = r.rows.map(row => {
       row.club_name = row.club_fantasy || row.club_name;
       return mapCheckin(row);
     });
-    res.json({ checkins });
+
+    res.json({ checkins, total: checkins.length });
   } catch (err) {
     console.error('Fetch club checkins error:', err);
     res.status(500).json({ error: 'Erro ao buscar check-ins do clube.' });
+  }
+});
+
+// 6. Delete a check-in (admin only)
+app.delete('/api/checkins/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query(`DELETE FROM club_checkins WHERE id = $1`, [id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete checkin error:', err);
+    res.status(500).json({ error: 'Erro ao excluir check-in.' });
   }
 });
 

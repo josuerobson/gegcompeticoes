@@ -1717,6 +1717,16 @@ export async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_club_checkins_checkin_at ON club_checkins(checkin_at DESC);
     `);
 
+    // Defensive backfill: suporte a checkout (registro de saida e tempo de permanencia)
+    await client.query(`
+      ALTER TABLE club_checkins
+        ADD COLUMN IF NOT EXISTS checkout_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS checkout_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS checkout_notes TEXT,
+        ADD COLUMN IF NOT EXISTS duration_minutes INT;
+      CREATE INDEX IF NOT EXISTS idx_club_checkins_checkout_at ON club_checkins(checkout_at);
+    `);
+
     console.log('Database seed check complete.');
 
     try {

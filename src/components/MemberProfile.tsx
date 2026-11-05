@@ -432,6 +432,55 @@ export default function MemberProfile({
   const isRegistrationComplete = isClubAdmin ? isClubDataComplete : Boolean(selectedUser.isProfileComplete);
 
   const [isCheckinModalOpen, setIsCheckinModalOpen] = useState(false);
+  const [activeCheckin, setActiveCheckin] = useState<ClubCheckin | null>(null);
+  const [staySeconds, setStaySeconds] = useState<number>(0);
+  const [isCheckoutConfirmOpen, setIsCheckoutConfirmOpen] = useState(false);
+  const [submittingCheckout, setSubmittingCheckout] = useState(false);
+
+  const fetchActiveCheckin = useCallback(async () => {
+    if (!isMe || !currentUser) return;
+    try {
+      const res = await fetch('/api/checkins/active', {
+        headers: { 'x-user-id': currentUser.id },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActiveCheckin(data.activeCheckin || null);
+      }
+    } catch (err) {
+      console.error('Error fetching active checkin:', err);
+    }
+  }, [isMe, currentUser]);
+
+  useEffect(() => {
+    fetchActiveCheckin();
+  }, [fetchActiveCheckin]);
+
+  useEffect(() => {
+    if (!activeCheckin) {
+      setStaySeconds(0);
+      return;
+    }
+    const calc = () => {
+      const start = new Date(activeCheckin.checkinAt).getTime();
+      const diff = Math.max(0, Math.floor((Date.now() - start) / 1000));
+      setStaySeconds(diff);
+    };
+    calc();
+    const interval = setInterval(calc, 1000);
+    return () => clearInterval(interval);
+  }, [activeCheckin]);
+
+  const formatStayTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    if (h > 0) {
+      return `${pad(h)}h ${pad(m)}m ${pad(s)}s`;
+    }
+    return `${pad(m)}m ${pad(s)}s`;
+  };
   const [profileForm, setProfileForm] = useState({
     fullName: '', isCac: false, birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
     fatherName: '', motherName: '', crNumber: '', crValidity: '', guiaTransitoExpiry: '', militaryRegion: '', clubAffiliationDate: '', nationality: '',
@@ -2354,13 +2403,28 @@ export default function MemberProfile({
                       <LogOut className="w-4 h-4" />
                     </button>
                   </div>
-                  <button
-                    onClick={() => setIsCheckinModalOpen(true)}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer"
-                  >
-                    <MapPin className="w-3.5 h-3.5" />
-                    Check-in Clube
-                  </button>
+                  {activeCheckin ? (
+                    <button
+                      onClick={() => setIsCheckoutConfirmOpen(true)}
+                      className="w-full bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-700 hover:to-orange-700 text-white text-xs py-2.5 px-3 rounded-xl font-bold transition flex items-center justify-between shadow-md shadow-amber-600/20 cursor-pointer"
+                    >
+                      <span className="flex items-center gap-1.5 truncate">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block shrink-0" />
+                        <span>Check-out Clube</span>
+                      </span>
+                      <span className="font-mono text-[11px] bg-black/25 px-2 py-0.5 rounded-lg shrink-0">
+                        ⏱️ {formatStayTime(staySeconds)}
+                      </span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setIsCheckinModalOpen(true)}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer"
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      Check-in Clube
+                    </button>
+                  )}
                 </div>
               ) : (
                 <button
@@ -5093,7 +5157,107 @@ export default function MemberProfile({
           currentUser={currentUser}
           club={myClub}
           onClose={() => setIsCheckinModalOpen(false)}
+          onCheckinSuccess={(newChk) => {
+            setActiveCheckin(newChk);
+          }}
         />
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE CHECK-OUT DO ATLETA */}
+      {isCheckoutConfirmOpen && activeCheckin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden text-slate-800 text-xs">
+            <div className="bg-gradient-to-r from-amber-600 to-orange-700 text-white px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <LogOut className="w-5 h-5 text-amber-200" />
+                <h3 className="font-bold text-sm">Registrar Check-out</h3>
+              </div>
+              <button
+                onClick={() => setIsCheckoutConfirmOpen(false)}
+                className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 transition flex items-center justify-center cursor-pointer text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-center">
+              <div className="w-14 h-14 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto shadow-inner">
+                <Clock className="w-8 h-8" />
+              </div>
+
+              <div>
+                <h4 className="font-bold text-base text-slate-900">Encerrar permanência no clube?</h4>
+                <p className="text-slate-500 text-xs mt-1">
+                  Seu tempo total de treino e permanência será registrado na sua ficha.
+                </p>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-left space-y-2 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Clube:</span>
+                  <span className="font-bold text-slate-800">{activeCheckin.clubName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Horário de Entrada:</span>
+                  <span className="font-mono text-slate-700">
+                    {new Date(activeCheckin.checkinAt).toLocaleTimeString('pt-BR')}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Tempo de Permanência:</span>
+                  <span className="font-mono font-bold text-amber-700">
+                    {formatStayTime(staySeconds)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCheckoutConfirmOpen(false)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold transition cursor-pointer"
+                >
+                  Continuar no Clube
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setSubmittingCheckout(true);
+                    try {
+                      const res = await fetch(`/api/checkins/${activeCheckin.id}/checkout`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'x-user-id': currentUser?.id || '',
+                        },
+                      });
+                      if (res.ok) {
+                        setActiveCheckin(null);
+                        setIsCheckoutConfirmOpen(false);
+                      }
+                    } catch (err) {
+                      console.error('Error during checkout:', err);
+                    } finally {
+                      setSubmittingCheckout(false);
+                    }
+                  }}
+                  disabled={submittingCheckout}
+                  className="flex-1 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold transition shadow-md shadow-amber-600/20 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  {submittingCheckout ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Registrando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Confirmar Saída
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* FULL SCREEN WEB PRINT VIEW OVERLAY */}

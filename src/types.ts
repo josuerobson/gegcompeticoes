@@ -670,6 +670,10 @@ export interface ClubCheckin {
   clubId: string;
   clubName?: string;
   checkinAt: string;
+  checkoutAt?: string;
+  checkoutByUserId?: string;
+  checkoutNotes?: string;
+  durationMinutes?: number;
   latitude?: number;
   longitude?: number;
   accuracyMeters?: number;
