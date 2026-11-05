@@ -7,7 +7,7 @@ import { QRCodeView } from './QRCodeView';
 import { PixPaymentModal } from './PixPaymentModal';
 import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel } from '../utils/textSearch';
 import { annuityStatus, ANNUITY_STATUS_LABELS } from '../utils/financeReports';
-import { downloadPdfFromElement } from '../utils/pdfDownloader';
+import { downloadPdfFromElement, downloadPdfFromHtml, sanitizePdfFilename } from '../utils/pdfDownloader';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
@@ -647,6 +647,8 @@ export default function MemberProfile({
   const [printData, setPrintData] = useState<any>(null);
   const printSheetRef = useRef<HTMLDivElement>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [isGeneratingHabPdf, setIsGeneratingHabPdf] = useState(false);
+  const [isGeneratingFilPdf, setIsGeneratingFilPdf] = useState(false);
 
   const handleDownloadDocumentPdf = async () => {
     if (!printSheetRef.current) return;
@@ -1990,6 +1992,234 @@ export default function MemberProfile({
       return fields.includes(q);
     });
   }, [twelveMonthsHabitualities, habModalTypeFilter, habModalSearch]);
+
+  // Download direto da Declaração de Habitualidade em PDF (sem pré-visualização, sem window.print)
+  const handleDirectDownloadHabitualidade = async () => {
+    if (combinedHabitualities.length === 0 || isGeneratingHabPdf) return;
+    setIsGeneratingHabPdf(true);
+    try {
+      const athleteClub = clubs.find(c => c.id === selectedUser.clubId) || clubs.find(c => c.id === 'club_aranas') || clubs[0];
+      const clubName = athleteClub?.name || 'Clube de Tiro & Caça Aranãs Ltda';
+      const clubFantasy = athleteClub?.fantasyName || athleteClub?.name || 'G&G Competições';
+      const clubCr = athleteClub?.crNumber || '572103';
+      const clubCnpj = athleteClub?.cnpj || '37138741000143';
+      const clubAddress = [
+        athleteClub?.address,
+        athleteClub?.addressNumber,
+        athleteClub?.neighborhood,
+        athleteClub?.city && athleteClub?.state ? `${athleteClub.city}, ${athleteClub.state}` : (athleteClub?.city || athleteClub?.state || ''),
+        athleteClub?.cep ? `CEP: ${athleteClub.cep}` : ''
+      ].filter(Boolean).join(', ') || 'Estrada que liga Capelinha Novo Cruzeiro, 9999999999, Curral Velho, Capelinha, MG, CEP: 39680000';
+      const clubCityState = athleteClub?.city && athleteClub?.state ? `${athleteClub.city} - ${athleteClub.state}` : (athleteClub?.city || 'Capelinha - MG');
+
+      const athleteAddr = [
+        selectedUser.address,
+        selectedUser.addressNumber,
+        selectedUser.neighborhood,
+        selectedUser.city && selectedUser.state ? `${selectedUser.city}, ${selectedUser.state}` : (selectedUser.city || selectedUser.state || ''),
+        selectedUser.cep ? `CEP: ${selectedUser.cep}` : ''
+      ].filter(Boolean).join(', ') || 'Não informado';
+
+      const athleteRegNum = selectedUser.bookNumber || (selectedUser.legacyId ? String(selectedUser.legacyId).padStart(4, '0') : (selectedUser.id ? selectedUser.id.replace(/\D/g, '').slice(-4).padStart(4, '0') : '0002'));
+
+      const formatExtensiveDate = (dStr?: string) => {
+        if (!dStr) return '01 de Setembro de 2021';
+        const clean = dStr.includes('T') ? dStr.split('T')[0] : dStr;
+        const parts = clean.split('-');
+        if (parts.length === 3) {
+          const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+          if (!isNaN(d.getTime())) {
+            const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+            return `${String(d.getDate()).padStart(2, '0')} de ${months[d.getMonth()]} de ${d.getFullYear()}`;
+          }
+        }
+        return dStr;
+      };
+
+      const affiliationDateExtensive = formatExtensiveDate(selectedUser.clubAffiliationDate || selectedUser.memberSince || (selectedUser as any).createdAt);
+
+      const sortedActivities = [...combinedHabitualities].sort((a, b) => {
+        const timeA = a.rawDate instanceof Date ? a.rawDate.getTime() : new Date(a.rawDate).getTime();
+        const timeB = b.rawDate instanceof Date ? b.rawDate.getTime() : new Date(b.rawDate).getTime();
+        return timeA - timeB;
+      });
+
+      const activitiesHtml = sortedActivities.length > 0
+        ? sortedActivities.map((item, idx) => `
+        <div style="border: 1px solid #0f172a; margin-bottom: 8px; page-break-inside: avoid; overflow: hidden; background-color: #ffffff;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 9.5px; color: #0f172a;">
+            <tbody>
+              <tr style="border-bottom: 1px solid #0f172a; background-color: #f8fafc;">
+                <td colspan="6" style="padding: 4px 8px; font-weight: bold; text-transform: uppercase; font-size: 10px; text-align: left;">
+                  Nome do evento: ${item.eventName}
+                </td>
+              </tr>
+              <tr style="border-bottom: 1px solid #0f172a;">
+                <td colspan="6" style="padding: 4px 8px; font-weight: 500; font-size: 9px; text-align: left; color: #334155;">
+                  Arma utilizada: ${item.weaponClass} - ${item.model} - N° ${item.weaponNumber} - ${item.manufacturer} - Calibre: ${item.caliber} - ${item.permissionStatus}
+                </td>
+              </tr>
+              <tr style="background-color: #f1f5f9; font-weight: bold; font-size: 8.5px; text-align: center; border-bottom: 1px solid #0f172a; text-transform: uppercase;">
+                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 45px;">Ordem</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 80px;">Data</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 60px;">Hora</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 100px;">Sigma</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 85px;">Qtd Munições</td>
+                <td style="padding: 4px;">Tipo de Evento</td>
+              </tr>
+              <tr style="text-align: center; font-family: monospace; font-size: 9.5px; border-bottom: 1px solid #0f172a;">
+                <td style="border-right: 1px solid #0f172a; padding: 4px; font-weight: bold;">${String(idx + 1).padStart(2, '0')}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px;">${item.dateFormatted}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px;">${item.timeFormatted}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px;">${item.sigma}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px; font-weight: bold;">${item.shotsCount}</td>
+                <td style="padding: 4px; font-family: Arial, sans-serif; font-weight: 600; color: #1e293b;">${item.eventType}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #0f172a; font-size: 9px;">
+                <td colspan="3" style="border-right: 1px solid #0f172a; padding: 3px 8px; font-weight: 500; text-align: left;">
+                  Arma: ${item.weaponOwnerText}
+                </td>
+                <td colspan="3" style="padding: 3px 8px; font-weight: 500; text-align: left;">
+                  Munições: ${item.ammoOwnerText}
+                </td>
+              </tr>
+              <tr>
+                <td colspan="6" style="padding: 3px 8px; font-weight: 500; text-transform: uppercase; font-size: 9px; text-align: left;">
+                  Evento: ${item.eventName}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      `).join('')
+      : `
+        <div style="padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px; text-align: center; font-size: 10.5px; color: #64748b; background-color: #f8fafc; margin-bottom: 12px;">
+          Nenhum treinamento ou participação em competição registrado no período de ${habStartDate.split('-').reverse().join('/')} a ${habEndDate.split('-').reverse().join('/')}.
+        </div>
+      `;
+
+      const pageHtml = `
+        <div style="padding: 20px 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #0f172a; background: #ffffff; box-sizing: border-box;">
+          <!-- Official Timbre Header -->
+          <div style="text-align: center; border-bottom: 2px solid #cbd5e1; padding-bottom: 8px; margin-bottom: 10px;">
+            <h1 style="font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; margin: 0; line-height: 1.3;">
+              Declaração de habitualidade COMPROVAÇÃO DE PARTICIPAÇÕES EM TREINAMENTOS E/OU COMPETIÇÕES DE TIRO
+            </h1>
+            <p style="font-size: 10.5px; font-weight: bold; color: #334155; margin: 2px 0 0 0;">
+              (art. 35 do Decreto nº 11.615/2023)
+            </p>
+          </div>
+
+          <!-- Official Declaration Text -->
+          <div style="text-align: justify; font-size: 10.5px; line-height: 1.5; color: #1e293b; margin-bottom: 12px;">
+            <p style="margin: 0;">
+              <strong>${clubName}</strong>, Nome Fantasia: <strong>${clubFantasy}</strong>, CR: Nº <strong>${clubCr}</strong> inscrito no CNPJ sob o nº <strong>${clubCnpj}</strong>, com endereço sede, na <strong>${clubAddress}</strong>, <strong>DECLARA</strong>, para fim de comprovação junto ao Exército Brasileiro e a Polícia Federal, que, <strong>${selectedUser.fullName}</strong>, CPF <strong>${selectedUser.cpf || 'Não informado'}</strong>, CR <strong>${selectedUser.crNumber || '000.330.311-00'}</strong>, com endereço: <strong>${athleteAddr}</strong> está regularmente inscrito nesta entidade sob o nº <strong>${athleteRegNum}</strong>, datado de <strong>${affiliationDateExtensive}</strong> e que participou de treinamentos/competições que justificam a aquisição de munição/insumos pleiteada/pleiteados. <strong>O TREINAMENTO FOI REALIZADO CONFORME DESCRIÇÕES</strong>
+            </p>
+          </div>
+
+          <!-- Habituality Cards -->
+          ${activitiesHtml}
+
+          <!-- Signatures & Footer -->
+          <div style="margin-top: 16px; padding-top: 10px; border-top: 1px solid #cbd5e1; page-break-inside: avoid; text-align: center;">
+            <p style="font-size: 10px; color: #1e293b; margin: 0 0 3px 0;">Atestamos a veracidade e exatidão dos registros de habitualidade acima especificados.</p>
+            <p style="font-size: 10px; color: #334155; margin: 0 0 16px 0;">${clubCityState}, ${new Date().toLocaleDateString('pt-BR')}.</p>
+
+            <div style="display: inline-block; text-align: center; font-size: 9.5px; margin-top: 6px;">
+              <div style="height: 1px; background-color: #475569; width: 250px; margin: 0 auto 5px auto;"></div>
+              <span style="font-weight: bold; color: #0f172a; display: block;">Oficial de Segurança de Estande / Controle de Frequência</span>
+              <span style="color: #64748b; display: block; margin-top: 2px;">Homologação de Frequência ${clubFantasy}</span>
+              <span style="color: #94a3b8; font-family: monospace; font-size: 8px; display: block; margin-top: 3px;">
+                Registro de Autenticidade: GG-HAB-${selectedUser.id.slice(0, 8).toUpperCase()}
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const slug = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      const athleteSlug = slug(selectedUser.fullName || 'atleta');
+      const filename = sanitizePdfFilename(`declaracao_habitualidade_${athleteSlug}_${habStartDate}_a_${habEndDate}`);
+
+      await downloadPdfFromHtml(pageHtml, {
+        filename,
+        orientation: 'portrait',
+        margin: [6, 6, 6, 6]
+      });
+    } catch (err) {
+      console.error('Erro ao gerar habitualidade em PDF:', err);
+      alert('Erro ao gerar o arquivo PDF de habitualidade. Por favor tente novamente.');
+    } finally {
+      setIsGeneratingHabPdf(false);
+    }
+  };
+
+  // Download direto da Declaração de Filiação em PDF (sem pré-visualização, sem window.print)
+  const handleDirectDownloadFiliacao = async () => {
+    if (isGeneratingFilPdf) return;
+    setIsGeneratingFilPdf(true);
+    try {
+      const athleteClub = clubs.find(c => c.id === selectedUser.clubId) || clubs.find(c => c.id === 'club_aranas') || clubs[0];
+      const clubName = athleteClub?.name || 'Clube de Tiro & Caça Aranãs Ltda';
+      const clubFantasy = athleteClub?.fantasyName || athleteClub?.name || 'G&G Competições';
+      const clubCr = athleteClub?.crNumber || '572103';
+      const clubCnpj = athleteClub?.cnpj || '37138741000143';
+      const clubCityState = athleteClub?.city && athleteClub?.state ? `${athleteClub.city} - ${athleteClub.state}` : (athleteClub?.city || 'Capelinha - MG');
+
+      const athleteRegNum = selectedUser.bookNumber || (selectedUser.legacyId ? String(selectedUser.legacyId).padStart(4, '0') : (selectedUser.id ? selectedUser.id.replace(/\D/g, '').slice(-4).padStart(4, '0') : '0002'));
+
+      const pageHtml = `
+        <div style="padding: 24px 28px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #0f172a; background: #ffffff; box-sizing: border-box;">
+          <div style="text-align: center; border-bottom: 2px solid #cbd5e1; padding-bottom: 10px; margin-bottom: 20px;">
+            <h1 style="font-size: 13.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; margin: 0; line-height: 1.3;">
+              DECLARAÇÃO DE FILIAÇÃO AO CLUBE DE TIRO
+            </h1>
+            <p style="font-size: 11px; font-weight: bold; color: #334155; margin: 4px 0 0 0;">
+              Comprovação de Associação Ativa Regular
+            </p>
+          </div>
+
+          <div style="text-align: justify; font-size: 11.5px; line-height: 1.8; color: #1e293b; margin: 24px 0 32px 0;">
+            <p style="margin-bottom: 16px;">
+              Declaramos, para os devidos fins de direito junto ao Sistema de Fiscalização de Produtos Controlados (SFPC) do Exército Brasileiro e à Polícia Federal, que <strong>${selectedUser.fullName}</strong>, inscrito no CPF sob o nº <strong>${selectedUser.cpf || 'Não informado'}</strong> e portador do Certificado de Registro (CR) nº <strong>${selectedUser.crNumber || 'Emissão pendente'}</strong>, é filiado ativo regular sob o registro nº <strong>${athleteRegNum}</strong> nesta entidade de tiro desportivo <strong>${clubName}</strong> (Nome Fantasia: <strong>${clubFantasy}</strong>), CNPJ: <strong>${clubCnpj}</strong>, CR nº <strong>${clubCr}</strong>.
+            </p>
+            <p style="margin-bottom: 16px;">
+              O referido atleta encontra-se em dia com suas obrigações estatutárias, anuidade e normas de segurança estabelecidas pela legislação vigente.
+            </p>
+          </div>
+
+          <div style="margin-top: 40px; padding-top: 16px; border-top: 1px solid #cbd5e1; page-break-inside: avoid; text-align: center;">
+            <p style="font-size: 11px; color: #1e293b; margin: 0 0 4px 0;">Atestamos a veracidade e exatidão das informações acima especificadas.</p>
+            <p style="font-size: 11px; color: #334155; margin: 0 0 24px 0;">${clubCityState}, ${new Date().toLocaleDateString('pt-BR')}.</p>
+
+            <div style="display: inline-block; text-align: center; font-size: 10px; margin-top: 10px;">
+              <div style="height: 1px; background-color: #475569; width: 260px; margin: 0 auto 6px auto;"></div>
+              <span style="font-weight: bold; color: #0f172a; display: block;">Diretoria / Oficial de Segurança do Clube</span>
+              <span style="color: #64748b; display: block; margin-top: 2px;">Homologação Oficial ${clubFantasy}</span>
+              <span style="color: #94a3b8; font-family: monospace; font-size: 8px; display: block; margin-top: 4px;">
+                Registro de Autenticidade: GG-FIL-${selectedUser.id.slice(0, 8).toUpperCase()}
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const slug = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      const athleteSlug = slug(selectedUser.fullName || 'atleta');
+      const filename = sanitizePdfFilename(`declaracao_filiacao_${athleteSlug}`);
+
+      await downloadPdfFromHtml(pageHtml, {
+        filename,
+        orientation: 'portrait',
+        margin: [6, 6, 6, 6]
+      });
+    } catch (err) {
+      console.error('Erro ao gerar declaração de filiação em PDF:', err);
+      alert('Erro ao gerar o arquivo PDF de filiação. Por favor tente novamente.');
+    } finally {
+      setIsGeneratingFilPdf(false);
+    }
+  };
 
   // Define sidebar menu items (only active for user's own profile)
   const menuItems = [
@@ -4381,19 +4611,21 @@ export default function MemberProfile({
                     </p>
                   </div>
                   <button
-                    onClick={() => {
-                      setPrintData({
-                        fullName: selectedUser.fullName,
-                        crNumber: selectedUser.crNumber || 'Emitindo...',
-                        date: new Date().toISOString().split('T')[0],
-                        hash: `GG-FIL-${selectedUser.id.slice(0, 8).toUpperCase()}`
-                      });
-                      setPrintMode('declaration_filiacao');
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-1.5 self-start sm:self-center transition cursor-pointer"
+                    disabled={isGeneratingFilPdf}
+                    onClick={handleDirectDownloadFiliacao}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-1.5 self-start sm:self-center transition cursor-pointer shadow-xs"
                   >
-                    <Printer className="w-3.5 h-3.5" />
-                    Gerar Declaração
+                    {isGeneratingFilPdf ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Gerando PDF...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-3.5 h-3.5" />
+                        Gerar Declaração
+                      </>
+                    )}
                   </button>
                 </div>
 
@@ -4408,23 +4640,25 @@ export default function MemberProfile({
                     </div>
                     
                     <button
-                      disabled={combinedHabitualities.length === 0}
-                      onClick={() => {
-                        setPrintData({
-                          fullName: selectedUser.fullName,
-                          crNumber: selectedUser.crNumber || 'Emitindo...',
-                          startDate: habStartDate,
-                          endDate: habEndDate,
-                          activities: combinedHabitualities,
-                          date: new Date().toISOString().split('T')[0],
-                          hash: `GG-HAB-${selectedUser.id.slice(0, 8).toUpperCase()}`
-                        });
-                        setPrintMode('declaration_habitualidade');
-                      }}
-                      className={`text-xs font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-1.5 self-start sm:self-center transition cursor-pointer ${combinedHabitualities.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                      disabled={combinedHabitualities.length === 0 || isGeneratingHabPdf}
+                      onClick={handleDirectDownloadHabitualidade}
+                      className={`text-xs font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-1.5 self-start sm:self-center transition cursor-pointer shadow-xs ${
+                        combinedHabitualities.length > 0 && !isGeneratingHabPdf
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                          : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      }`}
                     >
-                      <Printer className="w-3.5 h-3.5" />
-                      Gerar Habitualidade
+                      {isGeneratingHabPdf ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Gerando PDF...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-3.5 h-3.5" />
+                          Gerar Habitualidade
+                        </>
+                      )}
                     </button>
                   </div>
 

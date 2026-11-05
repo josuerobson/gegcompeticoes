@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(pdf): motor multi-secao para relatorio global prevenindo pdf em branco em periodos anuais` |
-| Data/hora | 2026-11-04T18:16:00-03:00 |
+| Mensagem | `feat(perfil): download direto de pdf da declaracao de habitualidade sem pre-visualizacao` |
+| Data/hora | 2026-11-05T11:15:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -406,6 +406,14 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
     1. Para **Competições**: A origem da arma é extraída com prioridade máxima a partir da inscrição oficial do atleta (`reg.weaponSource === 'clube' ? true : false`). Se for `'propria'`, é exibido "Arma própria"; se for `'clube'`, é exibido "Arma do clube".
     2. Para **Treinamentos**: A opção `t.weaponOwnerType` (`'propria'` | `'clube'`) passa a ter prioridade absoluta.
     3. Atualizadas tanto a visualização em tela quanto as declarações oficiais em PDF e as planilhas Excel em `ClubReportsViewer.tsx` e `MemberProfile.tsx`.
+
+- **Download Direto de PDF da Declaração de Habitualidade no Perfil do Atleta (`MemberProfile.tsx`)**:
+  - **Exigência**: No perfil do atleta (`n.gegcompeticoes.com.br/perfil`), na aba "Declarações", ao clicar no botão "Gerar Habitualidade", gerar e baixar o PDF completo diretamente para a máquina do usuário sem abrir modal de pré-visualização e sem disparar diálogo de impressão do navegador (`window.print`), com nome do arquivo descritivo e contextualizado com o documento gerado (`declaracao_habitualidade_{atleta}_{dataInicio}_a_{dataFim}.pdf`).
+  - **Implementação**:
+    1. Criada a função `handleDirectDownloadHabitualidade` que monta o documento HTML oficial timbrado em conformidade com o art. 35 do Decreto nº 11.615/2023, com dados do clube, dados do atleta, ordenação cronológica crescente das participações, armas, séries, sigmas, quantidade de munições, procedência da arma e munição, ateste de veracidade e hash de autenticidade.
+    2. Utilizado o motor `downloadPdfFromHtml` de `src/utils/pdfDownloader.ts`, que divide o documento de forma inteligente em páginas A4 sem estourar limites de altura de canvas e sem telas em branco.
+    3. Removida a abertura de modal de pré-visualização (`printMode`) ao clicar em "Gerar Habitualidade" e em "Gerar Declaração" (Filiação), substituindo por download binário instantâneo com feedback visual interativo (`<Loader2 className="animate-spin" /> Gerando PDF...`).
+    4. Padronizado o ícone de ação para `<Download className="w-3.5 h-3.5" />` e o nome dos arquivos gerados (`declaracao_habitualidade_{slugAtleta}_{dataInicio}_a_{dataFim}.pdf` e `declaracao_filiacao_{slugAtleta}.pdf`).
 
 ## Infra / deploy
 
