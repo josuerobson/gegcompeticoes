@@ -418,6 +418,7 @@ export default function MemberProfile({
   // master_admin também é um login de clube na prática (CNPJ, sem RG/data de
   // nascimento/etc) — hoje é literalmente a conta do clube G&G Competições
   // Ltda promovida a master, então conta como "clube" aqui igual a club_admin.
+  const isMe = currentUser?.id === selectedUser.id;
   const isClubAdmin = selectedUser.role === 'club_admin' || selectedUser.role === 'master_admin';
   const myClub = clubs.find(c => c.id === selectedUser.clubId);
 
@@ -1480,7 +1481,6 @@ export default function MemberProfile({
     }
   };
 
-  const isMe = currentUser?.id === selectedUser.id;
   const isFollowing = currentUser?.following.includes(selectedUser.id) || false;
   // Vencimento da anuidade é a única referência de situação do atleta.
   const annuitySituation = annuityStatus(selectedUser.signatureExpiry);

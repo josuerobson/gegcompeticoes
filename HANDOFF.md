@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(checkin): ciclo de checkout com cronometro de permanencia e painel de gerenciamento de check-ins` |
-| Data/hora | 2026-11-05T14:58:00-03:00 |
+| Mensagem | `fix(perfil): corrigir ReferenceError TDZ na declaracao de isMe antes de fetchActiveCheckin` |
+| Data/hora | 2026-11-05T15:10:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,11 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why (don't re-litigate without new info)
+
+- **Correção de Tela Branca no Perfil do Atleta (`MemberProfile.tsx`)**:
+  - **Causa Raiz**: O erro `ReferenceError: Cannot access 'U' before initialization` ocorria porque `isMe` estava sendo referenciado na função `fetchActiveCheckin` (linha 440) antes da sua declaração `const isMe = ...` original que ficava na linha 1483 (Temporal Dead Zone).
+  - **Correção**: A declaração `const isMe = currentUser?.id === selectedUser.id;` foi movida para o início do componente (linha 420), logo acima de `fetchActiveCheckin`, eliminando a referência antes da inicialização e removendo a declaração duplicada da linha 1483.
+
 
 - **Ciclo de Check-out com Tempo de Permanência e Módulo de Gerenciamento de Check-ins (`MemberProfile.tsx`, `CheckinsManager.tsx`, `AdminPanel.tsx`, `server.ts`, `src/db.ts`)**:
   - **Exigência**:
