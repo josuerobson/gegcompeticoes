@@ -6,6 +6,7 @@ import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import { QRCodeView } from './QRCodeView';
 import { PixPaymentModal } from './PixPaymentModal';
 import ClubCheckinModal from './ClubCheckinModal';
+import CheckoutActivityModal from './CheckoutActivityModal';
 import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel } from '../utils/textSearch';
 import { annuityStatus, ANNUITY_STATUS_LABELS } from '../utils/financeReports';
 import { downloadPdfFromElement, downloadPdfFromHtml, sanitizePdfFilename } from '../utils/pdfDownloader';
@@ -4615,6 +4616,11 @@ export default function MemberProfile({
                               <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${isClubWeapon ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
                                 {isClubWeapon ? '🏛️ Arma do Clube' : '🎯 Arma Própria'}
                               </span>
+                              {t.checkinId && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 flex items-center gap-1" title="Presença validada por check-in no estande">
+                                  <CheckCircle2 className="w-3 h-3" /> Check-in Validado
+                                </span>
+                              )}
                             </div>
                             <div className="text-[11px] text-slate-500 flex items-center gap-3">
                               <span className="flex items-center gap-1 font-mono">
@@ -5163,101 +5169,21 @@ export default function MemberProfile({
         />
       )}
 
-      {/* MODAL DE CONFIRMAÇÃO DE CHECK-OUT DO ATLETA */}
+      {/* MODAL DE ATIVIDADES E CHECK-OUT DO ATLETA */}
       {isCheckoutConfirmOpen && activeCheckin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden text-slate-800 text-xs">
-            <div className="bg-gradient-to-r from-amber-600 to-orange-700 text-white px-5 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <LogOut className="w-5 h-5 text-amber-200" />
-                <h3 className="font-bold text-sm">Registrar Check-out</h3>
-              </div>
-              <button
-                onClick={() => setIsCheckoutConfirmOpen(false)}
-                className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 transition flex items-center justify-center cursor-pointer text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4 text-center">
-              <div className="w-14 h-14 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto shadow-inner">
-                <Clock className="w-8 h-8" />
-              </div>
-
-              <div>
-                <h4 className="font-bold text-base text-slate-900">Encerrar permanência no clube?</h4>
-                <p className="text-slate-500 text-xs mt-1">
-                  Seu tempo total de treino e permanência será registrado na sua ficha.
-                </p>
-              </div>
-
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-left space-y-2 text-[11px]">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Clube:</span>
-                  <span className="font-bold text-slate-800">{activeCheckin.clubName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Horário de Entrada:</span>
-                  <span className="font-mono text-slate-700">
-                    {new Date(activeCheckin.checkinAt).toLocaleTimeString('pt-BR')}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Tempo de Permanência:</span>
-                  <span className="font-mono font-bold text-amber-700">
-                    {formatStayTime(staySeconds)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCheckoutConfirmOpen(false)}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold transition cursor-pointer"
-                >
-                  Continuar no Clube
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setSubmittingCheckout(true);
-                    try {
-                      const res = await fetch(`/api/checkins/${activeCheckin.id}/checkout`, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'x-user-id': currentUser?.id || '',
-                        },
-                      });
-                      if (res.ok) {
-                        setActiveCheckin(null);
-                        setIsCheckoutConfirmOpen(false);
-                      }
-                    } catch (err) {
-                      console.error('Error during checkout:', err);
-                    } finally {
-                      setSubmittingCheckout(false);
-                    }
-                  }}
-                  disabled={submittingCheckout}
-                  className="flex-1 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold transition shadow-md shadow-amber-600/20 cursor-pointer flex items-center justify-center gap-1.5"
-                >
-                  {submittingCheckout ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Registrando...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Confirmar Saída
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <CheckoutActivityModal
+          currentUser={currentUser}
+          activeCheckin={activeCheckin}
+          weapons={weapons}
+          modalities={modalities}
+          staySeconds={staySeconds}
+          onClose={() => setIsCheckoutConfirmOpen(false)}
+          onCheckoutComplete={() => {
+            setActiveCheckin(null);
+            setIsCheckoutConfirmOpen(false);
+            fetchTrainings();
+          }}
+        />
       )}
 
       {/* FULL SCREEN WEB PRINT VIEW OVERLAY */}

@@ -419,6 +419,8 @@ export async function initDB() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_trainings_user_id ON trainings(user_id);
+      ALTER TABLE trainings ADD COLUMN IF NOT EXISTS checkin_id TEXT REFERENCES club_checkins(id) ON DELETE SET NULL;
+      CREATE INDEX IF NOT EXISTS idx_trainings_checkin_id ON trainings(checkin_id);
     `);
 
     // Sanitize championships.modalities JSONB array: remove any deleted/orphaned modality IDs

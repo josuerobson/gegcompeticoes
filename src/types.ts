@@ -459,6 +459,7 @@ export interface TrainingSession {
   notes?: string;
   hidden?: boolean;
   selectedWeapon?: Weapon;
+  checkinId?: string;
   createdAt?: string;
 }
 

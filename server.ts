@@ -791,6 +791,7 @@ function mapTraining(t: any): TrainingSession {
     score: Number(t.score ?? 0),
     notes: t.notes || undefined,
     hidden: Boolean(t.hidden),
+    checkinId: t.checkin_id || undefined,
     createdAt: t.created_at,
     selectedWeapon: t.w_model ? {
       id: t.weapon_id,
@@ -7721,6 +7722,7 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
     modality,
     score,
     notes,
+    checkinId,
   } = req.body;
 
   if (!dateTime || !weaponName) {
@@ -7743,8 +7745,8 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
     const r = await pool.query(
       `INSERT INTO trainings (
         id, user_id, club_id, date_time, weapon_id, weapon_name, weapon_caliber,
-        weapon_owner_type, total_shots, own_ammo_shots, club_ammo_shots, club_ammo_type, modality, score, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        weapon_owner_type, total_shots, own_ammo_shots, club_ammo_shots, club_ammo_type, modality, score, notes, checkin_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       RETURNING *`,
       [
         id,
@@ -7762,6 +7764,7 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
         modality || 'Treino Livre',
         Number(score) || 0,
         notes || null,
+        checkinId || null,
       ]
     );
 
@@ -8116,6 +8119,28 @@ app.get('/api/checkins/active', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Fetch active checkin error:', err);
     res.status(500).json({ error: 'Erro ao verificar check-in ativo.' });
+  }
+});
+
+
+// 3.1. Fetch trainings linked to a specific check-in
+app.get('/api/checkins/:id/trainings', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const r = await pool.query(
+      `SELECT t.*, w.model as w_model, w.weapon_number as w_weapon_number, w.serial_number as w_serial_number,
+              w.sigma_number as w_sigma_number, w.caliber as w_caliber, w.manufacturer as w_manufacturer,
+              w.class as w_weapon_class, w.permission_status as w_permission_status, w.owner_id as w_owner_id
+       FROM trainings t
+       LEFT JOIN weapons w ON w.id = t.weapon_id
+       WHERE t.checkin_id = $1
+       ORDER BY t.date_time ASC`,
+      [id]
+    );
+    res.json({ trainings: r.rows.map(mapTraining) });
+  } catch (err) {
+    console.error('Fetch checkin trainings error:', err);
+    res.status(500).json({ error: 'Erro ao buscar treinamentos deste check-in.' });
   }
 });
 

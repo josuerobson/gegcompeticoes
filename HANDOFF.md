@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(perfil): corrigir ReferenceError TDZ na declaracao de isMe antes de fetchActiveCheckin` |
-| Data/hora | 2026-11-05T15:10:00-03:00 |
+| Mensagem | `feat(checkin): relacionar atividades praticadas no check-out com vinculo de treinamentos e competicao` |
+| Data/hora | 2026-11-05T16:32:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,23 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why (don't re-litigate without new info)
+
+- **Relacionar Atividades Praticadas no Check-out do Clube (`CheckoutActivityModal.tsx`, `MemberProfile.tsx`, `server.ts`, `src/db.ts`)**:
+  - **Exigência**: Ao clicar em "Check-out Clube", antes de dar a baixa na saída, abrir tela para relacionar atividades praticadas com as opções "Registrar Treinamentos" e "Competição". O formulário de treinamento deve vincular o treino ao `checkin_id` para constar nos relatórios de habitualidade. Ao salvar o treino, retorna à tela com opções de registrar novo treino ou finalizar o check-out.
+  - **Implementação**:
+    1. **Componente `CheckoutActivityModal.tsx`**:
+       - Tela inicial "Relacionar Atividades Praticadas" com resumo da visita (clube, tempo de permanência, lista de treinos já registrados nesta sessão).
+       - Botão "Registrar Treinamentos": abre o formulário completo de treino (arma própria vs clube, calibre, busca por modelo/série/sigma, tiros próprios/clube, modalidade, score e notas).
+       - Ao salvar: dispara `POST /api/trainings` passando `checkinId: activeCheckin.id`, abate munição do clube no saldo do atleta (se aplicável), adiciona à lista da visita e retorna para a tela de atividades.
+       - A tela agora exibe o treino salvo com badge e disponibiliza os botões "+ Registrar Novo Treinamento" e "Finalizar Check-out".
+       - Opção "Competição": permite registrar a prova ou campeonato disputado no estande durante a visita.
+       - Botão "Finalizar Check-out": conclui a saída salvando `checkout_at` e notas das atividades no mesmo registro em `club_checkins`.
+    2. **Banco de Dados e Backend (`server.ts`, `src/db.ts`, `src/types.ts`)**:
+       - Coluna `checkin_id TEXT REFERENCES club_checkins(id) ON DELETE SET NULL` adicionada defensivamente na tabela `trainings` com índice `idx_trainings_checkin_id`.
+       - `POST /api/trainings` recebe `checkinId` e persiste no banco.
+       - Novo endpoint `GET /api/checkins/:id/trainings` lista os treinamentos vinculados àquele check-in.
+       - Badge visual "Check-in Validado" exibido na listagem de treinos do diário de habitualidade no perfil do atleta.
+
 
 - **Correção de Tela Branca no Perfil do Atleta (`MemberProfile.tsx`)**:
   - **Causa Raiz**: O erro `ReferenceError: Cannot access 'U' before initialization` ocorria porque `isMe` estava sendo referenciado na função `fetchActiveCheckin` (linha 440) antes da sua declaração `const isMe = ...` original que ficava na linha 1483 (Temporal Dead Zone).
