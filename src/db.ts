@@ -101,8 +101,11 @@ export async function initDB() {
     // horário do node-postgres em cima de um objeto Date.
     await client.query(`
       ALTER TABLE clubs
-        ADD COLUMN IF NOT EXISTS annuity_due_date TEXT,
-        ADD COLUMN IF NOT EXISTS fantasy_name TEXT;
+                ADD COLUMN IF NOT EXISTS annuity_due_date TEXT,
+        ADD COLUMN IF NOT EXISTS fantasy_name TEXT,
+        ADD COLUMN IF NOT EXISTS latitude NUMERIC(10, 7),
+        ADD COLUMN IF NOT EXISTS longitude NUMERIC(10, 7),
+        ADD COLUMN IF NOT EXISTS checkin_radius_meters INT DEFAULT 500;
     `);
 
     // Multi-tenancy: every club (except the master itself) belongs to a "parent" tenant —
@@ -1687,6 +1690,31 @@ export async function initDB() {
       WHERE c.annuity_price IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM annuity_charges ac WHERE ac.club_id = c.id AND ac.kind = 'club')
       ON CONFLICT (id) DO NOTHING;
+    `);
+
+    
+    // Check-in no clube: presenca do atleta no estande com geolocalizacao e biometria facial.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS club_checkins (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        club_id TEXT REFERENCES clubs(id) ON DELETE CASCADE,
+        checkin_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        latitude NUMERIC(10, 7),
+        longitude NUMERIC(10, 7),
+        accuracy_meters NUMERIC(10, 2),
+        distance_to_club_meters NUMERIC(10, 2),
+        is_within_radius BOOLEAN DEFAULT TRUE,
+        facial_match_score NUMERIC(5, 2),
+        facial_match_status TEXT DEFAULT 'confirmed',
+        facial_notes TEXT,
+        photo_data TEXT,
+        status TEXT DEFAULT 'confirmed',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_club_checkins_user_id ON club_checkins(user_id);
+      CREATE INDEX IF NOT EXISTS idx_club_checkins_club_id ON club_checkins(club_id);
+      CREATE INDEX IF NOT EXISTS idx_club_checkins_checkin_at ON club_checkins(checkin_at DESC);
     `);
 
     console.log('Database seed check complete.');

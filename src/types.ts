@@ -132,6 +132,9 @@ export interface Club {
   annuityPrice?: number;
   annuityPaidAt?: string;
   isBlocked?: boolean;
+  latitude?: number;
+  longitude?: number;
+  checkinRadiusMeters?: number;
 }
 
 export interface Comment {
@@ -656,3 +659,26 @@ export interface AmmoAthleteBalance {
   updatedAt?: string;
 }
 
+
+export interface ClubCheckin {
+  id: string;
+  userId: string;
+  athleteName?: string;
+  athleteCpf?: string;
+  athleteCr?: string;
+  athleteAvatar?: string;
+  clubId: string;
+  clubName?: string;
+  checkinAt: string;
+  latitude?: number;
+  longitude?: number;
+  accuracyMeters?: number;
+  distanceToClubMeters?: number;
+  isWithinRadius: boolean;
+  facialMatchScore?: number;
+  facialMatchStatus: 'confirmed' | 'mismatch' | 'review';
+  facialNotes?: string;
+  photoData?: string;
+  status: 'confirmed' | 'rejected' | 'manual_review';
+  createdAt: string;
+}

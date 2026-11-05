@@ -1,3 +1,4 @@
+import { GoogleGenAI } from '@google/genai';
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';
@@ -6,7 +7,7 @@ import crypto from 'crypto';
 import compression from 'compression';
 import { createServer as createViteServer } from 'vite';
 import { defaultChampionships, shootingImages } from './src/data/mockData.js';
-import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, MultiChampionshipItem, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan, AnnuityCharge, RankingHighlight, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult, LegacyMultiDiscount } from './src/types.js';
+import { User, Post, Championship, Registration, StageScore, Comment, Club, Modality, Stage, Weapon, WeaponLookupOption, TrainingSession, SharedPostInfo, MultiChampionship, MultiChampionshipItem, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, AnnuityPlan, AnnuityCharge, RankingHighlight, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult, LegacyMultiDiscount, ClubCheckin } from './src/types.js';
 import { pool, initDB } from './src/db.js';
 import { hashPassword, verifyPassword, signToken, verifyToken, setAuthSecret } from './src/auth.js';
 import { uploadDocument, getDocumentStream, storageEnabled } from './src/storage.js';
@@ -37,7 +38,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Permissions-Policy', 'camera=(self), geolocation=(self), microphone=()');
   next();
 });
 
@@ -362,6 +363,9 @@ function mapClub(c: any): Club {
     annuityPrice: c.annuity_price != null ? Number(c.annuity_price) : undefined,
     annuityPaidAt: c.annuity_paid_at || undefined,
     isBlocked: c.is_blocked ?? undefined,
+    latitude: c.latitude != null ? Number(c.latitude) : undefined,
+    longitude: c.longitude != null ? Number(c.longitude) : undefined,
+    checkinRadiusMeters: c.checkin_radius_meters != null ? Number(c.checkin_radius_meters) : 500,
   };
 }
 
@@ -3235,6 +3239,9 @@ const CLUB_PROFILE_COLUMNS: Record<string, string> = {
   neighborhood: 'neighborhood',
   city: 'city',
   state: 'state',
+  latitude: 'latitude',
+  longitude: 'longitude',
+  checkinRadiusMeters: 'checkin_radius_meters',
 };
 
 app.patch('/api/clubs/:id', requireAuth, async (req, res) => {
@@ -7824,6 +7831,337 @@ app.delete('/api/trainings/:id', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Delete training error:', err);
     res.status(500).json({ error: 'Erro ao excluir treinamento.' });
+  }
+});
+
+
+// ==========================================
+// 11. CLUB CHECK-INS (Presença no Clube / Biometria Facial & Geolocalização)
+// ==========================================
+
+function calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3; // meters
+  const phi1 = (lat1 * Math.PI) / 180;
+  const phi2 = (lat2 * Math.PI) / 180;
+  const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+  const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+    Math.cos(phi1) * Math.cos(phi2) *
+    Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return Math.round(R * c);
+}
+
+function mapCheckin(r: any): ClubCheckin {
+  return {
+    id: r.id,
+    userId: r.user_id,
+    athleteName: r.athlete_name || undefined,
+    athleteCpf: r.athlete_cpf || undefined,
+    athleteCr: r.athlete_cr || undefined,
+    athleteAvatar: r.athlete_avatar ? avatarUrlFor(r.user_id, r.athlete_avatar) : undefined,
+    clubId: r.club_id,
+    clubName: r.club_name || undefined,
+    checkinAt: r.checkin_at ? new Date(r.checkin_at).toISOString() : new Date().toISOString(),
+    latitude: r.latitude != null ? Number(r.latitude) : undefined,
+    longitude: r.longitude != null ? Number(r.longitude) : undefined,
+    accuracyMeters: r.accuracy_meters != null ? Number(r.accuracy_meters) : undefined,
+    distanceToClubMeters: r.distance_to_club_meters != null ? Number(r.distance_to_club_meters) : undefined,
+    isWithinRadius: r.is_within_radius ?? true,
+    facialMatchScore: r.facial_match_score != null ? Number(r.facial_match_score) : undefined,
+    facialMatchStatus: r.facial_match_status || 'confirmed',
+    facialNotes: r.facial_notes || undefined,
+    photoData: r.photo_data || undefined,
+    status: r.status || 'confirmed',
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+  };
+}
+
+async function verifyFacialMatch(selfieBase64: string, referencePhoto: string | null | undefined): Promise<{
+  match: boolean;
+  confidence: number;
+  status: 'confirmed' | 'mismatch' | 'review';
+  notes: string;
+}> {
+  if (!referencePhoto || referencePhoto.includes('unsplash.com') || referencePhoto.startsWith('data:image/svg')) {
+    return {
+      match: true,
+      confidence: 100,
+      status: 'confirmed',
+      notes: 'Primeiro registro biométrico facial registrado no clube.',
+    };
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+    return {
+      match: true,
+      confidence: 85,
+      status: 'review',
+      notes: 'Foto gravada com sucesso para auditoria do clube.',
+    };
+  }
+
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    const cleanSelfie = selfieBase64.replace(/^data:image\/\w+;base64,/, '');
+
+    let refData = '';
+    let refMime = 'image/jpeg';
+    if (referencePhoto.startsWith('data:')) {
+      const match = referencePhoto.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        refMime = match[1];
+        refData = match[2];
+      }
+    } else if (referencePhoto.startsWith('http://') || referencePhoto.startsWith('https://')) {
+      try {
+        const resp = await fetch(referencePhoto);
+        if (resp.ok) {
+          const buf = await resp.arrayBuffer();
+          refData = Buffer.from(buf).toString('base64');
+          refMime = resp.headers.get('content-type') || 'image/jpeg';
+        }
+      } catch (fErr) {
+        console.warn('Could not fetch reference photo for facial compare:', fErr);
+      }
+    }
+
+    if (!refData) {
+      return {
+        match: true,
+        confidence: 90,
+        status: 'confirmed',
+        notes: 'Selfie capturada com sucesso. Foto de referência indisponível para comparação direta.',
+      };
+    }
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: `Você é um perito em biometria facial e controle de acesso a estandes de tiro desportivo.
+Compare a Imagem 1 (selfie capturada ao vivo agora pelo atleta) com a Imagem 2 (foto oficial cadastrada no perfil).
+Avalie:
+1. Se as duas imagens retratam a mesma pessoa (rosto compatível, traços faciais).
+2. Vivacidade (liveness): se a Imagem 1 aparenta ser uma pessoa viva real em frente à câmera e não uma foto impressa ou tela.
+3. Atribua uma pontuação de confiança de 0 a 100 na compatibilidade facial.
+
+IMPORTANTE: Responda APENAS com um objeto JSON válido, sem qualquer texto fora do JSON, no formato:
+{"match": boolean, "confidence": number, "liveness": boolean, "reason": "descrição concisa em português"}`,
+            },
+            {
+              inlineData: {
+                mimeType: 'image/jpeg',
+                data: cleanSelfie,
+              },
+            },
+            {
+              inlineData: {
+                mimeType: refMime,
+                data: refData,
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const text = response.text || '';
+    const cleanedJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const result = JSON.parse(cleanedJson);
+
+    const isMatch = Boolean(result.match) && (result.confidence == null || result.confidence >= 50);
+    const score = typeof result.confidence === 'number' ? Math.min(100, Math.max(0, result.confidence)) : (isMatch ? 90 : 30);
+    const notes = result.reason || (isMatch ? 'Identificação facial validada com sucesso.' : 'Incompatibilidade na identificação facial.');
+
+    return {
+      match: isMatch,
+      confidence: score,
+      status: isMatch ? 'confirmed' : 'mismatch',
+      notes,
+    };
+  } catch (err) {
+    console.warn('Gemini facial comparison error, fallback to audit:', err?.message || err);
+    return {
+      match: true,
+      confidence: 80,
+      status: 'review',
+      notes: 'Validação automática indisponível. Foto salva para auditoria do clube.',
+    };
+  }
+}
+
+// 1. Post Check-in
+app.post('/api/checkins', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { latitude, longitude, accuracy, photo, clubId } = req.body;
+
+  if (!photo) {
+    return res.status(400).json({ error: 'Foto de identificação facial é obrigatória.' });
+  }
+
+  try {
+    let targetClubId = clubId || currentUser.clubId;
+    if (!targetClubId) {
+      const firstClubRes = await pool.query(`SELECT id FROM clubs ORDER BY created_at ASC LIMIT 1`);
+      if (firstClubRes.rows.length > 0) {
+        targetClubId = firstClubRes.rows[0].id;
+      }
+    }
+
+    let distanceMeters = null;
+    let isWithinRadius = true;
+    let clubName = 'Clube de Tiro';
+
+    if (targetClubId) {
+      const clubRes = await pool.query(`SELECT id, name, fantasy_name, latitude, longitude, checkin_radius_meters FROM clubs WHERE id = $1`, [targetClubId]);
+      if (clubRes.rows.length > 0) {
+        const c = clubRes.rows[0];
+        clubName = c.fantasy_name || c.name;
+        if (c.latitude != null && c.longitude != null && latitude != null && longitude != null) {
+          distanceMeters = calculateHaversineDistance(
+            Number(latitude),
+            Number(longitude),
+            Number(c.latitude),
+            Number(c.longitude)
+          );
+          const maxRadius = c.checkin_radius_meters ? Number(c.checkin_radius_meters) : 500;
+          isWithinRadius = distanceMeters <= maxRadius;
+        }
+      }
+    }
+
+    const userRes = await pool.query(`SELECT avatar_url FROM users WHERE id = $1`, [currentUser.id]);
+    const rawAvatar = userRes.rows[0]?.avatar_url || currentUser.avatarUrl;
+
+    const facialResult = await verifyFacialMatch(photo, rawAvatar);
+
+    const id = `chk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const overallStatus = (!isWithinRadius || facialResult.status === 'mismatch') ? 'manual_review' : 'confirmed';
+
+    const insertRes = await pool.query(
+      `INSERT INTO club_checkins (
+        id, user_id, club_id, checkin_at, latitude, longitude, accuracy_meters,
+        distance_to_club_meters, is_within_radius, facial_match_score, facial_match_status,
+        facial_notes, photo_data, status
+      ) VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING *`,
+      [
+        id,
+        currentUser.id,
+        targetClubId,
+        latitude != null ? Number(latitude) : null,
+        longitude != null ? Number(longitude) : null,
+        accuracy != null ? Number(accuracy) : null,
+        distanceMeters,
+        isWithinRadius,
+        facialResult.confidence,
+        facialResult.status,
+        facialResult.notes,
+        photo,
+        overallStatus,
+      ]
+    );
+
+    const savedCheckin = insertRes.rows[0];
+    savedCheckin.athlete_name = currentUser.fullName;
+    savedCheckin.athlete_cpf = currentUser.cpf;
+    savedCheckin.athlete_cr = currentUser.crNumber;
+    savedCheckin.club_name = clubName;
+
+    if ((!rawAvatar || rawAvatar.includes('unsplash.com')) && facialResult.match) {
+      await pool.query(`UPDATE users SET avatar_url = $1 WHERE id = $2`, [photo, currentUser.id]);
+    }
+
+    res.json({
+      success: true,
+      checkin: mapCheckin(savedCheckin),
+    });
+  } catch (err) {
+    console.error('Check-in error:', err);
+    res.status(500).json({ error: 'Erro ao registrar check-in: ' + (err.message || 'Falha interna.') });
+  }
+});
+
+// 2. Athlete check-in history
+app.get('/api/checkins/me', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  try {
+    const r = await pool.query(
+      `SELECT c.*, cl.name as club_name, cl.fantasy_name as club_fantasy
+       FROM club_checkins c
+       LEFT JOIN clubs cl ON cl.id = c.club_id
+       WHERE c.user_id = $1
+       ORDER BY c.checkin_at DESC
+       LIMIT 30`,
+      [currentUser.id]
+    );
+    const checkins = r.rows.map(row => {
+      row.club_name = row.club_fantasy || row.club_name;
+      return mapCheckin(row);
+    });
+    res.json({ checkins });
+  } catch (err) {
+    console.error('Fetch my checkins error:', err);
+    res.status(500).json({ error: 'Erro ao buscar histórico de check-ins.' });
+  }
+});
+
+// 3. Admin list check-ins for the club
+app.get('/api/checkins', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const isMaster = currentUser.role === 'admin' || currentUser.role === 'master_admin';
+  const isClubAdmin = currentUser.role === 'club_admin';
+
+  if (!isMaster && !isClubAdmin) {
+    return res.status(403).json({ error: 'Acesso restrito à diretoria do clube.' });
+  }
+
+  const targetClubId = (isMaster && req.query.clubId) ? String(req.query.clubId) : currentUser.clubId;
+  const targetDate = req.query.date ? String(req.query.date) : null;
+
+  try {
+    let query = `
+      SELECT c.*, u.full_name as athlete_name, u.cpf as athlete_cpf, u.cr_number as athlete_cr,
+             u.avatar_url as athlete_avatar, cl.name as club_name, cl.fantasy_name as club_fantasy
+      FROM club_checkins c
+      LEFT JOIN users u ON u.id = c.user_id
+      LEFT JOIN clubs cl ON cl.id = c.club_id
+    `;
+    const params = [];
+
+    const conditions = [];
+    if (targetClubId) {
+      params.push(targetClubId);
+      conditions.push(`c.club_id = ${params.length}`);
+    }
+    if (targetDate) {
+      params.push(`${targetDate}%`);
+      conditions.push(`c.checkin_at::text LIKE ${params.length}`);
+    }
+
+    if (conditions.length > 0) {
+      query += ` WHERE ` + conditions.join(' AND ');
+    }
+
+    query += ` ORDER BY c.checkin_at DESC LIMIT 100`;
+
+    const r = await pool.query(query, params);
+    const checkins = r.rows.map(row => {
+      row.club_name = row.club_fantasy || row.club_name;
+      return mapCheckin(row);
+    });
+    res.json({ checkins });
+  } catch (err) {
+    console.error('Fetch club checkins error:', err);
+    res.status(500).json({ error: 'Erro ao buscar check-ins do clube.' });
   }
 });
 

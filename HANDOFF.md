@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(perfil): download direto de pdf da declaracao de habitualidade sem pre-visualizacao` |
-| Data/hora | 2026-11-05T11:15:00-03:00 |
+| Mensagem | `feat(checkin): check-in no clube com biometria facial e geolocalizacao no perfil do atleta` |
+| Data/hora | 2026-11-05T14:30:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,29 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why (don't re-litigate without new info)
+
+- **Sistema de Check-in no Clube com Biometria Facial e Geolocalização (`ClubCheckinModal.tsx`, `MemberProfile.tsx`, `server.ts`, `src/db.ts`)**:
+  - **Exigência**: No menu do atleta (perfil), adicionar um botão "Check-in Clube" abaixo do botão de "Anuidade" que inicia a autenticação facial pela câmera do celular e registra data, hora e geolocalização exata no estande.
+  - **Decisões Técnicas e Implementação**:
+    1. **Frontend / Mobile UX (`ClubCheckinModal.tsx`, `MemberProfile.tsx`)**:
+       - Botão "Check-in Clube" estilizado em verde esmeralda com ícone `MapPin` no card lateral do perfil do atleta (`isMe`).
+       - Modal mobile-first com abas "Realizar Check-in" e "Meu Histórico".
+       - Captura automática de GPS via `navigator.geolocation.getCurrentPosition` com cálculo em tempo real da distância até o estande do clube (ex: "✅ A 32m do estande" ou "⚠️ Fora do raio permitido de 500m").
+       - Abertura da câmera frontal (`facingMode: 'user'`) com moldura guia oval para centralização do rosto e instrução visual.
+       - Captura de foto via canvas, compressão JPEG e preview com opção de retentativa ("Tirar Outra").
+       - Aba "Meu Histórico" permitindo ao atleta consultar todos os check-ins anteriores com miniatura da selfie, data, hora, distância e status de validação.
+    2. **Correção de Permissões no Servidor (`server.ts`)**:
+       - O cabeçalho HTTP `Permissions-Policy` bloqueava totalmente câmera e geolocalização (`camera=(), microphone=(), geolocation=()`). Foi corrigido para `camera=(self), geolocation=(self), microphone=()`, garantindo execução segura no navegador mobile do atleta.
+    3. **Validação Biométrica com IA (`server.ts`, Gemini Vision)**:
+       - Endpoint `POST /api/checkins` recebe as coordenadas, precisão, foto e clube.
+       - Utiliza a biblioteca oficial `@google/genai` com o modelo Gemini Flash (`gemini-2.5-flash`) para comparar a selfie em tempo real contra a foto oficial cadastrada do atleta (`users.avatar_url`), avaliando compatibilidade facial, vivacidade (*liveness*) e atribuindo score de 0 a 100%.
+       - Tratamento resiliente de contingência: se o atleta for novo ou não possuir foto cadastrada, a selfie é aceita e registrada como foto biométrica de referência; se a API de IA estiver indisponível, o check-in é salvo com status `review` para auditoria do gestor, nunca bloqueando o atleta injustamente.
+    4. **Banco de Dados (`src/db.ts`)**:
+       - Adicionadas colunas `latitude`, `longitude` e `checkin_radius_meters` na tabela `clubs`.
+       - Criada a tabela `club_checkins` com índices para `user_id`, `club_id` e `checkin_at`.
+    5. **Configuração do Estande no Painel Diretor (`AdminPanel.tsx`)**:
+       - No modal de edição de cadastro do clube, incluídos campos de Latitude, Longitude e Raio de Check-in em metros, acompanhados do botão "Usar Minha Localização Atual (GPS)" para calibração rápida pelo diretor com o celular em mãos no estande.
+
 
 These came directly from the user reviewing legacy-system specs (real HTML forms from the system being migrated from) and correcting my initial assumptions — they're deliberate, not oversights:
 

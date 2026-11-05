@@ -8410,7 +8410,8 @@ export default function AdminPanel({
   const [editingClub, setEditingClub] = useState<Club | null>(null);
   const [editingClubForm, setEditingClubForm] = useState({
     name: '', fantasyName: '', cnpj: '', crNumber: '', crValidity: '', annuityDueDate: '', annuityPrice: '', responsibleName: '', email: '', phone: '',
-    cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: ''
+    cep: '', address: '', addressNumber: '', complement: '', neighborhood: '', city: '', state: '',
+    latitude: '', longitude: '', checkinRadiusMeters: '500'
   });
   const [savingEditClub, setSavingEditClub] = useState(false);
   const [editClubError, setEditClubError] = useState('');
@@ -8711,7 +8712,10 @@ export default function AdminPanel({
       complement: club.complement || '',
       neighborhood: club.neighborhood || '',
       city: club.city || '',
-      state: club.state || ''
+      state: club.state || '',
+      latitude: club.latitude != null ? String(club.latitude) : '',
+      longitude: club.longitude != null ? String(club.longitude) : '',
+      checkinRadiusMeters: club.checkinRadiusMeters != null ? String(club.checkinRadiusMeters) : '500'
     });
   };
 
@@ -10717,6 +10721,32 @@ export default function AdminPanel({
                       <MemberField label="Bairro" value={editingClubForm.neighborhood} onChange={v => setEditingClubForm({ ...editingClubForm, neighborhood: v })} />
                       <MemberField label="Cidade" value={editingClubForm.city} onChange={v => setEditingClubForm({ ...editingClubForm, city: v })} />
                       <MemberField label="UF" value={editingClubForm.state} onChange={v => setEditingClubForm({ ...editingClubForm, state: v })} />
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2">
+                      <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">Localização GPS do Estande (Check-in e Presença)</h4>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (navigator.geolocation) {
+                            navigator.geolocation.getCurrentPosition(pos => {
+                              setEditingClubForm(prev => ({
+                                ...prev,
+                                latitude: String(pos.coords.latitude),
+                                longitude: String(pos.coords.longitude)
+                              }));
+                            });
+                          }
+                        }}
+                        className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 cursor-pointer"
+                      >
+                        <MapPin className="w-3.5 h-3.5" /> Usar Minha Localização Atual (GPS)
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <MemberField label="Latitude" value={editingClubForm.latitude || ''} onChange={v => setEditingClubForm({ ...editingClubForm, latitude: v })} placeholder="Ex: -19.92083" />
+                      <MemberField label="Longitude" value={editingClubForm.longitude || ''} onChange={v => setEditingClubForm({ ...editingClubForm, longitude: v })} placeholder="Ex: -43.93778" />
+                      <MemberField label="Raio Máximo Check-in (Metros)" type="number" value={editingClubForm.checkinRadiusMeters || '500'} onChange={v => setEditingClubForm({ ...editingClubForm, checkinRadiusMeters: v })} placeholder="Ex: 500" />
                     </div>
 
                     {editClubSuccess && (

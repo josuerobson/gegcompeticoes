@@ -5,11 +5,12 @@ import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import { QRCodeView } from './QRCodeView';
 import { PixPaymentModal } from './PixPaymentModal';
+import ClubCheckinModal from './ClubCheckinModal';
 import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel } from '../utils/textSearch';
 import { annuityStatus, ANNUITY_STATUS_LABELS } from '../utils/financeReports';
 import { downloadPdfFromElement, downloadPdfFromHtml, sanitizePdfFilename } from '../utils/pdfDownloader';
 import {
-  ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2,
+  ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2, MapPin,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
   Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronLeft, ChevronDown, Info, PlusCircle, X, UserCog, Camera, Pencil,
   Clock, Copy, QrCode, Images, Heart, MessageCircle, Send, Bookmark, Maximize2, Share2, Repeat, Loader2, Menu, Search, Eye, Download
@@ -430,6 +431,7 @@ export default function MemberProfile({
   );
   const isRegistrationComplete = isClubAdmin ? isClubDataComplete : Boolean(selectedUser.isProfileComplete);
 
+  const [isCheckinModalOpen, setIsCheckinModalOpen] = useState(false);
   const [profileForm, setProfileForm] = useState({
     fullName: '', isCac: false, birthDate: '', sex: '', rg: '', rgIssuer: '', rgIssueDate: '',
     fatherName: '', motherName: '', crNumber: '', crValidity: '', guiaTransitoExpiry: '', militaryRegion: '', clubAffiliationDate: '', nationality: '',
@@ -2335,20 +2337,29 @@ export default function MemberProfile({
             {/* Action buttons */}
             <div className="w-full space-y-2 pt-2">
               {isMe ? (
-                <div className="flex gap-2">
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setIsSignModalOpen(true)}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-blue-50 cursor-pointer"
+                    >
+                      <DollarSign className="w-3.5 h-3.5" />
+                      Anuidade
+                    </button>
+                    <button
+                      onClick={onLogout}
+                      className="text-red-600 hover:bg-red-50 hover:text-red-800 border border-red-105 p-2.5 rounded-xl transition flex items-center justify-center cursor-pointer"
+                      title="Sair da Conta"
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </button>
+                  </div>
                   <button
-                    onClick={() => setIsSignModalOpen(true)}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-blue-50 cursor-pointer"
+                    onClick={() => setIsCheckinModalOpen(true)}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer"
                   >
-                    <DollarSign className="w-3.5 h-3.5" />
-                    Anuidade
-                  </button>
-                  <button
-                    onClick={onLogout}
-                    className="text-red-600 hover:bg-red-50 hover:text-red-800 border border-red-105 p-2.5 rounded-xl transition flex items-center justify-center cursor-pointer"
-                    title="Sair da Conta"
-                  >
-                    <LogOut className="w-4 h-4" />
+                    <MapPin className="w-3.5 h-3.5" />
+                    Check-in Clube
                   </button>
                 </div>
               ) : (
@@ -5073,6 +5084,15 @@ export default function MemberProfile({
             setTimeout(() => window.location.reload(), 1500);
           }}
           onClose={() => setAnnuityPixModal(null)}
+        />
+      )}
+
+      {/* MODAL DE CHECK-IN DO CLUBE COM BIOMETRIA E GPS */}
+      {isCheckinModalOpen && (
+        <ClubCheckinModal
+          currentUser={currentUser}
+          club={myClub}
+          onClose={() => setIsCheckinModalOpen(false)}
         />
       )}
 
