@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(weapons): adicionar CPF, Vencimento Guia de Transito e selecao automatica de Clube no cadastro de armas` |
-| Data/hora | 2026-11-06T08:35:00-03:00 |
+| Mensagem | `feat(checkin): ocultar checkin para clubes e vincular inscricoes de competicoes no checkout com badges de habitualidade` |
+| Data/hora | 2026-11-06T11:55:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,23 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why (don't re-litigate without new info)
+
+- **Ocultação de Check-in para Clubes e Vínculo de Inscrições de Competições no Check-out (`MemberProfile.tsx`, `CheckoutActivityModal.tsx`, `server.ts`, `src/db.ts`)**:
+  - **Exigência**:
+    1. Quando estiver logado como clube, não exibir o botão de Check-in no perfil.
+    2. Quando for fazer check-out e selecionar competição, exibir lista de inscrições do atleta que não estão vinculadas a um check-in (`checkin_id IS NULL`), permitindo marcar por checkbox quais foram disputadas na sessão. Ao salvar, vincular as inscrições ao check-in no sistema para constar nos relatórios de habitualidade.
+  - **Decisão e Implementação**:
+    1. **Ocultação Estrita para Clubes**: Em `MemberProfile.tsx`, a checagem `isClubViewOrSession` valida se `currentUser.role === 'club_admin' || currentUser.role === 'master_admin'`, se `selectedUser.role === 'club_admin'` ou se a sessão está em modo suporte / personificação (`localStorage.getItem('gg_impersonator_id')`). Nessas condições, os botões de Check-in/Check-out nunca são exibidos.
+    2. **Banco de Dados**: Coluna `checkin_id TEXT REFERENCES club_checkins(id) ON DELETE SET NULL` e índice `idx_registrations_checkin_id` adicionados na tabela `registrations` de forma aditiva.
+    3. **Backend (`server.ts`)**:
+       - `GET /api/registrations/unlinked-checkin`: busca inscrições com `checkin_id IS NULL` do atleta com joins informativos de campeonato, etapa, modalidade e arma.
+       - `GET /api/checkins/:id/registrations`: busca inscrições já associadas àquele check-in.
+       - `POST /api/checkins/:id/link-registrations`: atualiza atômica e bidirecionalmente a lista de IDs de inscrições vinculadas ao check-in.
+       - `POST /api/checkins/:id/checkout`: aceita `registrationIds` e concatena resumo amigável nas notas do check-out.
+    4. **Frontend (`CheckoutActivityModal.tsx`)**:
+       - No step `competition`, lista interativa com cards e checkboxes, contadores de seleção, botão "Selecionar todas / Desmarcar todas", e salvamento imediato com retorno à visão de atividades.
+       - Na visão de atividades, exibe card âmbar com todas as competições vinculadas, permitindo alterar ou gerenciar as participações antes do fechamento.
+    5. **Auditoria e Habitualidades**: Selo verde "Check-in Validado" renderizado na aba Minhas Inscrições e no modal oficial de detalhamento de habitualidades de 12 meses.
 
 - **Cadastro e Edição de Armas com CPF, Vencimento da Guia de Trânsito e Seleção Automática de Clube (`AdminPanel.tsx`, `ChampionshipsView.tsx`, `MemberProfile.tsx`, `server.ts`, `src/db.ts`)**:
   - **Exigência**:

@@ -389,6 +389,7 @@ export interface Registration {
   pixCopiaECola?: string;
   clubOwedAmount?: number; // Valor devido ao clube organizador (só quando o clube do atleta é filiado, diferente do organizador)
   clubInvoiceId?: string; // NULL até entrar numa fatura gerada
+  checkinId?: string; // Vínculo explícito com check-in físico no estande
 }
 
 export interface StageScore {

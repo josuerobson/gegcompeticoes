@@ -724,7 +724,10 @@ export async function initDB() {
     // (CREATE TABLE IF NOT EXISTS above won't add missing columns to it).
     await client.query(`
       ALTER TABLE registrations
-        ADD COLUMN IF NOT EXISTS club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS checkin_id TEXT REFERENCES club_checkins(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL;
+      CREATE INDEX IF NOT EXISTS idx_registrations_checkin_id ON registrations(checkin_id);
+      ALTER TABLE registrations
         ADD COLUMN IF NOT EXISTS modality_id TEXT REFERENCES modalities(id),
         ADD COLUMN IF NOT EXISTS stage_id TEXT REFERENCES stages(id),
         ADD COLUMN IF NOT EXISTS weapon_id TEXT REFERENCES weapons(id),

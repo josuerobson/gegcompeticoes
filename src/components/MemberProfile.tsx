@@ -421,6 +421,9 @@ export default function MemberProfile({
   // Ltda promovida a master, então conta como "clube" aqui igual a club_admin.
   const isMe = currentUser?.id === selectedUser.id;
   const isClubAdmin = selectedUser.role === 'club_admin' || selectedUser.role === 'master_admin';
+  const isImpersonating = typeof window !== 'undefined' && Boolean(localStorage.getItem('gg_impersonator_id'));
+  const isCurrentClubUser = currentUser?.role === 'club_admin' || currentUser?.role === 'master_admin';
+  const isClubViewOrSession = isClubAdmin || isCurrentClubUser || isImpersonating;
   const myClub = clubs.find(c => c.id === selectedUser.clubId);
 
   // users.is_profile_complete is always true for club_admin accounts (it only
@@ -440,7 +443,7 @@ export default function MemberProfile({
   const [submittingCheckout, setSubmittingCheckout] = useState(false);
 
   const fetchActiveCheckin = useCallback(async () => {
-    if (!isMe || !currentUser) return;
+    if (!isMe || isClubViewOrSession || !currentUser) return;
     try {
       const res = await fetch('/api/checkins/active', {
         headers: { 'x-user-id': currentUser.id },
@@ -452,7 +455,7 @@ export default function MemberProfile({
     } catch (err) {
       console.error('Error fetching active checkin:', err);
     }
-  }, [isMe, currentUser]);
+  }, [isMe, isClubViewOrSession, currentUser]);
 
   useEffect(() => {
     fetchActiveCheckin();
@@ -1798,6 +1801,7 @@ export default function MemberProfile({
         weaponOwnerText: isClubWeapon ? 'Clube' : 'Própria',
         ammoOwnerText: (Number(t.clubAmmoShots) || 0) > 0 ? 'Clube' : 'Própria',
         originId: t.id,
+        checkinId: t.checkinId,
       });
     });
 
@@ -1901,6 +1905,7 @@ export default function MemberProfile({
         weaponOwnerText: isClubWeapon ? 'Clube' : 'Própria',
         ammoOwnerText: (Number(reg?.clubAmmoShots) || 0) > 0 ? 'Clube' : 'Própria',
         originId: s.id,
+        checkinId: reg?.checkinId,
       });
     });
 
@@ -1984,6 +1989,7 @@ export default function MemberProfile({
         weaponOwnerText: isClubWeapon ? 'Clube' : 'Própria',
         ammoOwnerText: (Number(reg?.clubAmmoShots) || 0) > 0 ? 'Clube' : 'Própria',
         originId: reg.id,
+        checkinId: reg.checkinId,
       });
     });
 
@@ -2417,27 +2423,29 @@ export default function MemberProfile({
                       <LogOut className="w-4 h-4" />
                     </button>
                   </div>
-                  {activeCheckin ? (
-                    <button
-                      onClick={() => setIsCheckoutConfirmOpen(true)}
-                      className="w-full bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-700 hover:to-orange-700 text-white text-xs py-2.5 px-3 rounded-xl font-bold transition flex items-center justify-between shadow-md shadow-amber-600/20 cursor-pointer"
-                    >
-                      <span className="flex items-center gap-1.5 truncate">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block shrink-0" />
-                        <span>Check-out Clube</span>
-                      </span>
-                      <span className="font-mono text-[11px] bg-black/25 px-2 py-0.5 rounded-lg shrink-0">
-                        ⏱️ {formatStayTime(staySeconds)}
-                      </span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => setIsCheckinModalOpen(true)}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer"
-                    >
-                      <MapPin className="w-3.5 h-3.5" />
-                      Check-in Clube
-                    </button>
+                  {!isClubViewOrSession && (
+                    activeCheckin ? (
+                      <button
+                        onClick={() => setIsCheckoutConfirmOpen(true)}
+                        className="w-full bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-700 hover:to-orange-700 text-white text-xs py-2.5 px-3 rounded-xl font-bold transition flex items-center justify-between shadow-md shadow-amber-600/20 cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5 truncate">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block shrink-0" />
+                          <span>Check-out Clube</span>
+                        </span>
+                        <span className="font-mono text-[11px] bg-black/25 px-2 py-0.5 rounded-lg shrink-0">
+                          ⏱️ {formatStayTime(staySeconds)}
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setIsCheckinModalOpen(true)}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer"
+                      >
+                        <MapPin className="w-3.5 h-3.5" />
+                        Check-in Clube
+                      </button>
+                    )
                   )}
                 </div>
               ) : (
@@ -3826,6 +3834,12 @@ export default function MemberProfile({
                                   INSCRIÇÃO PRINCIPAL
                                 </span>
                               )}
+                              {reg.checkinId && (
+                                <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-2xs" title="Presença validada por Check-in facial e GPS no clube">
+                                  <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700" />
+                                  CHECK-IN VALIDADO
+                                </span>
+                              )}
                               <span className="font-bold text-xs text-slate-900">
                                 {champ?.title || 'Campeonato G&G'} &gt; {stg?.title || `Etapa ${stg?.stageNum || 1}`} &gt; {modName}
                               </span>
@@ -5203,6 +5217,9 @@ export default function MemberProfile({
           activeCheckin={activeCheckin}
           weapons={weapons}
           modalities={modalities}
+          championships={championships}
+          stages={stages}
+          registrations={registrations}
           staySeconds={staySeconds}
           onClose={() => setIsCheckoutConfirmOpen(false)}
           onCheckoutComplete={() => {
@@ -6210,6 +6227,15 @@ export default function MemberProfile({
                                     )}
                                     {item.eventType}
                                   </span>
+                                  {item.checkinId && (
+                                    <span
+                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 mt-1"
+                                      title="Presença validada por Check-in facial e GPS no estande"
+                                    >
+                                      <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                                      Check-in Validado
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="py-2.5 px-3">
                                   <span className="font-bold text-slate-800 block leading-tight">

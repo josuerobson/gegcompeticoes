@@ -564,6 +564,7 @@ function mapRegistration(r: any): Registration {
     pixCopiaECola: r.pix_copia_e_cola || undefined,
     clubOwedAmount: r.club_owed_amount != null ? Number(r.club_owed_amount) : undefined,
     clubInvoiceId: r.club_invoice_id || undefined,
+    checkinId: r.checkin_id || undefined,
   };
 }
 
@@ -8350,11 +8351,124 @@ app.get('/api/checkins/:id/trainings', requireAuth, async (req, res) => {
   }
 });
 
+// 3.1.1. Fetch registrations linked to a specific check-in
+app.get('/api/checkins/:id/registrations', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const r = await pool.query(
+      `SELECT r.*, c.title as championship_title, s.title as stage_title, s.stage_num, m.name as modality_name,
+              w.model as weapon_model, w.caliber as weapon_caliber
+       FROM registrations r
+       LEFT JOIN championships c ON c.id = r.championship_id
+       LEFT JOIN stages s ON s.id = r.stage_id
+       LEFT JOIN modalities m ON m.id = r.modality_id
+       LEFT JOIN weapons w ON w.id = r.weapon_id
+       WHERE r.checkin_id = $1
+       ORDER BY r.registered_at ASC`,
+      [id]
+    );
+    res.json({
+      registrations: r.rows.map(row => ({
+        ...mapRegistration(row),
+        championshipTitle: row.championship_title,
+        stageTitle: row.stage_title,
+        stageNum: row.stage_num,
+        modalityName: row.modality_name,
+        weaponModel: row.weapon_model,
+        weaponCaliber: row.weapon_caliber,
+      }))
+    });
+  } catch (err) {
+    console.error('Fetch checkin registrations error:', err);
+    res.status(500).json({ error: 'Erro ao buscar inscrições deste check-in.' });
+  }
+});
+
+// 3.1.2. Link registrations to a check-in
+app.post('/api/checkins/:id/link-registrations', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { id } = req.params;
+  const { registrationIds } = req.body;
+
+  if (!Array.isArray(registrationIds)) {
+    return res.status(400).json({ error: 'registrationIds deve ser uma lista de IDs.' });
+  }
+
+  try {
+    const chkRes = await pool.query(`SELECT * FROM club_checkins WHERE id = $1`, [id]);
+    if (chkRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Check-in não encontrado.' });
+    }
+    const checkin = chkRes.rows[0];
+    const isOwner = checkin.user_id === currentUser.id;
+    const isAdmin = ['admin', 'master_admin', 'club_admin'].includes(currentUser.role);
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: 'Não autorizado.' });
+    }
+
+    // 1. Desvincula as que eram deste check-in mas nao estao mais em registrationIds
+    await pool.query(
+      `UPDATE registrations
+       SET checkin_id = NULL
+       WHERE checkin_id = $1 AND NOT (id = ANY($2))`,
+      [id, registrationIds]
+    );
+
+    // 2. Vincula as selecionadas
+    if (registrationIds.length > 0) {
+      await pool.query(
+        `UPDATE registrations
+         SET checkin_id = $1
+         WHERE id = ANY($2) AND (user_id = $3 OR $4 = true)`,
+        [id, registrationIds, checkin.user_id, isAdmin]
+      );
+    }
+
+    res.json({ success: true, count: registrationIds.length });
+  } catch (err) {
+    console.error('Link registrations to checkin error:', err);
+    res.status(500).json({ error: 'Erro ao vincular inscrições ao check-in.' });
+  }
+});
+
+// 3.1.3. Fetch unlinked registrations for the athlete (without check-in)
+app.get('/api/registrations/unlinked-checkin', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  try {
+    const r = await pool.query(
+      `SELECT r.*, c.title as championship_title, s.title as stage_title, s.stage_num, m.name as modality_name,
+              w.model as weapon_model, w.caliber as weapon_caliber
+       FROM registrations r
+       LEFT JOIN championships c ON c.id = r.championship_id
+       LEFT JOIN stages s ON s.id = r.stage_id
+       LEFT JOIN modalities m ON m.id = r.modality_id
+       LEFT JOIN weapons w ON w.id = r.weapon_id
+       WHERE r.user_id = $1 AND (r.checkin_id IS NULL OR r.checkin_id = '')
+       ORDER BY r.registered_at DESC`,
+      [currentUser.id]
+    );
+    res.json({
+      registrations: r.rows.map(row => ({
+        ...mapRegistration(row),
+        championshipTitle: row.championship_title,
+        stageTitle: row.stage_title,
+        stageNum: row.stage_num,
+        modalityName: row.modality_name,
+        weaponModel: row.weapon_model,
+        weaponCaliber: row.weapon_caliber,
+      }))
+    });
+  } catch (err) {
+    console.error('Fetch unlinked registrations error:', err);
+    res.status(500).json({ error: 'Erro ao buscar inscrições sem check-in.' });
+  }
+});
+
 // 3. Register Check-out (athlete or manager manual checkout)
 app.post('/api/checkins/:id/checkout', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
   const { id } = req.params;
-  const { checkoutAt, notes } = req.body;
+  const { checkoutAt, notes, registrationIds } = req.body;
 
   try {
     const chkRes = await pool.query(`SELECT * FROM club_checkins WHERE id = $1`, [id]);
@@ -8387,6 +8501,16 @@ app.post('/api/checkins/:id/checkout', requireAuth, async (req, res) => {
     );
 
     const updated = updateRes.rows[0];
+
+    // Link any passed registrationIds to this checkin as well
+    if (Array.isArray(registrationIds) && registrationIds.length > 0) {
+      await pool.query(
+        `UPDATE registrations
+         SET checkin_id = $1
+         WHERE id = ANY($2) AND (user_id = $3 OR $4 = true)`,
+        [id, registrationIds, checkin.user_id, isAdmin]
+      );
+    }
 
     // Get club name & athlete name for returned payload
     const extraRes = await pool.query(
