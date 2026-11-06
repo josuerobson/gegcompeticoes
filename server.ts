@@ -423,8 +423,11 @@ function mapWeapon(w: any): Weapon {
     permissionStatus: w.permission_status || undefined,
     registrySystem: w.registry_system || undefined,
     legacyId: w.legacy_id ?? undefined,
-    ownerName: w.owner_name || undefined,
-    clubName: w.club_name || undefined,
+    ownerName: w.owner_name_user || w.owner_name || undefined,
+    clubName: w.club_name_joined || w.club_name || undefined,
+    cpf: w.owner_cpf || w.owner_cpf_user || undefined,
+    gtExpirationDate: w.gt_expiration_date || undefined,
+    clubId: w.club_id || undefined,
   };
 }
 
@@ -4874,29 +4877,39 @@ app.get('/api/weapons', requireAuth, async (req, res) => {
     const tenant = (req as any).tenant as Club;
     const visibleClubIds = await getVisibleClubIds(tenant);
 
+    const baseSelect = `
+      SELECT w.*, u.cpf as owner_cpf_user, u.full_name as owner_name_user, c.name as club_name_joined
+      FROM weapons w
+      LEFT JOIN users u ON u.id = w.owner_id
+      LEFT JOIN clubs c ON c.id = COALESCE(w.club_id, u.club_id)
+    `;
+
     if (currentUser.role === 'master_admin') {
       if (ownerId) {
-        weaponsRes = await pool.query('SELECT * FROM weapons WHERE owner_id = $1', [ownerId]);
+        weaponsRes = await pool.query(
+          `${baseSelect} WHERE w.owner_id = $1 OR w.club_id = $1`,
+          [ownerId]
+        );
       } else {
         weaponsRes = await pool.query(
-          `SELECT * FROM weapons WHERE owner_id = ANY($1)
-             OR owner_id IN (SELECT id FROM users WHERE club_id = ANY($1))`,
+          `${baseSelect} WHERE w.owner_id = ANY($1)
+             OR w.club_id = ANY($1)
+             OR w.owner_id IN (SELECT id FROM users WHERE club_id = ANY($1))`,
           [visibleClubIds]
         );
       }
     } else if (ADMIN_ROLES.includes(currentUser.role) && currentUser.clubId) {
       if (ownerId) {
         weaponsRes = await pool.query(
-          `SELECT w.* FROM weapons w
-           LEFT JOIN users u ON u.id = w.owner_id
-           WHERE w.owner_id = $1 AND (w.owner_id = $2 OR u.club_id = $2)`,
+          `${baseSelect}
+           WHERE (w.owner_id = $1 OR w.club_id = $1)
+             AND (w.owner_id = $2 OR u.club_id = $2 OR w.club_id = $2)`,
           [ownerId, currentUser.clubId]
         );
       } else {
         weaponsRes = await pool.query(
-          `SELECT w.* FROM weapons w
-           LEFT JOIN users u ON u.id = w.owner_id
-           WHERE w.owner_id = $1 OR u.club_id = $1`,
+          `${baseSelect}
+           WHERE w.owner_id = $1 OR u.club_id = $1 OR w.club_id = $1`,
           [currentUser.clubId]
         );
       }
@@ -4908,14 +4921,17 @@ app.get('/api/weapons', requireAuth, async (req, res) => {
       }
       if (ownerId) {
         if (ownerId === currentUser.id || ownerId === currentUser.clubId) {
-          weaponsRes = await pool.query('SELECT * FROM weapons WHERE owner_id = $1', [ownerId]);
+          weaponsRes = await pool.query(
+            `${baseSelect} WHERE w.owner_id = $1`,
+            [ownerId]
+          );
         } else {
           weaponsRes = { rows: [] };
         }
       } else {
         weaponsRes = await pool.query(
-          `SELECT * FROM weapons WHERE owner_id = ANY($1)`,
-          [allowedOwnerIds]
+          `${baseSelect} WHERE w.owner_id = ANY($1) OR (w.club_id = $2 AND w.owner_cpf IS NULL)`,
+          [allowedOwnerIds, currentUser.clubId || '']
         );
       }
     }
@@ -4928,32 +4944,85 @@ app.get('/api/weapons', requireAuth, async (req, res) => {
 
 app.post('/api/weapons', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
-  const { ownerId, manufacturer, model, caliber, serialNumber, weaponNumber, sigmaNumber, weaponClass, permissionStatus, registrySystem } = req.body;
+  const {
+    ownerId,
+    manufacturer,
+    model,
+    caliber,
+    serialNumber,
+    weaponNumber,
+    sigmaNumber,
+    weaponClass,
+    permissionStatus,
+    registrySystem,
+    cpf,
+    gtExpirationDate,
+    clubId,
+    ownerType
+  } = req.body;
 
   if (!manufacturer || !model || !caliber) {
     return res.status(400).json({ error: 'Preencha fabricante, modelo e calibre.' });
   }
 
-  // Members can only register weapons for themselves. Club admins may register
-  // on behalf of their own club — even if a different ownerId is sent, it's
-  // ignored and forced back to their club. Only master_admin can target an
-  // arbitrary owner via the request body.
   let resolvedOwnerId = currentUser.id;
-  if (ownerId) {
-    if (currentUser.role === 'master_admin') {
-      resolvedOwnerId = ownerId;
-    } else if (ADMIN_ROLES.includes(currentUser.role) && currentUser.clubId) {
-      if (ownerId === currentUser.clubId) {
-        resolvedOwnerId = currentUser.clubId;
-      } else {
-        const targetMember = await pool.query('SELECT club_id FROM users WHERE id = $1', [ownerId]);
-        if (targetMember.rows.length > 0 && targetMember.rows[0].club_id === currentUser.clubId) {
-          resolvedOwnerId = ownerId;
-        } else {
-          resolvedOwnerId = currentUser.clubId;
-        }
-      }
+  let resolvedCpf: string | null = null;
+  let resolvedClubId: string | null = clubId || currentUser.clubId || null;
+  let resolvedGtExpiration: string | null = gtExpirationDate || null;
+
+  const isClubAcervo = ownerType === 'clube' || (!cpf && ownerId && (ownerId === (clubId || currentUser.clubId)));
+
+  if (isClubAcervo) {
+    // Opção de vincular apenas ao clube: não precisa de CPF nem de vencimento de GT
+    resolvedOwnerId = clubId || currentUser.clubId || ownerId || currentUser.id;
+    resolvedCpf = null;
+    resolvedGtExpiration = null;
+    resolvedClubId = clubId || currentUser.clubId || resolvedOwnerId;
+  } else if (cpf) {
+    // Vinculado a atleta via CPF: tem que pertencer a um atleta registrado no sistema
+    const cleanCpf = String(cpf).replace(/\D/g, '');
+    const userRes = await pool.query(
+      `SELECT u.id, u.cpf, u.full_name, u.club_id, c.name as club_name
+       FROM users u
+       LEFT JOIN clubs c ON c.id = u.club_id
+       WHERE regexp_replace(u.cpf, '[^0-9]', '', 'g') = $1
+       LIMIT 1`,
+      [cleanCpf]
+    );
+    if (userRes.rows.length === 0) {
+      return res.status(400).json({ error: 'Nenhum atleta encontrado com este CPF. A arma só pode ser vinculada a um atleta registrado no sistema.' });
     }
+    const athlete = userRes.rows[0];
+    resolvedOwnerId = athlete.id;
+    resolvedCpf = athlete.cpf || cpf;
+    // Seleção automática do clube de acordo com o cadastro do atleta
+    resolvedClubId = athlete.club_id || clubId || currentUser.clubId || null;
+    resolvedGtExpiration = gtExpirationDate || null;
+  } else if (ownerId) {
+    // Se ownerId foi passado
+    const userRes = await pool.query(
+      `SELECT u.id, u.cpf, u.full_name, u.club_id
+       FROM users u WHERE u.id = $1`,
+      [ownerId]
+    );
+    if (userRes.rows.length > 0) {
+      const athlete = userRes.rows[0];
+      resolvedOwnerId = athlete.id;
+      resolvedCpf = athlete.cpf || null;
+      resolvedClubId = athlete.club_id || clubId || currentUser.clubId || null;
+      resolvedGtExpiration = gtExpirationDate || null;
+    } else {
+      resolvedOwnerId = ownerId;
+      resolvedCpf = null;
+      resolvedClubId = ownerId;
+      resolvedGtExpiration = null;
+    }
+  } else {
+    // Atleta cadastrando para si mesmo (inscrição, perfil, etc.)
+    resolvedOwnerId = currentUser.id;
+    resolvedCpf = currentUser.cpf || null;
+    resolvedClubId = currentUser.clubId || null;
+    resolvedGtExpiration = gtExpirationDate || null;
   }
 
   // Prioriza o número de série / número da arma real quando preenchido
@@ -4971,12 +5040,15 @@ app.post('/api/weapons', requireAuth, async (req, res) => {
     weaponClass: weaponClass || undefined,
     permissionStatus: permissionStatus || undefined,
     registrySystem: registrySystem || undefined,
+    cpf: resolvedCpf || undefined,
+    gtExpirationDate: resolvedGtExpiration || undefined,
+    clubId: resolvedClubId || undefined,
   };
 
   try {
     await pool.query(
-      `INSERT INTO weapons (id, owner_id, manufacturer, model, caliber, serial_number, weapon_number, sigma_number, class, permission_status, registry_system)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      `INSERT INTO weapons (id, owner_id, manufacturer, model, caliber, serial_number, weapon_number, sigma_number, class, permission_status, registry_system, owner_cpf, gt_expiration_date, club_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         newWeapon.id,
         newWeapon.ownerId,
@@ -4988,10 +5060,24 @@ app.post('/api/weapons', requireAuth, async (req, res) => {
         newWeapon.sigmaNumber || null,
         newWeapon.weaponClass || null,
         newWeapon.permissionStatus || null,
-        newWeapon.registrySystem || null
+        newWeapon.registrySystem || null,
+        resolvedCpf || null,
+        resolvedGtExpiration || null,
+        resolvedClubId || null,
       ]
     );
-    res.status(201).json({ weapon: newWeapon });
+
+    // Retorna com dados completos enriquecidos
+    const inserted = await pool.query(
+      `SELECT w.*, u.cpf as owner_cpf_user, u.full_name as owner_name_user, c.name as club_name_joined
+       FROM weapons w
+       LEFT JOIN users u ON u.id = w.owner_id
+       LEFT JOIN clubs c ON c.id = COALESCE(w.club_id, u.club_id)
+       WHERE w.id = $1`,
+      [newWeapon.id]
+    );
+
+    res.status(201).json({ weapon: mapWeapon(inserted.rows[0]) });
   } catch (err) {
     console.error('Create weapon database error:', err);
     res.status(500).json({ error: 'Erro ao cadastrar arma.' });
@@ -5009,7 +5095,9 @@ app.delete('/api/weapons/:id', requireAuth, async (req, res) => {
     }
     const weapon = mapWeapon(weaponRes.rows[0]);
 
-    const canDelete = currentUser.role === 'master_admin' || weapon.ownerId === currentUser.id || (ADMIN_ROLES.includes(currentUser.role) && weapon.ownerId === currentUser.clubId);
+    const canDelete = currentUser.role === 'master_admin'
+      || weapon.ownerId === currentUser.id
+      || (ADMIN_ROLES.includes(currentUser.role) && (weapon.ownerId === currentUser.clubId || weapon.clubId === currentUser.clubId));
     if (!canDelete) {
       return res.status(403).json({ error: 'Você não tem permissão para remover esta arma.' });
     }
@@ -5025,7 +5113,21 @@ app.delete('/api/weapons/:id', requireAuth, async (req, res) => {
 app.put('/api/weapons/:id', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
   const weaponId = req.params.id;
-  const { manufacturer, model, caliber, serialNumber, weaponNumber, sigmaNumber, weaponClass, permissionStatus, registrySystem } = req.body;
+  const {
+    manufacturer,
+    model,
+    caliber,
+    serialNumber,
+    weaponNumber,
+    sigmaNumber,
+    weaponClass,
+    permissionStatus,
+    registrySystem,
+    cpf,
+    gtExpirationDate,
+    clubId,
+    ownerType
+  } = req.body;
 
   try {
     const weaponRes = await pool.query('SELECT * FROM weapons WHERE id = $1', [weaponId]);
@@ -5034,29 +5136,90 @@ app.put('/api/weapons/:id', requireAuth, async (req, res) => {
     }
     const weapon = mapWeapon(weaponRes.rows[0]);
 
-    const canEdit = currentUser.role === 'master_admin' || weapon.ownerId === currentUser.id || (ADMIN_ROLES.includes(currentUser.role) && (weapon.ownerId === currentUser.clubId || !weapon.ownerId));
+    const canEdit = currentUser.role === 'master_admin'
+      || weapon.ownerId === currentUser.id
+      || (ADMIN_ROLES.includes(currentUser.role) && (weapon.ownerId === currentUser.clubId || weapon.clubId === currentUser.clubId || !weapon.ownerId));
     if (!canEdit) {
       return res.status(403).json({ error: 'Você não tem permissão para editar esta arma.' });
+    }
+
+    let resolvedOwnerId = weapon.ownerId;
+    let resolvedCpf: string | null = weapon.cpf || null;
+    let resolvedClubId: string | null = clubId || weapon.clubId || null;
+    let resolvedGtExpiration: string | null = gtExpirationDate !== undefined ? (gtExpirationDate || null) : (weapon.gtExpirationDate || null);
+
+    if (ownerType === 'clube') {
+      // Opção de só vincular ao clube: não precisa de CPF nem de vencimento de GT
+      resolvedOwnerId = clubId || currentUser.clubId || weapon.clubId || resolvedOwnerId;
+      resolvedCpf = null;
+      resolvedGtExpiration = null;
+      resolvedClubId = clubId || currentUser.clubId || resolvedOwnerId;
+    } else if (cpf) {
+      // Quando for cadastrar/alterar um CPF, tem que vincular a um atleta cadastrado no sistema
+      const cleanCpf = String(cpf).replace(/\D/g, '');
+      const userRes = await pool.query(
+        `SELECT u.id, u.cpf, u.full_name, u.club_id
+         FROM users u
+         WHERE regexp_replace(u.cpf, '[^0-9]', '', 'g') = $1
+         LIMIT 1`,
+        [cleanCpf]
+      );
+      if (userRes.rows.length === 0) {
+        return res.status(400).json({ error: 'Nenhum atleta encontrado com este CPF. A arma só pode ser vinculada a um atleta registrado no sistema.' });
+      }
+      const athlete = userRes.rows[0];
+      resolvedOwnerId = athlete.id;
+      resolvedCpf = athlete.cpf || cpf;
+      // Seleção do clube é automática de acordo com o cadastro do atleta
+      resolvedClubId = athlete.club_id || clubId || weapon.clubId || currentUser.clubId || null;
+      resolvedGtExpiration = gtExpirationDate || null;
+    } else if (ownerType === 'atleta' && !cpf) {
+      return res.status(400).json({ error: 'Informe o CPF do atleta para vincular a arma a um atleta.' });
     }
 
     const resolvedSerial = (serialNumber || weaponNumber || sigmaNumber || null);
     await pool.query(
       `UPDATE weapons SET
-        manufacturer      = COALESCE($1, manufacturer),
-        model             = COALESCE($2, model),
-        caliber           = COALESCE($3, caliber),
-        weapon_number     = $4,
-        sigma_number      = $5,
-        class             = $6,
-        permission_status = $7,
-        registry_system   = $8,
-        serial_number     = COALESCE($9, serial_number)
-       WHERE id = $10`,
-      [manufacturer, model, caliber, weaponNumber || null, sigmaNumber || null,
-       weaponClass || null, permissionStatus || null, registrySystem || null, resolvedSerial, weaponId]
+        manufacturer       = COALESCE($1, manufacturer),
+        model              = COALESCE($2, model),
+        caliber            = COALESCE($3, caliber),
+        weapon_number      = $4,
+        sigma_number       = $5,
+        class              = $6,
+        permission_status  = $7,
+        registry_system    = $8,
+        serial_number      = COALESCE($9, serial_number),
+        owner_id           = COALESCE($10, owner_id),
+        owner_cpf          = $11,
+        gt_expiration_date = $12,
+        club_id            = COALESCE($13, club_id)
+       WHERE id = $14`,
+      [
+        manufacturer,
+        model,
+        caliber,
+        weaponNumber || null,
+        sigmaNumber || null,
+        weaponClass || null,
+        permissionStatus || null,
+        registrySystem || null,
+        resolvedSerial,
+        resolvedOwnerId,
+        resolvedCpf,
+        resolvedGtExpiration,
+        resolvedClubId,
+        weaponId
+      ]
     );
 
-    const updated = await pool.query('SELECT * FROM weapons WHERE id = $1', [weaponId]);
+    const updated = await pool.query(
+      `SELECT w.*, u.cpf as owner_cpf_user, u.full_name as owner_name_user, c.name as club_name_joined
+       FROM weapons w
+       LEFT JOIN users u ON u.id = w.owner_id
+       LEFT JOIN clubs c ON c.id = COALESCE(w.club_id, u.club_id)
+       WHERE w.id = $1`,
+      [weaponId]
+    );
     res.json({ weapon: mapWeapon(updated.rows[0]) });
   } catch (err) {
     console.error('Update weapon error:', err);
@@ -5160,9 +5323,10 @@ app.get('/api/weapons/search', requireAuth, async (req, res) => {
     const searchPattern = `%${q}%`;
     const targetClubId = currentUser.clubId || '';
     const r = await pool.query(
-      `SELECT w.*, u.full_name as owner_name, c.name as club_name FROM weapons w
+      `SELECT w.*, u.cpf as owner_cpf_user, u.full_name as owner_name_user, c.name as club_name_joined
+       FROM weapons w
        LEFT JOIN users u ON u.id = w.owner_id
-       LEFT JOIN clubs c ON c.id = u.club_id OR c.id = w.owner_id
+       LEFT JOIN clubs c ON c.id = COALESCE(w.club_id, u.club_id, w.owner_id)
        WHERE (
          unaccent_lower(COALESCE(w.weapon_number, '')) LIKE unaccent_lower($1)
          OR unaccent_lower(COALESCE(w.serial_number, '')) LIKE unaccent_lower($1)
@@ -5172,6 +5336,7 @@ app.get('/api/weapons/search', requireAuth, async (req, res) => {
          OR unaccent_lower(COALESCE(w.caliber, '')) LIKE unaccent_lower($1)
          OR unaccent_lower(COALESCE(w.class, '')) LIKE unaccent_lower($1)
          OR unaccent_lower(COALESCE(w.registry_system, '')) LIKE unaccent_lower($1)
+         OR unaccent_lower(COALESCE(w.owner_cpf, u.cpf, '')) LIKE unaccent_lower($1)
          OR unaccent_lower(COALESCE(u.full_name, '')) LIKE unaccent_lower($1)
          OR unaccent_lower(COALESCE(c.name, '')) LIKE unaccent_lower($1)
        )
@@ -6089,6 +6254,41 @@ app.post('/api/settings', requireAdmin, async (req, res) => {
 // ==========================================
 
 // Search club members by CPF or name (debounced autocomplete — avoids loading 2500+ records at once)
+app.get('/api/members/by-cpf/:cpf', requireAuth, async (req, res) => {
+  const rawCpf = req.params.cpf || '';
+  const cleanCpf = rawCpf.replace(/\D/g, '');
+  if (!cleanCpf || cleanCpf.length < 11) {
+    return res.status(400).json({ error: 'CPF inválido.' });
+  }
+  try {
+    const result = await pool.query(
+      `SELECT u.id, u.full_name, u.cpf, u.cr_number, u.club_id, c.name as club_name
+       FROM users u
+       LEFT JOIN clubs c ON c.id = u.club_id
+       WHERE regexp_replace(u.cpf, '[^0-9]', '', 'g') = $1
+       LIMIT 1`,
+      [cleanCpf]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Atleta não encontrado no sistema.' });
+    }
+    const row = result.rows[0];
+    res.json({
+      athlete: {
+        id: row.id,
+        fullName: row.full_name,
+        cpf: row.cpf,
+        crNumber: row.cr_number,
+        clubId: row.club_id,
+        clubName: row.club_name,
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching athlete by CPF:', err);
+    res.status(500).json({ error: 'Erro ao consultar CPF do atleta.' });
+  }
+});
+
 app.get('/api/members/search', requireAdmin, async (req, res) => {
   const currentUser = (req as any).user as User;
   const q = (req.query.q as string || '').trim();
@@ -6099,19 +6299,23 @@ app.get('/api/members/search', requireAdmin, async (req, res) => {
     let rows;
     if (currentUser.role === 'master_admin') {
       const r = await pool.query(
-        `SELECT id, full_name, cpf, cr_number FROM users
-         WHERE role = 'member'
-           AND (regexp_replace(cpf, '[^0-9]', '', 'g') ILIKE $1 OR unaccent_lower(full_name) LIKE unaccent_lower($2))
-         ORDER BY full_name LIMIT 8`,
+        `SELECT u.id, u.full_name, u.cpf, u.cr_number, u.club_id, c.name as club_name
+         FROM users u
+         LEFT JOIN clubs c ON c.id = u.club_id
+         WHERE u.role = 'member'
+           AND (regexp_replace(u.cpf, '[^0-9]', '', 'g') ILIKE $1 OR unaccent_lower(u.full_name) LIKE unaccent_lower($2))
+         ORDER BY u.full_name LIMIT 8`,
         [term, nameTerm]
       );
       rows = r.rows;
     } else {
       const r = await pool.query(
-        `SELECT id, full_name, cpf, cr_number FROM users
-         WHERE role = 'member' AND club_id = $1
-           AND (regexp_replace(cpf, '[^0-9]', '', 'g') ILIKE $2 OR unaccent_lower(full_name) LIKE unaccent_lower($3))
-         ORDER BY full_name LIMIT 8`,
+        `SELECT u.id, u.full_name, u.cpf, u.cr_number, u.club_id, c.name as club_name
+         FROM users u
+         LEFT JOIN clubs c ON c.id = u.club_id
+         WHERE u.role = 'member' AND u.club_id = $1
+           AND (regexp_replace(u.cpf, '[^0-9]', '', 'g') ILIKE $2 OR unaccent_lower(u.full_name) LIKE unaccent_lower($3))
+         ORDER BY u.full_name LIMIT 8`,
         [currentUser.clubId, term, nameTerm]
       );
       rows = r.rows;
@@ -6128,6 +6332,8 @@ app.get('/api/members/search', requireAdmin, async (req, res) => {
         fullName: u.full_name,
         cpf: u.cpf,
         crNumber: u.cr_number,
+        clubId: u.club_id,
+        clubName: u.club_name,
         ammoBalances: balRes.rows.map((b: any) => ({ caliber: b.caliber, balance: Number(b.balance) || 0 }))
       });
     }

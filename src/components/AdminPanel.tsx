@@ -48,9 +48,38 @@ interface AdminPanelProps {
   weaponLookupOptions: WeaponLookupOption[];
   modalities: Modality[];
   onRefreshData?: () => Promise<void>;
-  onAddWeapon: (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string }) => Promise<void>;
+  onAddWeapon: (weapon: {
+    ownerId?: string;
+    manufacturer: string;
+    model: string;
+    caliber: string;
+    serialNumber?: string;
+    weaponNumber?: string;
+    sigmaNumber?: string;
+    weaponClass?: string;
+    permissionStatus?: string;
+    registrySystem?: string;
+    cpf?: string;
+    gtExpirationDate?: string;
+    clubId?: string;
+    ownerType?: 'atleta' | 'clube' | 'propria';
+  }) => Promise<void>;
   onRemoveWeapon: (weaponId: string) => Promise<void>;
-  onUpdateWeapon: (weaponId: string, updates: { manufacturer?: string; model?: string; caliber?: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string }) => Promise<{ error?: string }>;
+  onUpdateWeapon: (weaponId: string, updates: {
+    manufacturer?: string;
+    model?: string;
+    caliber?: string;
+    serialNumber?: string;
+    weaponNumber?: string;
+    sigmaNumber?: string;
+    weaponClass?: string;
+    permissionStatus?: string;
+    registrySystem?: string;
+    cpf?: string;
+    gtExpirationDate?: string;
+    clubId?: string;
+    ownerType?: 'atleta' | 'clube';
+  }) => Promise<{ error?: string }>;
   onAddWeaponLookup: (kind: string, label: string) => Promise<{ error?: string }>;
   onUpdateWeaponLookup: (id: string, label: string) => Promise<{ error?: string }>;
   onRemoveWeaponLookup: (id: string) => Promise<{ error?: string }>;
@@ -753,6 +782,7 @@ function QuickAddWeaponModal({
   const [caliber, setCaliber] = React.useState('');
   const [registrySystem, setRegistrySystem] = React.useState('SIGMA');
   const [permissionStatus, setPermissionStatus] = React.useState('Permitido');
+  const [gtExpirationDate, setGtExpirationDate] = React.useState('');
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState('');
 
@@ -785,6 +815,10 @@ function QuickAddWeaponModal({
 
     setSaving(true);
     setError('');
+    if (ownerType === 'atleta' && !gtExpirationDate) {
+      setError('Vencimento da Guia de Trânsito é obrigatório para armas do atleta.');
+      return;
+    }
     try {
       const targetOwnerId = ownerType === 'clube' ? currentUser?.clubId : (member?.id || currentUser?.id);
       const res = await fetch('/api/weapons', {
@@ -795,6 +829,10 @@ function QuickAddWeaponModal({
         },
         body: JSON.stringify({
           ownerId: targetOwnerId,
+          cpf: ownerType === 'atleta' ? (member?.cpf || currentUser?.cpf) : undefined,
+          clubId: member?.clubId || currentUser?.clubId,
+          gtExpirationDate: ownerType === 'atleta' ? gtExpirationDate : undefined,
+          ownerType: ownerType,
           manufacturer: manufacturer.trim(),
           model: model.trim(),
           caliber: caliber.trim(),
@@ -1833,7 +1871,7 @@ interface TreinamentosCompeticoesAdminPanelProps {
   users: User[];
   weapons: Weapon[];
   weaponLookupOptions: WeaponLookupOption[];
-  onAddWeapon: (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string }) => Promise<void>;
+  onAddWeapon: (weapon: any) => Promise<void>;
   onRefreshData?: () => Promise<void>;
 }
 
@@ -1980,6 +2018,10 @@ function TreinamentosCompeticoesAdminPanel({
     try {
       await onAddWeapon({
         ownerId: selectedAthlete.id,
+        cpf: selectedAthlete.cpf,
+        clubId: selectedAthlete.clubId,
+        gtExpirationDate: newWeaponData.gtExpirationDate,
+        ownerType: 'atleta',
         manufacturer: newWeaponData.manufacturer,
         model: newWeaponData.model,
         caliber: newWeaponData.caliber,
@@ -7341,17 +7383,156 @@ export default function AdminPanel({
     });
     return urls;
   }, [currentUser, posts]);
-  const DEFAULT_CLUB_WEAPON = { weaponNumber: '', sigmaNumber: '', weaponClass: '', model: '', caliber: '', manufacturer: '', registrySystem: '', permissionStatus: '' };
+  const DEFAULT_CLUB_WEAPON = {
+    weaponNumber: '',
+    sigmaNumber: '',
+    weaponClass: '',
+    model: '',
+    caliber: '',
+    manufacturer: '',
+    registrySystem: '',
+    permissionStatus: '',
+    ownerType: 'clube' as 'clube' | 'atleta',
+    cpf: '',
+    gtExpirationDate: '',
+    clubId: '',
+  };
   const [newClubWeapon, setNewClubWeapon] = useState(DEFAULT_CLUB_WEAPON);
   const [savingClubWeapon, setSavingClubWeapon] = useState(false);
   const [clubWeaponSearch, setClubWeaponSearch] = useState('');
 
+  // Athlete lookup for new weapon
+  const [newWeaponAthlete, setNewWeaponAthlete] = useState<{ id: string; fullName: string; cpf: string; clubId?: string; clubName?: string } | null>(null);
+  const [newWeaponAthleteLoading, setNewWeaponAthleteLoading] = useState(false);
+  const [newWeaponAthleteError, setNewWeaponAthleteError] = useState('');
+
+  // Athlete lookup for weapon editing
+  const [editWeaponAthlete, setEditWeaponAthlete] = useState<{ id: string; fullName: string; cpf: string; clubId?: string; clubName?: string } | null>(null);
+  const [editWeaponAthleteLoading, setEditWeaponAthleteLoading] = useState(false);
+  const [editWeaponAthleteError, setEditWeaponAthleteError] = useState('');
+
+  // Helper function to search athlete by CPF (in-memory first, fallback to API)
+  const searchAthleteByCpf = async (rawCpf: string) => {
+    const digits = rawCpf.replace(/\D/g, '');
+    if (digits.length !== 11) return null;
+    const localMatch = users.find(u => u.cpf && u.cpf.replace(/\D/g, '') === digits);
+    if (localMatch) {
+      const club = clubs.find(c => c.id === localMatch.clubId);
+      return {
+        id: localMatch.id,
+        fullName: localMatch.fullName,
+        cpf: localMatch.cpf || rawCpf,
+        clubId: localMatch.clubId,
+        clubName: club?.name,
+      };
+    }
+    try {
+      const res = await fetch(`/api/members/by-cpf/${digits}`, {
+        headers: currentUser ? { 'x-user-id': currentUser.id } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.athlete || null;
+      }
+    } catch (err) {
+      console.error('Athlete search error:', err);
+    }
+    return null;
+  };
+
+  const handleCpfChangeNewWeapon = async (val: string) => {
+    const digits = val.replace(/\D/g, '').slice(0, 11);
+    let formatted = digits;
+    if (digits.length > 9) formatted = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6,9)}-${digits.slice(9)}`;
+    else if (digits.length > 6) formatted = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6)}`;
+    else if (digits.length > 3) formatted = `${digits.slice(0,3)}.${digits.slice(3)}`;
+
+    setNewClubWeapon(prev => ({ ...prev, cpf: formatted }));
+
+    if (digits.length === 11) {
+      setNewWeaponAthleteLoading(true);
+      setNewWeaponAthleteError('');
+      const athlete = await searchAthleteByCpf(digits);
+      setNewWeaponAthleteLoading(false);
+      if (athlete) {
+        setNewWeaponAthlete(athlete);
+        setNewWeaponAthleteError('');
+        if (athlete.clubId) {
+          setNewClubWeapon(prev => ({ ...prev, clubId: athlete.clubId }));
+        }
+      } else {
+        setNewWeaponAthlete(null);
+        setNewWeaponAthleteError('Nenhum atleta encontrado com este CPF. A arma só pode ser vinculada a um atleta registrado no sistema.');
+      }
+    } else {
+      setNewWeaponAthlete(null);
+      setNewWeaponAthleteError('');
+    }
+  };
+
+  const handleCpfChangeEditWeapon = async (val: string) => {
+    const digits = val.replace(/\D/g, '').slice(0, 11);
+    let formatted = digits;
+    if (digits.length > 9) formatted = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6,9)}-${digits.slice(9)}`;
+    else if (digits.length > 6) formatted = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6)}`;
+    else if (digits.length > 3) formatted = `${digits.slice(0,3)}.${digits.slice(3)}`;
+
+    setEditWeaponData(prev => ({ ...prev, cpf: formatted }));
+
+    if (digits.length === 11) {
+      setEditWeaponAthleteLoading(true);
+      setEditWeaponAthleteError('');
+      const athlete = await searchAthleteByCpf(digits);
+      setEditWeaponAthleteLoading(false);
+      if (athlete) {
+        setEditWeaponAthlete(athlete);
+        setEditWeaponAthleteError('');
+        if (athlete.clubId) {
+          setEditWeaponData(prev => ({ ...prev, clubId: athlete.clubId }));
+        }
+      } else {
+        setEditWeaponAthlete(null);
+        setEditWeaponAthleteError('Nenhum atleta encontrado com este CPF. A arma só pode ser vinculada a um atleta registrado no sistema.');
+      }
+    } else {
+      setEditWeaponAthlete(null);
+      setEditWeaponAthleteError('');
+    }
+  };
+
   const handleSaveClubWeapon = async () => {
-    if (!newClubWeapon.manufacturer || !newClubWeapon.model || !newClubWeapon.caliber || !currentUser?.clubId) return;
+    if (!newClubWeapon.manufacturer || !newClubWeapon.model || !newClubWeapon.caliber) return;
+    if (newClubWeapon.ownerType === 'atleta') {
+      if (!newWeaponAthlete) {
+        alert('Vincule a arma a um atleta cadastrado no sistema informando um CPF válido.');
+        return;
+      }
+      if (!newClubWeapon.gtExpirationDate) {
+        alert('Informe a data de Vencimento da Guia de Trânsito.');
+        return;
+      }
+    }
+    const targetClub = newClubWeapon.clubId || newWeaponAthlete?.clubId || currentUser?.clubId;
+    if (newClubWeapon.ownerType === 'clube' && !targetClub) {
+      alert('Selecione o Clube.');
+      return;
+    }
+
     setSavingClubWeapon(true);
     try {
-      await onAddWeapon({ ownerId: currentUser.clubId, ...newClubWeapon });
+      await onAddWeapon({
+        ownerId: newClubWeapon.ownerType === 'atleta' ? newWeaponAthlete?.id : targetClub,
+        cpf: newClubWeapon.ownerType === 'atleta' ? (newWeaponAthlete?.cpf || newClubWeapon.cpf) : undefined,
+        clubId: targetClub,
+        gtExpirationDate: newClubWeapon.ownerType === 'atleta' ? newClubWeapon.gtExpirationDate : undefined,
+        ownerType: newClubWeapon.ownerType,
+        ...newClubWeapon
+      });
       setNewClubWeapon(DEFAULT_CLUB_WEAPON);
+      setNewWeaponAthlete(null);
+      setNewWeaponAthleteError('');
+    } catch (err: any) {
+      alert(err.message || 'Erro ao cadastrar arma.');
     } finally {
       setSavingClubWeapon(false);
     }
@@ -7365,14 +7546,38 @@ export default function AdminPanel({
 
   const handleSaveWeaponEdit = async () => {
     if (!editingWeaponId) return;
+    if (editWeaponData.ownerType === 'atleta') {
+      if (!editWeaponAthlete && (!editWeaponData.cpf || editWeaponData.cpf.replace(/\D/g, '').length !== 11)) {
+        setWeaponEditError('CPF deve pertencer a um atleta registrado no sistema.');
+        return;
+      }
+      if (editWeaponAthleteError) {
+        setWeaponEditError(editWeaponAthleteError);
+        return;
+      }
+      if (!editWeaponData.gtExpirationDate) {
+        setWeaponEditError('Vencimento da Guia de Trânsito é obrigatório para armas de atletas.');
+        return;
+      }
+    }
     setSavingWeaponEdit(true);
     setWeaponEditError('');
-    const result = await onUpdateWeapon(editingWeaponId, editWeaponData);
+    const targetClub = editWeaponData.clubId || editWeaponAthlete?.clubId || currentUser?.clubId;
+    const result = await onUpdateWeapon(editingWeaponId, {
+      ...editWeaponData,
+      ownerType: editWeaponData.ownerType,
+      ownerId: editWeaponData.ownerType === 'atleta' ? (editWeaponAthlete?.id || undefined) : targetClub,
+      cpf: editWeaponData.ownerType === 'atleta' ? (editWeaponAthlete?.cpf || editWeaponData.cpf) : undefined,
+      clubId: targetClub,
+      gtExpirationDate: editWeaponData.ownerType === 'atleta' ? editWeaponData.gtExpirationDate : undefined,
+    });
     setSavingWeaponEdit(false);
     if (result.error) {
       setWeaponEditError(result.error);
     } else {
       setEditingWeaponId(null);
+      setEditWeaponAthlete(null);
+      setEditWeaponAthleteError('');
     }
   };
 
@@ -13351,50 +13556,231 @@ export default function AdminPanel({
 
       case 'cadastro_armas': {
         const clubWeapons = currentUser?.clubId
-          ? weapons.filter(w => w.ownerId === currentUser.clubId)
+          ? weapons.filter(w => w.ownerId === currentUser.clubId || w.clubId === currentUser.clubId)
           : weapons;
         const normalizedFilter = normalizeSearchText(clubWeaponSearch.trim());
         const filteredClubWeapons = normalizedFilter
           ? clubWeapons.filter(w => {
               const fullSearch = normalizeSearchText(
-                `${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.weaponNumber || ''} ${w.serialNumber || ''} ${w.sigmaNumber || ''} ${w.weaponClass || ''} ${w.registrySystem || ''} ${w.permissionStatus || ''}`
+                `${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.weaponNumber || ''} ${w.serialNumber || ''} ${w.sigmaNumber || ''} ${w.weaponClass || ''} ${w.registrySystem || ''} ${w.permissionStatus || ''} ${w.cpf || ''} ${w.ownerName || ''} ${w.clubName || ''}`
               );
               return fullSearch.includes(normalizedFilter);
             })
           : clubWeapons;
+
+        const formatGtBadge = (d?: string) => {
+          if (!d) return null;
+          const cleanDate = d.split('T')[0];
+          const parts = cleanDate.split('-');
+          const formatted = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : cleanDate;
+          const today = new Date().toISOString().split('T')[0];
+          const isExpired = cleanDate < today;
+          const expDate = new Date(cleanDate);
+          const now = new Date();
+          const diffDays = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          const isExpiringSoon = !isExpired && diffDays <= 30;
+
+          if (isExpired) {
+            return (
+              <span className="bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1">
+                ⚠️ GT Vencida: {formatted}
+              </span>
+            );
+          }
+          if (isExpiringSoon) {
+            return (
+              <span className="bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1">
+                ⏰ GT Vence em breve: {formatted}
+              </span>
+            );
+          }
+          return (
+            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px] font-medium inline-flex items-center gap-1">
+              ✅ GT: {formatted}
+            </span>
+          );
+        };
+
+        const formatCpfDisplay = (cpfVal?: string) => {
+          if (!cpfVal) return '—';
+          const digits = cpfVal.replace(/\D/g, '');
+          if (digits.length === 11) {
+            return `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6,9)}-${digits.slice(9)}`;
+          }
+          return cpfVal;
+        };
 
         return (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs text-slate-805">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
               <div>
                 <h3 className="font-display font-bold text-slate-900 text-base">Cadastro de Armas do Clube</h3>
-                <p className="text-xs text-slate-500">Gerencie o acervo de armas registradas no estande para uso em competições e treinos.</p>
+                <p className="text-xs text-slate-500">Gerencie o acervo de armas registradas no estande para uso em competições e treinos, com controle de CPF, Guia de Trânsito e Clube.</p>
               </div>
               <div className="text-xs text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 w-fit">
                 Total de armas: <span className="font-bold text-slate-800">{clubWeapons.length}</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-xl space-y-3">
-                <h4 className="font-bold text-xs">Registrar Arma no Estande</h4>
-                <div className="space-y-2">
-                  <input type="text" placeholder="Número da arma" value={newClubWeapon.weaponNumber} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, weaponNumber: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
-                  <input type="text" placeholder="Número Sigma" value={newClubWeapon.sigmaNumber} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, sigmaNumber: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* ── COLUNA ESQUERDA: NOVO CADASTRO ── */}
+              <div className="lg:col-span-5 bg-slate-50/70 p-4 border border-slate-200 rounded-2xl space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-xs text-slate-900">Registrar Arma no Estande</h4>
+                  <span className="text-[10px] font-bold uppercase text-slate-400 font-mono">Novo Cadastro</span>
+                </div>
+
+                {/* Seletor de Vínculo: Clube vs Atleta */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Vincular arma a quem?</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewClubWeapon(prev => ({ ...prev, ownerType: 'clube', cpf: '', gtExpirationDate: '' }));
+                        setNewWeaponAthlete(null);
+                        setNewWeaponAthleteError('');
+                      }}
+                      className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                        newClubWeapon.ownerType === 'clube'
+                          ? 'bg-purple-50 border-purple-500 text-purple-700 shadow-xs'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      🏛️ Acervo do Clube
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewClubWeapon(prev => ({ ...prev, ownerType: 'atleta' }))}
+                      className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                        newClubWeapon.ownerType === 'atleta'
+                          ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-xs'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      🎯 Arma de Atleta
+                    </button>
+                  </div>
+                </div>
+
+                {/* Campos específicos se vinculada a ATLETA */}
+                {newClubWeapon.ownerType === 'atleta' ? (
+                  <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 space-y-2.5">
+                    <div>
+                      <label className="text-[10px] font-bold text-blue-900 uppercase block mb-1">
+                        CPF do Atleta *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="000.000.000-00 (digite 11 dígitos)"
+                        value={newClubWeapon.cpf}
+                        onChange={(e) => handleCpfChangeNewWeapon(e.target.value)}
+                        className="w-full bg-white border border-slate-300 p-2.5 rounded-lg text-xs font-mono font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      />
+                      {newWeaponAthleteLoading && (
+                        <p className="text-[10px] text-blue-600 mt-1 flex items-center gap-1">
+                          <div className="w-2.5 h-2.5 border-2 border-blue-600/40 border-t-blue-600 rounded-full animate-spin" />
+                          Consultando cadastro do atleta...
+                        </p>
+                      )}
+                      {newWeaponAthlete && (
+                        <div className="mt-2 p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs">
+                          <p className="font-bold flex items-center gap-1">
+                            ✓ {newWeaponAthlete.fullName}
+                          </p>
+                          <p className="text-[10px] text-emerald-600 font-mono">
+                            CPF: {formatCpfDisplay(newWeaponAthlete.cpf)}
+                          </p>
+                        </div>
+                      )}
+                      {newWeaponAthleteError && (
+                        <p className="text-[11px] text-rose-600 font-semibold mt-1.5 bg-rose-50 p-2 rounded-lg border border-rose-200">
+                          {newWeaponAthleteError}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Clube: Seleção automática de acordo com o cadastro do atleta */}
+                    <div>
+                      <label className="text-[10px] font-bold text-blue-900 uppercase block mb-1">
+                        Clube (Seleção Automática do Atleta)
+                      </label>
+                      <div className="w-full bg-slate-100 border border-slate-200 p-2.5 rounded-lg text-xs font-semibold text-slate-700 flex items-center justify-between">
+                        <span>
+                          {newWeaponAthlete
+                            ? (clubs.find(c => c.id === (newWeaponAthlete.clubId || newClubWeapon.clubId))?.name || newWeaponAthlete.clubName || 'Clube Vinculado')
+                            : 'Aguardando validação do atleta pelo CPF...'}
+                        </span>
+                        <span className="text-[9px] bg-blue-100 text-blue-700 font-mono px-1.5 py-0.5 rounded font-bold uppercase">
+                          Automático
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Vencimento Guia de Trânsito */}
+                    <div>
+                      <label className="text-[10px] font-bold text-blue-900 uppercase block mb-1">
+                        Vencimento Guia de Trânsito *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={newClubWeapon.gtExpirationDate}
+                        onChange={(e) => setNewClubWeapon({ ...newClubWeapon, gtExpirationDate: e.target.value })}
+                        className="w-full bg-white border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  /* Campos específicos se vinculada ao CLUBE */
+                  <div className="bg-purple-50/50 p-3 rounded-xl border border-purple-100 space-y-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-purple-900 uppercase block mb-1">
+                        Clube Proprietário *
+                      </label>
+                      {currentUser?.role === 'master_admin' ? (
+                        <select
+                          value={newClubWeapon.clubId || currentUser?.clubId || ''}
+                          onChange={(e) => setNewClubWeapon({ ...newClubWeapon, clubId: e.target.value })}
+                          className="w-full bg-white border border-slate-300 p-2.5 rounded-lg text-xs"
+                        >
+                          <option value="">Selecione o Clube...</option>
+                          {clubs.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div className="w-full bg-slate-100 border border-slate-200 p-2.5 rounded-lg text-xs font-semibold text-slate-700">
+                          {clubs.find(c => c.id === currentUser?.clubId)?.name || 'Meu Clube'}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-purple-700 font-medium italic">
+                      ℹ️ Armas do acervo do clube não exigem CPF nem Guia de Trânsito.
+                    </p>
+                  </div>
+                )}
+
+                {/* Dados da Arma */}
+                <div className="space-y-2 pt-1 border-t border-slate-200">
+                  <div className="grid grid-cols-2 gap-2">
+                    <input type="text" placeholder="Número da arma" value={newClubWeapon.weaponNumber} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, weaponNumber: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
+                    <input type="text" placeholder="Número Sigma" value={newClubWeapon.sigmaNumber} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, sigmaNumber: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs" />
+                  </div>
                   <select value={newClubWeapon.weaponClass} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, weaponClass: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs">
                     <option value="">Classe...</option>
                     {weaponLookup('classe').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
                   </select>
                   <select value={newClubWeapon.model} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, model: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs">
-                    <option value="">Modelo...</option>
+                    <option value="">Modelo *...</option>
                     {weaponLookup('modelo').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
                   </select>
                   <select value={newClubWeapon.caliber} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, caliber: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs">
-                    <option value="">Calibre...</option>
+                    <option value="">Calibre *...</option>
                     {weaponLookup('calibre').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
                   </select>
                   <select value={newClubWeapon.manufacturer} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, manufacturer: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs">
-                    <option value="">Fabricante...</option>
+                    <option value="">Fabricante *...</option>
                     {weaponLookup('fabricante').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
                   </select>
                   <select value={newClubWeapon.registrySystem} onChange={(e) => setNewClubWeapon({ ...newClubWeapon, registrySystem: e.target.value })} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg text-xs">
@@ -13406,23 +13792,35 @@ export default function AdminPanel({
                     {weaponLookup('permissao_arma').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
                   </select>
                 </div>
+
                 <button
                   onClick={handleSaveClubWeapon}
-                  disabled={savingClubWeapon || !newClubWeapon.manufacturer || !newClubWeapon.model || !newClubWeapon.caliber || !currentUser?.clubId}
-                  className="w-full bg-blue-600 disabled:opacity-60 text-white text-xs py-2 rounded-lg font-bold"
+                  disabled={
+                    savingClubWeapon ||
+                    !newClubWeapon.manufacturer ||
+                    !newClubWeapon.model ||
+                    !newClubWeapon.caliber ||
+                    (newClubWeapon.ownerType === 'atleta' && (!newWeaponAthlete || !newClubWeapon.gtExpirationDate)) ||
+                    (newClubWeapon.ownerType === 'clube' && !(newClubWeapon.clubId || currentUser?.clubId))
+                  }
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
                 >
-                  {savingClubWeapon ? 'Salvando...' : 'Salvar'}
+                  {savingClubWeapon ? (
+                    <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Salvando...</>
+                  ) : (
+                    'Salvar Arma'
+                  )}
                 </button>
               </div>
 
-              {/* Weapons list */}
-              <div className="space-y-3">
+              {/* ── COLUNA DIREITA: LISTAGEM & EDIÇÃO ── */}
+              <div className="lg:col-span-7 space-y-3">
                 <div className="relative">
                   <input
                     type="text"
                     value={clubWeaponSearch}
                     onChange={(e) => setClubWeaponSearch(e.target.value)}
-                    placeholder="Buscar por número, série, sigma, modelo, fabricante, calibre..."
+                    placeholder="Buscar por número, série, sigma, modelo, fabricante, calibre, CPF, atleta, clube..."
                     className="w-full bg-slate-50 border border-slate-200 pl-8 pr-8 py-2 rounded-lg text-xs outline-none focus:border-blue-500 focus:bg-white transition"
                   />
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
@@ -13443,7 +13841,7 @@ export default function AdminPanel({
                   </p>
                 )}
 
-                <div className="space-y-2 max-h-[440px] overflow-y-auto pr-1">
+                <div className="space-y-2.5 max-h-[580px] overflow-y-auto pr-1">
                   {clubWeapons.length === 0 ? (
                     <p className="text-xs text-slate-400 p-2.5">Nenhuma arma cadastrada para este clube ainda.</p>
                   ) : filteredClubWeapons.length === 0 ? (
@@ -13457,16 +13855,153 @@ export default function AdminPanel({
                       </button>
                     </div>
                   ) : filteredClubWeapons.map((w) => (
-                  <div key={w.id} className="border border-slate-200 rounded-xl overflow-hidden">
+                  <div key={w.id} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
                     {editingWeaponId === w.id ? (
                       /* ── EDIT MODE ── */
-                      <div className="bg-slate-50 p-3 space-y-2">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase">Editando arma</p>
+                      <div className="bg-slate-50 p-4 space-y-3 border-l-4 border-l-blue-600">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
+                            <Pencil className="w-3.5 h-3.5 text-blue-600" />
+                            Editando Arma
+                          </p>
+                          <span className="text-[10px] text-slate-400 font-mono">ID: {w.id}</span>
+                        </div>
+
                         {weaponEditError && (
-                          <p className="text-[10px] text-red-600 font-semibold">{weaponEditError}</p>
+                          <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 p-2 rounded-lg font-semibold">{weaponEditError}</p>
                         )}
-                        <input type="text" placeholder="Número da arma" value={editWeaponData.weaponNumber} onChange={(e) => setEditWeaponData({ ...editWeaponData, weaponNumber: e.target.value })} className="w-full bg-white border border-slate-200 p-2 rounded-lg text-xs" />
-                        <input type="text" placeholder="Número Sigma" value={editWeaponData.sigmaNumber} onChange={(e) => setEditWeaponData({ ...editWeaponData, sigmaNumber: e.target.value })} className="w-full bg-white border border-slate-200 p-2 rounded-lg text-xs" />
+
+                        {/* Seletor de Vínculo na Edição */}
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Vínculo da Arma</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditWeaponData(prev => ({ ...prev, ownerType: 'clube', cpf: '', gtExpirationDate: '' }));
+                                setEditWeaponAthlete(null);
+                                setEditWeaponAthleteError('');
+                              }}
+                              className={`py-1.5 px-3 rounded-lg border text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                                editWeaponData.ownerType === 'clube'
+                                  ? 'bg-purple-50 border-purple-500 text-purple-700'
+                                  : 'bg-white border-slate-200 text-slate-600'
+                              }`}
+                            >
+                              🏛️ Acervo do Clube
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditWeaponData(prev => ({ ...prev, ownerType: 'atleta' }))}
+                              className={`py-1.5 px-3 rounded-lg border text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                                editWeaponData.ownerType === 'atleta'
+                                  ? 'bg-blue-50 border-blue-500 text-blue-700'
+                                  : 'bg-white border-slate-200 text-slate-600'
+                              }`}
+                            >
+                              🎯 Arma de Atleta
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Se Atleta na edição */}
+                        {editWeaponData.ownerType === 'atleta' ? (
+                          <div className="bg-blue-50/60 p-3 rounded-xl border border-blue-100 space-y-2">
+                            <div>
+                              <label className="text-[10px] font-bold text-blue-900 uppercase block mb-1">
+                                CPF do Atleta *
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="000.000.000-00 (digite 11 dígitos)"
+                                value={editWeaponData.cpf}
+                                onChange={(e) => handleCpfChangeEditWeapon(e.target.value)}
+                                className="w-full bg-white border border-slate-300 p-2 rounded-lg text-xs font-mono font-medium outline-none focus:border-blue-500"
+                              />
+                              {editWeaponAthleteLoading && (
+                                <p className="text-[10px] text-blue-600 mt-1 flex items-center gap-1">
+                                  <div className="w-2.5 h-2.5 border-2 border-blue-600/40 border-t-blue-600 rounded-full animate-spin" />
+                                  Verificando atleta...
+                                </p>
+                              )}
+                              {editWeaponAthlete && (
+                                <div className="mt-1.5 p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs">
+                                  <p className="font-bold">✓ Atleta: {editWeaponAthlete.fullName}</p>
+                                  <p className="text-[10px] text-emerald-600 font-mono">CPF: {formatCpfDisplay(editWeaponAthlete.cpf)}</p>
+                                </div>
+                              )}
+                              {editWeaponAthleteError && (
+                                <p className="text-[11px] text-rose-600 font-semibold mt-1 bg-rose-50 p-2 rounded-lg border border-rose-200">
+                                  {editWeaponAthleteError}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Clube: Seleção automática de acordo com o atleta */}
+                            <div>
+                              <label className="text-[10px] font-bold text-blue-900 uppercase block mb-1">
+                                Clube (Seleção Automática de acordo com o Atleta)
+                              </label>
+                              <div className="w-full bg-slate-100 border border-slate-200 p-2 rounded-lg text-xs font-semibold text-slate-700 flex items-center justify-between">
+                                <span>
+                                  {editWeaponAthlete
+                                    ? (clubs.find(c => c.id === (editWeaponAthlete.clubId || editWeaponData.clubId))?.name || editWeaponAthlete.clubName || 'Clube Vinculado')
+                                    : (clubs.find(c => c.id === editWeaponData.clubId)?.name || 'Aguardando validação do atleta...')}
+                                </span>
+                                <span className="text-[9px] bg-blue-100 text-blue-700 font-mono px-1.5 py-0.5 rounded font-bold uppercase">
+                                  Automático
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Vencimento Guia de Trânsito */}
+                            <div>
+                              <label className="text-[10px] font-bold text-blue-900 uppercase block mb-1">
+                                Vencimento Guia de Trânsito *
+                              </label>
+                              <input
+                                type="date"
+                                required
+                                value={editWeaponData.gtExpirationDate}
+                                onChange={(e) => setEditWeaponData({ ...editWeaponData, gtExpirationDate: e.target.value })}
+                                className="w-full bg-white border border-slate-300 p-2 rounded-lg text-xs outline-none focus:border-blue-500"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          /* Se Clube na edição */
+                          <div className="bg-purple-50/60 p-3 rounded-xl border border-purple-100 space-y-2">
+                            <div>
+                              <label className="text-[10px] font-bold text-purple-900 uppercase block mb-1">
+                                Clube Proprietário *
+                              </label>
+                              {currentUser?.role === 'master_admin' ? (
+                                <select
+                                  value={editWeaponData.clubId || currentUser?.clubId || ''}
+                                  onChange={(e) => setEditWeaponData({ ...editWeaponData, clubId: e.target.value })}
+                                  className="w-full bg-white border border-slate-300 p-2 rounded-lg text-xs"
+                                >
+                                  <option value="">Selecione o Clube...</option>
+                                  {clubs.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <div className="w-full bg-slate-100 border border-slate-200 p-2 rounded-lg text-xs font-semibold text-slate-700">
+                                  {clubs.find(c => c.id === (editWeaponData.clubId || currentUser?.clubId))?.name || 'Meu Clube'}
+                                </div>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-purple-700 font-medium italic">
+                              ℹ️ Armas do acervo do clube não exigem CPF nem Guia de Trânsito.
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <input type="text" placeholder="Número da arma" value={editWeaponData.weaponNumber} onChange={(e) => setEditWeaponData({ ...editWeaponData, weaponNumber: e.target.value })} className="w-full bg-white border border-slate-200 p-2 rounded-lg text-xs" />
+                          <input type="text" placeholder="Número Sigma" value={editWeaponData.sigmaNumber} onChange={(e) => setEditWeaponData({ ...editWeaponData, sigmaNumber: e.target.value })} className="w-full bg-white border border-slate-200 p-2 rounded-lg text-xs" />
+                        </div>
                         <select value={editWeaponData.weaponClass} onChange={(e) => setEditWeaponData({ ...editWeaponData, weaponClass: e.target.value })} className="w-full bg-white border border-slate-200 p-2 rounded-lg text-xs">
                           <option value="">Classe...</option>
                           {weaponLookup('classe').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
@@ -13494,13 +14029,16 @@ export default function AdminPanel({
                         <div className="flex gap-2 pt-1">
                           <button
                             onClick={handleSaveWeaponEdit}
-                            disabled={savingWeaponEdit}
-                            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs py-2 rounded-lg font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                            disabled={
+                              savingWeaponEdit ||
+                              (editWeaponData.ownerType === 'atleta' && (!editWeaponAthlete || !editWeaponData.gtExpirationDate || !!editWeaponAthleteError))
+                            }
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs py-2 rounded-lg font-bold transition flex items-center justify-center gap-1 cursor-pointer"
                           >
                             {savingWeaponEdit ? <><div className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Salvando...</> : <><Check className="w-3 h-3" /> Salvar alterações</>}
                           </button>
                           <button
-                            onClick={() => { setEditingWeaponId(null); setWeaponEditError(''); }}
+                            onClick={() => { setEditingWeaponId(null); setWeaponEditError(''); setEditWeaponAthlete(null); setEditWeaponAthleteError(''); }}
                             className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-lg font-semibold transition cursor-pointer"
                           >
                             Cancelar
@@ -13509,43 +14047,99 @@ export default function AdminPanel({
                       </div>
                     ) : (
                       /* ── VIEW MODE ── */
-                      <div className="bg-slate-50/50 p-2.5 flex justify-between items-start gap-2 text-xs leading-tight">
-                        <div className="min-w-0">
-                          <span className="font-bold text-slate-800 block truncate">
-                            <span className="font-mono text-blue-950 font-bold">Série: {resolveWeaponSerial(w)} • Sigma: {w.sigmaNumber || '—'}</span> — {w.manufacturer} {w.model} {w.caliber}
-                          </span>
-                          <span className="text-[10px] text-slate-500 font-mono block truncate">
-                            {[w.weaponClass, w.registrySystem, w.permissionStatus].filter(Boolean).join(' • ')}
-                          </span>
+                      <div className="p-3 space-y-2">
+                        <div className="flex justify-between items-start gap-2 text-xs leading-tight">
+                          <div className="min-w-0">
+                            <span className="font-bold text-slate-800 block truncate text-xs">
+                              <span className="font-mono text-blue-950 font-bold">Série: {resolveWeaponSerial(w)} • Sigma: {w.sigmaNumber || '—'}</span> — {w.manufacturer} {w.model} {w.caliber}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono block truncate mt-0.5">
+                              {[w.weaponClass, w.registrySystem, w.permissionStatus].filter(Boolean).join(' • ')}
+                            </span>
+                          </div>
+                          <div className="flex gap-1.5 shrink-0">
+                            <button
+                              onClick={() => {
+                                const isAthlete = Boolean(w.cpf || (w.ownerId && w.ownerId !== w.clubId && users.some(u => u.id === w.ownerId)));
+                                setEditingWeaponId(w.id);
+                                setWeaponEditError('');
+                                setEditWeaponAthleteError('');
+                                const initOwnerType = isAthlete ? 'atleta' : 'clube';
+                                setEditWeaponData({
+                                  weaponNumber: w.weaponNumber || '',
+                                  sigmaNumber: w.sigmaNumber || '',
+                                  weaponClass: w.weaponClass || '',
+                                  model: w.model || '',
+                                  caliber: w.caliber || '',
+                                  manufacturer: w.manufacturer || '',
+                                  registrySystem: w.registrySystem || '',
+                                  permissionStatus: w.permissionStatus || '',
+                                  ownerType: initOwnerType,
+                                  cpf: w.cpf || '',
+                                  gtExpirationDate: w.gtExpirationDate ? w.gtExpirationDate.split('T')[0] : '',
+                                  clubId: w.clubId || '',
+                                });
+                                if (isAthlete && (w.cpf || w.ownerId)) {
+                                  const localMatch = users.find(u => (w.cpf && u.cpf === w.cpf) || u.id === w.ownerId);
+                                  if (localMatch) {
+                                    const club = clubs.find(c => c.id === localMatch.clubId);
+                                    setEditWeaponAthlete({
+                                      id: localMatch.id,
+                                      fullName: localMatch.fullName,
+                                      cpf: localMatch.cpf || w.cpf || '',
+                                      clubId: localMatch.clubId,
+                                      clubName: club?.name || w.clubName,
+                                    });
+                                  } else if (w.cpf) {
+                                    searchAthleteByCpf(w.cpf).then(ath => {
+                                      if (ath) setEditWeaponAthlete(ath);
+                                    });
+                                  }
+                                } else {
+                                  setEditWeaponAthlete(null);
+                                }
+                              }}
+                              className="text-blue-500 hover:text-blue-700 transition p-1.5 rounded-lg hover:bg-blue-50 cursor-pointer"
+                              title="Editar"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => onRemoveWeapon(w.id)}
+                              className="text-red-400 hover:text-red-600 transition p-1.5 rounded-lg hover:bg-red-50 cursor-pointer"
+                              title="Remover"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex gap-1.5 shrink-0">
-                          <button
-                            onClick={() => {
-                              setEditingWeaponId(w.id);
-                              setWeaponEditError('');
-                              setEditWeaponData({
-                                weaponNumber: w.weaponNumber || '',
-                                sigmaNumber: w.sigmaNumber || '',
-                                weaponClass: w.weaponClass || '',
-                                model: w.model || '',
-                                caliber: w.caliber || '',
-                                manufacturer: w.manufacturer || '',
-                                registrySystem: w.registrySystem || '',
-                                permissionStatus: w.permissionStatus || '',
-                              });
-                            }}
-                            className="text-blue-500 hover:text-blue-700 transition p-1 rounded hover:bg-blue-50 cursor-pointer"
-                            title="Editar"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => onRemoveWeapon(w.id)}
-                            className="text-red-400 hover:text-red-600 transition p-1 rounded hover:bg-red-50 cursor-pointer"
-                            title="Remover"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+
+                        {/* Metadados: Vínculo (Atleta vs Clube), CPF, Clube e Guia de Trânsito */}
+                        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-1.5">
+                          {w.cpf || (w.ownerId && w.ownerId !== w.clubId && users.some(u => u.id === w.ownerId)) ? (
+                            <>
+                              <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1">
+                                🎯 Atleta: {w.ownerName || users.find(u => u.id === w.ownerId)?.fullName || 'Atleta'}
+                              </span>
+                              <span className="bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] font-mono">
+                                CPF: {formatCpfDisplay(w.cpf || users.find(u => u.id === w.ownerId)?.cpf)}
+                              </span>
+                              <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded text-[10px] font-medium inline-flex items-center gap-1">
+                                🏛️ {w.clubName || clubs.find(c => c.id === w.clubId)?.name || 'Clube'}
+                              </span>
+                              {w.gtExpirationDate ? (
+                                formatGtBadge(w.gtExpirationDate)
+                              ) : (
+                                <span className="bg-slate-50 text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded text-[10px]">
+                                  Sem GT
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="bg-purple-50 text-purple-800 border border-purple-200 px-2 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1">
+                              🏛️ Acervo do Clube: {w.clubName || clubs.find(c => c.id === w.clubId || c.id === w.ownerId)?.name || 'Clube'}
+                            </span>
+                          )}
                         </div>
                       </div>
                     )}

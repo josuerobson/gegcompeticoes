@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(checkin): relacionar atividades praticadas no check-out com vinculo de treinamentos e competicao` |
-| Data/hora | 2026-11-05T16:32:00-03:00 |
+| Mensagem | `feat(weapons): adicionar CPF, Vencimento Guia de Transito e selecao automatica de Clube no cadastro de armas` |
+| Data/hora | 2026-11-06T08:35:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,31 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why (don't re-litigate without new info)
+
+- **Cadastro e Edição de Armas com CPF, Vencimento da Guia de Trânsito e Seleção Automática de Clube (`AdminPanel.tsx`, `ChampionshipsView.tsx`, `MemberProfile.tsx`, `server.ts`, `src/db.ts`)**:
+  - **Exigência**:
+    1. No cadastro de armas adicionar os campos: CPF, Vencimento Guia de Trânsito e Clube.
+    2. Em editar, quando for cadastrar um CPF, tem que vincular a um atleta cadastrado no sistema (não pode vincular a CPF que não pertença a atleta registrado). A seleção do clube é automática de acordo com o cadastro do atleta, que já é vinculado a um clube.
+    3. Ter a opção de só vincular a arma ao clube — neste caso não precisa de vencimento para guia de trânsito.
+    4. Quando uma nova arma for cadastrada por qualquer caminho (inclusive inscrição em campeonato ou perfil/treinamento), já solicitar "Vencimento Guia de Trânsito" e vincular ao CPF e ao Clube do atleta.
+  - **Implementação**:
+    1. **Banco de Dados (`src/db.ts`, `src/types.ts`)**:
+       - Colunas adicionadas na tabela `weapons`: `owner_cpf TEXT`, `gt_expiration_date TEXT`, `club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL`.
+       - Índices criados: `idx_weapons_owner_cpf` e `idx_weapons_club_id`.
+       - Backfill automático seguro e defensivo vinculando armas legadas existentes aos CPFs e clubes dos atletas e acervos institucionais.
+    2. **Backend (`server.ts`)**:
+       - `GET /api/weapons` e `GET /api/weapons/search`: enriquecidos com JOIN de usuários e clubes, retornando dados completos de CPF, nome do atleta, clube e data de vencimento da GT.
+       - `POST /api/weapons` e `PUT /api/weapons/:id`: validação estrita de CPF. Se o CPF for informado, valida existência na tabela `users` (`regexp_replace`). Se não existir atleta, retorna 400. Se existir, vincula `owner_id` ao ID do atleta, grava `owner_cpf` e seleciona automaticamente o `club_id` do atleta. Se selecionada opção de acervo do clube, limpa CPF e GT.
+       - Novo endpoint `GET /api/members/by-cpf/:cpf` e aprimoramento de `GET /api/members/search` com `club_id` e `club_name`.
+    3. **Painel Diretor > ADM > Cadastro de Armas (`AdminPanel.tsx`)**:
+       - Tanto no cadastro de nova arma quanto na edição inline:
+         - Seletor de Vínculo: "🏛️ Acervo do Clube" vs "🎯 Arma de Atleta".
+         - Se Clube: seleciona o clube (ou mantém o do diretor), sem exigir CPF nem GT.
+         - Se Atleta: input com máscara de CPF e validação em tempo real. Se encontrado, exibe badge verde com nome do atleta e CR, e preenche o Clube automaticamente de forma bloqueada/somente leitura ("Automático"). Se não encontrado, bloqueia o salvamento e exibe alerta vermelho. Campo Vencimento Guia de Trânsito obrigatório.
+         - Cards da listagem exibem tags com Atleta, CPF, Clube e selo de status da GT (em dia, vence em breve ou vencida).
+    4. **Inscrição em Campeonatos (`ChampionshipsView.tsx`), Perfil do Atleta (`MemberProfile.tsx`) e Treinamentos (`AdminPanel.tsx`)**:
+       - Modal de nova arma agora solicita o campo obrigatório "Vencimento Guia de Trânsito" e vincula automaticamente ao CPF e Clube do atleta.
+
 
 - **Relacionar Atividades Praticadas no Check-out do Clube (`CheckoutActivityModal.tsx`, `MemberProfile.tsx`, `server.ts`, `src/db.ts`)**:
   - **Exigência**: Ao clicar em "Check-out Clube", antes de dar a baixa na saída, abrir tela para relacionar atividades praticadas com as opções "Registrar Treinamentos" e "Competição". O formulário de treinamento deve vincular o treino ao `checkin_id` para constar nos relatórios de habitualidade. Ao salvar o treino, retorna à tela com opções de registrar novo treino ou finalizar o check-out.

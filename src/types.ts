@@ -241,6 +241,9 @@ export interface Weapon {
   legacyId?: number;
   ownerName?: string;
   clubName?: string;
+  cpf?: string;
+  gtExpirationDate?: string;
+  clubId?: string;
 }
 
 // Managed dropdown option for the weapon form's Classe/Modelo/Calibre/

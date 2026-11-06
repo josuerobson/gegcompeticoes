@@ -1306,6 +1306,7 @@ export default function MemberProfile({
     weaponClass: '',
     permissionStatus: '',
     registrySystem: '',
+    gtExpirationDate: '',
   });
 
   const weaponLookup = (kind: string) => (weaponLookupOptions || []).filter(o => o.kind === kind);
@@ -1320,11 +1321,19 @@ export default function MemberProfile({
       alert('Preencha os campos obrigatórios: Fabricante, Modelo e Calibre.');
       return;
     }
+    if (!newWeaponData.gtExpirationDate) {
+      alert('Preencha o campo obrigatório: Vencimento Guia de Trânsito.');
+      return;
+    }
     setSavingWeapon(true);
     try {
       if (onAddWeapon) {
         await onAddWeapon({
           ownerId: currentUser?.id,
+          cpf: currentUser?.cpf,
+          clubId: currentUser?.clubId,
+          gtExpirationDate: newWeaponData.gtExpirationDate,
+          ownerType: 'atleta',
           manufacturer,
           model,
           caliber,
@@ -1344,6 +1353,10 @@ export default function MemberProfile({
           },
           body: JSON.stringify({
             ownerId: currentUser?.id,
+            cpf: currentUser?.cpf,
+            clubId: currentUser?.clubId,
+            gtExpirationDate: newWeaponData.gtExpirationDate,
+            ownerType: 'atleta',
             manufacturer,
             model,
             caliber,
@@ -4534,6 +4547,20 @@ export default function MemberProfile({
                               {weaponLookup('permissao_arma').map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
                             </select>
                           </div>
+                        </div>
+
+                        {/* Vencimento Guia de Trânsito */}
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                            Vencimento Guia de Trânsito *
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={newWeaponData.gtExpirationDate}
+                            onChange={(e) => setNewWeaponData(prev => ({ ...prev, gtExpirationDate: e.target.value }))}
+                            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium"
+                          />
                         </div>
 
                         <div className="flex gap-2 pt-2">

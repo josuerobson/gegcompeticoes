@@ -512,6 +512,30 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS registry_system TEXT;
     `);
 
+    // Novas colunas de controle: CPF do atleta proprietario, Vencimento da GT e Clube
+    await client.query(`
+      ALTER TABLE weapons
+        ADD COLUMN IF NOT EXISTS owner_cpf TEXT,
+        ADD COLUMN IF NOT EXISTS gt_expiration_date TEXT,
+        ADD COLUMN IF NOT EXISTS club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL;
+      CREATE INDEX IF NOT EXISTS idx_weapons_owner_cpf ON weapons(owner_cpf);
+      CREATE INDEX IF NOT EXISTS idx_weapons_club_id ON weapons(club_id);
+    `);
+
+    // Backfill defensivo de armas existentes: vincula CPF e Clube a partir da tabela users / clubs
+    await client.query(`
+      UPDATE weapons w
+      SET owner_cpf = u.cpf,
+          club_id = COALESCE(w.club_id, u.club_id)
+      FROM users u
+      WHERE w.owner_id = u.id AND (w.owner_cpf IS NULL OR w.club_id IS NULL);
+
+      UPDATE weapons w
+      SET club_id = c.id
+      FROM clubs c
+      WHERE w.owner_id = c.id AND w.club_id IS NULL;
+    `);
+
     // Managed dropdown lists for the weapon form (Classe, Modelo, Calibre,
     // Fabricante, Arma é, Status de permissão) — only master_admin can add/edit/
     // remove items (see requireMasterAdmin in server.ts); club admins just pick

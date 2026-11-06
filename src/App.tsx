@@ -1302,7 +1302,22 @@ export default function App() {
     }
   };
 
-  const handleAddWeapon = async (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; serialNumber?: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string }) => {
+  const handleAddWeapon = async (weapon: {
+    ownerId?: string;
+    manufacturer: string;
+    model: string;
+    caliber: string;
+    serialNumber?: string;
+    weaponNumber?: string;
+    sigmaNumber?: string;
+    weaponClass?: string;
+    permissionStatus?: string;
+    registrySystem?: string;
+    cpf?: string;
+    gtExpirationDate?: string;
+    clubId?: string;
+    ownerType?: 'atleta' | 'clube' | 'propria';
+  }) => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) {
       authHeaders['x-user-id'] = currentUser.id;
@@ -1411,6 +1426,8 @@ export default function App() {
     manufacturer?: string; model?: string; caliber?: string;
     weaponNumber?: string; sigmaNumber?: string; weaponClass?: string;
     permissionStatus?: string; registrySystem?: string;
+    cpf?: string; gtExpirationDate?: string; clubId?: string;
+    ownerType?: 'atleta' | 'clube';
   }): Promise<{ error?: string }> => {
     const authHeaders: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentUser) authHeaders['x-user-id'] = currentUser.id;

@@ -16,7 +16,23 @@ interface ChampionshipsProps {
   weapons: Weapon[];
   weaponLookupOptions?: WeaponLookupOption[];
   onRegister: (championshipId: string, modalityId: string, stageId: string, weaponId: string, crNumber: string, paymentMethod: 'pix' | 'credit_card', weaponSource?: 'propria' | 'clube') => Promise<{ pixCopiaECola?: string; txId?: string }>;
-  onAddWeapon: (weapon: { ownerId?: string; manufacturer: string; model: string; caliber: string; serialNumber?: string; weaponNumber?: string; sigmaNumber?: string; weaponClass?: string; permissionStatus?: string; registrySystem?: string; weaponType?: string }) => Promise<void>;
+  onAddWeapon: (weapon: {
+    ownerId?: string;
+    manufacturer: string;
+    model: string;
+    caliber: string;
+    serialNumber?: string;
+    weaponNumber?: string;
+    sigmaNumber?: string;
+    weaponClass?: string;
+    permissionStatus?: string;
+    registrySystem?: string;
+    weaponType?: string;
+    cpf?: string;
+    gtExpirationDate?: string;
+    clubId?: string;
+    ownerType?: 'atleta' | 'clube' | 'propria';
+  }) => Promise<void>;
   globalRankings: RankingItem[];
   onSelectModalityRanking: (modality: string) => void;
   selectedRankingModality: string;
@@ -164,6 +180,7 @@ export default function ChampionshipsView({
     manufacturer: '',
     registrySystem: '',
     permissionStatus: '',
+    gtExpirationDate: '',
     ownerType: 'propria' as 'propria' | 'clube'
   });
   const [savingWeapon, setSavingWeapon] = useState(false);
@@ -222,10 +239,18 @@ export default function ChampionshipsView({
       alert('Preencha os campos obrigatórios: Fabricante, Modelo e Calibre.');
       return;
     }
+    if (newWeaponData.ownerType !== 'clube' && !newWeaponData.gtExpirationDate) {
+      alert('Preencha o campo obrigatório: Vencimento Guia de Trânsito.');
+      return;
+    }
     setSavingWeapon(true);
     try {
       await onAddWeapon({
         ownerId: (newWeaponData.ownerType === 'clube' && currentUser?.clubId) ? currentUser.clubId : currentUser?.id,
+        cpf: newWeaponData.ownerType === 'clube' ? undefined : currentUser?.cpf,
+        clubId: currentUser?.clubId,
+        gtExpirationDate: newWeaponData.ownerType === 'clube' ? undefined : newWeaponData.gtExpirationDate,
+        ownerType: newWeaponData.ownerType === 'clube' ? 'clube' : 'atleta',
         manufacturer,
         model,
         caliber,
@@ -269,7 +294,8 @@ export default function ChampionshipsView({
         manufacturer: '',
         registrySystem: '',
         permissionStatus: '',
-    ownerType: 'propria' as 'propria' | 'clube'
+        gtExpirationDate: '',
+        ownerType: 'propria' as 'propria' | 'clube'
       });
       setShowAddWeapon(false);
       setWeaponSearchResults([]);
@@ -1559,6 +1585,22 @@ export default function ChampionshipsView({
                     </select>
                   </div>
                 </div>
+
+                {/* Vencimento Guia de Trânsito (obrigatório se arma de atleta) */}
+                {newWeaponData.ownerType !== 'clube' && (
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                      Vencimento Guia de Trânsito *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={newWeaponData.gtExpirationDate}
+                      onChange={(e) => setNewWeaponData(prev => ({ ...prev, gtExpirationDate: e.target.value }))}
+                      className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-medium"
+                    />
+                  </div>
+                )}
 
                 <div className="flex gap-2 pt-2">
                   <button
