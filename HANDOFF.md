@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(resultados): vincular inscricao aos ultimos 4 check-ins no cadastro de resultados` |
-| Data/hora | 2026-11-06T15:42:00-03:00 |
+| Mensagem | `feat(checkout): informar vinculo automatico apos lancamento de resultados quando sem inscricoes ativas` |
+| Data/hora | 2026-11-06T17:45:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -88,6 +88,7 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
        - **Filtro estrito a partir de novembro de 2026**: No backend (`GET /api/registrations/unlinked-checkin`) e no frontend (`eligibleRegistrations`), inscrições com data anterior a `2026-11-01` são excluídas da listagem de seleção.
        - **Ocultação de inscrições já vinculadas**: Inscrições que já possuem `checkin_id` associado (seja a este check-in ou a outros) não são exibidas na lista de seleção de vincular, aparecendo apenas no bloco de competições vinculadas da visita com opção de desvinculação individual via `POST /api/checkins/:id/unlink-registration`.
        - Na visão de atividades, exibe card âmbar com todas as competições vinculadas, permitindo desvincular ou vincular novas participações antes do fechamento.
+        - **Aviso de vínculo automático sem inscrições ativas**: No passo `competition`, caso o atleta não possua nenhuma inscrição ativa/disponível pendente de check-in (`eligibleRegistrations.length === 0`), é exibido um card informativo esclarecendo: *"As participações nos campeonatos serão vinculadas automaticamente após o lançamento dos resultados."*, orientando o atleta que o vínculo será realizado diretamente pelo diretor da prova na súmula oficial e ocultando botões redundantes de salvar.
     5. **Auditoria e Habitualidades**: Selo verde "Check-in Validado" renderizado na aba Minhas Inscrições e no modal oficial de detalhamento de habitualidades de 12 meses.
 
 - **Cadastro e Edição de Armas com CPF, Vencimento da Guia de Trânsito e Seleção Automática de Clube (`AdminPanel.tsx`, `ChampionshipsView.tsx`, `MemberProfile.tsx`, `server.ts`, `src/db.ts`)**:
