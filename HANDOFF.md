@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(checkin): filtrar inscricoes para vincular a partir de nov/2026 e ocultar as ja vinculadas` |
-| Data/hora | 2026-11-06T13:18:00-03:00 |
+| Mensagem | `feat(resultados): vincular inscricao aos ultimos 4 check-ins no cadastro de resultados` |
+| Data/hora | 2026-11-06T15:42:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,19 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why (don't re-litigate without new info)
+
+- **Vínculo com os 4 Últimos Check-ins no Cadastro de Resultados (`AdminPanel.tsx`, `server.ts`)**:
+  - **Exigência**: Nos casos em que a inscrição é realizada depois da realização da prova, adicionar no lançamento/cadastro de resultados o botão "Vincular check-in", abrindo os 4 últimos check-ins presenciais do atleta no clube para que o gestor selecione a qual check-in aquela inscrição/resultado será vinculada.
+  - **Implementação**:
+    1. **Backend (`server.ts`)**:
+       - Endpoint `PATCH /api/registrations/:id/link-checkin`: permite vincular ou desvincular (`checkinId: null`) o check-in de uma inscrição específica de forma atômica e com validação de admin/clube.
+       - Endpoint `GET /api/members/:userId/recent-checkins?limit=4`: busca os 4 check-ins mais recentes do atleta no clube com dados de data, horário, tempo de permanência, biometria facial e clube.
+       - Endpoint `GET /api/admin/registrations`: enriquecido com `chk.checkin_at as checkin_date` e `LEFT JOIN club_checkins chk ON chk.id = r.checkin_id`, retornando `checkinId` e `checkinDate`.
+    2. **Frontend (`AdminPanel.tsx`)**:
+       - No painel de notas (`selectedReg` em `CadastrarResultadosPanel`): adicionado bloco destacado *"Presença no Clube / Check-in"* com o botão *"Vincular check-in"* (ou *"Alterar check-in"* e *"Desvincular"* caso já haja um vinculado).
+       - Modal interativo dos 4 últimos check-ins (`checkinModalReg`): lista cada presença com número sequencial (`#1` a `#4`), data e hora formatadas, permanência em minutos ou status, score de biometria facial, nome/fantasia do clube e botão de vínculo imediato.
+       - Ao vincular o check-in, se os campos `Data da Prova` (`dataExec`) e `Hora da Prova` (`horaExec`) estiverem vazios, são automaticamente pré-preenchidos com a data e hora do check-in selecionado, agilizando o lançamento da súmula.
+       - Na listagem de inscrições da modalidade (`filteredRegs`), cada card exibe o selo verde *"Check-in Validado"* com ícone de localização quando vinculado, permitindo auditoria visual rápida.
 
 - **Ocultação de Check-in para Clubes e Vínculo de Inscrições de Competições no Check-out (`MemberProfile.tsx`, `CheckoutActivityModal.tsx`, `server.ts`, `src/db.ts`)**:
   - **Exigência**:

@@ -2874,6 +2874,7 @@ type EnrichedRegistration = {
   seriesPontos?: any[]; seriesTempos?: any[];
   ownAmmoShots?: number; clubAmmoShots?: number; clubAmmoType?: 'nova' | 'recarga';
   registeredByUserId?: string; registrationType?: string;
+  checkinId?: string; checkinDate?: string;
 };
 
 const ZONES = ['x','p10','p9','p8','p7','p6','p5','p4','p3','p2','p1','p0'] as const;
@@ -2906,6 +2907,98 @@ function CadastrarResultadosPanel({ championships, stages, modalities, weapons =
   const [error, setError] = React.useState('');
 
   const [searchAthlete, setSearchAthlete] = React.useState('');
+
+  // Estados e controle de vínculo com os 4 últimos check-ins do atleta
+  const [checkinModalReg, setCheckinModalReg] = React.useState<EnrichedRegistration | null>(null);
+  const [recentCheckins, setRecentCheckins] = React.useState<any[]>([]);
+  const [loadingRecentCheckins, setLoadingRecentCheckins] = React.useState(false);
+  const [linkingCheckinId, setLinkingCheckinId] = React.useState<string | null>(null);
+  const [checkinModalError, setCheckinModalError] = React.useState('');
+
+  const formatCheckinDateTime = (dateStr?: string) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const day = String(d.getDate()).padStart(2, '0');
+    const mon = String(d.getMonth() + 1).padStart(2, '0');
+    const yr = d.getFullYear();
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${day}/${mon}/${yr} às ${hh}:${min}`;
+  };
+
+  const openLinkCheckinModal = async (reg: EnrichedRegistration) => {
+    setCheckinModalReg(reg);
+    setCheckinModalError('');
+    setLoadingRecentCheckins(true);
+    setRecentCheckins([]);
+    try {
+      const res = await fetch(`/api/members/${reg.userId}/recent-checkins?limit=4&clubId=${reg.clubId || ''}`, {
+        headers: { 'x-user-id': currentUser?.id || '' }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao carregar check-ins');
+      setRecentCheckins(data.checkins || []);
+    } catch (e: any) {
+      setCheckinModalError(e.message || 'Erro ao carregar os últimos check-ins.');
+    } finally {
+      setLoadingRecentCheckins(false);
+    }
+  };
+
+  const handleLinkCheckin = async (chkId: string | null) => {
+    if (!checkinModalReg) return;
+    setLinkingCheckinId(chkId || 'unlink');
+    setCheckinModalError('');
+    try {
+      const res = await fetch(`/api/registrations/${checkinModalReg.id}/link-checkin`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser?.id || ''
+        },
+        body: JSON.stringify({ checkinId: chkId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao vincular check-in.');
+
+      // Atualiza na lista de registrations local
+      setRegistrations(prev => prev.map(r => r.id === checkinModalReg.id ? {
+        ...r,
+        checkinId: chkId || undefined,
+        checkinDate: data.checkinDate || undefined
+      } : r));
+
+      // Se o modal de lançamento de notas está aberto para essa inscrição, atualiza selectedReg
+      if (selectedReg && selectedReg.id === checkinModalReg.id) {
+        setSelectedReg(prev => prev ? {
+          ...prev,
+          checkinId: chkId || undefined,
+          checkinDate: data.checkinDate || undefined
+        } : null);
+
+        // Se vinculou um check-in e dataExec/horaExec estiverem vazios, pré-preenche com a data/hora do check-in
+        if (chkId && data.checkinDate) {
+          const chkDt = new Date(data.checkinDate);
+          if (!isNaN(chkDt.getTime())) {
+            const yyyy = chkDt.getFullYear();
+            const mm = String(chkDt.getMonth() + 1).padStart(2, '0');
+            const dd = String(chkDt.getDate()).padStart(2, '0');
+            const hh = String(chkDt.getHours()).padStart(2, '0');
+            const min = String(chkDt.getMinutes()).padStart(2, '0');
+            if (!dataExec) setDataExec(`${yyyy}-${mm}-${dd}`);
+            if (!horaExec) setHoraExec(`${hh}:${min}`);
+          }
+        }
+      }
+
+      setCheckinModalReg(null);
+    } catch (e: any) {
+      setCheckinModalError(e.message || 'Erro ao atualizar vínculo do check-in.');
+    } finally {
+      setLinkingCheckinId(null);
+    }
+  };
 
   const filteredRegs = React.useMemo(() => {
     if (!searchAthlete.trim()) return registrations;
@@ -3249,18 +3342,29 @@ function CadastrarResultadosPanel({ championships, stages, modalities, weapons =
                         <div className={`text-[10px] truncate ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
                           {r.modalityName}
                         </div>
-                        {(r.weaponModel || r.weaponCaliber) && (
-                          <div className={`text-[9.5px] font-mono truncate flex items-center gap-1.5 ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
-                            <span>Arma: {r.weaponModel || 'N/A'} {r.weaponCaliber ? `(${r.weaponCaliber})` : ''}</span>
-                            <span className={`text-[8.5px] px-1.5 py-0.2 rounded font-sans font-bold uppercase ${
-                              r.weaponSource === 'clube'
-                                ? (isSelected ? 'bg-purple-200 text-purple-900' : 'bg-purple-50 text-purple-700 border border-purple-200')
-                                : (isSelected ? 'bg-blue-200 text-blue-900' : 'bg-blue-50 text-blue-700 border border-blue-200')
-                            }`}>
-                              {r.weaponSource === 'clube' ? 'Clube' : 'Própria'}
+                        <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                          {(r.weaponModel || r.weaponCaliber) && (
+                            <div className={`text-[9.5px] font-mono truncate flex items-center gap-1.5 ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                              <span>Arma: {r.weaponModel || 'N/A'} {r.weaponCaliber ? `(${r.weaponCaliber})` : ''}</span>
+                              <span className={`text-[8.5px] px-1.5 py-0.2 rounded font-sans font-bold uppercase ${
+                                r.weaponSource === 'clube'
+                                  ? (isSelected ? 'bg-purple-200 text-purple-900' : 'bg-purple-50 text-purple-700 border border-purple-200')
+                                  : (isSelected ? 'bg-blue-200 text-blue-900' : 'bg-blue-50 text-blue-700 border border-blue-200')
+                              }`}>
+                                {r.weaponSource === 'clube' ? 'Clube' : 'Própria'}
+                              </span>
+                            </div>
+                          )}
+                          {r.checkinId ? (
+                            <span className={`text-[8.5px] px-1.5 py-0.2 rounded font-bold uppercase inline-flex items-center gap-1 ${isSelected ? 'bg-emerald-300 text-emerald-950' : 'bg-emerald-50 text-emerald-700 border border-emerald-300'}`} title="Presença validada por check-in no clube">
+                              <MapPin className="w-2.5 h-2.5" /> Check-in Validado
                             </span>
-                          </div>
-                        )}
+                          ) : (
+                            <span className={`text-[8.5px] px-1.5 py-0.2 rounded font-semibold inline-flex items-center gap-1 ${isSelected ? 'bg-white/20 text-white' : 'text-slate-400 bg-slate-100'}`}>
+                              Sem check-in
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex-shrink-0">
                         {statusBadge(r)}
@@ -3410,6 +3514,78 @@ function CadastrarResultadosPanel({ championships, stages, modalities, weapons =
                             <span>Arma do clube</span>
                           </button>
                         </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Seção: Vínculo com Check-in no Clube */}
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2 text-slate-700 font-bold text-xs">
+                        <MapPin className="w-4 h-4 text-emerald-600" />
+                        <span>Presença no Clube / Check-in</span>
+                      </div>
+                      {selectedReg.checkinId ? (
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3 text-emerald-600" /> Check-in Validado
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-amber-600" /> Nenhum Check-in Vinculado
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-lg border border-slate-200">
+                      <div className="text-xs space-y-0.5">
+                        {selectedReg.checkinId ? (
+                          <>
+                            <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                              <span>Check-in realizado em:</span>
+                              <span className="font-mono text-emerald-700 font-bold">
+                                {formatCheckinDateTime(selectedReg.checkinDate)}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500">
+                              Esta inscrição/resultado está vinculada e validada para emissão de habitualidade no clube.
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <div className="font-semibold text-slate-700">
+                              Inscrição sem vínculo de check-in presencial
+                            </div>
+                            <p className="text-[11px] text-slate-500">
+                              Se a inscrição foi feita após a prova, você pode vinculá-la a um dos últimos 4 check-ins do atleta no estande.
+                            </p>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => openLinkCheckinModal(selectedReg)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <MapPin className="w-3.5 h-3.5" />
+                          {selectedReg.checkinId ? 'Alterar check-in' : 'Vincular check-in'}
+                        </button>
+                        {selectedReg.checkinId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm('Deseja desvincular o check-in desta inscrição?')) {
+                                setCheckinModalReg(selectedReg);
+                                handleLinkCheckin(null);
+                              }
+                            }}
+                            className="text-slate-500 hover:text-red-600 hover:bg-red-50 border border-slate-200 hover:border-red-200 p-2 rounded-lg transition cursor-pointer text-xs"
+                            title="Desvincular check-in"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -3606,6 +3782,186 @@ function CadastrarResultadosPanel({ championships, stages, modalities, weapons =
                     className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs px-4 py-2.5 rounded-xl font-bold transition cursor-pointer"
                   >
                     Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Modal: Selecionar um dos 4 últimos Check-ins do Atleta */}
+          {checkinModalReg && (
+            <div
+              className="fixed inset-0 z-60 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
+              onClick={() => { if (!linkingCheckinId) setCheckinModalReg(null); }}
+            >
+              <div
+                className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200 text-slate-800"
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-emerald-400" />
+                      <h4 className="font-display font-bold text-base text-white">
+                        Vincular Check-in
+                      </h4>
+                    </div>
+                    <p className="text-xs text-slate-300">
+                      Atleta: <strong className="text-white">{checkinModalReg.athleteName}</strong>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCheckinModalReg(null)}
+                    disabled={Boolean(linkingCheckinId)}
+                    className="text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 p-1.5 rounded-lg transition cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Subtitle / Explicação */}
+                <div className="px-5 py-3 bg-slate-50 border-b border-slate-100 text-xs text-slate-600">
+                  Selecione um dos <strong>4 últimos check-ins</strong> realizados pelo atleta no clube para vincular a esta inscrição ({checkinModalReg.modalityName}).
+                </div>
+
+                {/* Body */}
+                <div className="p-5 max-h-[60vh] overflow-y-auto space-y-3">
+                  {checkinModalError && (
+                    <div className="bg-red-50 text-red-700 border border-red-200 p-3 rounded-xl text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                      <span>{checkinModalError}</span>
+                    </div>
+                  )}
+
+                  {loadingRecentCheckins ? (
+                    <div className="py-8 flex flex-col items-center justify-center text-slate-400 space-y-2">
+                      <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                      <span className="text-xs font-semibold">Buscando os 4 últimos check-ins do atleta...</span>
+                    </div>
+                  ) : recentCheckins.length === 0 ? (
+                    <div className="py-8 text-center space-y-2">
+                      <MapPin className="w-8 h-8 mx-auto text-slate-300" />
+                      <p className="text-xs font-semibold text-slate-600">
+                        Nenhum check-in encontrado para este atleta.
+                      </p>
+                      <p className="text-[11px] text-slate-450 max-w-xs mx-auto">
+                        O atleta ainda não realizou check-in presencial no estande pelo sistema.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {recentCheckins.map((chk, idx) => {
+                        const isCurrent = checkinModalReg.checkinId === chk.id;
+                        const isLinking = linkingCheckinId === chk.id;
+
+                        return (
+                          <div
+                            key={chk.id}
+                            className={`p-3.5 rounded-xl border transition space-y-2 ${
+                              isCurrent
+                                ? 'bg-emerald-50/70 border-emerald-400 ring-1 ring-emerald-400'
+                                : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-xs'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-5 h-5 rounded-full bg-slate-900 text-white font-mono text-[10px] font-bold flex items-center justify-center shrink-0">
+                                  #{idx + 1}
+                                </span>
+                                <span className="font-bold text-xs text-slate-800">
+                                  {formatCheckinDateTime(chk.checkinAt)}
+                                </span>
+                              </div>
+                              {isCurrent && (
+                                <span className="text-[9.5px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                                  <Check className="w-3 h-3 text-emerald-600" /> Vinculado
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500 font-mono pt-1 border-t border-slate-100">
+                              <div>
+                                <span className="text-slate-400">Permanência: </span>
+                                <span className="font-bold text-slate-700">
+                                  {chk.stayMinutes ? `${chk.stayMinutes} min` : (chk.checkoutAt ? 'Check-out feito' : 'Em aberto')}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400">Facial Match: </span>
+                                <span className="font-bold text-emerald-700">
+                                  {chk.facialMatchScore ? `${Math.round(chk.facialMatchScore * 100)}%` : 'Validado'}
+                                </span>
+                              </div>
+                              {chk.clubFantasy || chk.clubName ? (
+                                <div className="col-span-2 truncate">
+                                  <span className="text-slate-400 font-sans">Clube: </span>
+                                  <span className="font-bold text-slate-700 font-sans">{chk.clubFantasy || chk.clubName}</span>
+                                </div>
+                              ) : null}
+                            </div>
+
+                            <div className="pt-1 flex justify-end">
+                              <button
+                                type="button"
+                                disabled={isCurrent || Boolean(linkingCheckinId)}
+                                onClick={() => handleLinkCheckin(chk.id)}
+                                className={`text-xs font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${
+                                  isCurrent
+                                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                    : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs'
+                                }`}
+                              >
+                                {isLinking ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Vinculando...</span>
+                                  </>
+                                ) : isCurrent ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Selecionado</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <MapPin className="w-3.5 h-3.5" />
+                                    <span>Vincular a este Check-in</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex items-center justify-between">
+                  {checkinModalReg.checkinId ? (
+                    <button
+                      type="button"
+                      disabled={Boolean(linkingCheckinId)}
+                      onClick={() => handleLinkCheckin(null)}
+                      className="text-xs font-bold text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1"
+                    >
+                      {linkingCheckinId === 'unlink' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
+                      <span>Desvincular Check-in</span>
+                    </button>
+                  ) : <div />}
+                  <button
+                    type="button"
+                    onClick={() => setCheckinModalReg(null)}
+                    disabled={Boolean(linkingCheckinId)}
+                    className="text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 px-4 py-1.5 rounded-lg transition cursor-pointer"
+                  >
+                    Fechar
                   </button>
                 </div>
               </div>

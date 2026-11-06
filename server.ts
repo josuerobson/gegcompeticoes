@@ -5402,12 +5402,14 @@ app.get('/api/admin/registrations', requireAdmin, async (req, res) => {
       u.full_name as athlete_name, u.cr_number as athlete_cr,
       c.name as club_name,
       m.name as modality_name, m.series_count, m.shots_per_series, m.evaluation_type,
-      w.model as weapon_model, w.serial_number as weapon_serial, w.weapon_number as weapon_number, w.sigma_number, w.caliber as weapon_caliber
+      w.model as weapon_model, w.serial_number as weapon_serial, w.weapon_number as weapon_number, w.sigma_number, w.caliber as weapon_caliber,
+      chk.checkin_at as checkin_date
       FROM registrations r
       LEFT JOIN users u ON u.id = r.user_id
       LEFT JOIN clubs c ON c.id = r.club_id
       LEFT JOIN modalities m ON m.id = r.modality_id
       LEFT JOIN weapons w ON w.id = r.weapon_id
+      LEFT JOIN club_checkins chk ON chk.id = r.checkin_id
       WHERE 1=1`;
     const params: any[] = [];
     let idx = 1;
@@ -5435,6 +5437,8 @@ app.get('/api/admin/registrations', requireAdmin, async (req, res) => {
       weaponNumber: r.weapon_number,
       weaponSigma: r.sigma_number,
       weaponCaliber: r.weapon_caliber,
+      checkinId: r.checkin_id || undefined,
+      checkinDate: r.checkin_date || undefined,
     }));
     res.json({ registrations });
   } catch (err) {
@@ -8456,6 +8460,77 @@ app.post('/api/checkins/:id/unlink-registration', requireAuth, async (req, res) 
   } catch (err) {
     console.error('Unlink registration error:', err);
     res.status(500).json({ error: 'Erro ao desvincular inscrição.' });
+  }
+});
+
+// 3.1.2.1. Link or change checkin directly on a registration (e.g. from Cadastrar Resultados)
+app.patch('/api/registrations/:id/link-checkin', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { checkinId } = req.body;
+
+  try {
+    let checkinDate: string | null = null;
+    if (checkinId) {
+      const chkRes = await pool.query('SELECT id, checkin_at FROM club_checkins WHERE id = $1', [checkinId]);
+      if (chkRes.rows.length === 0) {
+        return res.status(404).json({ error: 'Check-in não encontrado.' });
+      }
+      checkinDate = chkRes.rows[0].checkin_at;
+    }
+
+    const result = await pool.query(
+      `UPDATE registrations
+       SET checkin_id = $1
+       WHERE id = $2
+       RETURNING *`,
+      [checkinId || null, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Inscrição não encontrada.' });
+    }
+
+    res.json({
+      success: true,
+      registration: mapRegistration(result.rows[0]),
+      checkinDate: checkinDate || undefined,
+    });
+  } catch (err) {
+    console.error('Link registration to checkin error:', err);
+    res.status(500).json({ error: 'Erro ao vincular inscrição ao check-in.' });
+  }
+});
+
+// 3.1.2.2. Fetch recent checkins of an athlete (e.g. the 4 most recent for result linking)
+app.get('/api/members/:userId/recent-checkins', requireAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const limit = Math.min(20, Math.max(1, Number(req.query.limit) || 4));
+  const { clubId } = req.query;
+
+  try {
+    let query = `
+      SELECT c.*, cl.name as club_name, cl.fantasy_name as club_fantasy
+      FROM club_checkins c
+      LEFT JOIN clubs cl ON cl.id = c.club_id
+      WHERE c.user_id = $1
+    `;
+    const params: any[] = [userId];
+
+    if (clubId) {
+      params.push(clubId);
+      query += ` AND c.club_id = $${params.length}`;
+    }
+
+    query += ` ORDER BY c.checkin_at DESC LIMIT $${params.length + 1}`;
+    params.push(limit);
+
+    const result = await pool.query(query, params);
+    res.json({
+      checkins: result.rows.map(mapCheckin)
+    });
+  } catch (err) {
+    console.error('Fetch recent checkins error:', err);
+    res.status(500).json({ error: 'Erro ao buscar check-ins recentes do atleta.' });
   }
 });
 
