@@ -62,6 +62,7 @@ export default function CheckoutActivityModal({
   const [loadingRegistrations, setLoadingRegistrations] = useState(false);
   const [selectedRegIds, setSelectedRegIds] = useState<string[]>([]);
   const [savingCompLinks, setSavingCompLinks] = useState(false);
+  const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
   const [compError, setCompError] = useState('');
 
   // Optional manual competition notes
@@ -148,8 +149,8 @@ export default function CheckoutActivityModal({
       setLinkedRegistrations(linkedList);
       setUnlinkedRegistrations(unlinkedList);
 
-      // Pre-select already linked IDs
-      setSelectedRegIds(linkedList.map((r) => r.id));
+      // Selected IDs for new vinculations starts empty
+      setSelectedRegIds([]);
     } catch (err) {
       console.error('Fetch registrations error:', err);
       setCompError('Erro ao carregar inscrições de campeonatos.');
@@ -163,17 +164,20 @@ export default function CheckoutActivityModal({
     fetchRegistrations();
   }, [activeCheckin.id]);
 
-  // Combined list of eligible registrations for the competition step
+  // Exibir estritamente inscricoes a partir de novembro de 2026 E que ainda NAO foram vinculadas
   const eligibleRegistrations = useMemo(() => {
-    const map = new Map<string, LinkedCompetitionItem>();
-    linkedRegistrations.forEach((r) => map.set(r.id, r));
-    unlinkedRegistrations.forEach((r) => {
-      if (!map.has(r.id)) {
-        map.set(r.id, r);
-      }
+    return unlinkedRegistrations.filter((r) => {
+      // 1. Nao exibe as que ja foram vinculadas
+      if (r.checkinId && r.checkinId.trim() !== '') return false;
+      // 2. Nao exibe inscricoes anteriores a novembro de 2026 (a partir de 2026-11-01)
+      const dateStr =
+        (r as any).dataExecucao ||
+        (r as any).stageDate ||
+        (r.registeredAt ? r.registeredAt.slice(0, 10) : '');
+      if (dateStr && dateStr < '2026-11-01') return false;
+      return true;
     });
-    return Array.from(map.values());
-  }, [linkedRegistrations, unlinkedRegistrations]);
+  }, [unlinkedRegistrations]);
 
   // Toggle registration selection
   const handleToggleRegistration = (regId: string) => {
@@ -182,8 +186,34 @@ export default function CheckoutActivityModal({
     );
   };
 
+  // Desvincular inscricao individual deste check-in
+  const handleUnlinkRegistration = async (regId: string) => {
+    setUnlinkingId(regId);
+    try {
+      const res = await fetch(`/api/checkins/${activeCheckin.id}/unlink-registration`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser?.id || '',
+        },
+        body: JSON.stringify({ registrationId: regId }),
+      });
+      if (res.ok) {
+        await fetchRegistrations();
+      }
+    } catch (err) {
+      console.error('Error unlinking registration:', err);
+    } finally {
+      setUnlinkingId(null);
+    }
+  };
+
   // Save competition links
   const handleSaveCompetitionLinks = async () => {
+    if (selectedRegIds.length === 0) {
+      setStep('activities');
+      return;
+    }
     setSavingCompLinks(true);
     setCompError('');
     try {
@@ -203,6 +233,7 @@ export default function CheckoutActivityModal({
         throw new Error(data.error || 'Erro ao vincular inscrições ao check-in.');
       }
 
+      setSelectedRegIds([]);
       // Refresh list and return to activities
       await fetchRegistrations();
       setStep('activities');
@@ -478,9 +509,20 @@ export default function CheckoutActivityModal({
                             {reg.weaponModel ? ` • ${reg.weaponModel}` : ''}
                           </p>
                         </div>
-                        <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2 py-0.5 rounded-full text-[9px] shrink-0">
-                          Check-in Validado
-                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2 py-0.5 rounded-full text-[9px]">
+                            Check-in Validado
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleUnlinkRegistration(reg.id)}
+                            disabled={unlinkingId === reg.id}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition text-[10px] font-bold cursor-pointer"
+                            title="Desvincular esta inscrição deste check-in"
+                          >
+                            {unlinkingId === reg.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -859,7 +901,7 @@ export default function CheckoutActivityModal({
                   Selecione as etapas que você disputou nesta visita ao clube
                 </p>
                 <p className="text-amber-850">
-                  As inscrições marcadas ficarão vinculadas a este check-in oficial com data, hora e geolocalização auditadas para seu relatório de habitualidade.
+                  Exibindo inscrições em aberto a partir de novembro de 2026. Inscrições já vinculadas a um check-in não são exibidas.
                 </p>
               </div>
 
@@ -879,7 +921,7 @@ export default function CheckoutActivityModal({
                   <Trophy className="w-8 h-8 text-slate-300 mx-auto" />
                   <p className="text-xs font-bold text-slate-700">Nenhuma inscrição disponível para vínculo</p>
                   <p className="text-[11px] text-slate-450 max-w-sm mx-auto">
-                    Você não possui inscrições de competições pendentes de check-in. Caso tenha atirado apenas para treino, registre seus disparos pelo botão de Treinamentos.
+                    Não há inscrições em aberto a partir de novembro de 2026 pendentes de check-in. Inscrições anteriores ou que já foram vinculadas não são exibidas.
                   </p>
                 </div>
               ) : (

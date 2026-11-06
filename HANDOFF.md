@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(checkin): exibir botao de check-in quando o clube entra como atleta para registrar presenca pelo atleta` |
-| Data/hora | 2026-11-06T12:28:00-03:00 |
+| Mensagem | `feat(checkin): filtrar inscricoes para vincular a partir de nov/2026 e ocultar as ja vinculadas` |
+| Data/hora | 2026-11-06T13:18:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -72,7 +72,9 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
        - `POST /api/checkins/:id/checkout`: aceita `registrationIds` e concatena resumo amigável nas notas do check-out.
     4. **Frontend (`CheckoutActivityModal.tsx`)**:
        - No step `competition`, lista interativa com cards e checkboxes, contadores de seleção, botão "Selecionar todas / Desmarcar todas", e salvamento imediato com retorno à visão de atividades.
-       - Na visão de atividades, exibe card âmbar com todas as competições vinculadas, permitindo alterar ou gerenciar as participações antes do fechamento.
+       - **Filtro estrito a partir de novembro de 2026**: No backend (`GET /api/registrations/unlinked-checkin`) e no frontend (`eligibleRegistrations`), inscrições com data anterior a `2026-11-01` são excluídas da listagem de seleção.
+       - **Ocultação de inscrições já vinculadas**: Inscrições que já possuem `checkin_id` associado (seja a este check-in ou a outros) não são exibidas na lista de seleção de vincular, aparecendo apenas no bloco de competições vinculadas da visita com opção de desvinculação individual via `POST /api/checkins/:id/unlink-registration`.
+       - Na visão de atividades, exibe card âmbar com todas as competições vinculadas, permitindo desvincular ou vincular novas participações antes do fechamento.
     5. **Auditoria e Habitualidades**: Selo verde "Check-in Validado" renderizado na aba Minhas Inscrições e no modal oficial de detalhamento de habitualidades de 12 meses.
 
 - **Cadastro e Edição de Armas com CPF, Vencimento da Guia de Trânsito e Seleção Automática de Clube (`AdminPanel.tsx`, `ChampionshipsView.tsx`, `MemberProfile.tsx`, `server.ts`, `src/db.ts`)**:

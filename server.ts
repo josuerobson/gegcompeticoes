@@ -8406,15 +8406,7 @@ app.post('/api/checkins/:id/link-registrations', requireAuth, async (req, res) =
       return res.status(403).json({ error: 'Não autorizado.' });
     }
 
-    // 1. Desvincula as que eram deste check-in mas nao estao mais em registrationIds
-    await pool.query(
-      `UPDATE registrations
-       SET checkin_id = NULL
-       WHERE checkin_id = $1 AND NOT (id = ANY($2))`,
-      [id, registrationIds]
-    );
-
-    // 2. Vincula as selecionadas
+    // Vincula as inscricoes selecionadas ao check-in
     if (registrationIds.length > 0) {
       await pool.query(
         `UPDATE registrations
@@ -8431,20 +8423,60 @@ app.post('/api/checkins/:id/link-registrations', requireAuth, async (req, res) =
   }
 });
 
-// 3.1.3. Fetch unlinked registrations for the athlete (without check-in)
+// 3.1.2. Unlink a specific registration from this check-in
+app.post('/api/checkins/:id/unlink-registration', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { id } = req.params;
+  const { registrationId } = req.body;
+
+  if (!registrationId) {
+    return res.status(400).json({ error: 'registrationId é obrigatório.' });
+  }
+
+  try {
+    const chkRes = await pool.query(`SELECT * FROM club_checkins WHERE id = $1`, [id]);
+    if (chkRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Check-in não encontrado.' });
+    }
+    const checkin = chkRes.rows[0];
+    const isOwner = checkin.user_id === currentUser.id;
+    const isAdmin = ['admin', 'master_admin', 'club_admin'].includes(currentUser.role);
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: 'Não autorizado.' });
+    }
+
+    await pool.query(
+      `UPDATE registrations
+       SET checkin_id = NULL
+       WHERE id = $1 AND checkin_id = $2 AND (user_id = $3 OR $4 = true)`,
+      [registrationId, id, checkin.user_id, isAdmin]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Unlink registration error:', err);
+    res.status(500).json({ error: 'Erro ao desvincular inscrição.' });
+  }
+});
+
+// 3.1.3. Fetch unlinked registrations for the athlete (without check-in, from Nov 2026 onwards)
 app.get('/api/registrations/unlinked-checkin', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
   try {
     const r = await pool.query(
-      `SELECT r.*, c.title as championship_title, s.title as stage_title, s.stage_num, m.name as modality_name,
-              w.model as weapon_model, w.caliber as weapon_caliber
+      `SELECT r.*, c.title as championship_title, s.title as stage_title, s.stage_num, s.date as stage_date,
+              m.name as modality_name, w.model as weapon_model, w.caliber as weapon_caliber
        FROM registrations r
        LEFT JOIN championships c ON c.id = r.championship_id
        LEFT JOIN stages s ON s.id = r.stage_id
        LEFT JOIN modalities m ON m.id = r.modality_id
        LEFT JOIN weapons w ON w.id = r.weapon_id
-       WHERE r.user_id = $1 AND (r.checkin_id IS NULL OR r.checkin_id = '')
-       ORDER BY r.registered_at DESC`,
+       WHERE r.user_id = $1 
+         AND (r.checkin_id IS NULL OR r.checkin_id = '')
+         AND (
+           COALESCE(r.data_execucao, s.date, substring(r.registered_at from 1 for 10)) >= '2026-11-01'
+         )
+       ORDER BY COALESCE(r.data_execucao, s.date, substring(r.registered_at from 1 for 10)) DESC, r.registered_at DESC`,
       [currentUser.id]
     );
     res.json({
@@ -8453,6 +8485,7 @@ app.get('/api/registrations/unlinked-checkin', requireAuth, async (req, res) => 
         championshipTitle: row.championship_title,
         stageTitle: row.stage_title,
         stageNum: row.stage_num,
+        stageDate: row.stage_date,
         modalityName: row.modality_name,
         weaponModel: row.weapon_model,
         weaponCaliber: row.weapon_caliber,
