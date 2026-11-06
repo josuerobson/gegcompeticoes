@@ -421,9 +421,10 @@ export default function MemberProfile({
   // Ltda promovida a master, então conta como "clube" aqui igual a club_admin.
   const isMe = currentUser?.id === selectedUser.id;
   const isClubAdmin = selectedUser.role === 'club_admin' || selectedUser.role === 'master_admin';
-  const isImpersonating = typeof window !== 'undefined' && Boolean(localStorage.getItem('gg_impersonator_id'));
-  const isCurrentClubUser = currentUser?.role === 'club_admin' || currentUser?.role === 'master_admin';
-  const isClubViewOrSession = isClubAdmin || isCurrentClubUser || isImpersonating;
+  const isAthleteProfile = selectedUser.role === 'member';
+  // Check-in é exclusivo para perfis de atletas (nunca para contas de clube).
+  // Exibido para o atleta logado e quando o clube entra como atleta (modo suporte) para registrar o check-in pelo atleta.
+  const canPerformCheckin = isMe && isAthleteProfile && !isClubAdmin;
   const myClub = clubs.find(c => c.id === selectedUser.clubId);
 
   // users.is_profile_complete is always true for club_admin accounts (it only
@@ -443,7 +444,7 @@ export default function MemberProfile({
   const [submittingCheckout, setSubmittingCheckout] = useState(false);
 
   const fetchActiveCheckin = useCallback(async () => {
-    if (!isMe || isClubViewOrSession || !currentUser) return;
+    if (!canPerformCheckin || !currentUser) return;
     try {
       const res = await fetch('/api/checkins/active', {
         headers: { 'x-user-id': currentUser.id },
@@ -455,7 +456,7 @@ export default function MemberProfile({
     } catch (err) {
       console.error('Error fetching active checkin:', err);
     }
-  }, [isMe, isClubViewOrSession, currentUser]);
+  }, [canPerformCheckin, currentUser]);
 
   useEffect(() => {
     fetchActiveCheckin();
@@ -2423,7 +2424,7 @@ export default function MemberProfile({
                       <LogOut className="w-4 h-4" />
                     </button>
                   </div>
-                  {!isClubViewOrSession && (
+                  {canPerformCheckin && (
                     activeCheckin ? (
                       <button
                         onClick={() => setIsCheckoutConfirmOpen(true)}

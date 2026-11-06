@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(checkin): ocultar checkin para clubes e vincular inscricoes de competicoes no checkout com badges de habitualidade` |
-| Data/hora | 2026-11-06T11:55:00-03:00 |
+| Mensagem | `fix(checkin): exibir botao de check-in quando o clube entra como atleta para registrar presenca pelo atleta` |
+| Data/hora | 2026-11-06T12:28:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -63,7 +63,7 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
     1. Quando estiver logado como clube, não exibir o botão de Check-in no perfil.
     2. Quando for fazer check-out e selecionar competição, exibir lista de inscrições do atleta que não estão vinculadas a um check-in (`checkin_id IS NULL`), permitindo marcar por checkbox quais foram disputadas na sessão. Ao salvar, vincular as inscrições ao check-in no sistema para constar nos relatórios de habitualidade.
   - **Decisão e Implementação**:
-    1. **Ocultação Estrita para Clubes**: Em `MemberProfile.tsx`, a checagem `isClubViewOrSession` valida se `currentUser.role === 'club_admin' || currentUser.role === 'master_admin'`, se `selectedUser.role === 'club_admin'` ou se a sessão está em modo suporte / personificação (`localStorage.getItem('gg_impersonator_id')`). Nessas condições, os botões de Check-in/Check-out nunca são exibidos.
+    1. **Ocultação em Contas de Clube vs Exibição em "Entrar como Atleta"**: Em `MemberProfile.tsx`, contas institucionais de clube (`selectedUser.role === 'club_admin' || selectedUser.role === 'master_admin'`) nunca realizam nem exibem botões de check-in. Porém, quando um gestor/diretor de clube clica em **"Entrar como Atleta"** no Painel Diretor (modo suporte) para atuar em nome do atleta, o botão de Check-in/Check-out **é exibido**, permitindo que a secretaria do clube registre a presença, foto facial e atividades pelo próprio atleta no estande.
     2. **Banco de Dados**: Coluna `checkin_id TEXT REFERENCES club_checkins(id) ON DELETE SET NULL` e índice `idx_registrations_checkin_id` adicionados na tabela `registrations` de forma aditiva.
     3. **Backend (`server.ts`)**:
        - `GET /api/registrations/unlinked-checkin`: busca inscrições com `checkin_id IS NULL` do atleta com joins informativos de campeonato, etapa, modalidade e arma.
