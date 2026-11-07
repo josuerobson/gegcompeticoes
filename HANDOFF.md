@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(weapons): validacao de pendencia de GT em armas proprias com edicao rapida e remocao de GT do cadastro de atletas` |
-| Data/hora | 2026-11-07T14:40:00-03:00 |
+| Mensagem | `feat(weapons): status pendente de atribuicao para armas sem definicao e fim da atribuicao automatica ao acervo do clube` |
+| Data/hora | 2026-11-07T16:45:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -570,6 +570,21 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
     2. Utilizado o motor `downloadPdfFromHtml` de `src/utils/pdfDownloader.ts`, que divide o documento de forma inteligente em páginas A4 sem estourar limites de altura de canvas e sem telas em branco.
     3. Removida a abertura de modal de pré-visualização (`printMode`) ao clicar em "Gerar Habitualidade" e em "Gerar Declaração" (Filiação), substituindo por download binário instantâneo com feedback visual interativo (`<Loader2 className="animate-spin" /> Gerando PDF...`).
     4. Padronizado o ícone de ação para `<Download className="w-3.5 h-3.5" />` e o nome dos arquivos gerados (`declaracao_habitualidade_{slugAtleta}_{dataInicio}_a_{dataFim}.pdf` e `declaracao_filiacao_{slugAtleta}.pdf`).
+
+- **Status Pendente de Atribuição e Fim da Atribuição Automática de Armas ao Clube (`src/db.ts`, `server.ts`, `AdminPanel.tsx`, `src/types.ts`)**:
+  - **Causa Raiz Identificada**: O usuário observou que armas legadas sem definição (ex: `1PT606327 / Taurus TX 22`, `AGB056519 / Taurus RT8566`, `Kvk4776090 / CBC Pump`) apareciam com a etiqueta `🏛️ Acervo do Clube: Clube de Tiro e Caça Aranãs`. A investigação identificou 3 fatores cumulativos:
+    1. No script de importação de competições legadas (`server.ts:2548`), armas sem clube de origem caíam no fallback padrão `owner_id = 'club_aranas'`.
+    2. No `initDB()` (`src/db.ts`), existia a query `UPDATE weapons w SET club_id = c.id FROM clubs c WHERE w.owner_id = c.id AND w.club_id IS NULL;` que setou `club_id = 'club_aranas'` em todas as armas legadas.
+    3. No frontend (`AdminPanel.tsx`), a lógica de renderização tratava compulsoriamente qualquer arma sem CPF como acervo de clube (`🏛️ Acervo do Clube: {w.clubName || 'Clube'}`).
+  - **Nova Regra & Solução Implementada**:
+    1. **Status Explícito `owner_type`**: Adicionada a coluna `owner_type TEXT DEFAULT 'pendente'` e relaxada a restrição NOT NULL de `owner_id` em `weapons` (`src/db.ts`).
+    2. **Desvinculação Defensiva de Armas Legadas**: Armas legadas sem CPF e sem confirmação explícita de propriedade foram limpas e marcadas como `owner_type = 'pendente'`, `club_id = NULL`, `owner_id = NULL`. Removida a query de re-atribuição compulsória a `club_aranas`. Armas com CPF foram migradas para `owner_type = 'atleta'`.
+    3. **Backend (`server.ts`)**: No `mapWeapon`, armas com `ownerType === 'pendente'` retornam `clubId: undefined` e `clubName: undefined`, prevenindo qualquer exibição indevida de acervo. Os endpoints `GET /api/weapons` e `PUT /api/weapons/:id` foram ajustados para que administradores possam visualizar e editar armas pendentes para realizar o apontamento manual.
+    4. **Frontend (`AdminPanel.tsx`)**:
+       - Adicionadas abas de filtros rápidos no topo da listagem: `Todas ({total})`, `🏛️ Acervo do Clube ({totalClube})`, `🎯 Armas de Atletas ({totalAtletas})`, `⚠️ Pendentes de Atribuição ({totalPendentes})`. Se houver pendências, a aba recebe destaque âmbar.
+       - Cada card de arma pendente exibe badge em âmbar chamativo `⚠️ Status: Pendente de Atribuição`, legenda `Aguardando apontamento manual (Atleta ou Clube)` e botão direto `📝 Apontar Vínculo`.
+       - No formulário de edição de arma pendente, exibe caixa de aviso orientando o gestor a escolher entre **Acervo do Clube** ou **Arma de Atleta** (com busca de CPF em tempo real, validação e seleção automática do clube), salvando a decisão e regularizando o status no sistema.
+  - **O que NÃO fazer no futuro**: Nunca associar automaticamente armas importadas ou sem definição a nenhum clube ou atleta sem intervenção manual explícita.
 
 ## Infra / deploy
 

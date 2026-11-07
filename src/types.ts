@@ -244,6 +244,7 @@ export interface Weapon {
   cpf?: string;
   gtExpirationDate?: string;
   clubId?: string;
+  ownerType?: 'atleta' | 'clube' | 'pendente';
 }
 
 // Managed dropdown option for the weapon form's Classe/Modelo/Calibre/

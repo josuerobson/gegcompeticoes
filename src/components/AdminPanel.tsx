@@ -8241,6 +8241,7 @@ export default function AdminPanel({
   const [newClubWeapon, setNewClubWeapon] = useState(DEFAULT_CLUB_WEAPON);
   const [savingClubWeapon, setSavingClubWeapon] = useState(false);
   const [clubWeaponSearch, setClubWeaponSearch] = useState('');
+  const [weaponTabFilter, setWeaponTabFilter] = useState<'todas' | 'clube' | 'atleta' | 'pendente'>('todas');
 
   // Athlete lookup for new weapon
   const [newWeaponAthlete, setNewWeaponAthlete] = useState<{ id: string; fullName: string; cpf: string; clubId?: string; clubName?: string } | null>(null);
@@ -14389,18 +14390,81 @@ export default function AdminPanel({
         );
 
       case 'cadastro_armas': {
+        const isWeaponAthlete = (w: Weapon) => w.ownerType === 'atleta' || Boolean(w.cpf || (w.ownerId && w.ownerId !== w.clubId && users.some(u => u.id === w.ownerId)));
+        const isWeaponClub = (w: Weapon) => !isWeaponAthlete(w) && (w.ownerType === 'clube' || (!w.cpf && !!w.clubId && w.ownerType !== 'pendente'));
+        const isWeaponPendente = (w: Weapon) => !isWeaponAthlete(w) && !isWeaponClub(w);
+
         const clubWeapons = currentUser?.clubId
-          ? weapons.filter(w => w.ownerId === currentUser.clubId || w.clubId === currentUser.clubId)
+          ? weapons.filter(w => {
+              if (w.clubId === currentUser.clubId || w.ownerId === currentUser.clubId) return true;
+              if (w.cpf && users.some(u => u.clubId === currentUser.clubId && (u.cpf === w.cpf || u.id === w.ownerId))) return true;
+              if (isWeaponPendente(w)) return true;
+              return false;
+            })
           : weapons;
+
+        const countClube = clubWeapons.filter(isWeaponClub).length;
+        const countAtletas = clubWeapons.filter(isWeaponAthlete).length;
+        const countPendentes = clubWeapons.filter(isWeaponPendente).length;
+
+        const tabFilteredWeapons = clubWeapons.filter(w => {
+          if (weaponTabFilter === 'clube') return isWeaponClub(w);
+          if (weaponTabFilter === 'atleta') return isWeaponAthlete(w);
+          if (weaponTabFilter === 'pendente') return isWeaponPendente(w);
+          return true;
+        });
+
         const normalizedFilter = normalizeSearchText(clubWeaponSearch.trim());
         const filteredClubWeapons = normalizedFilter
-          ? clubWeapons.filter(w => {
+          ? tabFilteredWeapons.filter(w => {
               const fullSearch = normalizeSearchText(
                 `${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.weaponNumber || ''} ${w.serialNumber || ''} ${w.sigmaNumber || ''} ${w.weaponClass || ''} ${w.registrySystem || ''} ${w.permissionStatus || ''} ${w.cpf || ''} ${w.ownerName || ''} ${w.clubName || ''}`
               );
               return fullSearch.includes(normalizedFilter);
             })
-          : clubWeapons;
+          : tabFilteredWeapons;
+
+        const openEditWeapon = (w: Weapon) => {
+          const isAth = isWeaponAthlete(w);
+          const isClb = isWeaponClub(w);
+          setEditingWeaponId(w.id);
+          setWeaponEditError('');
+          setEditWeaponAthleteError('');
+          const initOwnerType = isAth ? 'atleta' : 'clube';
+          setEditWeaponData({
+            weaponNumber: w.weaponNumber || '',
+            sigmaNumber: w.sigmaNumber || '',
+            weaponClass: w.weaponClass || '',
+            model: w.model || '',
+            caliber: w.caliber || '',
+            manufacturer: w.manufacturer || '',
+            registrySystem: w.registrySystem || '',
+            permissionStatus: w.permissionStatus || '',
+            ownerType: initOwnerType,
+            cpf: w.cpf || '',
+            gtExpirationDate: w.gtExpirationDate ? w.gtExpirationDate.split('T')[0] : '',
+            clubId: w.clubId || currentUser?.clubId || '',
+          });
+          if (isAth && (w.cpf || w.ownerId)) {
+            const localMatch = users.find(u => (w.cpf && u.cpf === w.cpf) || u.id === w.ownerId);
+            if (localMatch) {
+              const club = clubs.find(c => c.id === localMatch.clubId);
+              setEditWeaponAthlete({
+                id: localMatch.id,
+                fullName: localMatch.fullName,
+                cpf: localMatch.cpf || w.cpf || '',
+                clubId: localMatch.clubId,
+                clubName: club?.name || w.clubName,
+              });
+            } else if (w.cpf) {
+              searchAthleteByCpf(w.cpf).then(ath => {
+                if (ath) setEditWeaponAthlete(ath);
+              });
+            }
+          } else {
+            setEditWeaponAthlete(null);
+          }
+        };
 
         const formatGtBadge = (d?: string) => {
           if (!d) return null;
@@ -14669,9 +14733,60 @@ export default function AdminPanel({
                   )}
                 </div>
 
-                {normalizedFilter && (
+                {/* Abas de Filtro por Vínculo */}
+                <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setWeaponTabFilter('todas')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      weaponTabFilter === 'todas'
+                        ? 'bg-white text-slate-800 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Todas ({clubWeapons.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWeaponTabFilter('clube')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                      weaponTabFilter === 'clube'
+                        ? 'bg-purple-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-purple-700'
+                    }`}
+                  >
+                    🏛️ Acervo do Clube ({countClube})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWeaponTabFilter('atleta')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                      weaponTabFilter === 'atleta'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-blue-700'
+                    }`}
+                  >
+                    🎯 Armas de Atletas ({countAtletas})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWeaponTabFilter('pendente')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                      weaponTabFilter === 'pendente'
+                        ? 'bg-amber-600 text-white shadow-2xs'
+                        : countPendentes > 0
+                          ? 'text-amber-800 bg-amber-100 border border-amber-300 font-bold animate-pulse'
+                          : 'text-slate-600 hover:text-amber-700'
+                    }`}
+                  >
+                    ⚠️ Pendentes ({countPendentes})
+                  </button>
+                </div>
+
+                {(normalizedFilter || weaponTabFilter !== 'todas') && (
                   <p className="text-[11px] text-slate-500 px-1">
-                    Listando <span className="font-bold text-slate-700">{filteredClubWeapons.length}</span> de <span className="font-bold text-slate-700">{clubWeapons.length}</span> armas
+                    Exibindo <span className="font-bold text-slate-700">{filteredClubWeapons.length}</span> de <span className="font-bold text-slate-700">{clubWeapons.length}</span> armas
+                    {weaponTabFilter !== 'todas' && <span className="ml-1 text-slate-400 font-medium">({weaponTabFilter === 'pendente' ? 'Pendentes de atribuição' : weaponTabFilter === 'clube' ? 'Acervo do clube' : 'Armas de atletas'})</span>}
                   </p>
                 )}
 
@@ -14703,6 +14818,17 @@ export default function AdminPanel({
 
                         {weaponEditError && (
                           <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 p-2 rounded-lg font-semibold">{weaponEditError}</p>
+                        )}
+
+                        {isWeaponPendente(w) && (
+                          <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 space-y-1">
+                            <p className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                              ⚠️ Arma Pendente de Atribuição
+                            </p>
+                            <p className="text-[11px] text-amber-800 leading-relaxed">
+                              Esta arma está no sistema sem apontamento definido. Escolha abaixo se ela deve ser incorporada ao <strong>Acervo do Clube</strong> ou vinculada a um <strong>Atleta específico (via CPF)</strong> para regularizá-la.
+                            </p>
+                          </div>
                         )}
 
                         {/* Seletor de Vínculo na Edição */}
@@ -14893,46 +15019,7 @@ export default function AdminPanel({
                           </div>
                           <div className="flex gap-1.5 shrink-0">
                             <button
-                              onClick={() => {
-                                const isAthlete = Boolean(w.cpf || (w.ownerId && w.ownerId !== w.clubId && users.some(u => u.id === w.ownerId)));
-                                setEditingWeaponId(w.id);
-                                setWeaponEditError('');
-                                setEditWeaponAthleteError('');
-                                const initOwnerType = isAthlete ? 'atleta' : 'clube';
-                                setEditWeaponData({
-                                  weaponNumber: w.weaponNumber || '',
-                                  sigmaNumber: w.sigmaNumber || '',
-                                  weaponClass: w.weaponClass || '',
-                                  model: w.model || '',
-                                  caliber: w.caliber || '',
-                                  manufacturer: w.manufacturer || '',
-                                  registrySystem: w.registrySystem || '',
-                                  permissionStatus: w.permissionStatus || '',
-                                  ownerType: initOwnerType,
-                                  cpf: w.cpf || '',
-                                  gtExpirationDate: w.gtExpirationDate ? w.gtExpirationDate.split('T')[0] : '',
-                                  clubId: w.clubId || '',
-                                });
-                                if (isAthlete && (w.cpf || w.ownerId)) {
-                                  const localMatch = users.find(u => (w.cpf && u.cpf === w.cpf) || u.id === w.ownerId);
-                                  if (localMatch) {
-                                    const club = clubs.find(c => c.id === localMatch.clubId);
-                                    setEditWeaponAthlete({
-                                      id: localMatch.id,
-                                      fullName: localMatch.fullName,
-                                      cpf: localMatch.cpf || w.cpf || '',
-                                      clubId: localMatch.clubId,
-                                      clubName: club?.name || w.clubName,
-                                    });
-                                  } else if (w.cpf) {
-                                    searchAthleteByCpf(w.cpf).then(ath => {
-                                      if (ath) setEditWeaponAthlete(ath);
-                                    });
-                                  }
-                                } else {
-                                  setEditWeaponAthlete(null);
-                                }
-                              }}
+                              onClick={() => openEditWeapon(w)}
                               className="text-blue-500 hover:text-blue-700 transition p-1.5 rounded-lg hover:bg-blue-50 cursor-pointer"
                               title="Editar"
                             >
@@ -14948,31 +15035,53 @@ export default function AdminPanel({
                           </div>
                         </div>
 
-                        {/* Metadados: Vínculo (Atleta vs Clube), CPF, Clube e Guia de Trânsito */}
-                        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-1.5">
-                          {w.cpf || (w.ownerId && w.ownerId !== w.clubId && users.some(u => u.id === w.ownerId)) ? (
-                            <>
+                        {/* Metadados: Vínculo (Atleta vs Clube vs Pendente), CPF, Clube e Guia de Trânsito */}
+                        <div className="pt-2 border-t border-slate-100">
+                          {isWeaponPendente(w) ? (
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-amber-50/80 border border-amber-200 rounded-lg p-2">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1 shadow-2xs">
+                                  ⚠️ Status: Pendente de Atribuição
+                                </span>
+                                <span className="text-[10px] text-amber-800 italic">
+                                  Aguardando apontamento manual (Atleta ou Clube)
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => openEditWeapon(w)}
+                                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] px-2.5 py-1 rounded-md transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs shrink-0"
+                              >
+                                📝 Apontar Vínculo
+                              </button>
+                            </div>
+                          ) : isWeaponAthlete(w) ? (
+                            <div className="flex flex-wrap items-center gap-1.5">
                               <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1">
                                 🎯 Atleta: {w.ownerName || users.find(u => u.id === w.ownerId)?.fullName || 'Atleta'}
                               </span>
                               <span className="bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] font-mono">
                                 CPF: {formatCpfDisplay(w.cpf || users.find(u => u.id === w.ownerId)?.cpf)}
                               </span>
-                              <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded text-[10px] font-medium inline-flex items-center gap-1">
-                                🏛️ {w.clubName || clubs.find(c => c.id === w.clubId)?.name || 'Clube'}
-                              </span>
+                              {w.clubName && (
+                                <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded text-[10px] font-medium inline-flex items-center gap-1">
+                                  🏛️ {w.clubName}
+                                </span>
+                              )}
                               {w.gtExpirationDate ? (
                                 formatGtBadge(w.gtExpirationDate)
                               ) : (
-                                <span className="bg-slate-50 text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded text-[10px]">
-                                  Sem GT
+                                <span className="bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1">
+                                  ⚠️ GT Ausente
                                 </span>
                               )}
-                            </>
+                            </div>
                           ) : (
-                            <span className="bg-purple-50 text-purple-800 border border-purple-200 px-2 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1">
-                              🏛️ Acervo do Clube: {w.clubName || clubs.find(c => c.id === w.clubId || c.id === w.ownerId)?.name || 'Clube'}
-                            </span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="bg-purple-50 text-purple-800 border border-purple-200 px-2 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1">
+                                🏛️ Acervo do Clube: {w.clubName || clubs.find(c => c.id === w.clubId || c.id === w.ownerId)?.name || 'Clube'}
+                              </span>
+                            </div>
                           )}
                         </div>
                       </div>

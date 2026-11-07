@@ -509,10 +509,12 @@ export async function initDB() {
     await client.query(`
       ALTER TABLE weapons
         ALTER COLUMN weapon_type DROP NOT NULL,
-        ADD COLUMN IF NOT EXISTS registry_system TEXT;
+        ALTER COLUMN owner_id DROP NOT NULL,
+        ADD COLUMN IF NOT EXISTS registry_system TEXT,
+        ADD COLUMN IF NOT EXISTS owner_type TEXT DEFAULT 'pendente';
     `);
 
-    // Novas colunas de controle: CPF do atleta proprietario, Vencimento da GT e Clube
+    // Novas colunas de controle: CPF do atleta proprietario, Vencimento da GT, Clube e Tipo de Propriedade
     await client.query(`
       ALTER TABLE weapons
         ADD COLUMN IF NOT EXISTS owner_cpf TEXT,
@@ -520,20 +522,33 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS club_id TEXT REFERENCES clubs(id) ON DELETE SET NULL;
       CREATE INDEX IF NOT EXISTS idx_weapons_owner_cpf ON weapons(owner_cpf);
       CREATE INDEX IF NOT EXISTS idx_weapons_club_id ON weapons(club_id);
+      CREATE INDEX IF NOT EXISTS idx_weapons_owner_type ON weapons(owner_type);
     `);
 
-    // Backfill defensivo de armas existentes: vincula CPF e Clube a partir da tabela users / clubs
+    // Backfill defensivo e correcao de status de atribuicao:
+    // 1) Armas com CPF registrado sao armas de atletas
     await client.query(`
       UPDATE weapons w
       SET owner_cpf = u.cpf,
-          club_id = COALESCE(w.club_id, u.club_id)
+          club_id = COALESCE(w.club_id, u.club_id),
+          owner_type = 'atleta'
       FROM users u
-      WHERE w.owner_id = u.id AND (w.owner_cpf IS NULL OR w.club_id IS NULL);
+      WHERE w.owner_id = u.id AND w.owner_cpf IS NULL;
 
-      UPDATE weapons w
-      SET club_id = c.id
-      FROM clubs c
-      WHERE w.owner_id = c.id AND w.club_id IS NULL;
+      UPDATE weapons
+      SET owner_type = 'atleta'
+      WHERE owner_cpf IS NOT NULL AND owner_cpf != '' AND (owner_type IS NULL OR owner_type = 'pendente');
+    `);
+
+    // 2) Armas legadas sem CPF ou sem apontamento manual NAO podem ser vinculadas
+    // automaticamente a nenhum clube (nem club_aranas). Devem ficar como 'pendente' e club_id = NULL.
+    await client.query(`
+      UPDATE weapons
+      SET owner_type = 'pendente',
+          club_id = NULL,
+          owner_id = NULL
+      WHERE (owner_cpf IS NULL OR owner_cpf = '')
+        AND (owner_type IS NULL OR owner_type = 'pendente' OR (owner_id = 'club_aranas' AND legacy_id IS NOT NULL));
     `);
 
     // Managed dropdown lists for the weapon form (Classe, Modelo, Calibre,

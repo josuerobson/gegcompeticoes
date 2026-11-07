@@ -409,9 +409,15 @@ function mapStage(s: any): Stage {
 }
 
 function mapWeapon(w: any): Weapon {
+  const rawOwnerType = w.owner_type || (w.owner_cpf || w.owner_cpf_user ? 'atleta' : 'pendente');
+  const resolvedOwnerType = (rawOwnerType === 'clube' || rawOwnerType === 'atleta' || rawOwnerType === 'pendente')
+    ? rawOwnerType
+    : (w.owner_cpf || w.owner_cpf_user ? 'atleta' : 'pendente');
+  const isPendente = resolvedOwnerType === 'pendente';
+
   return {
     id: w.id,
-    ownerId: w.owner_id,
+    ownerId: isPendente ? undefined : w.owner_id,
     manufacturer: w.manufacturer,
     model: w.model,
     caliber: w.caliber,
@@ -423,11 +429,12 @@ function mapWeapon(w: any): Weapon {
     permissionStatus: w.permission_status || undefined,
     registrySystem: w.registry_system || undefined,
     legacyId: w.legacy_id ?? undefined,
-    ownerName: w.owner_name_user || w.owner_name || undefined,
-    clubName: w.club_name_joined || w.club_name || undefined,
-    cpf: w.owner_cpf || w.owner_cpf_user || undefined,
-    gtExpirationDate: w.gt_expiration_date || undefined,
-    clubId: w.club_id || undefined,
+    ownerName: isPendente ? undefined : (w.owner_name_user || w.owner_name || undefined),
+    clubName: isPendente ? undefined : (w.club_name_joined || w.club_name || undefined),
+    cpf: isPendente ? undefined : (w.owner_cpf || w.owner_cpf_user || undefined),
+    gtExpirationDate: isPendente ? undefined : (w.gt_expiration_date || undefined),
+    clubId: isPendente ? undefined : (w.club_id || undefined),
+    ownerType: resolvedOwnerType,
   };
 }
 
@@ -4895,7 +4902,9 @@ app.get('/api/weapons', requireAuth, async (req, res) => {
         weaponsRes = await pool.query(
           `${baseSelect} WHERE w.owner_id = ANY($1)
              OR w.club_id = ANY($1)
-             OR w.owner_id IN (SELECT id FROM users WHERE club_id = ANY($1))`,
+             OR w.owner_id IN (SELECT id FROM users WHERE club_id = ANY($1))
+             OR w.owner_type = 'pendente'
+             OR (w.owner_cpf IS NULL AND w.club_id IS NULL)`,
           [visibleClubIds]
         );
       }
@@ -4910,7 +4919,9 @@ app.get('/api/weapons', requireAuth, async (req, res) => {
       } else {
         weaponsRes = await pool.query(
           `${baseSelect}
-           WHERE w.owner_id = $1 OR u.club_id = $1 OR w.club_id = $1`,
+           WHERE w.owner_id = $1 OR u.club_id = $1 OR w.club_id = $1
+              OR w.owner_type = 'pendente'
+              OR (w.owner_cpf IS NULL AND w.club_id IS NULL)`,
           [currentUser.clubId]
         );
       }
@@ -4966,15 +4977,21 @@ app.post('/api/weapons', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Preencha fabricante, modelo e calibre.' });
   }
 
-  let resolvedOwnerId = currentUser.id;
+  let resolvedOwnerId: string | null = null;
   let resolvedCpf: string | null = null;
-  let resolvedClubId: string | null = clubId || currentUser.clubId || null;
-  let resolvedGtExpiration: string | null = gtExpirationDate || null;
+  let resolvedClubId: string | null = null;
+  let resolvedGtExpiration: string | null = null;
+  let resolvedOwnerType: 'atleta' | 'clube' | 'pendente' = (ownerType as any) || (cpf ? 'atleta' : 'pendente');
 
-  const isClubAcervo = ownerType === 'clube' || (!cpf && ownerId && (ownerId === (clubId || currentUser.clubId)));
-
-  if (isClubAcervo) {
-    // Opção de vincular apenas ao clube: não precisa de CPF nem de vencimento de GT
+  if (ownerType === 'pendente') {
+    resolvedOwnerType = 'pendente';
+    resolvedOwnerId = null;
+    resolvedCpf = null;
+    resolvedClubId = null;
+    resolvedGtExpiration = null;
+  } else if (ownerType === 'clube' || (!cpf && ownerId && (ownerId === (clubId || currentUser.clubId)))) {
+    // Vínculo exclusivo como acervo do clube: não exige CPF nem GT
+    resolvedOwnerType = 'clube';
     resolvedOwnerId = clubId || currentUser.clubId || ownerId || currentUser.id;
     resolvedCpf = null;
     resolvedGtExpiration = null;
@@ -4994,13 +5011,12 @@ app.post('/api/weapons', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Nenhum atleta encontrado com este CPF. A arma só pode ser vinculada a um atleta registrado no sistema.' });
     }
     const athlete = userRes.rows[0];
+    resolvedOwnerType = 'atleta';
     resolvedOwnerId = athlete.id;
     resolvedCpf = athlete.cpf || cpf;
-    // Seleção automática do clube de acordo com o cadastro do atleta
     resolvedClubId = athlete.club_id || clubId || currentUser.clubId || null;
     resolvedGtExpiration = gtExpirationDate || null;
   } else if (ownerId) {
-    // Se ownerId foi passado
     const userRes = await pool.query(
       `SELECT u.id, u.cpf, u.full_name, u.club_id
        FROM users u WHERE u.id = $1`,
@@ -5008,11 +5024,13 @@ app.post('/api/weapons', requireAuth, async (req, res) => {
     );
     if (userRes.rows.length > 0) {
       const athlete = userRes.rows[0];
+      resolvedOwnerType = 'atleta';
       resolvedOwnerId = athlete.id;
       resolvedCpf = athlete.cpf || null;
       resolvedClubId = athlete.club_id || clubId || currentUser.clubId || null;
       resolvedGtExpiration = gtExpirationDate || null;
     } else {
+      resolvedOwnerType = 'clube';
       resolvedOwnerId = ownerId;
       resolvedCpf = null;
       resolvedClubId = ownerId;
@@ -5020,6 +5038,7 @@ app.post('/api/weapons', requireAuth, async (req, res) => {
     }
   } else {
     // Atleta cadastrando para si mesmo (inscrição, perfil, etc.)
+    resolvedOwnerType = 'atleta';
     resolvedOwnerId = currentUser.id;
     resolvedCpf = currentUser.cpf || null;
     resolvedClubId = currentUser.clubId || null;
@@ -5031,7 +5050,7 @@ app.post('/api/weapons', requireAuth, async (req, res) => {
 
   const newWeapon: Weapon = {
     id: `weapon_${Date.now()}`,
-    ownerId: resolvedOwnerId,
+    ownerId: resolvedOwnerId || undefined,
     manufacturer,
     model,
     caliber,
@@ -5044,15 +5063,16 @@ app.post('/api/weapons', requireAuth, async (req, res) => {
     cpf: resolvedCpf || undefined,
     gtExpirationDate: resolvedGtExpiration || undefined,
     clubId: resolvedClubId || undefined,
+    ownerType: resolvedOwnerType,
   };
 
   try {
     await pool.query(
-      `INSERT INTO weapons (id, owner_id, manufacturer, model, caliber, serial_number, weapon_number, sigma_number, class, permission_status, registry_system, owner_cpf, gt_expiration_date, club_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+      `INSERT INTO weapons (id, owner_id, manufacturer, model, caliber, serial_number, weapon_number, sigma_number, class, permission_status, registry_system, owner_cpf, gt_expiration_date, club_id, owner_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
       [
         newWeapon.id,
-        newWeapon.ownerId,
+        resolvedOwnerId || null,
         newWeapon.manufacturer,
         newWeapon.model,
         newWeapon.caliber,
@@ -5065,6 +5085,7 @@ app.post('/api/weapons', requireAuth, async (req, res) => {
         resolvedCpf || null,
         resolvedGtExpiration || null,
         resolvedClubId || null,
+        resolvedOwnerType,
       ]
     );
 
@@ -5137,9 +5158,10 @@ app.put('/api/weapons/:id', requireAuth, async (req, res) => {
     }
     const weapon = mapWeapon(weaponRes.rows[0]);
 
+    const isPendenteWeapon = (weapon.ownerType === 'pendente') || (weaponRes.rows[0].owner_type === 'pendente') || (!weaponRes.rows[0].owner_cpf && !weaponRes.rows[0].club_id);
     let canEdit = currentUser.role === 'master_admin'
       || weapon.ownerId === currentUser.id
-      || (ADMIN_ROLES.includes(currentUser.role) && (weapon.ownerId === currentUser.clubId || weapon.clubId === currentUser.clubId || !weapon.ownerId));
+      || (ADMIN_ROLES.includes(currentUser.role) && (weapon.ownerId === currentUser.clubId || weapon.clubId === currentUser.clubId || !weapon.ownerId || isPendenteWeapon));
 
     if (!canEdit && ADMIN_ROLES.includes(currentUser.role) && currentUser.clubId && weapon.ownerId) {
       // Checa se o atleta proprietário da arma pertence ao mesmo clube do gestor/admin logado
@@ -5153,17 +5175,25 @@ app.put('/api/weapons/:id', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Você não tem permissão para editar esta arma.' });
     }
 
-    let resolvedOwnerId = weapon.ownerId;
+    let resolvedOwnerId: string | null = weapon.ownerId || null;
     let resolvedCpf: string | null = weapon.cpf || null;
     let resolvedClubId: string | null = clubId || weapon.clubId || null;
     let resolvedGtExpiration: string | null = gtExpirationDate !== undefined ? (gtExpirationDate || null) : (weapon.gtExpirationDate || null);
+    let resolvedOwnerType: 'atleta' | 'clube' | 'pendente' = (ownerType as any) || weapon.ownerType || (resolvedCpf ? 'atleta' : 'pendente');
 
-    if (ownerType === 'clube') {
-      // Opção de só vincular ao clube: não precisa de CPF nem de vencimento de GT
-      resolvedOwnerId = clubId || currentUser.clubId || weapon.clubId || resolvedOwnerId;
+    if (ownerType === 'pendente') {
+      resolvedOwnerType = 'pendente';
+      resolvedOwnerId = null;
+      resolvedCpf = null;
+      resolvedClubId = null;
+      resolvedGtExpiration = null;
+    } else if (ownerType === 'clube') {
+      // Opção de vincular como Acervo do Clube: não precisa de CPF nem de GT
+      resolvedOwnerType = 'clube';
+      resolvedOwnerId = clubId || currentUser.clubId || weapon.clubId || currentUser.id;
       resolvedCpf = null;
       resolvedGtExpiration = null;
-      resolvedClubId = clubId || currentUser.clubId || resolvedOwnerId;
+      resolvedClubId = clubId || currentUser.clubId || weapon.clubId || null;
     } else if (cpf) {
       // Quando for cadastrar/alterar um CPF, tem que vincular a um atleta cadastrado no sistema
       const cleanCpf = String(cpf).replace(/\D/g, '');
@@ -5178,9 +5208,9 @@ app.put('/api/weapons/:id', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'Nenhum atleta encontrado com este CPF. A arma só pode ser vinculada a um atleta registrado no sistema.' });
       }
       const athlete = userRes.rows[0];
+      resolvedOwnerType = 'atleta';
       resolvedOwnerId = athlete.id;
       resolvedCpf = athlete.cpf || cpf;
-      // Seleção do clube é automática de acordo com o cadastro do atleta
       resolvedClubId = athlete.club_id || clubId || weapon.clubId || currentUser.clubId || null;
       resolvedGtExpiration = gtExpirationDate !== undefined ? (gtExpirationDate || null) : (weapon.gtExpirationDate || null);
     } else if (ownerType === 'atleta' && !cpf && !resolvedCpf) {
@@ -5199,11 +5229,12 @@ app.put('/api/weapons/:id', requireAuth, async (req, res) => {
         permission_status  = $7,
         registry_system    = $8,
         serial_number      = COALESCE($9, serial_number),
-        owner_id           = COALESCE($10, owner_id),
+        owner_id           = $10,
         owner_cpf          = $11,
         gt_expiration_date = $12,
-        club_id            = COALESCE($13, club_id)
-       WHERE id = $14`,
+        club_id            = $13,
+        owner_type         = $14
+       WHERE id = $15`,
       [
         manufacturer !== undefined ? manufacturer : weapon.manufacturer,
         model !== undefined ? model : weapon.model,
@@ -5218,6 +5249,7 @@ app.put('/api/weapons/:id', requireAuth, async (req, res) => {
         resolvedCpf,
         resolvedGtExpiration,
         resolvedClubId,
+        resolvedOwnerType,
         weaponId
       ]
     );
