@@ -5137,9 +5137,18 @@ app.put('/api/weapons/:id', requireAuth, async (req, res) => {
     }
     const weapon = mapWeapon(weaponRes.rows[0]);
 
-    const canEdit = currentUser.role === 'master_admin'
+    let canEdit = currentUser.role === 'master_admin'
       || weapon.ownerId === currentUser.id
       || (ADMIN_ROLES.includes(currentUser.role) && (weapon.ownerId === currentUser.clubId || weapon.clubId === currentUser.clubId || !weapon.ownerId));
+
+    if (!canEdit && ADMIN_ROLES.includes(currentUser.role) && currentUser.clubId && weapon.ownerId) {
+      // Checa se o atleta proprietário da arma pertence ao mesmo clube do gestor/admin logado
+      const ownerCheck = await pool.query('SELECT club_id FROM users WHERE id = $1', [weapon.ownerId]);
+      if (ownerCheck.rows.length > 0 && ownerCheck.rows[0].club_id === currentUser.clubId) {
+        canEdit = true;
+      }
+    }
+
     if (!canEdit) {
       return res.status(403).json({ error: 'Você não tem permissão para editar esta arma.' });
     }
@@ -5173,8 +5182,8 @@ app.put('/api/weapons/:id', requireAuth, async (req, res) => {
       resolvedCpf = athlete.cpf || cpf;
       // Seleção do clube é automática de acordo com o cadastro do atleta
       resolvedClubId = athlete.club_id || clubId || weapon.clubId || currentUser.clubId || null;
-      resolvedGtExpiration = gtExpirationDate || null;
-    } else if (ownerType === 'atleta' && !cpf) {
+      resolvedGtExpiration = gtExpirationDate !== undefined ? (gtExpirationDate || null) : (weapon.gtExpirationDate || null);
+    } else if (ownerType === 'atleta' && !cpf && !resolvedCpf) {
       return res.status(400).json({ error: 'Informe o CPF do atleta para vincular a arma a um atleta.' });
     }
 
@@ -5196,14 +5205,14 @@ app.put('/api/weapons/:id', requireAuth, async (req, res) => {
         club_id            = COALESCE($13, club_id)
        WHERE id = $14`,
       [
-        manufacturer,
-        model,
-        caliber,
-        weaponNumber || null,
-        sigmaNumber || null,
-        weaponClass || null,
-        permissionStatus || null,
-        registrySystem || null,
+        manufacturer !== undefined ? manufacturer : weapon.manufacturer,
+        model !== undefined ? model : weapon.model,
+        caliber !== undefined ? caliber : weapon.caliber,
+        weaponNumber !== undefined ? (weaponNumber || null) : weapon.weaponNumber,
+        sigmaNumber !== undefined ? (sigmaNumber || null) : weapon.sigmaNumber,
+        weaponClass !== undefined ? (weaponClass || null) : (weapon as any).weaponClass,
+        permissionStatus !== undefined ? (permissionStatus || null) : (weapon as any).permissionStatus,
+        registrySystem !== undefined ? (registrySystem || null) : (weapon as any).registrySystem,
         resolvedSerial,
         resolvedOwnerId,
         resolvedCpf,

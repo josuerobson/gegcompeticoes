@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(weapons): vencimento guia de transito na inscricao e correcao de altura/scroll do dropdown de armas` |
-| Data/hora | 2026-11-07T14:02:00-03:00 |
+| Mensagem | `feat(weapons): validacao de pendencia de GT em armas proprias com edicao rapida e remocao de GT do cadastro de atletas` |
+| Data/hora | 2026-11-07T14:40:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,28 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Validação de Pendência de Guia de Trânsito em Armas Próprias com Edição Rápida e Remoção de GT do Cadastro de Atletas (`AdminPanel.tsx`, `MemberProfile.tsx`, `server.ts`)**:
+  - **Exigência**:
+    1. Quando listar as armas próprias (dropdown de seleção de armas na Inscrição em Lote do Clube e IDSC), validar se todas estão com o campo "Vencimento da guia de trânsito". Se alguma não estiver cadastrada ou estiver com a data vencida, exibir botão em vermelho `"Pendência! - Editar"` acompanhado de um texto pequeno explicando qual é a pendência (`⚠️ Guia de trânsito não cadastrada` ou `⚠️ Guia de trânsito vencida (DD/MM/AAAA)`). Ao clicar em pendência, abrir tela para editar o cadastro da arma e fazer as correções necessárias.
+    2. Remover do cadastro do atleta em todos os locais onde é editado e cadastrado os dados do atleta o campo "Vencimento guia de trânsito", pois agora esta informação é vinculada exclusivamente à arma do atleta.
+  - **Implementação**:
+    1. **Validação e Destaque Visual no Dropdown de Armas Próprias (`InscricaoClubePanel` e `IdscInscricaoPanel` em `AdminPanel.tsx`)**:
+       - Cada arma do atleta em `filteredOwn` é inspecionada contra a data atual (`new Date().toISOString().split('T')[0]`).
+       - Se `!w.gtExpirationDate`, define `isGtMissing = true` e a mensagem `Guia de trânsito não cadastrada`.
+       - Se a data for anterior a hoje, define `isGtExpired = true` e a mensagem `Guia de trânsito vencida (DD/MM/AAAA)`.
+       - Havendo pendência, a linha recebe realce em tom vermelho suave (`bg-red-50/40`), a mensagem descritiva de erro com ícone de alerta, e o botão vermelho `"Pendência! - Editar"`.
+       - O clique no botão interrompe a propagação (`e.stopPropagation()` e `e.preventDefault()`), abrindo o modal `QuickEditWeaponModal` sem selecionar indevidamente a arma com pendência.
+    2. **Modal Rápido de Regularização (`QuickEditWeaponModal` em `AdminPanel.tsx`)**:
+       - Abre com os dados da arma preenchidos (Fabricante, Modelo, Calibre, Número da arma, SIGMA, Classe, Sistema de Registro e Status de Permissão).
+       - O campo "Vencimento Guia de Trânsito" é exibido com destaque especial (borda âmbar e validação de preenchimento obrigatório).
+       - Ao salvar, envia requisição `PUT /api/weapons/:id` e atualiza o estado local de `clubWeapons` imediatamente, fazendo com que o selo de pendência desapareça sem necessidade de recarregar a página.
+    3. **Backend com Permissão Flexível (`server.ts`)**:
+       - No endpoint `PUT /api/weapons/:id`, adicionada checagem para permitir que gestores do clube (`club_admin`) possam editar armas de atletas filiados ao seu clube mesmo quando a arma for de registro antigo e não possuir `club_id` direto na tabela `weapons`.
+       - Na validação de CPF, mantido o CPF já existente da arma (`resolvedCpf`) caso a atualização não envie um novo CPF, e protegidos todos os campos opcionais contra sobreposição acidental por `null`.
+    4. **Remoção Completa de Guia de Trânsito do Atleta**:
+       - Removido o bloco lateral de edição direta de Guia de Trânsito e o campo em "Documentos & Filiação" em `MemberProfile.tsx`.
+       - Removido o campo "Vencimento Guia de Trânsito" de "Cadastrar Membros" (`AdminPanel.tsx`) e do modal "Novo Atleta" em Gerenciamento Plataforma > Clubes (`AdminPanel.tsx`).
 
 - **Vencimento Guia de Trânsito no Cadastro Rápido de Armas e Correção de Altura/Scroll do Dropdown de Armas (`AdminPanel.tsx`)**:
   - **Exigência**:

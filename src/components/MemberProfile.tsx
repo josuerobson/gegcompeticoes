@@ -657,37 +657,6 @@ export default function MemberProfile({
     }
   };
 
-  // Guia de Trânsito direct edit state
-  const [isEditingGuia, setIsEditingGuia] = useState(false);
-  const [guiaExpiryInput, setGuiaExpiryInput] = useState('');
-  const [savingGuia, setSavingGuia] = useState(false);
-  const [guiaSaveSuccess, setGuiaSaveSuccess] = useState(false);
-
-  const startEditGuia = () => {
-    let raw = selectedUser.guiaTransitoExpiry || '';
-    if (raw.includes('T')) raw = raw.split('T')[0];
-    if (raw.includes('/') && raw.split('/').length === 3) {
-      const parts = raw.split('/');
-      if (parts[2].length === 4) raw = `${parts[2]}-${parts[1]}-${parts[0]}`;
-    }
-    setGuiaExpiryInput(raw);
-    setIsEditingGuia(true);
-    setGuiaSaveSuccess(false);
-  };
-
-  const handleSaveGuiaExpiry = async () => {
-    setSavingGuia(true);
-    const ok = await onUpdateProfile({ guiaTransitoExpiry: guiaExpiryInput });
-    setSavingGuia(false);
-    if (ok) {
-      setGuiaSaveSuccess(true);
-      setTimeout(() => {
-        setGuiaSaveSuccess(false);
-        setIsEditingGuia(false);
-      }, 1200);
-    }
-  };
-
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
   const [annuityPixModal, setAnnuityPixModal] = useState<{ pixCopiaECola: string; txId: string } | null>(null);
   const [annuityChargeError, setAnnuityChargeError] = useState('');
@@ -2527,78 +2496,6 @@ export default function MemberProfile({
                     </button>
                   </div>
 
-                  {/* Guia de Trânsito */}
-                  {!isEditingGuia ? (
-                    <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-slate-450 font-sans text-[11px]">Guia de Trânsito</span>
-                        {isMe && (
-                          <button
-                            type="button"
-                            onClick={startEditGuia}
-                            title="Editar Vencimento da Guia de Trânsito"
-                            className="p-0.5 text-slate-400 hover:text-blue-600 transition rounded hover:bg-slate-200/60 cursor-pointer"
-                          >
-                            <Pencil className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-slate-800 text-xs">
-                          {selectedUser.guiaTransitoExpiry
-                            ? (selectedUser.guiaTransitoExpiry.includes('-')
-                                ? selectedUser.guiaTransitoExpiry.split('T')[0].split('-').reverse().join('/')
-                                : selectedUser.guiaTransitoExpiry)
-                            : '--/--/----'}
-                        </span>
-                        {isMe && (
-                          <button
-                            type="button"
-                            onClick={startEditGuia}
-                            title="Editar Guia de Trânsito"
-                            className="p-1 text-blue-600 hover:text-blue-800 transition rounded hover:bg-blue-50 cursor-pointer"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-blue-50/70 border border-blue-200 p-2.5 rounded-lg space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-blue-900 font-bold text-[11px]">Editar Vencimento Guia de Trânsito</span>
-                        <button
-                          type="button"
-                          onClick={() => setIsEditingGuia(false)}
-                          className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      {guiaSaveSuccess && (
-                        <div className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Vencimento da Guia salvo!
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="date"
-                          value={guiaExpiryInput}
-                          onChange={e => setGuiaExpiryInput(e.target.value)}
-                          className="bg-white border border-slate-300 text-slate-800 text-xs rounded-lg p-1.5 w-full outline-none focus:border-blue-500 font-semibold"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleSaveGuiaExpiry}
-                          disabled={savingGuia}
-                          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition shrink-0 cursor-pointer"
-                        >
-                          {savingGuia ? '...' : 'Salvar'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Saldo de Munições */}
                   <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                     <span className="text-slate-450 font-sans text-[11px]">Saldo de Munições</span>
@@ -2788,7 +2685,6 @@ export default function MemberProfile({
                       crValidity: profileForm.isCac ? profileForm.crValidity : null,
                       militaryRegion: profileForm.isCac ? profileForm.militaryRegion : null,
                       clubAffiliationDate: profileForm.isCac ? profileForm.clubAffiliationDate : null,
-                      guiaTransitoExpiry: profileForm.guiaTransitoExpiry,
                       nationality: profileForm.nationality
                     })}
                     saving={savingSection === 'user_data'}
@@ -2826,7 +2722,6 @@ export default function MemberProfile({
                     />
                     <ProfileField label="Nome do pai" value={profileForm.fatherName} onChange={v => setProfileForm({ ...profileForm, fatherName: v })} />
                     <ProfileField label="Nome da mãe" value={profileForm.motherName} onChange={v => setProfileForm({ ...profileForm, motherName: v })} />
-                    <ProfileField label="Vencimento Guia de Trânsito" type="date" value={profileForm.guiaTransitoExpiry} onChange={v => setProfileForm({ ...profileForm, guiaTransitoExpiry: v })} />
                     <ProfileField label="Nacionalidade" value={profileForm.nationality} onChange={v => setProfileForm({ ...profileForm, nationality: v })} />
                     {profileForm.isCac && (
                       <>

@@ -1109,6 +1109,343 @@ function QuickAddWeaponModal({
 }
 
 // =============================================================================
+// QuickEditWeaponModal — Modal rápido para editar arma e regularizar Guia de Trânsito
+// =============================================================================
+interface QuickEditWeaponModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  weapon: Weapon | null;
+  currentUser: User | null;
+  weaponLookupOptions?: WeaponLookupOption[];
+  onWeaponUpdated: (weapon: Weapon, formattedLabel: string) => void;
+}
+
+function QuickEditWeaponModal({
+  isOpen,
+  onClose,
+  weapon,
+  currentUser,
+  weaponLookupOptions = [],
+  onWeaponUpdated,
+}: QuickEditWeaponModalProps) {
+  const [weaponNumber, setWeaponNumber] = React.useState('');
+  const [sigmaNumber, setSigmaNumber] = React.useState('');
+  const [weaponClass, setWeaponClass] = React.useState('');
+  const [manufacturer, setManufacturer] = React.useState('');
+  const [model, setModel] = React.useState('');
+  const [caliber, setCaliber] = React.useState('');
+  const [registrySystem, setRegistrySystem] = React.useState('SIGMA');
+  const [permissionStatus, setPermissionStatus] = React.useState('Permitido');
+  const [gtExpirationDate, setGtExpirationDate] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    if (isOpen && weapon) {
+      setError('');
+      setManufacturer(weapon.manufacturer || '');
+      setModel(weapon.model || '');
+      setCaliber(weapon.caliber || '');
+      setWeaponNumber(weapon.weaponNumber || '');
+      setSigmaNumber(weapon.sigmaNumber || '');
+      setWeaponClass((weapon as any).weaponClass || '');
+      setRegistrySystem((weapon as any).registrySystem || 'SIGMA');
+      setPermissionStatus((weapon as any).permissionStatus || 'Permitido');
+      setGtExpirationDate(weapon.gtExpirationDate ? weapon.gtExpirationDate.split('T')[0] : '');
+    }
+  }, [isOpen, weapon]);
+
+  if (!isOpen || !weapon) return null;
+
+  const lookup = (kind: string) => weaponLookupOptions.filter(o => o.kind === kind);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const isMissing = !gtExpirationDate;
+  const isExpired = !isMissing && gtExpirationDate < todayStr;
+  const hasPendencia = isMissing || isExpired;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manufacturer.trim() || !model.trim() || !caliber.trim()) {
+      setError('Fabricante, Modelo e Calibre são obrigatórios.');
+      return;
+    }
+
+    if (!gtExpirationDate) {
+      setError('O campo Vencimento da Guia de Trânsito é obrigatório para regularizar a arma.');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
+    try {
+      const res = await fetch(`/api/weapons/${weapon.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser?.id || '',
+        },
+        body: JSON.stringify({
+          manufacturer: manufacturer.trim(),
+          model: model.trim(),
+          caliber: caliber.trim(),
+          weaponNumber: weaponNumber.trim() || undefined,
+          sigmaNumber: sigmaNumber.trim() || undefined,
+          serialNumber: weaponNumber.trim() || sigmaNumber.trim() || undefined,
+          weaponClass: weaponClass || undefined,
+          registrySystem: registrySystem || undefined,
+          permissionStatus: permissionStatus || undefined,
+          gtExpirationDate: gtExpirationDate,
+          ownerType: 'atleta',
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao atualizar dados da arma.');
+      }
+
+      const updatedWeapon = data.weapon;
+      const formatted = formatWeaponLabel(updatedWeapon);
+      onWeaponUpdated(updatedWeapon, formatted);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao atualizar arma.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white max-w-lg w-full rounded-2xl shadow-2xl overflow-hidden text-slate-800 p-6 space-y-4 text-left border border-slate-100 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold">
+              <Pencil className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base leading-tight">
+                Regularizar Arma & Guia de Trânsito
+              </h3>
+              <p className="text-[11px] text-slate-500 font-medium">
+                {weapon.ownerName ? `Atleta: ${weapon.ownerName}` : 'Arma Própria do Atleta'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 transition p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {hasPendencia && (
+          <div className="bg-red-50 border border-red-200 text-red-800 p-3 rounded-xl text-xs font-semibold flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>
+              {isMissing
+                ? 'Pendência: Esta arma ainda não possui a Guia de Trânsito cadastrada.'
+                : `Pendência: A Guia de Trânsito desta arma está vencida (${gtExpirationDate.split('-').reverse().join('/')}).`}
+            </span>
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold border border-red-200">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-3 text-xs">
+          {/* Vencimento Guia de Trânsito - Destaque */}
+          <div className="bg-amber-50/70 border-2 border-amber-300 p-3 rounded-xl space-y-1">
+            <label className="text-[10px] font-bold text-amber-900 uppercase block">
+              Vencimento Guia de Trânsito <span className="text-red-600">*</span>
+            </label>
+            <input
+              type="date"
+              required
+              value={gtExpirationDate}
+              onChange={e => setGtExpirationDate(e.target.value)}
+              className="w-full bg-white border border-amber-300 outline-none p-2 rounded-lg focus:border-amber-500 text-xs font-bold text-slate-900"
+            />
+            <p className="text-[10px] text-amber-700">
+              Informe a data de validade da Guia de Trânsito vinculada a esta arma.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                Nº de Série / Nº da Arma
+              </label>
+              <input
+                type="text"
+                placeholder="Ex: AGL584781"
+                value={weaponNumber}
+                onChange={e => setWeaponNumber(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-semibold text-slate-800"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                Nº SIGMA
+              </label>
+              <input
+                type="text"
+                placeholder="Ex: 2002911378"
+                value={sigmaNumber}
+                onChange={e => setSigmaNumber(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-semibold text-slate-800"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+              Classe da Arma
+            </label>
+            <select
+              value={weaponClass}
+              onChange={e => setWeaponClass(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-semibold text-slate-700"
+            >
+              <option value="">Selecione a classe...</option>
+              {lookup('classe').map(o => (
+                <option key={o.id} value={o.label}>{o.label}</option>
+              ))}
+              <option value="Pistola">Pistola</option>
+              <option value="Revólver">Revólver</option>
+              <option value="Carabina">Carabina</option>
+              <option value="Espingarda">Espingarda</option>
+              <option value="Fuzil">Fuzil</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                Fabricante <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                list="quick-edit-manufacturers-list"
+                placeholder="Ex: TAURUS, IMBEL, GLOCK..."
+                value={manufacturer}
+                onChange={e => setManufacturer(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-semibold text-slate-800"
+                required
+              />
+              <datalist id="quick-edit-manufacturers-list">
+                {lookup('fabricante').map(o => <option key={o.id} value={o.label} />)}
+                <option value="TAURUS" />
+                <option value="IMBEL" />
+                <option value="GLOCK" />
+                <option value="CBC" />
+                <option value="BOITO" />
+                <option value="CZ" />
+                <option value="BERETTA" />
+                <option value="COLT" />
+                <option value="SMITH & WESSON" />
+              </datalist>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                Modelo <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                list="quick-edit-models-list"
+                placeholder="Ex: TS9, PT 58 HC PLUS, G17..."
+                value={model}
+                onChange={e => setModel(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-semibold text-slate-800"
+                required
+              />
+              <datalist id="quick-edit-models-list">
+                {lookup('modelo').map(o => <option key={o.id} value={o.label} />)}
+              </datalist>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+              Calibre <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              list="quick-edit-calibers-list"
+              placeholder="Ex: 9mm, .380 Auto, .40 S&W, .45 ACP, .38 SPL, 12 GA..."
+              value={caliber}
+              onChange={e => setCaliber(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-semibold text-slate-800"
+              required
+            />
+            <datalist id="quick-edit-calibers-list">
+              {lookup('calibre').map(o => <option key={o.id} value={o.label} />)}
+              <option value="9mm" />
+              <option value=".380 Auto" />
+              <option value=".40 S&W" />
+              <option value=".45 ACP" />
+              <option value=".38 SPL" />
+              <option value=".357 Magnum" />
+              <option value=".22 LR" />
+              <option value="12 GA" />
+            </datalist>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Sistema de Registro</label>
+              <select
+                value={registrySystem}
+                onChange={e => setRegistrySystem(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-semibold text-slate-700"
+              >
+                <option value="SIGMA">SIGMA (Exército)</option>
+                <option value="SINARM">SINARM (Polícia Federal)</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Status de Permissão</label>
+              <select
+                value={permissionStatus}
+                onChange={e => setPermissionStatus(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-semibold text-slate-700"
+              >
+                <option value="Permitido">Uso Permitido</option>
+                <option value="Restrito">Uso Restrito</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-red-200"
+            >
+              {saving ? 'Salvando...' : 'Salvar Alterações'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // InscricaoClubePanel — Inscrição em lote para atletas do clube
 // =============================================================================
 interface InscricaoClubePanelProps {
@@ -1160,6 +1497,8 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
   const [showAddWeaponModal, setShowAddWeaponModal] = React.useState(false);
   const [addWeaponMember, setAddWeaponMember] = React.useState<User | null>(null);
   const [addWeaponInitialSearch, setAddWeaponInitialSearch] = React.useState('');
+  const [editingWeaponTarget, setEditingWeaponTarget] = React.useState<Weapon | null>(null);
+  const [showEditWeaponModal, setShowEditWeaponModal] = React.useState(false);
   React.useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
     const update = () => setIsMobile(window.innerWidth <= 767);
@@ -1482,20 +1821,59 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
               const sigma = (w.sigmaNumber || '').trim() || 'N/A';
               const modelText = `${w.manufacturer || ''} ${w.model || ''} ${w.caliber ? `(${w.caliber})` : ''}`.trim();
               const label = formatWeaponLabel(w);
+
+              const todayStr = new Date().toISOString().split('T')[0];
+              const gtDate = w.gtExpirationDate ? w.gtExpirationDate.split('T')[0] : '';
+              const isGtMissing = !gtDate;
+              const isGtExpired = !isGtMissing && gtDate < todayStr;
+              const hasPendencia = isGtMissing || isGtExpired;
+              const pendenciaMsg = isGtMissing
+                ? 'Guia de trânsito não cadastrada'
+                : `Guia de trânsito vencida (${gtDate.split('-').reverse().join('/')})`;
+
               return (
-                <button
+                <div
                   key={w.id}
-                  type="button"
-                  onMouseDown={e => { e.preventDefault(); selectWeapon(w, label); }}
-                  className="w-full text-left px-3 py-2 hover:bg-blue-50 transition border-b border-slate-50 last:border-0"
+                  className={`w-full text-left px-3 py-2 transition border-b border-slate-100 last:border-0 flex items-center justify-between gap-2 ${
+                    hasPendencia ? 'bg-red-50/40 hover:bg-red-50/70' : 'hover:bg-blue-50'
+                  }`}
                 >
-                  <div className="font-bold text-slate-900 font-mono text-[11px]">
-                    Série: <span className="text-blue-700 font-black">{serial}</span> • Sigma: <span className="text-slate-800">{sigma}</span>
-                  </div>
-                  <div className="text-[10px] text-slate-600 font-medium">
-                    {modelText} {w.ownerName ? `• Atleta: ${w.ownerName}` : ''}
-                  </div>
-                </button>
+                  <button
+                    type="button"
+                    onMouseDown={e => { e.preventDefault(); selectWeapon(w, label); }}
+                    className="flex-1 text-left min-w-0 cursor-pointer"
+                  >
+                    <div className="font-bold text-slate-900 font-mono text-[11px] truncate">
+                      Série: <span className="text-blue-700 font-black">{serial}</span> • Sigma: <span className="text-slate-800">{sigma}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-600 font-medium truncate">
+                      {modelText} {w.ownerName ? `• Atleta: ${w.ownerName}` : ''}
+                    </div>
+                    {hasPendencia && (
+                      <div className="text-[10px] font-bold text-red-600 flex items-center gap-1 mt-0.5">
+                        <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />
+                        <span>{pendenciaMsg}</span>
+                      </div>
+                    )}
+                  </button>
+
+                  {hasPendencia && (
+                    <button
+                      type="button"
+                      title="Editar cadastro da arma e corrigir pendência de Guia de Trânsito"
+                      onMouseDown={e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEditingWeaponTarget(w);
+                        setShowEditWeaponModal(true);
+                      }}
+                      className="shrink-0 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1 shadow-xs cursor-pointer"
+                    >
+                      <Pencil className="w-3 h-3" />
+                      Pendência! - Editar
+                    </button>
+                  )}
+                </div>
               );
             })}
             {extraResults.map(w => {
@@ -1878,6 +2256,20 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
           setSearchResults(prev => ({ ...prev, [targetId]: [] }));
           setSelectedAthletes(prev => ({ ...prev, [targetId]: { weaponId: w.id, checked: true } }));
           setOpenWeaponFieldId(null);
+          if (onRefreshData) onRefreshData();
+        }}
+      />
+      <QuickEditWeaponModal
+        isOpen={showEditWeaponModal}
+        onClose={() => {
+          setShowEditWeaponModal(false);
+          setEditingWeaponTarget(null);
+        }}
+        weapon={editingWeaponTarget}
+        currentUser={currentUser}
+        weaponLookupOptions={weaponLookupOptions}
+        onWeaponUpdated={(updatedWeapon, formatted) => {
+          setClubWeapons(prev => prev.map(w => w.id === updatedWeapon.id ? { ...w, ...updatedWeapon } : w));
           if (onRefreshData) onRefreshData();
         }}
       />
@@ -4627,20 +5019,59 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
               const sigma = (w.sigmaNumber || '').trim() || 'N/A';
               const modelText = `${w.manufacturer || ''} ${w.model || ''} ${w.caliber ? `(${w.caliber})` : ''}`.trim();
               const label = formatWeaponLabel(w);
+
+              const todayStr = new Date().toISOString().split('T')[0];
+              const gtDate = w.gtExpirationDate ? w.gtExpirationDate.split('T')[0] : '';
+              const isGtMissing = !gtDate;
+              const isGtExpired = !isGtMissing && gtDate < todayStr;
+              const hasPendencia = isGtMissing || isGtExpired;
+              const pendenciaMsg = isGtMissing
+                ? 'Guia de trânsito não cadastrada'
+                : `Guia de trânsito vencida (${gtDate.split('-').reverse().join('/')})`;
+
               return (
-                <button
+                <div
                   key={w.id}
-                  type="button"
-                  onMouseDown={e => { e.preventDefault(); selectWeapon(w, label); }}
-                  className="w-full text-left px-3 py-2 hover:bg-blue-50 transition border-b border-slate-50 last:border-0"
+                  className={`w-full text-left px-3 py-2 transition border-b border-slate-100 last:border-0 flex items-center justify-between gap-2 ${
+                    hasPendencia ? 'bg-red-50/40 hover:bg-red-50/70' : 'hover:bg-blue-50'
+                  }`}
                 >
-                  <div className="font-bold text-slate-900 font-mono text-[11px]">
-                    Série: <span className="text-blue-700 font-black">{serial}</span> • Sigma: <span className="text-slate-800">{sigma}</span>
-                  </div>
-                  <div className="text-[10px] text-slate-600 font-medium">
-                    {modelText} {w.ownerName ? `• Atleta: ${w.ownerName}` : ''}
-                  </div>
-                </button>
+                  <button
+                    type="button"
+                    onMouseDown={e => { e.preventDefault(); selectWeapon(w, label); }}
+                    className="flex-1 text-left min-w-0 cursor-pointer"
+                  >
+                    <div className="font-bold text-slate-900 font-mono text-[11px] truncate">
+                      Série: <span className="text-blue-700 font-black">{serial}</span> • Sigma: <span className="text-slate-800">{sigma}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-600 font-medium truncate">
+                      {modelText} {w.ownerName ? `• Atleta: ${w.ownerName}` : ''}
+                    </div>
+                    {hasPendencia && (
+                      <div className="text-[10px] font-bold text-red-600 flex items-center gap-1 mt-0.5">
+                        <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />
+                        <span>{pendenciaMsg}</span>
+                      </div>
+                    )}
+                  </button>
+
+                  {hasPendencia && (
+                    <button
+                      type="button"
+                      title="Editar cadastro da arma e corrigir pendência de Guia de Trânsito"
+                      onMouseDown={e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEditingWeaponTarget(w);
+                        setShowEditWeaponModal(true);
+                      }}
+                      className="shrink-0 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1 shadow-xs cursor-pointer"
+                    >
+                      <Pencil className="w-3 h-3" />
+                      Pendência! - Editar
+                    </button>
+                  )}
+                </div>
               );
             })}
             {extraResults.map(w => {
@@ -4973,6 +5404,20 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
           setSearchResults(prev => ({ ...prev, [targetId]: [] }));
           setSelectedAthletes(prev => ({ ...prev, [targetId]: { weaponId: w.id, checked: true } }));
           setOpenWeaponFieldId(null);
+          if (onRefreshData) onRefreshData();
+        }}
+      />
+      <QuickEditWeaponModal
+        isOpen={showEditWeaponModal}
+        onClose={() => {
+          setShowEditWeaponModal(false);
+          setEditingWeaponTarget(null);
+        }}
+        weapon={editingWeaponTarget}
+        currentUser={currentUser}
+        weaponLookupOptions={weaponLookupOptions}
+        onWeaponUpdated={(updatedWeapon, formatted) => {
+          setClubWeapons(prev => prev.map(w => w.id === updatedWeapon.id ? { ...w, ...updatedWeapon } : w));
           if (onRefreshData) onRefreshData();
         }}
       />
@@ -10437,11 +10882,10 @@ export default function AdminPanel({
                     )}
                   </MemberSection>
 
-                  {/* Vencimento Guia de Trânsito, Vencimento Anuidade e Plano de Anuidade (Exclusivo Painel Diretor > Gerenciamento Clube > Cadastrar Membros) */}
+                  {/* Vencimento Anuidade e Plano de Anuidade (Exclusivo Painel Diretor > Gerenciamento Clube > Cadastrar Membros) */}
                   <MemberSection
                     title="Validades & Plano de Anuidade (Exclusivo Diretor)"
                     onSave={() => saveMemberSection('member_club_validities', {
-                      guiaTransitoExpiry: memberEditForm.guiaTransitoExpiry,
                       signatureExpiry: memberEditForm.signatureExpiry,
                       annuityPlanId: memberEditForm.annuityPlanId || null,
                       bookNumber: memberEditForm.bookNumber || null
@@ -10449,12 +10893,6 @@ export default function AdminPanel({
                     saving={memberSavingSection === 'member_club_validities'}
                     saved={memberSavedSection === 'member_club_validities'}
                   >
-                    <MemberField
-                      label="Vencimento Guia de Trânsito"
-                      type="date"
-                      value={memberEditForm.guiaTransitoExpiry}
-                      onChange={v => setMemberEditForm({ ...memberEditForm, guiaTransitoExpiry: v })}
-                    />
                     <MemberField
                       label="Vencimento Anuidade"
                       type="date"
@@ -11844,7 +12282,7 @@ export default function AdminPanel({
                     <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-xl space-y-3">
                       <h5 className="font-bold text-xs text-slate-700">Validades & Anuidade</h5>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <MemberField label="Vencimento Guia de Trânsito" type="date" value={editAthleteForm.guiaTransitoExpiry} onChange={v => setEditAthleteForm({ ...editAthleteForm, guiaTransitoExpiry: v })} />
+                        
                         <MemberField label="Vencimento Anuidade" type="date" value={editAthleteForm.signatureExpiry} onChange={v => setEditAthleteForm({ ...editAthleteForm, signatureExpiry: v })} />
                         <div className="sm:col-span-2">
                           <MemberSelect
