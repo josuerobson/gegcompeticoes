@@ -799,6 +799,7 @@ function QuickAddWeaponModal({
       setCaliber('');
       setRegistrySystem('SIGMA');
       setPermissionStatus('Permitido');
+      setGtExpirationDate('');
     }
   }, [isOpen, initialSearch]);
 
@@ -950,6 +951,22 @@ function QuickAddWeaponModal({
               />
             </div>
           </div>
+
+          {/* Vencimento Guia de Trânsito (obrigatório se arma do atleta) */}
+          {ownerType === 'atleta' && (
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                Vencimento Guia de Trânsito <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                required
+                value={gtExpirationDate}
+                onChange={e => setGtExpirationDate(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl focus:border-blue-500 text-xs font-semibold text-slate-800"
+              />
+            </div>
+          )}
 
           {/* Classe */}
           <div>
@@ -1439,7 +1456,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
         {searching && <span className="absolute right-3 top-2.5 text-[9px] text-slate-400 font-semibold">Buscando...</span>}
 
         {isOpen && (
-          <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
+          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100">
             {filteredOwn.length === 0 && extraResults.length === 0 && (
               <div className="p-3 text-center space-y-2">
                 <div className="text-[11px] text-slate-500 font-medium">
@@ -1647,7 +1664,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
               Nenhum atleta encontrado para "{athleteFilterQuery}".
             </div>
           ) : (
-          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+          <div className="overflow-x-auto border border-slate-200 rounded-xl min-h-[320px]">
             <table className="w-full min-w-[640px] text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">
@@ -1699,6 +1716,11 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
                     </tr>
                   );
                 })}
+                {displayedMembers.length <= 2 && (
+                  <tr className="border-0 pointer-events-none select-none">
+                    <td colSpan={3} className="py-20 border-0" />
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -1923,6 +1945,7 @@ function TreinamentosCompeticoesAdminPanel({
     weaponClass: '',
     permissionStatus: '',
     registrySystem: '',
+    gtExpirationDate: '',
   });
 
   // Trainings List State
@@ -2012,6 +2035,10 @@ function TreinamentosCompeticoesAdminPanel({
     if (!selectedAthlete) return;
     if (!newWeaponData.manufacturer || !newWeaponData.model || !newWeaponData.caliber) {
       alert('Fabricante, Modelo e Calibre são obrigatórios.');
+      return;
+    }
+    if (!newWeaponData.gtExpirationDate) {
+      alert('Preencha o campo obrigatório: Vencimento Guia de Trânsito.');
       return;
     }
     setSavingNewWeapon(true);
@@ -2707,6 +2734,19 @@ function TreinamentosCompeticoesAdminPanel({
                     className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 font-mono"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                  Vencimento Guia de Trânsito <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={newWeaponData.gtExpirationDate}
+                  onChange={e => setNewWeaponData({ ...newWeaponData, gtExpirationDate: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 text-xs font-semibold"
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
@@ -4561,7 +4601,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
         {searching && <span className="absolute right-3 top-2.5 text-[9px] text-slate-400 font-semibold">Buscando...</span>}
 
         {isOpen && (
-          <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
+          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100">
             {filteredOwn.length === 0 && extraResults.length === 0 && (
               <div className="p-3 text-center space-y-2">
                 <div className="text-[11px] text-slate-500 font-medium">
@@ -4748,7 +4788,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
               Nenhum atleta encontrado para "{athleteFilterQuery}".
             </div>
           ) : (
-          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+          <div className="overflow-x-auto border border-slate-200 rounded-xl min-h-[320px]">
             <table className="w-full min-w-[520px] text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 font-mono text-[10px] uppercase">

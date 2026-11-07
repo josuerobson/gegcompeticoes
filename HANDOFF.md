@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(checkout): informar vinculo automatico apos lancamento de resultados quando sem inscricoes ativas` |
-| Data/hora | 2026-11-06T17:45:00-03:00 |
+| Mensagem | `feat(weapons): vencimento guia de transito na inscricao e correcao de altura/scroll do dropdown de armas` |
+| Data/hora | 2026-11-07T14:02:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -56,7 +56,17 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **No email verification** on signup, ever.
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
-## Decisions made this session, and why (don't re-litigate without new info)
+## Decisions made this session, and why
+
+- **Vencimento Guia de Trânsito no Cadastro Rápido de Armas e Correção de Altura/Scroll do Dropdown de Armas (`AdminPanel.tsx`)**:
+  - **Exigência**:
+    1. Quando cadastrar uma nova arma no momento da inscrição (modal *"Cadastrar Nova Arma na Inscrição"*), adicionar o campo *"Vencimento Guia de Trânsito"* quando for arma de atleta, vinculado ao CPF do atleta (mantendo a regra de que arma de acervo do clube dispensa vencimento de GT). Verificar em todos os locais do sistema se este campo está constando.
+    2. Na inscrição em lote, quando a busca filtra apenas um atleta, as opções do dropdown de seleção de arma e o botão *"Cadastrar nova arma"* ficavam cortados/escondidos sob a barra de rolagem da tabela, gerando confusão pois o resultado da pesquisa não ficava visível.
+  - **Implementação**:
+    1. Em `QuickAddWeaponModal` (`AdminPanel.tsx`), adicionado o input obrigatório de data (`<input type="date" required />`) para *"Vencimento Guia de Trânsito"* quando `ownerType === 'atleta'`, com reset ao abrir o modal e envio para a API vinculado ao CPF e Clube do atleta.
+    2. Em `TreinamentosCompeticoesAdminPanel` (`AdminPanel.tsx`), adicionado o campo e validação de `gtExpirationDate` no cadastro rápido de arma durante o lançamento de treinos. Verificados `ChampionshipsView.tsx`, `MemberProfile.tsx` e `CadastroDeArmasPanel`, confirmando que todos já possuem o campo e validação de GT integrados.
+    3. Em `InscricaoClubePanel` e `IdscInscricaoPanel` (`AdminPanel.tsx`), adicionada altura mínima de 320px (`min-h-[320px]`) no container da tabela (`overflow-x-auto`) e uma linha espaçadora decorativa no `<tbody>` quando há até 2 atletas exibidos. O menu dropdown de armas foi elevado para `z-50 max-h-56 shadow-xl`. Isso assegura que, mesmo com apenas um único atleta filtrado, o dropdown e os botões de busca/cadastro fiquem 100% visíveis imediatamente sem gerar barra de rolagem vertical.
+ (don't re-litigate without new info)
 
 - **Vínculo com os 4 Últimos Check-ins no Cadastro de Resultados (`AdminPanel.tsx`, `server.ts`)**:
   - **Exigência**: Nos casos em que a inscrição é realizada depois da realização da prova, adicionar no lançamento/cadastro de resultados o botão "Vincular check-in", abrindo os 4 últimos check-ins presenciais do atleta no clube para que o gestor selecione a qual check-in aquela inscrição/resultado será vinculada.
