@@ -18,7 +18,8 @@ import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, EyeOff, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn, QrCode, KeyRound, Copy, AlertTriangle, ChevronLeft, ChevronRight, Download
+  Eye, EyeOff, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn, QrCode, KeyRound, Copy, AlertTriangle, ChevronLeft, ChevronRight, Download,
+  MapPin, Clock
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -3318,7 +3319,48 @@ function calcSeriePts(s: Record<string,number>, xValue: number = 11): number {
   return ZONES.reduce((acc, z) => acc + (Number(s[z])||0) * points[z], 0);
 }
 
-function CadastrarResultadosPanel({ championships, stages, modalities, weapons = [], currentUser, onRecordScore, onRefreshData, isPlataformaScope }: CadastrarResultadosPanelProps) {
+class PanelErrorBoundary extends React.Component<{ children: React.ReactNode; fallbackTitle?: string }, { hasError: boolean; error: any }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error('PanelErrorBoundary caught an error:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center space-y-3 my-4">
+          <AlertCircle className="w-8 h-8 text-red-500 mx-auto" />
+          <h4 className="font-bold text-red-800 text-sm">{this.props.fallbackTitle || 'Ocorreu um erro ao carregar este painel'}</h4>
+          <p className="text-xs text-red-600 max-w-md mx-auto">{this.state.error?.message || 'Erro inesperado de renderização.'}</p>
+          <button
+            type="button"
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function CadastrarResultadosPanel({
+  championships = [],
+  stages = [],
+  modalities = [],
+  weapons = [],
+  currentUser,
+  onRecordScore,
+  onRefreshData,
+  isPlataformaScope = false
+}: CadastrarResultadosPanelProps) {
   const [champId, setChampId] = React.useState('');
   const [stageId, setStageId] = React.useState('');
   const [modalityId, setModalityId] = React.useState('');
@@ -3433,27 +3475,33 @@ function CadastrarResultadosPanel({ championships, stages, modalities, weapons =
   };
 
   const filteredRegs = React.useMemo(() => {
+    if (!Array.isArray(registrations)) return [];
     if (!searchAthlete.trim()) return registrations;
     const q = normalizeSearchText(searchAthlete);
-    return registrations.filter(r =>
-      normalizeSearchText(r.athleteName).includes(q) ||
-      normalizeSearchText(r.modalityName).includes(q) ||
-      normalizeSearchText(r.weaponModel).includes(q) ||
-      normalizeSearchText(r.weaponCaliber).includes(q)
-    );
+    return registrations.filter(r => {
+      if (!r) return false;
+      return (
+        normalizeSearchText(r.athleteName).includes(q) ||
+        normalizeSearchText(r.modalityName).includes(q) ||
+        normalizeSearchText(r.weaponModel).includes(q) ||
+        normalizeSearchText(r.weaponCaliber).includes(q)
+      );
+    });
   }, [registrations, searchAthlete]);
 
-  const champStages = stages.filter(s => s.championshipId === champId);
+  const champStages = (stages || []).filter(s => s && s.championshipId === champId);
 
   const athleteWeapons = React.useMemo(() => {
     if (!selectedReg) return [];
     const list = (weapons || []).filter(w =>
-      w.ownerId === selectedReg.userId ||
-      w.ownerId === selectedReg.clubId ||
-      (w.ownerId ? w.ownerId.startsWith('club_') : false)
+      w && (
+        w.ownerId === selectedReg.userId ||
+        w.ownerId === selectedReg.clubId ||
+        (w.ownerId ? w.ownerId.startsWith('club_') : false)
+      )
     );
     if (selectedReg.weaponId && !list.some(w => w.id === selectedReg.weaponId)) {
-      const current = (weapons || []).find(w => w.id === selectedReg.weaponId);
+      const current = (weapons || []).find(w => w && w.id === selectedReg.weaponId);
       if (current) list.unshift(current);
     }
     return list;
@@ -3462,7 +3510,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, weapons =
   const selectedWeapon = React.useMemo(() => {
     const currentId = weaponId || selectedReg?.weaponId;
     if (currentId) {
-      const found = (weapons || []).find(w => w.id === currentId);
+      const found = (weapons || []).find(w => w && w.id === currentId);
       if (found) return found;
     }
     return null;
@@ -3471,9 +3519,9 @@ function CadastrarResultadosPanel({ championships, stages, modalities, weapons =
   React.useEffect(() => {
     if (!champId || !stageId) { setRegistrations([]); return; }
     setLoadingRegs(true);
-    let url = `/api/admin/registrations?championshipId=${champId}&stageId=${stageId}`;
+    let url = `/api/admin/registrations?championshipId=${encodeURIComponent(champId)}&stageId=${encodeURIComponent(stageId)}`;
     if (modalityId) {
-      url += `&modalityId=${modalityId}`;
+      url += `&modalityId=${encodeURIComponent(modalityId)}`;
     }
     if (isPlataformaScope) {
       url += `&allClubs=true`;
@@ -3481,11 +3529,21 @@ function CadastrarResultadosPanel({ championships, stages, modalities, weapons =
     fetch(url, {
       headers: { 'x-user-id': currentUser?.id || '' }
     })
-      .then(r => r.json())
-      .then(d => setRegistrations(d.registrations || []))
-      .catch(() => setRegistrations([]))
+      .then(async r => {
+        if (!r.ok) {
+          const errData = await r.json().catch(() => ({}));
+          console.error('Erro ao buscar inscrições:', errData);
+          return { registrations: [] };
+        }
+        return r.json();
+      })
+      .then(d => setRegistrations(Array.isArray(d?.registrations) ? d.registrations : []))
+      .catch(err => {
+        console.error('Falha na requisição de inscrições:', err);
+        setRegistrations([]);
+      })
       .finally(() => setLoadingRegs(false));
-  }, [champId, stageId, modalityId, isPlataformaScope]);
+  }, [champId, stageId, modalityId, isPlataformaScope, currentUser?.id]);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -3498,15 +3556,20 @@ function CadastrarResultadosPanel({ championships, stages, modalities, weapons =
   }, [selectedReg]);
 
   const selectReg = (reg: EnrichedRegistration) => {
+    if (!reg) return;
     setSelectedReg(reg);
     setError(''); setSuccess('');
-    const n = reg.seriesCount || 1;
-    if (reg.seriesPontos && reg.seriesPontos.length > 0) {
-      setSeriesData(reg.seriesPontos.map((s: any) =>
-        Object.fromEntries(ZONES.map(z => [z, s[z] ? String(s[z]) : '']))
+    const n = reg.shotsPerSeries ? (reg.seriesCount || 1) : 1;
+    let sPontos = reg.seriesPontos;
+    if (typeof sPontos === 'string') {
+      try { sPontos = JSON.parse(sPontos); } catch { sPontos = []; }
+    }
+    if (Array.isArray(sPontos) && sPontos.length > 0) {
+      setSeriesData(sPontos.map((s: any) =>
+        Object.fromEntries(ZONES.map(z => [z, s && s[z] !== undefined && s[z] !== null ? String(s[z]) : '']))
       ));
     } else {
-      setSeriesData(Array.from({length: n}, () => Object.fromEntries(ZONES.map(z => [z,'']))));
+      setSeriesData(Array.from({length: Math.max(1, n)}, () => Object.fromEntries(ZONES.map(z => [z,'']))));
     }
     setDataExec(reg.dataExecucao || '');
     setHoraExec(reg.horaExecucao || '');
@@ -3523,12 +3586,12 @@ function CadastrarResultadosPanel({ championships, stages, modalities, weapons =
     setSeriesData(prev => prev.map((s, i) => i === serieIdx ? {...s, [zone]: val} : s));
   };
 
-  const currentChamp = championships.find(c => c.id === champId);
+  const currentChamp = (championships || []).find(c => c && c.id === champId);
   const xValue = (currentChamp && typeof currentChamp.valorX === 'number') ? currentChamp.valorX : 11;
-  const champAvailableModalities = modalities.filter(m => (currentChamp?.modalities || []).includes(m.id));
+  const champAvailableModalities = (modalities || []).filter(m => m && (currentChamp?.modalities || []).includes(m.id));
 
   const serieTotals = seriesData.map(s => calcSeriePts(Object.fromEntries(Object.entries(s).map(([k,v]) => [k, Number(v)||0])), xValue));
-  const bestIdx = serieTotals.indexOf(Math.max(...serieTotals));
+  const bestIdx = serieTotals.length > 0 ? serieTotals.indexOf(Math.max(...serieTotals)) : -1;
 
   const handleSubmit = async (acao: 'salvar'|'nao_participou'|'desclassificar') => {
     if (!selectedReg) return;
@@ -3677,7 +3740,7 @@ function CadastrarResultadosPanel({ championships, stages, modalities, weapons =
           label="Campeonato"
           value={champId}
           onChange={v => { setChampId(v); setStageId(''); setModalityId(''); setSelectedReg(null); setSearchAthlete(''); }}
-          options={championships.map(c => ({ value: c.id, label: c.title }))}
+          options={(championships || []).filter(c => c && c.id).map(c => ({ value: c.id, label: c.title || 'Sem título' }))}
         />
         <div className="space-y-1">
           <label className="text-[10px] font-bold text-slate-500 uppercase block">Etapa</label>
@@ -4806,6 +4869,9 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
   const [showPixModal, setShowPixModal] = React.useState(false);
   const [clubInvoiceCount, setClubInvoiceCount] = React.useState(0);
   const [error, setError] = React.useState('');
+
+  const [editingWeaponTarget, setEditingWeaponTarget] = React.useState<Weapon | null>(null);
+  const [showEditWeaponModal, setShowEditWeaponModal] = React.useState(false);
 
   // Atletas que já têm inscrição nesta pista (qualquer situação de pagamento): se inscritos de
   // novo, será Re-inscrição.
@@ -10665,16 +10731,18 @@ export default function AdminPanel({
             {clubeCadastrarResultadosTab === 'idsc' ? (
               <IdscResultadosPanel currentUser={currentUser} scopeClubId={currentUser?.clubId} weapons={weapons} />
             ) : (
-              <CadastrarResultadosPanel
-                championships={championships}
-                stages={stages}
-                modalities={modalities}
-                weapons={weapons}
-                currentUser={currentUser}
-                onRecordScore={onRecordScore}
-                onRefreshData={onRefreshData}
-                isPlataformaScope={false}
-              />
+              <PanelErrorBoundary fallbackTitle="Erro ao carregar Lançar Notas e Homologar Tempos">
+                <CadastrarResultadosPanel
+                  championships={championships}
+                  stages={stages}
+                  modalities={modalities}
+                  weapons={weapons}
+                  currentUser={currentUser}
+                  onRecordScore={onRecordScore}
+                  onRefreshData={onRefreshData}
+                  isPlataformaScope={false}
+                />
+              </PanelErrorBoundary>
             )}
           </div>
         );
@@ -14167,16 +14235,20 @@ export default function AdminPanel({
         );
 
       case 'cadastrar_resultados':
-        return <CadastrarResultadosPanel
-          championships={championships}
-          stages={stages}
-          modalities={modalities}
-          weapons={weapons}
-          currentUser={currentUser}
-          onRecordScore={onRecordScore}
-          onRefreshData={onRefreshData}
-          isPlataformaScope={true}
-        />;
+        return (
+          <PanelErrorBoundary fallbackTitle="Erro ao carregar Lançar Notas e Homologar Tempos">
+            <CadastrarResultadosPanel
+              championships={championships}
+              stages={stages}
+              modalities={modalities}
+              weapons={weapons}
+              currentUser={currentUser}
+              onRecordScore={onRecordScore}
+              onRefreshData={onRefreshData}
+              isPlataformaScope={true}
+            />
+          </PanelErrorBoundary>
+        );
 
       case 'multi_campeonatos':
         return (

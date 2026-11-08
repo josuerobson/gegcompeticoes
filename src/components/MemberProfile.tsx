@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { User, Post, Registration, StageScore, Championship, Modality, Club, Stage, Weapon, TrainingSession, WeaponLookupOption, AmmoAthleteBalance } from '../types';
+import { User, Post, Registration, StageScore, Championship, Modality, Club, Stage, Weapon, TrainingSession, WeaponLookupOption, AmmoAthleteBalance, ClubCheckin } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import { QRCodeView } from './QRCodeView';
@@ -1691,6 +1691,7 @@ export default function MemberProfile({
       weaponOwnerText: string;
       ammoOwnerText: string;
       originId: string;
+      checkinId?: string;
     }> = [];
 
     const userRegs = (registrations || []).filter(r => r.userId === selectedUser.id);

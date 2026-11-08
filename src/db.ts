@@ -400,6 +400,36 @@ export async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_weapons_owner ON weapons(owner_id);
     `);
 
+    // Check-in no clube: presenca do atleta no estande com geolocalizacao e biometria facial.
+    // Criado antes de trainings e registrations para suportar constraints FK REFERENCES club_checkins(id).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS club_checkins (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        club_id TEXT REFERENCES clubs(id) ON DELETE CASCADE,
+        checkin_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        latitude NUMERIC(10, 7),
+        longitude NUMERIC(10, 7),
+        accuracy_meters NUMERIC(10, 2),
+        distance_to_club_meters NUMERIC(10, 2),
+        is_within_radius BOOLEAN DEFAULT TRUE,
+        facial_match_score NUMERIC(5, 2),
+        facial_match_status TEXT DEFAULT 'confirmed',
+        facial_notes TEXT,
+        photo_data TEXT,
+        status TEXT DEFAULT 'confirmed',
+        checkout_at TIMESTAMPTZ,
+        checkout_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        checkout_notes TEXT,
+        duration_minutes INT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_club_checkins_user_id ON club_checkins(user_id);
+      CREATE INDEX IF NOT EXISTS idx_club_checkins_club_id ON club_checkins(club_id);
+      CREATE INDEX IF NOT EXISTS idx_club_checkins_checkin_at ON club_checkins(checkin_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_club_checkins_checkout_at ON club_checkins(checkout_at);
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS trainings (
         id TEXT PRIMARY KEY,

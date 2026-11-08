@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(weapons): status pendente de atribuicao para armas sem definicao e fim da atribuicao automatica ao acervo do clube` |
-| Data/hora | 2026-11-07T16:45:00-03:00 |
+| Mensagem | `fix(resultados): corrigir ordem de criacao de club_checkins no db, imports de icones e prevencao de tela branca em cadastrar resultados` |
+| Data/hora | 2026-11-08T15:45:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,19 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Resolução de Tela Branca em Cadastrar Resultados e Ordem de DDL no Banco (`src/db.ts`, `src/components/AdminPanel.tsx`, `src/components/MemberProfile.tsx`)**:
+  - **Exigência**: Ao acessar "Gerenciamento clube > Cadastrar Resultados", selecionar o campeonato e a etapa, a tela ficava branca.
+  - **Causa Raiz**:
+    1. *DDL e Foreign Key fora de ordem no banco (`src/db.ts`)*: A tabela `club_checkins` estava definida no final do arquivo (linha 1742), porém nas linhas 422 (`trainings`) e 742 (`registrations`) havia foreign keys `REFERENCES club_checkins(id)`. Como `initDB()` roda em transação, ao tentar criar FK para tabela inexistente o PostgreSQL abortava a transação inteira com erro fatal `relação "club_checkins" não existe`, deixando de criar a tabela e todas as migrações posteriores.
+    2. *Ícones ausentes de importação no React (`AdminPanel.tsx`)*: Os ícones `MapPin` e `Clock` da biblioteca `lucide-react` estavam sendo usados nos cards de inscrição (badge de check-in) e no modal de check-in, mas não estavam importados no topo do arquivo. No navegador, disparavam `ReferenceError: MapPin is not defined` assim que a etapa era selecionada e as inscrições renderizadas, desmontando a aplicação inteira.
+    3. *Variáveis ausentes no escopo de `IdscInscricaoPanel` (`AdminPanel.tsx`)*: O modal rápido de edição de arma utilizava `editingWeaponTarget` e `showEditWeaponModal`, que não haviam sido declarados neste painel.
+    4. *Tipagem e import em `MemberProfile.tsx`*: Faltava importar `ClubCheckin` de `../types` e declarar a propriedade `checkinId?: string` no tipo de atividade do histórico.
+  - **Implementação**:
+    1. **Banco de Dados (`src/db.ts`)**: A criação da tabela `club_checkins` com seus índices foi movida para logo antes da criação da tabela `trainings`, garantindo que a tabela exista antes de qualquer foreign key que a referencie.
+    2. **Frontend (`AdminPanel.tsx`)**: Importados `MapPin` e `Clock` de `lucide-react`. Criado `PanelErrorBoundary` envolvendo o painel de lançamento de notas para capturar falhas de renderização de forma isolada com mensagem e botão "Tentar novamente". Blindados os seletores e cálculos contra valores nulos e strings JSON em `seriesPontos`.
+    3. **Resiliência de Requisição**: A chamada para `/api/admin/registrations` trata códigos HTTP de erro de forma segura, garantindo fallback para lista vazia sem quebrar o componente.
+  - **O que NÃO fazer no futuro**: Nunca referenciar tabelas em foreign keys ou queries sem assegurar a ordem cronológica estrita de criação no `initDB()`. Sempre verificar `npx tsc --noEmit` após introduzir novos ícones ou estados em componentes React.
 
 - **Validação de Pendência de Guia de Trânsito em Armas Próprias com Edição Rápida e Remoção de GT do Cadastro de Atletas (`AdminPanel.tsx`, `MemberProfile.tsx`, `server.ts`)**:
   - **Exigência**:
