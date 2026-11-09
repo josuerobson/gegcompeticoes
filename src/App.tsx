@@ -346,6 +346,7 @@ export default function App() {
   // Estados adicionais da Landing Page
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginModalMessage, setLoginModalMessage] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Top header user profile dropdown menu state
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
@@ -457,7 +458,7 @@ export default function App() {
       ] = await Promise.allSettled([
         fetch('/api/auth/me', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/users', { headers: authHeaders }).then(r => r.json()),
-        fetch('/api/posts?limit=50', { headers: authHeaders }).then(r => r.json()),
+        fetch('/api/posts?limit=12', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/championships', { headers: authHeaders }).then(r => r.json()),
         targetUserId ? fetch('/api/registrations', { headers: authHeaders }).then(r => r.json()) : Promise.resolve({ registrations: [] }),
         fetch('/api/scores?activeOnly=true', { headers: authHeaders }).then(r => r.json()),
@@ -677,15 +678,14 @@ export default function App() {
   useEffect(() => {
     let isSubscribed = true;
 
-    // Safety fallback: Force booting = false after 3 seconds max so initial screen never hangs
+    // Safety fallback: Libera a tela de boot rapidamente (máximo 1.2s) para a abertura ser ágil
     const bootTimer = setTimeout(() => {
       if (isSubscribed) {
         setBooting(false);
       }
-    }, 3000);
+    }, 1200);
 
     const initApp = async () => {
-      await syncWithBackend();
       const cleanPath = window.location.pathname.replace(/\/$/, '') || '/';
       if (cleanPath.startsWith('/validar/carteirinha/')) {
         const valId = cleanPath.split('/validar/carteirinha/')[1];
@@ -710,10 +710,14 @@ export default function App() {
           }
         }
       }
-      if (isSubscribed) {
-        clearTimeout(bootTimer);
-        setBooting(false);
-      }
+
+      // Dispara a sincronização e libera a tela de boot tão logo conclua
+      syncWithBackend().finally(() => {
+        if (isSubscribed) {
+          clearTimeout(bootTimer);
+          setBooting(false);
+        }
+      });
     };
 
     initApp();
@@ -753,6 +757,8 @@ export default function App() {
   // API Mutating Actions
   const handleLogin = async (cpf: string, password: string): Promise<boolean> => {
     if (!cpf.trim() || !password) return false;
+    setIsLoggingIn(true);
+    setLoginModalMessage('');
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -767,7 +773,13 @@ export default function App() {
         setCurrentUser(data.user);
         localStorage.setItem('gg_user_id', data.user.id);
         setActiveTab('feed');
-        await syncWithBackend(data.user.id);
+        setShowLoginModal(false);
+        setLoginCpf('');
+        setLoginPassword('');
+        // Dispara a sincronização em segundo plano imediatamente, liberando o usuário para o feed na hora
+        syncWithBackend(data.user.id).catch(err => {
+          console.error('Erro na sincronização em segundo plano pós-login:', err);
+        });
         return true;
       }
       setLoginModalMessage(data.error || 'CPF ou senha inválidos.');
@@ -776,6 +788,8 @@ export default function App() {
       console.error(err);
       setLoginModalMessage('Erro ao tentar entrar. Tente novamente.');
       return false;
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -850,7 +864,10 @@ export default function App() {
         setCurrentUser(data.user);
         localStorage.setItem('gg_user_id', data.user.id);
         setActiveTab('championships');
-        await syncWithBackend(data.user.id);
+        setShowLoginModal(false);
+        syncWithBackend(data.user.id).catch(err => {
+          console.error('Erro na sincronização em segundo plano pós-cadastro:', err);
+        });
         return true;
       }
       setLoginModalMessage(data.error || 'Erro ao realizar cadastro.');
@@ -2216,22 +2233,25 @@ export default function App() {
                 <form
                   onSubmit={async (e) => {
                     e.preventDefault();
-                    const ok = await handleLogin(loginCpf, loginPassword);
-                    if (ok) {
-                      setShowLoginModal(false);
-                      setLoginCpf('');
-                      setLoginPassword('');
-                    }
+                    await handleLogin(loginCpf, loginPassword);
                   }}
                   className="space-y-4"
                 >
-                  <AuthField label="CPF" theme={theme} required type="text" placeholder="Ex: 000.000.000-00" value={loginCpf} onChange={(e) => setLoginCpf(e.target.value)} />
-                  <AuthField label="Senha" theme={theme} required type="password" placeholder="••••••••" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} />
+                  <AuthField label="CPF" theme={theme} required type="text" placeholder="Ex: 000.000.000-00" value={loginCpf} onChange={(e) => setLoginCpf(e.target.value)} disabled={isLoggingIn} />
+                  <AuthField label="Senha" theme={theme} required type="password" placeholder="••••••••" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} disabled={isLoggingIn} />
                   <button
                     type="submit"
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl text-xs transition uppercase shadow-lg shadow-blue-500/10 flex items-center justify-center gap-2 cursor-pointer"
+                    disabled={isLoggingIn}
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-2xl text-xs transition uppercase shadow-lg shadow-blue-500/10 flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    Iniciar Sessão Atleta
+                    {isLoggingIn ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                        Iniciando sessão...
+                      </>
+                    ) : (
+                      'Iniciar Sessão Atleta'
+                    )}
                   </button>
                 </form>
               )}

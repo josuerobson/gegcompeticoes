@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(resultados): alinhar filtro de cards com aberto_para_resultados e homologar_resultado da etapa` |
-| Data/hora | 2026-11-09T09:46:00-03:00 |
+| Mensagem | `fix(auth): acelerar login instantaneo, feedback de loading e otimizar sync no boot` |
+| Data/hora | 2026-11-09T13:38:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,16 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Otimização de Login Instantâneo, Feedback no Botão e Desbloqueio da Interface (`src/App.tsx`)**:
+  - **Problema / Causa Raiz Identificada no Vídeo do Cliente**: O cliente gravou um vídeo demonstrando que, ao clicar no botão "INICIAR SESSÃO ATLETA", a tela ficava estática por mais de 30 segundos, sem fechar o modal e sem qualquer feedback no botão. A investigação técnica no servidor de produção revelou que a autenticação em si (`POST /api/auth/login`) respondia em apenas ~0.7 segundos. O gargalo ocorria porque o `handleLogin` aguardava obrigatoriamente a finalização de `await syncWithBackend(data.user.id)` antes de retornar `true` e fechar o modal. Como o `syncWithBackend` baixava mais de 22 MB de dados (incluindo 50 posts com imagens base64 totalizando 17.8 MB), em conexões 4G móveis o download levava 30 a 40 segundos com a tela travada.
+  - **Correções Aplicadas**:
+    1. **Feedback Visual Imediato no Botão**: Criado estado `isLoggingIn`, desabilitando o botão e campos do formulário e exibindo `<Loader2 className="animate-spin text-white" /> Iniciando sessão...`.
+    2. **Fechamento Instantâneo do Modal**: O modal de login fecha e o usuário é direcionado ao feed imediatamente após a validação do token (~0.7s), sem qualquer retenção visual.
+    3. **Sincronização em Segundo Plano (Non-blocking)**: O `syncWithBackend(data.user.id)` passa a rodar de forma assíncrona em background (`.catch(...)`), sem prender o fechamento do modal nem a navegação do atleta.
+    4. **Redução do Payload do Feed Inicial**: Reduzido o limite inicial de posts de 50 para 12 em `fetch('/api/posts?limit=12')`, cortando mais de 13 MB de transferência de rede desnecessária no carregamento inicial.
+    5. **Aceleração do Splash / Boot**: Reduzido o tempo de espera do boot de 3000ms para 1200ms e liberada a renderização da rota inicial tão logo os dados essenciais estejam disponíveis, eliminando o congelamento na tela "Conectando Atletas do Tiro Esportivo...".
+  - **O que NÃO fazer no futuro**: Nunca bloquear a transição de telas ou fechamento de modais de autenticação aguardando downloads massivos de dados secundários.
 
 - **Fluxo por Cards de Etapas Não Homologadas em "Cadastrar Resultados" (`AdminPanel.tsx`)**:
   - **Exigência**: Ao clicar em "Cadastrar Resultados", em vez de abrir selects vazios de Campeonato, Etapa e Modalidade, exibir diretamente cards contendo o nome do Campeonato e da Etapa. Devem aparecer apenas cards de campeonatos ativos (não finalizados, `status !== 'completed'`) e etapas ainda não homologadas (`homologarResultado !== 'sim'`). Ao clicar no card, carregar imediatamente todas as inscrições daquela etapa, com a possibilidade de filtrar por modalidade cadastrada no campeonato.
