@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(auth): acelerar login instantaneo, feedback de loading e otimizar sync no boot` |
-| Data/hora | 2026-11-09T13:38:00-03:00 |
+| Mensagem | `feat(checkin): reconhecimento facial com animacao e contagem de 3s, coordenadas GPS completas e relatorio oficial em PDF para o Exercito` |
+| Data/hora | 2026-11-09T17:05:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,28 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Reconhecimento Facial com Animação, Coordenadas GPS Completas e Relatórios para o Exército (`ClubCheckinModal.tsx`, `CheckinsManager.tsx`, `server.ts`, `src/types.ts`)**:
+  - **Exigências do Usuário**:
+    1. Alterar o texto do botão verde de "Tirar foto e validar" para "Iniciar reconhecimento facial".
+    2. Adicionar exportação de relatórios de check-ins completos (com foto do reconhecimento, geolocalização com latitude, longitude e precisão, data e hora de entrada e saída, e dados do atleta que o Exército exige: Nome, CPF, CR). Exibir também as coordenadas geográficas completas no modal de visualização de foto em Gerenciamento de Check-ins.
+    3. Criar uma animação no círculo verde da cabeça no momento em que vai tirar a foto do reconhecimento facial, como se estivesse aguardando o posicionamento correto da cabeça, exibindo por 3 segundos antes do disparo.
+  - **Implementação Realizada**:
+    1. **Botão e Fluxo de Escaneamento**: Botão atualizado para "Iniciar reconhecimento facial" com ícone `ScanFace`. Ao ser clicado, inicia o estado de escaneamento facial (`isScanning = true`) e contagem regressiva de 3 segundos (`scanCountdown` de 3 a 1).
+    2. **Animação Biométrica**:
+       - Moldura oval com efeito de brilho `shadow-[0_0_35px_rgba(52,211,153,0.9)]` e anel de pulso contínuo (`animate-ping`).
+       - Brackets (mira biométrica) nos 4 cantos da moldura oval para enquadramento da face.
+       - Linha laser de varredura vertical animada (`biometric-scanner-line`) com gradiente esmeralda.
+       - Indicador central com contador numérico animado e legenda inferior: *"Aguardando posicionamento correto da cabeça... (Xs)"*.
+       - Ao zerar os 3 segundos, dispara automaticamente `handleCapture()` e `submitCheckinWithPhoto()`.
+    3. **Estampa de Segurança na Foto (Canvas)**: O `handleCapture()` estampa na imagem capturada a barra oficial de auditoria contendo: Nome do Atleta, CPF, Data, Hora e Coordenadas GPS Exatas (`Lat: ..., Lon: ..., Precisão: ±...m`), tornando a selfie auto-auditável perante o Exército Brasileiro (SFPC).
+    4. **Coordenadas e Auditoria em `CheckinsManager.tsx`**:
+       - Na tabela: exibe distância e coordenadas geográficas exatas (`Lat, Lon`).
+       - No modal de ampliação da foto: exibe card de destaque com latitude e longitude, link direto para abrir no Google Maps, precisão do sinal em metros, dados completos do atirador (Nome, CPF, CR), clube/estande e horários de entrada e saída.
+       - Botão "Exportar Relatório PDF": gera o Livro Eletrônico Oficial de Entrada, Saída e Biometria Facial (paisagem A4) com fotos, coordenadas GPS por satélite, score biométrico, KPIs, termo de autenticidade para o SFPC/EB e linhas de assinatura.
+       - Botão "Exportar CSV": gera planilha compatível com Excel com todos os campos exigidos.
+       - Botão "Imprimir Comprovante Individual (PDF)": ficha de comprovação individual de presença do atirador desportivo.
+  - **O que NÃO fazer no futuro**: Não remover os campos de auditoria geográfica nem a estampa de coordenadas das fotos de check-in, pois são exigências legais de comprovação de habitualidade perante a fiscalização do Exército Brasileiro.
 
 - **Otimização de Login Instantâneo, Feedback no Botão e Desbloqueio da Interface (`src/App.tsx`)**:
   - **Problema / Causa Raiz Identificada no Vídeo do Cliente**: O cliente gravou um vídeo demonstrando que, ao clicar no botão "INICIAR SESSÃO ATLETA", a tela ficava estática por mais de 30 segundos, sem fechar o modal e sem qualquer feedback no botão. A investigação técnica no servidor de produção revelou que a autenticação em si (`POST /api/auth/login`) respondia em apenas ~0.7 segundos. O gargalo ocorria porque o `handleLogin` aguardava obrigatoriamente a finalização de `await syncWithBackend(data.user.id)` antes de retornar `true` e fechar o modal. Como o `syncWithBackend` baixava mais de 22 MB de dados (incluindo 50 posts com imagens base64 totalizando 17.8 MB), em conexões 4G móveis o download levava 30 a 40 segundos com a tela travada.

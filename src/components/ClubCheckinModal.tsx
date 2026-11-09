@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, MapPin, CheckCircle2, AlertTriangle, X, RefreshCw, Clock, ShieldCheck, ChevronRight, User, Loader2, Sparkles, Navigation } from 'lucide-react';
+import { Camera, MapPin, CheckCircle2, AlertTriangle, X, RefreshCw, Clock, ShieldCheck, ChevronRight, User, Loader2, Sparkles, Navigation, ScanFace } from 'lucide-react';
 import { User as UserType, Club, ClubCheckin } from '../types';
 
 interface ClubCheckinModalProps {
@@ -28,6 +28,17 @@ export default function ClubCheckinModal({
   const [cameraActive, setCameraActive] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string>('');
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+
+  // Estados de escaneamento e contagem de 3 segundos
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanCountdown, setScanCountdown] = useState(3);
+  const countdownTimerRef = useRef<any>(null);
+
+  useEffect(() => {
+    return () => {
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    };
+  }, []);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string>('');
   const [successCheckin, setSuccessCheckin] = useState<ClubCheckin | null>(null);
@@ -177,9 +188,9 @@ export default function ClubCheckinModal({
     }
   }, [activeTab]);
 
-  // Capture Photo
-  const handleCapture = () => {
-    if (!videoRef.current) return;
+  // Capture Photo com Estampa de Auditoria / Exército (GPS, Data, Hora, Atleta)
+  const handleCapture = (): string | null => {
+    if (!videoRef.current) return null;
     const video = videoRef.current;
     const canvas = canvasRef.current || document.createElement('canvas');
 
@@ -188,33 +199,62 @@ export default function ClubCheckinModal({
     canvas.height = size;
 
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) return null;
 
     // Crop center square
     const startX = ((video.videoWidth || size) - size) / 2;
     const startY = ((video.videoHeight || size) - size) / 2;
 
+    ctx.save();
+    // Espelha horizontalmente para coincidir com a visualização da câmera
+    ctx.translate(size, 0);
+    ctx.scale(-1, 1);
     ctx.drawImage(video, startX, startY, size, size, 0, 0, size, size);
+    ctx.restore();
+
+    // Faixa inferior de auditoria biométrica (Exército / SFPC)
+    const barHeight = Math.round(size * 0.15);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.90)';
+    ctx.fillRect(0, size - barHeight, size, barHeight);
+
+    // Linha de realce verde esmeralda
+    ctx.fillStyle = '#10b981';
+    ctx.fillRect(0, size - barHeight, size, Math.max(2, Math.round(size * 0.007)));
+
+    // Linha 1: Atleta e CPF
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${Math.max(11, Math.round(size * 0.028))}px sans-serif`;
+    const athleteLabel = `${currentUser?.fullName || 'Atleta'} • CPF: ${currentUser?.cpf || '—'}`;
+    ctx.fillText(athleteLabel, 10, size - barHeight + Math.round(barHeight * 0.38));
+
+    // Linha 2: Data, Hora e Coordenadas GPS Exatas
+    ctx.fillStyle = '#a7f3d0';
+    ctx.font = `${Math.max(10, Math.round(size * 0.023))}px monospace`;
+    const nowStr = new Date().toLocaleString('pt-BR');
+    const coordsStr = coords?.latitude != null && coords?.longitude != null
+      ? `GPS: ${Number(coords.latitude).toFixed(5)}, ${Number(coords.longitude).toFixed(5)} (±${coords.accuracy ? Math.round(coords.accuracy) : 0}m)`
+      : 'GPS: Registrado no sistema';
+    ctx.fillText(`${nowStr} | ${coordsStr}`, 10, size - barHeight + Math.round(barHeight * 0.78));
 
     // Compress to 480x480 jpeg
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.84);
     setCapturedPhoto(dataUrl);
     stopCamera();
+    return dataUrl;
   };
 
   const handleRetake = () => {
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    countdownTimerRef.current = null;
+    setIsScanning(false);
+    setScanCountdown(3);
     setCapturedPhoto(null);
     setSubmitError('');
     startCamera();
   };
 
-  // Submit Checkin
-  const handleSubmitCheckin = async () => {
-    if (!capturedPhoto) {
-      setSubmitError('Por favor, tire uma selfie antes de confirmar o check-in.');
-      return;
-    }
-
+  // Envio do Checkin
+  const submitCheckinWithPhoto = async (photoToSend: string) => {
     setSubmitting(true);
     setSubmitError('');
 
@@ -223,7 +263,7 @@ export default function ClubCheckinModal({
         latitude: coords?.latitude ?? null,
         longitude: coords?.longitude ?? null,
         accuracy: coords?.accuracy ?? null,
-        photo: capturedPhoto,
+        photo: photoToSend,
         clubId: club?.id || currentUser?.clubId,
       };
 
@@ -251,6 +291,40 @@ export default function ClubCheckinModal({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSubmitCheckin = async () => {
+    if (!capturedPhoto) {
+      setSubmitError('Por favor, realize o reconhecimento facial antes de confirmar.');
+      return;
+    }
+    await submitCheckinWithPhoto(capturedPhoto);
+  };
+
+  // Iniciar sequência de 3 segundos para reconhecimento facial
+  const startFacialRecognition = () => {
+    if (!cameraActive || isScanning || submitting) return;
+    setIsScanning(true);
+    setScanCountdown(3);
+    setSubmitError('');
+
+    let currentSec = 3;
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+
+    countdownTimerRef.current = setInterval(() => {
+      currentSec -= 1;
+      if (currentSec > 0) {
+        setScanCountdown(currentSec);
+      } else {
+        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+        setIsScanning(false);
+        const photo = handleCapture();
+        if (photo) {
+          submitCheckinWithPhoto(photo);
+        }
+      }
+    }, 1000);
   };
 
   const clubDisplayName = club?.fantasyName || club?.name || 'Clube de Tiro';
@@ -427,8 +501,19 @@ export default function ClubCheckinModal({
                   </div>
                 </div>
 
-                {/* 2. Camera Viewfinder with Facial Oval Guide */}
+                {/* 2. Camera Viewfinder with Facial Oval Guide & 3s Animation */}
                 <div className="relative bg-slate-950 rounded-2xl overflow-hidden aspect-square max-w-[340px] mx-auto border-2 border-slate-700 shadow-inner flex items-center justify-center">
+                  <style>{`
+                    @keyframes scanlineAnim {
+                      0% { top: 12%; opacity: 0.3; }
+                      50% { top: 82%; opacity: 1; }
+                      100% { top: 12%; opacity: 0.3; }
+                    }
+                    .biometric-scanner-line {
+                      animation: scanlineAnim 1.4s ease-in-out infinite;
+                    }
+                  `}</style>
+
                   {!capturedPhoto ? (
                     <>
                       <video
@@ -439,12 +524,57 @@ export default function ClubCheckinModal({
                         className="w-full h-full object-cover transform -scale-x-100"
                       />
 
-                      {/* Oval Face Frame Overlay */}
+                      {/* Oval Face Frame Overlay com Animação de 3 Segundos */}
                       <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-4">
-                        <div className="w-48 h-64 border-2 border-dashed border-emerald-400/80 rounded-[50%] shadow-[0_0_0_9999px_rgba(15,23,42,0.45)] animate-pulse" />
-                        <span className="absolute bottom-3 bg-slate-900/80 backdrop-blur-md text-emerald-300 text-[10px] font-semibold px-2.5 py-1 rounded-full border border-emerald-500/30">
-                          Centralize seu rosto na moldura
-                        </span>
+                        <div
+                          className={`w-48 h-64 rounded-[50%] transition-all duration-300 relative flex items-center justify-center ${
+                            isScanning
+                              ? 'border-4 border-emerald-400 shadow-[0_0_35px_rgba(52,211,153,0.9),0_0_0_9999px_rgba(15,23,42,0.65)] ring-4 ring-emerald-300/60 ring-offset-2 ring-offset-slate-950'
+                              : 'border-2 border-dashed border-emerald-400/80 shadow-[0_0_0_9999px_rgba(15,23,42,0.45)] animate-pulse'
+                          }`}
+                        >
+                          {/* Marcadores de cantos biométricos (Brackets de mira) */}
+                          <div className={`absolute -top-3 -left-3 w-6 h-6 border-t-3 border-l-3 transition-colors ${isScanning ? 'border-emerald-300 scale-110' : 'border-emerald-400/70'}`} />
+                          <div className={`absolute -top-3 -right-3 w-6 h-6 border-t-3 border-r-3 transition-colors ${isScanning ? 'border-emerald-300 scale-110' : 'border-emerald-400/70'}`} />
+                          <div className={`absolute -bottom-3 -left-3 w-6 h-6 border-b-3 border-l-3 transition-colors ${isScanning ? 'border-emerald-300 scale-110' : 'border-emerald-400/70'}`} />
+                          <div className={`absolute -bottom-3 -right-3 w-6 h-6 border-b-3 border-r-3 transition-colors ${isScanning ? 'border-emerald-300 scale-110' : 'border-emerald-400/70'}`} />
+
+                          {/* Efeitos durante os 3 segundos de escaneamento */}
+                          {isScanning && (
+                            <>
+                              {/* Linha laser de escaneamento vertical */}
+                              <div className="absolute w-40 h-0.5 bg-gradient-to-r from-transparent via-emerald-300 to-transparent shadow-[0_0_15px_#10b981] biometric-scanner-line" />
+
+                              {/* Radar pulsante */}
+                              <div className="absolute inset-4 rounded-[50%] border border-emerald-300/40 animate-ping" />
+
+                              {/* Contador regressivo centralizado */}
+                              <div className="w-16 h-16 rounded-full bg-slate-950/85 border-2 border-emerald-400 flex flex-col items-center justify-center shadow-2xl backdrop-blur-md">
+                                <span className="text-2xl font-black text-emerald-400 font-mono leading-none animate-bounce">
+                                  {scanCountdown}
+                                </span>
+                                <span className="text-[8px] font-bold text-emerald-300 uppercase tracking-wider mt-0.5">
+                                  seg
+                                </span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Legenda Informativa */}
+                        <div className="absolute bottom-3 flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-md text-emerald-300 text-[10.5px] font-semibold px-3 py-1.5 rounded-full border border-emerald-500/40 shadow-lg">
+                          {isScanning ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                              <span>Aguardando posicionamento correto da cabeça... ({scanCountdown}s)</span>
+                            </>
+                          ) : (
+                            <>
+                              <ScanFace className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>Centralize seu rosto na moldura</span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </>
                   ) : (
@@ -488,12 +618,26 @@ export default function ClubCheckinModal({
                 <div className="pt-1">
                   {!capturedPhoto ? (
                     <button
-                      onClick={handleCapture}
-                      disabled={!cameraActive}
+                      onClick={startFacialRecognition}
+                      disabled={!cameraActive || isScanning || submitting}
                       className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white py-3 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 cursor-pointer"
                     >
-                      <Camera className="w-4 h-4" />
-                      Tirar Foto e Validar
+                      {isScanning ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Escaneando posicionamento facial... ({scanCountdown}s)
+                        </>
+                      ) : submitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Validando Reconhecimento Facial...
+                        </>
+                      ) : (
+                        <>
+                          <ScanFace className="w-4 h-4" />
+                          Iniciar reconhecimento facial
+                        </>
+                      )}
                     </button>
                   ) : (
                     <div className="flex gap-2">

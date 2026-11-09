@@ -2,9 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Clock, MapPin, Search, Calendar, User, ShieldCheck, AlertTriangle,
   CheckCircle2, LogOut, Trash2, RefreshCw, Filter, Eye, X, Loader2,
-  ChevronLeft, ChevronRight, Navigation
+  ChevronLeft, ChevronRight, Navigation, FileText, Download, Printer, ExternalLink
 } from 'lucide-react';
 import { User as UserType, Club, ClubCheckin } from '../types';
+import { downloadPdfFromHtml, sanitizePdfFilename } from '../utils/pdfDownloader';
 
 interface CheckinsManagerProps {
   currentUser: UserType | null;
@@ -35,6 +36,348 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
 
   // Photo Zoom Modal
   const [photoModalTarget, setPhotoModalTarget] = useState<ClubCheckin | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  // Clube selecionado para cabeçalho dos relatórios
+  const activeClub = useMemo(() => {
+    if (selectedClubId) {
+      return clubs.find(c => c.id === selectedClubId) || null;
+    }
+    if (currentUser?.clubId) {
+      return clubs.find(c => c.id === currentUser.clubId) || null;
+    }
+    return clubs[0] || null;
+  }, [selectedClubId, currentUser, clubs]);
+
+  // Exportar Planilha CSV
+  const exportCheckinsToCsv = () => {
+    if (checkins.length === 0) {
+      alert('Nenhum registro de check-in para exportar com os filtros atuais.');
+      return;
+    }
+    const headers = [
+      'ID Registro',
+      'Atleta',
+      'CPF',
+      'CR (Exército)',
+      'Clube',
+      'Data Entrada',
+      'Hora Entrada',
+      'Data Saída',
+      'Hora Saída',
+      'Tempo Permanência (min)',
+      'Latitude',
+      'Longitude',
+      'Precisão GPS (metros)',
+      'Distância Estande (metros)',
+      'Dentro do Raio',
+      'Score Facial (%)',
+      'Status Biometria'
+    ];
+
+    const rows = checkins.map(c => [
+      c.id,
+      c.athleteName || '',
+      c.athleteCpf || '',
+      c.athleteCr || '',
+      c.clubName || activeClub?.fantasyName || activeClub?.name || '',
+      new Date(c.checkinAt).toLocaleDateString('pt-BR'),
+      new Date(c.checkinAt).toLocaleTimeString('pt-BR'),
+      c.checkoutAt ? new Date(c.checkoutAt).toLocaleDateString('pt-BR') : 'No Estande',
+      c.checkoutAt ? new Date(c.checkoutAt).toLocaleTimeString('pt-BR') : 'No Estande',
+      c.durationMinutes != null ? c.durationMinutes : '',
+      c.latitude != null ? Number(c.latitude).toFixed(6) : '',
+      c.longitude != null ? Number(c.longitude).toFixed(6) : '',
+      c.accuracyMeters != null ? Math.round(c.accuracyMeters) : '',
+      c.distanceToClubMeters != null ? c.distanceToClubMeters : '',
+      c.isWithinRadius ? 'Sim' : 'Não',
+      c.facialMatchScore != null ? Math.round(c.facialMatchScore) : '',
+      c.facialMatchStatus || 'confirmed'
+    ]);
+
+    const csvContent = '\uFEFF' + [
+      headers.map(h => `"${h}"`).join(';'),
+      ...rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+    ].join('\r\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio_checkins_exercito_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Exportar Relatório Oficial Completo em PDF para Auditoria do Exército / SFPC
+  const exportCheckinsToPdf = async () => {
+    if (checkins.length === 0) {
+      alert('Nenhum registro para exportar.');
+      return;
+    }
+
+    setExportingPdf(true);
+    try {
+      const nowStr = new Date().toLocaleString('pt-BR');
+      const clubName = activeClub?.fantasyName || activeClub?.name || 'Clube de Tiro e Caça';
+      const clubCnpj = activeClub?.cnpj || '—';
+      const clubCr = activeClub?.crNumber || '—';
+      const clubAddress = [activeClub?.address, activeClub?.addressNumber, activeClub?.city, activeClub?.state].filter(Boolean).join(', ') || 'Endereço da sede do estande';
+
+      const periodText = startDate && endDate
+        ? `Período: ${new Date(startDate + 'T12:00:00').toLocaleDateString('pt-BR')} até ${new Date(endDate + 'T12:00:00').toLocaleDateString('pt-BR')}`
+        : startDate
+        ? `A partir de: ${new Date(startDate + 'T12:00:00').toLocaleDateString('pt-BR')}`
+        : endDate
+        ? `Até: ${new Date(endDate + 'T12:00:00').toLocaleDateString('pt-BR')}`
+        : 'Período Completo (Todos os Registros)';
+
+      const tableRowsHtml = checkins.map((chk, idx) => {
+        const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+        const entrance = new Date(chk.checkinAt);
+        const exit = chk.checkoutAt ? new Date(chk.checkoutAt) : null;
+        const durationText = chk.durationMinutes != null ? formatDuration(chk.durationMinutes) : 'No Estande';
+        const coordsText = chk.latitude != null && chk.longitude != null
+          ? `${Number(chk.latitude).toFixed(5)}, ${Number(chk.longitude).toFixed(5)}`
+          : 'Não informadas';
+        const gpsAccuracy = chk.accuracyMeters != null ? `±${Math.round(chk.accuracyMeters)}m` : '';
+        const distanceText = chk.distanceToClubMeters != null ? `${chk.distanceToClubMeters}m` : '—';
+        const facialText = chk.facialMatchScore != null ? `${Math.round(chk.facialMatchScore)}%` : 'Validada';
+
+        const photoImg = chk.photoData
+          ? `<img src="${chk.photoData}" style="width: 52px; height: 52px; object-fit: cover; border-radius: 6px; border: 1px solid #cbd5e1;" />`
+          : `<div style="width: 52px; height: 52px; background: #e2e8f0; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #64748b; text-align: center;">Sem Foto</div>`;
+
+        return `
+          <tr style="background-color: ${bg}; page-break-inside: avoid;">
+            <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: center; width: 60px;">
+              ${photoImg}
+            </td>
+            <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-size: 10px; line-height: 1.3;">
+              <strong style="color: #0f172a; font-size: 10.5px; display: block;">${chk.athleteName || 'Atleta Desconhecido'}</strong>
+              <span style="color: #475569; font-family: monospace;">CPF: ${chk.athleteCpf || '—'}</span><br/>
+              <span style="color: #1e3a8a; font-weight: bold; font-family: monospace;">CR: ${chk.athleteCr || '—'}</span>
+            </td>
+            <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 9.5px; font-family: monospace; white-space: nowrap;">
+              <strong>${entrance.toLocaleDateString('pt-BR')}</strong><br/>
+              ${entrance.toLocaleTimeString('pt-BR')}
+            </td>
+            <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 9.5px; font-family: monospace; white-space: nowrap;">
+              ${exit ? `<strong>${exit.toLocaleDateString('pt-BR')}</strong><br/>${exit.toLocaleTimeString('pt-BR')}` : '<span style="color: #047857; font-weight: bold; background: #ecfdf5; padding: 2px 4px; border-radius: 4px;">No Estande</span>'}
+            </td>
+            <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 10px; font-family: monospace; font-weight: bold; color: #0f172a;">
+              ${durationText}
+            </td>
+            <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-size: 9px; line-height: 1.3;">
+              <span style="font-family: monospace; color: #0f172a; font-weight: bold; display: block;">${coordsText}</span>
+              <span style="color: #64748b;">Precisão: ${gpsAccuracy || '—'} • Dist.: ${distanceText}</span>
+            </td>
+            <td style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 9.5px;">
+              <span style="background: #eff6ff; color: #1d4ed8; padding: 2px 6px; border-radius: 9999px; font-weight: bold; font-size: 9px; border: 1px solid #bfdbfe;">
+                ${facialText}
+              </span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Relatório Oficial de Check-ins e Presenças</title>
+          <style>
+            @page { size: A4 landscape; margin: 8mm; }
+            body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #0f172a; margin: 0; padding: 0; background: #ffffff; }
+            .header-box { border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; margin-bottom: 12px; }
+            .title { font-size: 14px; font-weight: 800; color: #1e3a8a; text-transform: uppercase; margin: 0 0 2px 0; letter-spacing: 0.5px; }
+            .subtitle { font-size: 10px; color: #475569; margin: 0 0 6px 0; font-weight: 600; }
+            .info-grid { display: flex; justify-content: space-between; font-size: 9px; color: #334155; }
+            .kpi-bar { display: flex; gap: 12px; margin-bottom: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 12px; font-size: 9.5px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 9.5px; }
+            th { background-color: #1e3a8a; color: #ffffff; font-weight: bold; padding: 6px 8px; border: 1px solid #1e3a8a; text-align: center; font-size: 9.5px; text-transform: uppercase; }
+            .declaration-box { margin-top: 14px; border: 1px dashed #94a3b8; background: #f8fafc; padding: 8px 12px; border-radius: 6px; font-size: 8.5px; color: #334155; line-height: 1.4; text-align: justify; page-break-inside: avoid; }
+            .signature-row { display: flex; justify-content: space-around; margin-top: 25px; page-break-inside: avoid; }
+            .signature-line { width: 240px; border-top: 1px solid #475569; text-align: center; padding-top: 4px; font-size: 9px; color: #1e293b; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="header-box">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+              <div>
+                <h1 class="title">LIVRO ELETRÔNICO DE ENTRADA, SAÍDA E BIOMETRIA FACIAL</h1>
+                <p class="subtitle">Relatório Oficial de Controle de Acesso e Presença no Estande de Tiro — Portaria COLOG / Exército Brasileiro</p>
+                <div style="font-size: 9.5px; color: #1e293b; line-height: 1.35;">
+                  <strong>Clube / Estande:</strong> ${clubName} &nbsp;|&nbsp; <strong>CNPJ:</strong> ${clubCnpj} &nbsp;|&nbsp; <strong>CR do Clube:</strong> ${clubCr}<br/>
+                  <strong>Endereço:</strong> ${clubAddress}
+                </div>
+              </div>
+              <div style="text-align: right; font-size: 9px; color: #64748b; line-height: 1.35;">
+                <strong>Emissão:</strong> ${nowStr}<br/>
+                <strong>${periodText}</strong><br/>
+                <span style="color: #047857; font-weight: bold;">Auditoria por Geolocalização e IA</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="kpi-bar">
+            <span><strong>Total de Registros:</strong> ${checkins.length}</span>
+            <span>&bull;</span>
+            <span><strong>Atletas no Estande:</strong> ${checkins.filter(c => !c.checkoutAt).length}</span>
+            <span>&bull;</span>
+            <span><strong>Check-outs Concluídos:</strong> ${checkins.filter(c => !!c.checkoutAt).length}</span>
+            <span>&bull;</span>
+            <span><strong>Permanência Média:</strong> ${formatDuration(stats.avgMinutes)}</span>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Foto</th>
+                <th style="text-align: left;">Atleta / Identificação (Exército)</th>
+                <th>Entrada</th>
+                <th>Saída</th>
+                <th>Permanência</th>
+                <th style="text-align: left;">Geolocalização (GPS Estande)</th>
+                <th>Biometria</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRowsHtml}
+            </tbody>
+          </table>
+
+          <div class="declaration-box">
+            <strong>TERMO DE AUTENTICIDADE E DECLARAÇÃO DE FISCALIZAÇÃO:</strong><br/>
+            Declaramos, sob as penas da lei e para os devidos fins de comprovação de habitualidade e presença perante o Serviço de Fiscalização de Produtos Controlados (SFPC / Exército Brasileiro) e autoridades competentes, que os dados constantes neste relatório foram colhidos de forma fidedigna por meios eletrônicos com registro de coordenadas geográficas via satélite (GPS) e autenticação facial biométrica por inteligência artificial no momento da entrada nas dependências deste estande de tiro.
+          </div>
+
+          <div class="signature-row">
+            <div class="signature-line">
+              Responsável Técnico / Diretor de Tiro<br/>
+              <span style="font-weight: normal; font-size: 8px; color: #64748b;">${clubName}</span>
+            </div>
+            <div class="signature-line">
+              Representante Legal / Presidente do Clube<br/>
+              <span style="font-weight: normal; font-size: 8px; color: #64748b;">CNPJ: ${clubCnpj}</span>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      await downloadPdfFromHtml(html, {
+        filename: sanitizePdfFilename(`relatorio_checkins_exercito_${new Date().toISOString().split('T')[0]}.pdf`),
+        orientation: 'landscape',
+        margin: [6, 6, 6, 6]
+      });
+    } catch (err: any) {
+      console.error('Erro ao gerar relatório PDF:', err);
+      alert('Ocorreu um erro ao exportar o relatório em PDF.');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  // Exportar Comprovante Individual em PDF (Ficha do Atleta)
+  const exportSingleCheckinPdf = async (chk: ClubCheckin) => {
+    try {
+      const nowStr = new Date().toLocaleString('pt-BR');
+      const clubName = chk.clubName || activeClub?.fantasyName || activeClub?.name || 'Clube de Tiro e Caça';
+      const clubCnpj = chk.clubCnpj || activeClub?.cnpj || '—';
+      const clubCr = chk.clubCr || activeClub?.crNumber || '—';
+      const entrance = new Date(chk.checkinAt);
+      const exit = chk.checkoutAt ? new Date(chk.checkoutAt) : null;
+      const durationText = chk.durationMinutes != null ? formatDuration(chk.durationMinutes) : calculateLiveDuration(chk.checkinAt);
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Comprovante Individual de Presença no Estande</title>
+          <style>
+            @page { size: A4 portrait; margin: 12mm; }
+            body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #0f172a; margin: 0; padding: 0; }
+            .cert-box { border: 2px solid #1e3a8a; padding: 24px; border-radius: 12px; }
+            .title { font-size: 16px; font-weight: 800; color: #1e3a8a; text-align: center; text-transform: uppercase; margin-bottom: 2px; }
+            .subtitle { font-size: 11px; text-align: center; color: #475569; margin-bottom: 20px; font-weight: 600; }
+            .grid-2 { display: flex; gap: 20px; margin-bottom: 20px; }
+            .photo-box { width: 160px; height: 160px; border-radius: 8px; border: 1px solid #cbd5e1; overflow: hidden; flex-shrink: 0; }
+            .photo-img { width: 100%; height: 100%; object-fit: cover; }
+            .data-table { width: 100%; font-size: 11px; border-collapse: collapse; }
+            .data-table td { padding: 6px 8px; border-bottom: 1px solid #e2e8f0; }
+            .label { font-weight: bold; color: #475569; width: 160px; }
+            .val { font-weight: 600; color: #0f172a; }
+            .val-mono { font-family: monospace; font-weight: bold; }
+            .stamp-box { background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 12px; margin-top: 16px; font-size: 10.5px; color: #166534; }
+            .footer-sig { display: flex; justify-content: space-around; margin-top: 40px; }
+            .sig-line { width: 220px; border-top: 1px solid #334155; text-align: center; padding-top: 6px; font-size: 10px; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="cert-box">
+            <h1 class="title">COMPROVANTE INDIVIDUAL DE PRESENÇA NO ESTANDE</h1>
+            <p class="subtitle">Auditoria de Acesso e Reconhecimento Facial — Portaria COLOG / Exército Brasileiro</p>
+
+            <div class="grid-2">
+              <div class="photo-box">
+                ${chk.photoData ? `<img src="${chk.photoData}" class="photo-img" />` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f1f5f9;color:#64748b;font-size:10px;">Foto não disponível</div>'}
+              </div>
+              <div style="flex: 1;">
+                <table class="data-table">
+                  <tr><td class="label">Atirador Desportivo:</td><td class="val">${chk.athleteName || 'Atleta'}</td></tr>
+                  <tr><td class="label">CPF:</td><td class="val-mono">${chk.athleteCpf || '—'}</td></tr>
+                  <tr><td class="label">CR (Exército):</td><td class="val-mono" style="color: #1e3a8a;">${chk.athleteCr || '—'}</td></tr>
+                  <tr><td class="label">Clube / Estande:</td><td class="val">${clubName}</td></tr>
+                  <tr><td class="label">CNPJ do Clube:</td><td class="val-mono">${clubCnpj}</td></tr>
+                  <tr><td class="label">CR do Clube:</td><td class="val-mono">${clubCr}</td></tr>
+                </table>
+              </div>
+            </div>
+
+            <table class="data-table">
+              <tr><td class="label">Data de Entrada:</td><td class="val-mono">${entrance.toLocaleDateString('pt-BR')} às ${entrance.toLocaleTimeString('pt-BR')}</td></tr>
+              <tr><td class="label">Data de Saída:</td><td class="val-mono">${exit ? `${exit.toLocaleDateString('pt-BR')} às ${exit.toLocaleTimeString('pt-BR')}` : 'Presença em andamento'}</td></tr>
+              <tr><td class="label">Tempo no Estande:</td><td class="val" style="color: #047857; font-weight: bold;">${durationText}</td></tr>
+              <tr><td class="label">Coordenadas GPS:</td><td class="val-mono">${chk.latitude != null && chk.longitude != null ? `${Number(chk.latitude).toFixed(6)}, ${Number(chk.longitude).toFixed(6)}` : 'Registradas em sistema'}</td></tr>
+              <tr><td class="label">Precisão do GPS:</td><td class="val">${chk.accuracyMeters != null ? `±${Math.round(chk.accuracyMeters)} metros` : 'Padrão'}</td></tr>
+              <tr><td class="label">Distância do Estande:</td><td class="val">${chk.distanceToClubMeters != null ? `${chk.distanceToClubMeters} metros` : 'Dentro do raio'}</td></tr>
+              <tr><td class="label">Similaridade Biométrica:</td><td class="val" style="color: #1e40af; font-weight: bold;">${chk.facialMatchScore != null ? `${Math.round(chk.facialMatchScore)}% de correspondência facial` : 'Validada'}</td></tr>
+            </table>
+
+            <div class="stamp-box">
+              <strong>AUTENTICIDADE ELETRÔNICA COMPROVADA:</strong> Registro biométrico e geolocalizado efetuado no estande de tiro em conformidade com as diretrizes do Serviço de Fiscalização de Produtos Controlados (SFPC / EB).
+            </div>
+
+            <div class="footer-sig">
+              <div class="sig-line">
+                Responsável Técnico do Estande<br/>
+                <span style="font-weight: normal; font-size: 9px; color: #64748b;">${clubName}</span>
+              </div>
+              <div class="sig-line">
+                Atirador Desportivo<br/>
+                <span style="font-weight: normal; font-size: 9px; color: #64748b;">CPF: ${chk.athleteCpf || '—'}</span>
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      await downloadPdfFromHtml(html, {
+        filename: sanitizePdfFilename(`comprovante_presenca_${(chk.athleteName || 'atleta').replace(/\s+/g, '_')}_${entrance.toISOString().split('T')[0]}.pdf`),
+        orientation: 'portrait',
+        margin: [10, 10, 10, 10]
+      });
+    } catch (err: any) {
+      console.error('Erro ao gerar comprovante individual:', err);
+      alert('Erro ao exportar comprovante individual.');
+    }
+  };
 
   // Delete State
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -196,14 +539,45 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
           </p>
         </div>
 
-        <button
-          onClick={fetchCheckins}
-          disabled={loading}
-          className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer self-start sm:self-auto"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Atualizar Lista
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={exportCheckinsToPdf}
+            disabled={exportingPdf || checkins.length === 0}
+            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm shadow-emerald-600/20 cursor-pointer"
+            title="Exportar relatório completo em PDF para auditoria do Exército Brasileiro / SFPC"
+          >
+            {exportingPdf ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Gerando PDF...
+              </>
+            ) : (
+              <>
+                <FileText className="w-3.5 h-3.5" />
+                Exportar Relatório PDF
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={exportCheckinsToCsv}
+            disabled={checkins.length === 0}
+            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+            title="Exportar registros em planilha CSV / Excel"
+          >
+            <Download className="w-3.5 h-3.5 text-blue-600" />
+            Exportar CSV
+          </button>
+
+          <button
+            onClick={fetchCheckins}
+            disabled={loading}
+            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Atualizar Lista
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -438,21 +812,28 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
                         )}
                       </td>
 
-                      {/* GPS / Distância */}
+                      {/* GPS / Distância e Coordenadas */}
                       <td className="px-4 py-3 whitespace-nowrap">
-                        {chk.distanceToClubMeters != null ? (
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                              chk.isWithinRadius
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-amber-50 text-amber-700 border border-amber-200'
-                            }`}
-                          >
-                            📍 {chk.distanceToClubMeters}m
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-400">Coordenadas OK</span>
-                        )}
+                        <div className="space-y-0.5">
+                          {chk.distanceToClubMeters != null ? (
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                chk.isWithinRadius
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}
+                            >
+                              📍 {chk.distanceToClubMeters}m
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">📍 No estande</span>
+                          )}
+                          {chk.latitude != null && chk.longitude != null && (
+                            <span className="text-[9px] text-slate-500 font-mono block">
+                              {Number(chk.latitude).toFixed(4)}, {Number(chk.longitude).toFixed(4)}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Biometria */}
@@ -621,25 +1002,94 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
                 className="w-full aspect-square object-cover"
               />
             )}
-            <div className="p-4 bg-slate-50 text-left text-xs space-y-1 text-slate-700">
-              <p>
-                <strong>Entrada:</strong> {new Date(photoModalTarget.checkinAt).toLocaleString('pt-BR')}
-              </p>
-              {photoModalTarget.checkoutAt && (
-                <p>
-                  <strong>Saída:</strong> {new Date(photoModalTarget.checkoutAt).toLocaleString('pt-BR')}
-                </p>
-              )}
-              {photoModalTarget.facialMatchScore != null && (
-                <p>
-                  <strong>Score Facial:</strong> {Math.round(photoModalTarget.facialMatchScore)}% de similaridade
-                </p>
-              )}
-              {photoModalTarget.distanceToClubMeters != null && (
-                <p>
-                  <strong>Distância GPS:</strong> {photoModalTarget.distanceToClubMeters} metros do estande
-                </p>
-              )}
+            <div className="p-4 bg-slate-50 text-left text-xs space-y-3 text-slate-700">
+              {/* Coordenadas GPS Exatas */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-1 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-emerald-900 flex items-center gap-1.5 text-[11px] uppercase tracking-wide">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                    Geolocalização no Estande
+                  </span>
+                  {photoModalTarget.latitude != null && photoModalTarget.longitude != null && (
+                    <a
+                      href={`https://www.google.com/maps?q=${photoModalTarget.latitude},${photoModalTarget.longitude}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-0.5"
+                    >
+                      Ver no Mapa <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  )}
+                </div>
+
+                {photoModalTarget.latitude != null && photoModalTarget.longitude != null ? (
+                  <p className="font-mono font-bold text-emerald-950 text-xs pt-0.5">
+                    {Number(photoModalTarget.latitude).toFixed(6)}, {Number(photoModalTarget.longitude).toFixed(6)}
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-slate-500 font-mono">Coordenadas gravadas na foto</p>
+                )}
+
+                <div className="flex flex-wrap items-center gap-3 text-[10px] text-emerald-800 pt-0.5">
+                  {photoModalTarget.accuracyMeters != null && (
+                    <span>Precisão GPS: ±{Math.round(photoModalTarget.accuracyMeters)}m</span>
+                  )}
+                  {photoModalTarget.distanceToClubMeters != null && (
+                    <span>Distância: {photoModalTarget.distanceToClubMeters}m do estande</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Dados do Atleta (Exército) */}
+              <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-1.5 text-xs">
+                <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium">Atirador:</span>
+                  <span className="font-bold text-slate-900">{photoModalTarget.athleteName || 'Atleta'}</span>
+                </div>
+                <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium">CPF:</span>
+                  <span className="font-mono font-bold text-slate-800">{photoModalTarget.athleteCpf || '—'}</span>
+                </div>
+                <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium">CR (Exército):</span>
+                  <span className="font-mono font-bold text-blue-700">{photoModalTarget.athleteCr || '—'}</span>
+                </div>
+                <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium">Clube:</span>
+                  <span className="font-semibold text-slate-800">{photoModalTarget.clubName || activeClub?.fantasyName || activeClub?.name || 'Clube de Tiro'}</span>
+                </div>
+                <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium">Entrada:</span>
+                  <span className="font-mono font-semibold text-slate-800">{new Date(photoModalTarget.checkinAt).toLocaleString('pt-BR')}</span>
+                </div>
+                <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium">Saída:</span>
+                  <span className="font-mono font-semibold text-slate-800">
+                    {photoModalTarget.checkoutAt ? new Date(photoModalTarget.checkoutAt).toLocaleString('pt-BR') : 'No Estande (aberto)'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium">Permanência:</span>
+                  <span className="font-mono font-bold text-emerald-700">
+                    {photoModalTarget.durationMinutes != null ? formatDuration(photoModalTarget.durationMinutes) : calculateLiveDuration(photoModalTarget.checkinAt)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-slate-500 font-medium">Score Biométrico:</span>
+                  <span className="font-bold text-blue-700">
+                    {photoModalTarget.facialMatchScore != null ? `${Math.round(photoModalTarget.facialMatchScore)}% de similaridade` : 'Validado'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Botão de Impressão de Comprovante Individual */}
+              <button
+                onClick={() => exportSingleCheckinPdf(photoModalTarget)}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5 text-blue-400" />
+                Imprimir Comprovante Individual (PDF)
+              </button>
             </div>
           </div>
         </div>

@@ -673,8 +673,14 @@ export interface ClubCheckin {
   athleteCpf?: string;
   athleteCr?: string;
   athleteAvatar?: string;
+  athletePhone?: string;
+  athleteEmail?: string;
   clubId: string;
   clubName?: string;
+  clubCnpj?: string;
+  clubCr?: string;
+  clubCity?: string;
+  clubState?: string;
   checkinAt: string;
   checkoutAt?: string;
   checkoutByUserId?: string;

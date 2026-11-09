@@ -8118,8 +8118,14 @@ function mapCheckin(r: any): ClubCheckin {
     athleteCpf: r.athlete_cpf || undefined,
     athleteCr: r.athlete_cr || undefined,
     athleteAvatar: r.athlete_avatar ? avatarUrlFor(r.user_id, r.athlete_avatar) : undefined,
+    athletePhone: r.athlete_phone || undefined,
+    athleteEmail: r.athlete_email || undefined,
     clubId: r.club_id,
     clubName: r.club_name || undefined,
+    clubCnpj: r.club_cnpj || undefined,
+    clubCr: r.club_cr || undefined,
+    clubCity: r.club_city || undefined,
+    clubState: r.club_state || undefined,
     checkinAt: r.checkin_at ? new Date(r.checkin_at).toISOString() : new Date().toISOString(),
     latitude: r.latitude != null ? Number(r.latitude) : undefined,
     longitude: r.longitude != null ? Number(r.longitude) : undefined,
@@ -8720,7 +8726,8 @@ app.get('/api/checkins', requireAuth, async (req, res) => {
   try {
     let query = `
       SELECT c.*, u.full_name as athlete_name, u.cpf as athlete_cpf, u.cr_number as athlete_cr,
-             u.avatar_url as athlete_avatar, cl.name as club_name, cl.fantasy_name as club_fantasy
+             u.avatar_url as athlete_avatar, u.phone as athlete_phone, u.email as athlete_email,
+             cl.name as club_name, cl.fantasy_name as club_fantasy, cl.cnpj as club_cnpj, cl.cr_number as club_cr, cl.city as club_city, cl.state as club_state
       FROM club_checkins c
       LEFT JOIN users u ON u.id = c.user_id
       LEFT JOIN clubs cl ON cl.id = c.club_id
