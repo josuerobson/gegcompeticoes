@@ -3649,12 +3649,12 @@ function CadastrarResultadosPanel({
       if (!champ) return false;
 
       if (!showAllStages) {
-        // Exclui campeonatos passados já finalizados
-        if (champ.status === 'completed') return false;
-
-        // Exclui etapas que já foram homologadas (homologarResultado === 'sim')
-        const isHomologada = s.homologarResultado === 'sim';
+        // Regra Oficial: Etapas Abertas para Resultados ('sim') e Não Homologadas (!== 'sim')
+        const isHomologada = (s.homologarResultado || '').toLowerCase() === 'sim';
         if (isHomologada) return false;
+
+        const isAbertaParaResultados = (s.abertoParaResultados || '').toLowerCase() === 'sim';
+        if (!isAbertaParaResultados) return false;
       }
 
       return true;
@@ -3904,7 +3904,7 @@ function CadastrarResultadosPanel({
               <p className="text-xs text-slate-500 max-w-md mx-auto">
                 {searchStageCardQuery
                   ? 'Verifique os termos digitados ou limpe a busca para visualizar as etapas ativas.'
-                  : 'Todas as etapas atuais já foram homologadas ou pertencem a campeonatos finalizados.'}
+                  : 'Todas as etapas atuais já foram homologadas ou estão fechadas para lançamento de resultados.'}
               </p>
               {searchStageCardQuery ? (
                 <button
@@ -3927,7 +3927,8 @@ function CadastrarResultadosPanel({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {stageCards.map(({ stage: s, champ: c }) => {
-                const isHomologada = s.homologarResultado === 'sim';
+                const isHomologada = (s.homologarResultado || '').toLowerCase() === 'sim';
+                const isAberta = (s.abertoParaResultados || '').toLowerCase() === 'sim';
                 const isCompleted = c.status === 'completed';
                 const numModalities = c.modalities?.length || 0;
 
@@ -3947,9 +3948,9 @@ function CadastrarResultadosPanel({
                           <span className="text-[9.5px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">
                             ✓ Homologada
                           </span>
-                        ) : isCompleted ? (
+                        ) : !isAberta ? (
                           <span className="text-[9.5px] font-bold uppercase bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
-                            Finalizado
+                            Fechada para Resultados
                           </span>
                         ) : (
                           <span className="text-[9.5px] font-bold uppercase bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
