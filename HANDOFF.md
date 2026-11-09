@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(resultados): corrigir ordem de criacao de club_checkins no db, imports de icones e prevencao de tela branca em cadastrar resultados` |
-| Data/hora | 2026-11-08T15:45:00-03:00 |
+| Mensagem | `feat(resultados): substituir selects por cards de campeonatos e etapas nao homologadas em cadastrar resultados` |
+| Data/hora | 2026-11-09T09:25:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,16 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Fluxo por Cards de Etapas Não Homologadas em "Cadastrar Resultados" (`AdminPanel.tsx`)**:
+  - **Exigência**: Ao clicar em "Cadastrar Resultados", em vez de abrir selects vazios de Campeonato, Etapa e Modalidade, exibir diretamente cards contendo o nome do Campeonato e da Etapa. Devem aparecer apenas cards de campeonatos ativos (não finalizados, `status !== 'completed'`) e etapas ainda não homologadas (`homologarResultado !== 'sim'`). Ao clicar no card, carregar imediatamente todas as inscrições daquela etapa, com a possibilidade de filtrar por modalidade cadastrada no campeonato.
+  - **Implementação**:
+    1. **Cards de Etapas Ativas**: Substituído o grid de 3 selects iniciais por uma listagem de cards estilizados e responsivos. Cada card exibe badge da etapa (ex: "9ª Etapa"), badge de status ("● Aberta para Lançamento"), título do campeonato, título da etapa, datas do período (início e término) e contagem de modalidades vinculadas.
+    2. **Filtro Inteligente de Exibição**: Por padrão, etapas já homologadas (`homologarResultado === 'sim'`) e campeonatos concluídos (`status === 'completed'`) são excluídos da listagem. Foi incluído campo de busca rápida por texto (filtra por campeonato, etapa ou número da etapa) e um checkbox opcional `"Exibir homologadas/finalizadas"` caso o gestor precise consultar ou ajustar resultados históricos.
+    3. **Carregamento Imediato de Inscrições**: Ao clicar no card, `champId` e `stageId` são ativados e `modalityId` inicia vazio, disparando a busca imediata de todas as inscrições da etapa via `/api/admin/registrations`.
+    4. **Header com Troca de Etapa e Filtro por Modalidade**: No topo da tela de inscrições, é exibido o botão `"← Trocar Etapa"` (que retorna instantaneamente à visão de cards com 1 clique), os dados em destaque da etapa selecionada e o seletor `"Filtrar por Modalidade"`, listando todas as modalidades cadastradas no campeonato com a quantidade de atletas inscritos.
+    5. **Correção de Parâmetros de Refresh**: Garantido que atualizações pós-lançamento de notas ou exclusão de inscrições preservem o parâmetro `allClubs=true` quando executadas no escopo de Gerenciamento da Plataforma.
+  - **O que NÃO fazer no futuro**: Não reintroduzir selects iniciais obrigatórios que forcem o usuário a adivinhar ou navegar cegamente entre etapas já finalizadas ou já homologadas.
 
 - **Resolução de Tela Branca em Cadastrar Resultados e Ordem de DDL no Banco (`src/db.ts`, `src/components/AdminPanel.tsx`, `src/components/MemberProfile.tsx`)**:
   - **Exigência**: Ao acessar "Gerenciamento clube > Cadastrar Resultados", selecionar o campeonato e a etapa, a tela ficava branca.

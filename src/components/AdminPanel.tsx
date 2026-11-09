@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Component } from 'react';
 import { Championship, ChampionshipInput, Registration, User, StageScore, Stage, StageInput, Weapon, WeaponLookupOption, Modality, Club, Post, MultiChampionship, MultiChampionshipItem, HomeBanner, AmmoCaliberStock, AmmoInvoice, AmmoProduction, AmmoRecycled, AmmoAthleteAllocation, AmmoAthleteBalance, TrainingSession, AnnuityPlan, AnnuityPayment, AnnuityCharge, ClubBulkRegistrationPrefill, IdscChampionship, IdscStage, IdscCourse, IdscRegistration, IdscResult, IdscTargetResult, LegacyMultiDiscount } from '../types';
 import { CompetitionResultsViewer } from './CompetitionResultsViewer';
 import { ClubTemplatesManager } from './ClubTemplatesManager';
@@ -18,7 +18,7 @@ import {
   ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
-  Eye, EyeOff, Check, Trash2, Search, X, Pencil, ArrowLeft, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn, QrCode, KeyRound, Copy, AlertTriangle, ChevronLeft, ChevronRight, Download,
+  Eye, EyeOff, Check, Trash2, Search, X, Pencil, ArrowLeft, ArrowRight, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn, QrCode, KeyRound, Copy, AlertTriangle, ChevronLeft, ChevronRight, Download,
   MapPin, Clock
 } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -3319,10 +3319,24 @@ function calcSeriePts(s: Record<string,number>, xValue: number = 11): number {
   return ZONES.reduce((acc, z) => acc + (Number(s[z])||0) * points[z], 0);
 }
 
-class PanelErrorBoundary extends React.Component<{ children: React.ReactNode; fallbackTitle?: string }, { hasError: boolean; error: any }> {
-  constructor(props: any) {
+interface PanelErrorBoundaryProps {
+  children: React.ReactNode;
+  fallbackTitle?: string;
+}
+
+interface PanelErrorBoundaryState {
+  hasError: boolean;
+  error: any;
+}
+
+class PanelErrorBoundary extends Component<PanelErrorBoundaryProps, PanelErrorBoundaryState> {
+  props: PanelErrorBoundaryProps;
+  state: PanelErrorBoundaryState = { hasError: false, error: null };
+  setState: any;
+
+  constructor(props: PanelErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.props = props;
   }
   static getDerivedStateFromError(error: any) {
     return { hasError: true, error };
@@ -3381,6 +3395,8 @@ function CadastrarResultadosPanel({
   const [error, setError] = React.useState('');
 
   const [searchAthlete, setSearchAthlete] = React.useState('');
+  const [searchStageCardQuery, setSearchStageCardQuery] = React.useState('');
+  const [showAllStages, setShowAllStages] = React.useState(false);
 
   // Estados e controle de vínculo com os 4 últimos check-ins do atleta
   const [checkinModalReg, setCheckinModalReg] = React.useState<EnrichedRegistration | null>(null);
@@ -3587,8 +3603,101 @@ function CadastrarResultadosPanel({
   };
 
   const currentChamp = (championships || []).find(c => c && c.id === champId);
+  const currentStage = (stages || []).find(s => s && s.id === stageId);
   const xValue = (currentChamp && typeof currentChamp.valorX === 'number') ? currentChamp.valorX : 11;
-  const champAvailableModalities = (modalities || []).filter(m => m && (currentChamp?.modalities || []).includes(m.id));
+
+  const champAvailableModalities = React.useMemo(() => {
+    const list: Modality[] = [];
+    const seen = new Set<string>();
+
+    if (currentChamp?.modalities && Array.isArray(currentChamp.modalities)) {
+      for (const mId of currentChamp.modalities) {
+        const found = (modalities || []).find(m => m && m.id === mId);
+        if (found && !seen.has(found.id)) {
+          seen.add(found.id);
+          list.push(found);
+        }
+      }
+    }
+
+    for (const r of registrations) {
+      if (r && r.modalityId && !seen.has(r.modalityId)) {
+        const found = (modalities || []).find(m => m && m.id === r.modalityId) || {
+          id: r.modalityId,
+          name: r.modalityName || 'Modalidade'
+        };
+        seen.add(found.id);
+        list.push(found as Modality);
+      }
+    }
+
+    return list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [currentChamp?.modalities, modalities, registrations]);
+
+  const formatDisplayDate = (d?: string) => {
+    if (!d) return '';
+    const parsed = new Date(d.length === 10 ? `${d}T12:00:00` : d);
+    return isNaN(parsed.getTime()) ? d : parsed.toLocaleDateString('pt-BR');
+  };
+
+  const stageCards = React.useMemo(() => {
+    const champMap = new Map((championships || []).map(c => [c.id, c]));
+
+    let list = (stages || []).filter(s => {
+      if (!s || !s.championshipId) return false;
+      const champ = champMap.get(s.championshipId);
+      if (!champ) return false;
+
+      if (!showAllStages) {
+        // Exclui campeonatos passados já finalizados
+        if (champ.status === 'completed') return false;
+
+        // Exclui etapas que já foram homologadas (homologarResultado === 'sim')
+        const isHomologada = s.homologarResultado === 'sim';
+        if (isHomologada) return false;
+      }
+
+      return true;
+    }).map(s => {
+      const champ = champMap.get(s.championshipId)!;
+      return {
+        stage: s,
+        champ
+      };
+    });
+
+    if (searchStageCardQuery.trim()) {
+      const q = normalizeSearchText(searchStageCardQuery);
+      list = list.filter(item =>
+        normalizeSearchText(item.champ.title).includes(q) ||
+        normalizeSearchText(item.stage.title).includes(q) ||
+        normalizeSearchText(String(item.stage.stageNum || '')).includes(q)
+      );
+    }
+
+    // Ordenar: primeiro por título do campeonato, depois pelo número da etapa
+    return list.sort((a, b) => {
+      const titleCmp = (a.champ.title || '').localeCompare(b.champ.title || '');
+      if (titleCmp !== 0) return titleCmp;
+      return (a.stage.stageNum || 0) - (b.stage.stageNum || 0);
+    });
+  }, [stages, championships, showAllStages, searchStageCardQuery]);
+
+  const handleSelectStageCard = (selectedChampId: string, selectedStageId: string) => {
+    setChampId(selectedChampId);
+    setStageId(selectedStageId);
+    setModalityId('');
+    setSelectedReg(null);
+    setSearchAthlete('');
+  };
+
+  const handleBackToStageCards = () => {
+    setStageId('');
+    setChampId('');
+    setModalityId('');
+    setSelectedReg(null);
+    setSearchAthlete('');
+  };
 
   const serieTotals = seriesData.map(s => calcSeriePts(Object.fromEntries(Object.entries(s).map(([k,v]) => [k, Number(v)||0])), xValue));
   const bestIdx = serieTotals.length > 0 ? serieTotals.indexOf(Math.max(...serieTotals)) : -1;
@@ -3654,9 +3763,12 @@ function CadastrarResultadosPanel({
       setSuccess(msgs[acao]);
       setSelectedReg(null);
       
-      let refreshUrl = `/api/admin/registrations?championshipId=${champId}&stageId=${stageId}`;
+      let refreshUrl = `/api/admin/registrations?championshipId=${encodeURIComponent(champId)}&stageId=${encodeURIComponent(stageId)}`;
       if (modalityId) {
-        refreshUrl += `&modalityId=${modalityId}`;
+        refreshUrl += `&modalityId=${encodeURIComponent(modalityId)}`;
+      }
+      if (isPlataformaScope) {
+        refreshUrl += `&allClubs=true`;
       }
       const r2 = await fetch(refreshUrl, { headers: { 'x-user-id': currentUser?.id||'' } });
       const d2 = await r2.json();
@@ -3688,9 +3800,12 @@ function CadastrarResultadosPanel({
       setSuccess('✅ Inscrição excluída com sucesso.');
       setSelectedReg(null);
 
-      let refreshUrl = `/api/admin/registrations?championshipId=${champId}&stageId=${stageId}`;
+      let refreshUrl = `/api/admin/registrations?championshipId=${encodeURIComponent(champId)}&stageId=${encodeURIComponent(stageId)}`;
       if (modalityId) {
-        refreshUrl += `&modalityId=${modalityId}`;
+        refreshUrl += `&modalityId=${encodeURIComponent(modalityId)}`;
+      }
+      if (isPlataformaScope) {
+        refreshUrl += `&allClubs=true`;
       }
       const r2 = await fetch(refreshUrl, { headers: { 'x-user-id': currentUser?.id || '' } });
       const d2 = await r2.json();
@@ -3735,40 +3850,255 @@ function CadastrarResultadosPanel({
       {success && <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl text-xs font-semibold flex gap-2"><CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />{success}</div>}
       {error && <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold">{error}</div>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <SearchableSelect
-          label="Campeonato"
-          value={champId}
-          onChange={v => { setChampId(v); setStageId(''); setModalityId(''); setSelectedReg(null); setSearchAthlete(''); }}
-          options={(championships || []).filter(c => c && c.id).map(c => ({ value: c.id, label: c.title || 'Sem título' }))}
-        />
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-slate-500 uppercase block">Etapa</label>
-          <select value={stageId} onChange={e => { setStageId(e.target.value); setSelectedReg(null); setSearchAthlete(''); }}
-            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!champId}>
-            <option value="">Selecione...</option>
-            {champStages.map(s => <option key={s.id} value={s.id}>{s.title || `Etapa ${s.stageNum}`}</option>)}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-slate-500 uppercase block">Modalidade</label>
-          <select value={modalityId} onChange={e => { setModalityId(e.target.value); setSelectedReg(null); setSearchAthlete(''); }}
-            className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold" disabled={!stageId}>
-            <option value="">Todas as modalidades ({registrations.length})</option>
-            {champAvailableModalities.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-        </div>
-      </div>
+      {!stageId ? (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
+            <div>
+              <h4 className="font-display font-bold text-slate-900 text-sm sm:text-base">
+                Etapas Abertas para Lançamento
+              </h4>
+              <p className="text-xs text-slate-400">
+                Selecione um card para abrir as inscrições e registrar pontuações por série.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="relative w-full sm:w-64">
+                <input
+                  type="text"
+                  placeholder="Buscar campeonato ou etapa..."
+                  value={searchStageCardQuery}
+                  onChange={e => setSearchStageCardQuery(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 outline-none p-2 pl-8 pr-7 rounded-xl text-xs font-semibold text-slate-700 focus:border-blue-500 focus:bg-white"
+                />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+                {searchStageCardQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchStageCardQuery('')}
+                    className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showAllStages}
+                  onChange={e => setShowAllStages(e.target.checked)}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                <span>Exibir homologadas/finalizadas</span>
+              </label>
+            </div>
+          </div>
 
-      {loadingRegs ? (
-        <div className="py-6 text-center text-slate-400 text-xs font-semibold">Carregando inscrições...</div>
-      ) : registrations.length === 0 ? (
-        <div className="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400 font-semibold">
-          {champId && stageId ? 'Nenhuma inscrição encontrada para a etapa selecionada.' : 'Selecione o Campeonato e a Etapa acima para carregar a lista de atiradores.'}
+          {stageCards.length === 0 ? (
+            <div className="p-8 sm:p-12 bg-slate-50 border border-slate-200 rounded-2xl text-center space-y-3">
+              <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto" />
+              <h4 className="font-display font-bold text-slate-800 text-sm sm:text-base">
+                {searchStageCardQuery
+                  ? `Nenhuma etapa encontrada para "${searchStageCardQuery}"`
+                  : 'Nenhuma etapa pendente para lançamento'}
+              </h4>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                {searchStageCardQuery
+                  ? 'Verifique os termos digitados ou limpe a busca para visualizar as etapas ativas.'
+                  : 'Todas as etapas atuais já foram homologadas ou pertencem a campeonatos finalizados.'}
+              </p>
+              {searchStageCardQuery ? (
+                <button
+                  type="button"
+                  onClick={() => setSearchStageCardQuery('')}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-700 underline cursor-pointer"
+                >
+                  Limpar filtro de busca
+                </button>
+              ) : !showAllStages ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllStages(true)}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-white border border-slate-200 px-4 py-2 rounded-xl transition cursor-pointer shadow-2xs hover:bg-slate-50"
+                >
+                  Exibir todas as etapas (incluindo homologadas)
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {stageCards.map(({ stage: s, champ: c }) => {
+                const isHomologada = s.homologarResultado === 'sim';
+                const isCompleted = c.status === 'completed';
+                const numModalities = c.modalities?.length || 0;
+
+                return (
+                  <div
+                    key={s.id}
+                    onClick={() => handleSelectStageCard(c.id, s.id)}
+                    className="bg-white rounded-2xl border border-slate-200 hover:border-blue-500 hover:shadow-md transition-all p-5 flex flex-col justify-between group cursor-pointer text-left relative overflow-hidden"
+                  >
+                    <div className="space-y-3">
+                      {/* Badges row */}
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full">
+                          {s.stageNum ? `${s.stageNum}ª Etapa` : 'Etapa'}
+                        </span>
+                        {isHomologada ? (
+                          <span className="text-[9.5px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">
+                            ✓ Homologada
+                          </span>
+                        ) : isCompleted ? (
+                          <span className="text-[9.5px] font-bold uppercase bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                            Finalizado
+                          </span>
+                        ) : (
+                          <span className="text-[9.5px] font-bold uppercase bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
+                            ● Aberta para Lançamento
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Championship and Stage titles */}
+                      <div>
+                        <h4 className="font-display font-bold text-slate-900 text-sm sm:text-base group-hover:text-blue-600 transition-colors line-clamp-2">
+                          {c.title}
+                        </h4>
+                        <p className="text-xs font-semibold text-slate-600 mt-1">
+                          {s.title}
+                        </p>
+                      </div>
+
+                      {/* Metadata: Dates and Modalities */}
+                      <div className="pt-2 border-t border-slate-100 space-y-1.5 text-[11px] text-slate-500 font-mono">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>
+                            {formatDisplayDate(s.date)}
+                            {s.endDate ? ` a ${formatDisplayDate(s.endDate)}` : ''}
+                          </span>
+                        </div>
+                        {numModalities > 0 && (
+                          <div className="flex items-center gap-1.5 font-sans text-slate-500">
+                            <Trophy className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>{numModalities} modalidade{numModalities > 1 ? 's' : ''} vinculada{numModalities > 1 ? 's' : ''}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action Call to Action */}
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-blue-600 group-hover:text-blue-700">
+                      <span className="text-xs font-bold">Lançar Resultados</span>
+                      <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="space-y-2">
+          {/* Header da Etapa Ativa com Filtro de Modalidade */}
+          <div className="bg-gradient-to-r from-slate-50 to-blue-50/40 border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3">
+              <button
+                type="button"
+                onClick={handleBackToStageCards}
+                className="p-2.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-700 hover:text-slate-900 transition flex items-center gap-1.5 text-xs font-bold cursor-pointer shrink-0 shadow-2xs"
+                title="Voltar para a seleção de etapas"
+              >
+                <ArrowLeft className="w-4 h-4 text-blue-600" />
+                <span>Trocar Etapa</span>
+              </button>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] uppercase font-black tracking-wider bg-blue-600 text-white px-2.5 py-0.5 rounded-full">
+                    {currentStage?.stageNum ? `${currentStage.stageNum}ª Etapa` : 'Etapa'}
+                  </span>
+                  <h4 className="font-display font-bold text-slate-900 text-sm sm:text-base">
+                    {currentChamp?.title}
+                  </h4>
+                  {currentStage?.homologarResultado === 'sim' ? (
+                    <span className="text-[9.5px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full">
+                      Homologada
+                    </span>
+                  ) : (
+                    <span className="text-[9.5px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full">
+                      ● Aberta para Lançamento
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-600 flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-slate-800">{currentStage?.title}</span>
+                  {currentStage?.date && (
+                    <span className="font-mono text-slate-500 text-[11px]">
+                      • {formatDisplayDate(currentStage.date)}
+                      {currentStage.endDate ? ` a ${formatDisplayDate(currentStage.endDate)}` : ''}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {/* Filtro por Modalidade */}
+            <div className="w-full md:w-80 shrink-0">
+              <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                Filtrar por Modalidade
+              </label>
+              <select
+                value={modalityId}
+                onChange={e => {
+                  setModalityId(e.target.value);
+                  setSelectedReg(null);
+                  setSearchAthlete('');
+                }}
+                className="w-full bg-white border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold focus:border-blue-500 shadow-2xs"
+              >
+                <option value="">Todas as modalidades ({registrations.length})</option>
+                {champAvailableModalities.map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {loadingRegs ? (
+            <div className="py-12 flex flex-col items-center justify-center text-slate-400 space-y-2">
+              <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+              <span className="text-xs font-semibold">Carregando inscrições da etapa...</span>
+            </div>
+          ) : registrations.length === 0 ? (
+            <div className="p-8 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center space-y-2">
+              <Users className="w-8 h-8 mx-auto text-slate-300" />
+              <p className="text-xs font-semibold text-slate-600">
+                Nenhuma inscrição encontrada para esta etapa{modalityId ? ' e modalidade selecionada' : ''}.
+              </p>
+              <p className="text-[11px] text-slate-400">
+                Atletas inscritos nesta etapa aparecerão aqui para lançamento de resultados.
+              </p>
+              <div className="pt-2 flex justify-center gap-2">
+                {modalityId && (
+                  <button
+                    type="button"
+                    onClick={() => setModalityId('')}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg transition cursor-pointer"
+                  >
+                    Ver todas as modalidades
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleBackToStageCards}
+                  className="text-xs font-bold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 px-3 py-1.5 rounded-lg transition cursor-pointer"
+                >
+                  ← Escolher outra etapa
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
               <label className="text-[10px] font-bold text-slate-500 uppercase block">
                 Selecione o Atleta / Inscrição ({filteredRegs.length}{filteredRegs.length !== registrations.length ? ` de ${registrations.length}` : ''})
@@ -3870,8 +4200,10 @@ function CadastrarResultadosPanel({
               </div>
             )}
           </div>
+        </div>
+      )}
 
-          {selectedReg && (
+      {selectedReg && (
             <div
               className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
               onClick={() => setSelectedReg(null)}
