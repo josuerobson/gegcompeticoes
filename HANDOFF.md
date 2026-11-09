@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(checkin): reconhecimento facial com animacao e contagem de 3s, coordenadas GPS completas e relatorio oficial em PDF para o Exercito` |
-| Data/hora | 2026-11-09T17:05:00-03:00 |
+| Mensagem | `feat(checkin): mover menu Gerenciamento de Check-ins para Gerenciamento Clube` |
+| Data/hora | 2026-11-09T18:35:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,15 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Migração do Menu "Gerenciamento de Check-ins" para "Gerenciamento Clube" (`AdminPanel.tsx`, `CheckinsManager.tsx`)**:
+  - **Exigência**: Mover o menu de "Gerenciamento Plataforma > Gerenciamento de Check-ins" para "Gerenciamento Clube > Gerenciamento de Check-ins", para que os clubes parceiros possam acompanhar diretamente os check-ins, frequência e biometria de seus atletas no estande.
+  - **Implementação**:
+    1. **Inclusão em Menus Clube**: Adicionado `{ id: 'checkins', label: 'Gerenciamento de Check-ins', icon: Clock }` no menu lateral de `clubeMenu`.
+    2. **Roteamento de Conteúdo**: Conectado `case 'checkins': return <CheckinsManager currentUser={currentUser} clubs={clubs || []} />` em `renderClubeContent()`.
+    3. **Remoção de Plataforma**: Removido o botão de atalho em `plataformaMenu` (seção Clubes), centralizando a funcionalidade na área operacional do clube.
+    4. **Filtro por Clube e Restrição de Acesso**: Quando acessado por um gestor de clube (`club_admin`), o sistema isola automaticamente apenas os atletas e check-ins do seu respectivo estande (`currentUser.clubId`). Quando acessado por administradores master (`admin` / `master_admin`), é exibido seletor de clubes no cabeçalho dos filtros para acompanhamento consolidado ou por unidade.
+  - **O que NÃO fazer no futuro**: Não expor check-ins de outros clubes para um `club_admin` — o isolamento por `currentUser.clubId` no backend e frontend é mandatória conforme diretrizes de privacidade e LGPD.
 
 - **Reconhecimento Facial com Animação, Coordenadas GPS Completas e Relatórios para o Exército (`ClubCheckinModal.tsx`, `CheckinsManager.tsx`, `server.ts`, `src/types.ts`)**:
   - **Exigências do Usuário**:

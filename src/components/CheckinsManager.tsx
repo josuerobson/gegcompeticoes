@@ -523,6 +523,9 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
     setStartDate('');
     setEndDate('');
     setOpenOnly(false);
+    if (currentUser?.role === 'master_admin' || currentUser?.role === 'admin') {
+      setSelectedClubId('');
+    }
   };
 
   return (
@@ -535,7 +538,11 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
             Gerenciamento de Check-ins e Presenças
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Controle de fluxo de entrada e saída, tempo de permanência no estande e auditoria biométrica facial.
+            {currentUser?.role === 'club_admin' && activeClub ? (
+              <span>Controle de fluxo de entrada, saída e auditoria biométrica facial dos atletas no <strong>{activeClub.fantasyName || activeClub.name}</strong>.</span>
+            ) : (
+              <span>Controle de fluxo de entrada e saída, tempo de permanência no estande e auditoria biométrica facial.</span>
+            )}
           </p>
         </div>
 
@@ -645,7 +652,7 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 ${(currentUser?.role === 'master_admin' || currentUser?.role === 'admin') ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3 text-xs`}>
           {/* Athlete Search */}
           <div>
             <label className="block text-[11px] font-semibold text-slate-600 mb-1">Buscar Atleta</label>
@@ -660,6 +667,25 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
               />
             </div>
           </div>
+
+          {/* Club Filter (Master / Admin only) */}
+          {(currentUser?.role === 'master_admin' || currentUser?.role === 'admin') && (
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Clube / Estande</label>
+              <select
+                value={selectedClubId}
+                onChange={(e) => setSelectedClubId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:bg-white focus:border-blue-500 outline-none transition"
+              >
+                <option value="">Todos os Clubes</option>
+                {clubs.slice().sort((a, b) => a.name.localeCompare(b.name)).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.fantasyName || c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Start Date */}
           <div>

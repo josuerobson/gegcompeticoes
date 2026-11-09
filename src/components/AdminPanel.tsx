@@ -11918,6 +11918,9 @@ export default function AdminPanel({
         );
 
 
+      case 'checkins':
+        return <CheckinsManager currentUser={currentUser} clubs={clubs || []} />;
+
       case 'relatorios_declaracoes':
         return (
           <ClubReportsViewer
@@ -16062,6 +16065,7 @@ export default function AdminPanel({
                 { id: 'inscricao_clube', label: 'Inscrição Clube', icon: FileCheck },
                 { id: 'certificados', label: 'Certificados', icon: Award },
                 { id: 'cadastrar_membros', label: 'Cadastrar Membros', icon: UserPlus },
+                { id: 'checkins', label: 'Gerenciamento de Check-ins', icon: Clock },
                 { id: 'relatorios_declaracoes', label: 'Relatórios e Declarações', icon: FileText }
               ].map((item) => {
                 const Icon = item.icon;
@@ -16103,7 +16107,6 @@ export default function AdminPanel({
                     <button onClick={() => setPlataformaMenu('relatorio_financeiro')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'relatorio_financeiro' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Relatorio Financeiro</button>
                     <button onClick={() => setPlataformaMenu('financeiro_franquia')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'financeiro_franquia' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Financeiro da Franquia</button>
                     <button onClick={() => setPlataformaMenu('anuidades')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'anuidades' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Anuidades</button>
-                    <button onClick={() => setPlataformaMenu('checkins')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'checkins' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Gerenciamento de Check-ins</button>
                   </div>
                 )}
               </div>

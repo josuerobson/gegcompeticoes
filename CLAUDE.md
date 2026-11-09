@@ -38,7 +38,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Painel Diretor module status (as of 2026-11-09)
 
 Real (backed by actual DB tables/endpoints, tested end-to-end):
-- **Gerenciamento Clube > Check-ins no Estande, Reconhecimento Facial e Relatórios para Exército (`ClubCheckinModal.tsx`, `CheckinsManager.tsx`, `server.ts`, `src/types.ts`)** — controle eletrônico de acesso e presença no estande com biometria e auditoria SFPC / EB:
+- **Gerenciamento Clube > Gerenciamento de Check-ins, Reconhecimento Facial e Relatórios para Exército (`AdminPanel.tsx`, `ClubCheckinModal.tsx`, `CheckinsManager.tsx`, `server.ts`, `src/types.ts`)** — controle eletrônico de acesso e presença no estande integrado aos Menus Clube (permitindo aos clubes acompanhar o fluxo e biometria de seus atletas) e auditoria SFPC / EB:
+  - **Acesso pelo Clube e Filtros**: movido de Gerenciamento Plataforma para Gerenciamento Clube. Usuários de clubes visualizam automaticamente os check-ins de seu estande, enquanto master admins dispõem de seletor por clube para análise consolidada.
   - **Reconhecimento Facial com Animação e Contagem**: botão atualizado para "Iniciar reconhecimento facial", acionando mira biométrica com brackets nos 4 cantos, linha laser vertical de escaneamento, efeito glow na moldura oval e contagem regressiva de 3 segundos ("Aguardando posicionamento correto da cabeça... (Xs)") com captura e validação automáticas ao zerar o timer.
   - **Estampa de Segurança na Imagem**: gravação indelével no rodapé da selfie com Nome, CPF, Data, Hora e Coordenadas GPS exatas no momento do disparo.
   - **Coordenadas GPS Completas**: visualização de latitude e longitude formatadas (com link "Ver no Mapa"), precisão do sinal em metros e distância do estande tanto na tabela quanto no modal de zoom da foto do atleta em `CheckinsManager.tsx`.
