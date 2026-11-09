@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(checkin): mover menu Gerenciamento de Check-ins para Gerenciamento Clube` |
-| Data/hora | 2026-11-09T18:35:00-03:00 |
+| Mensagem | `fix(checkin): popup responsivo com scroll vertical, fechamento por ESC e clique no backdrop` |
+| Data/hora | 2026-11-09T18:40:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,17 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Correção de Dimensões e Fechamento por ESC do Popup de Check-in (`CheckinsManager.tsx`)**:
+  - **Problema Relatado pelo Usuário**: Ao clicar na foto do check-in, abria um popup que estourava a altura da tela (especialmente em telas de notebooks comuns com 768px de altura), cortando o cabeçalho e impedindo visualizar o botão de fechar (obrigando o usuário a reduzir o zoom do navegador para 67% ou 50% para conseguir fechar), além de não responder à tecla `ESC`.
+  - **Causa Raiz**: O modal utilizava `max-w-sm` com `aspect-square` sem qualquer restrição de altura vertical (`max-h`), empurrando os blocos de geolocalização GPS e dados do atirador para além dos 850px de altura. Também não havia event listener de `keydown` para a tecla `Escape`, nem evento de clique na área escura (backdrop) para fechar.
+  - **Solução Implementada**:
+    1. **Contenção Vertical Responsiva**: Aplicado `max-h-[92vh]` e `overflow-hidden flex flex-col` no container do modal, com `my-auto` dentro do container com `overflow-y-auto`.
+    2. **Cabeçalho Fixo (Sticky Header)**: O cabeçalho com nome do atleta e botão `X` agora tem `shrink-0`, permanecendo sempre fixo e 100% visível e clicável no topo em qualquer resolução ou nível de zoom.
+    3. **Corpo com Rolagem Suave**: Todo o conteúdo interno (foto contida com `max-h-72 object-contain`, coordenadas GPS, dados de auditoria do Exército e botão de impressão de PDF) agora fica dentro de uma área com rolagem vertical natural (`overflow-y-auto flex-1`).
+    4. **Fechamento por Tecla ESC**: Adicionado `useEffect` global capturando a tecla `Escape` (`e.key === 'Escape'`) para fechar instantaneamente o modal de foto ou o modal de checkout.
+    5. **Fechamento ao Clicar Fora**: Clicar em qualquer ponto da área escura de fundo (backdrop) fecha o modal imediatamente (`e.stopPropagation()` no card impede fechamento indevido ao clicar nos dados).
+  - **O que NÃO fazer no futuro**: Nunca renderizar modais com conteúdo vertical longo sem `max-h` relativo à viewport (`vh`) e rolagem interna (`overflow-y-auto`).
 
 - **Migração do Menu "Gerenciamento de Check-ins" para "Gerenciamento Clube" (`AdminPanel.tsx`, `CheckinsManager.tsx`)**:
   - **Exigência**: Mover o menu de "Gerenciamento Plataforma > Gerenciamento de Check-ins" para "Gerenciamento Clube > Gerenciamento de Check-ins", para que os clubes parceiros possam acompanhar diretamente os check-ins, frequência e biometria de seus atletas no estande.
