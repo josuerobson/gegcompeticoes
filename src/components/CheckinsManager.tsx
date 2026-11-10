@@ -209,7 +209,7 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
               <div>
                 <h1 class="title">LIVRO ELETRÔNICO DE ENTRADA, SAÍDA E BIOMETRIA FACIAL</h1>
-                <p class="subtitle">Relatório Oficial de Controle de Acesso e Presença no Estande de Tiro — Portaria COLOG / Exército Brasileiro</p>
+                <p class="subtitle">Relatório Oficial de Controle de Acesso e Presença no Estande de Tiro — DECRETO Nº 12.345, DE 30 DE DEZEMBRO DE 2024, Art. 38, § 5º  Inciso III</p>
                 <div style="font-size: 9.5px; color: #1e293b; line-height: 1.35;">
                   <strong>Nome do Estande/Clube:</strong> ${clubName} &nbsp;|&nbsp; <strong>CNPJ:</strong> ${clubCnpj} &nbsp;|&nbsp; <strong>CR do Clube:</strong> ${clubCr}<br/>
                   <strong>Endereço:</strong> ${clubAddress}
@@ -321,7 +321,7 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
         <body>
           <div class="cert-box">
             <h1 class="title">COMPROVANTE INDIVIDUAL DE PRESENÇA NO ESTANDE</h1>
-            <p class="subtitle">Auditoria de Acesso e Reconhecimento Facial — Portaria COLOG / Exército Brasileiro</p>
+            <p class="subtitle">Auditoria de Acesso e Reconhecimento Facial — DECRETO Nº 12.345, DE 30 DE DEZEMBRO DE 2024, Art. 38, § 5º  Inciso III</p>
 
             <div class="grid-2">
               <div class="photo-box">

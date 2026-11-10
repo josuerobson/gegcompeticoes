@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(checkin): bloquear check-in sem geolocalizacao gps para validade perante o exercito` |
-| Data/hora | 2026-11-10T09:17:00-03:00 |
+| Mensagem | `fix(checkin): atualizar fundamentacao legal nos relatorios para Decreto 12.345/2024 art 38` |
+| Data/hora | 2026-11-10T10:18:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,14 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Atualização da Fundamentação Legal nos Relatórios Oficiais de Check-in (`CheckinsManager.tsx`)**:
+  - **Solicitação do Usuário**: Substituir nos relatórios oficiais de check-in (Livro Eletrônico e Comprovante Individual) o texto `"Portaria COLOG / Exército Brasileiro"` por `"DECRETO Nº 12.345, DE 30 DE DEZEMBRO DE 2024, Art. 38, § 5º  Inciso III"`.
+  - **Contexto Legal**: O Decreto nº 12.345/2024, Art. 38, § 5º, inciso III regulamenta os requisitos de controle de acesso, frequência e registro biométrico/eletrônico em entidades e estandes de tiro desportivo.
+  - **Onde foi atualizado**:
+    1. No cabeçalho do PDF do **Livro Eletrônico de Entrada, Saída e Biometria Facial**: `<p class="subtitle">Relatório Oficial de Controle de Acesso e Presença no Estande de Tiro — DECRETO Nº 12.345, DE 30 DE DEZEMBRO DE 2024, Art. 38, § 5º  Inciso III</p>`.
+    2. No cabeçalho do PDF do **Comprovante Individual de Presença no Estande**: `<p class="subtitle">Auditoria de Acesso e Reconhecimento Facial — DECRETO Nº 12.345, DE 30 DE DEZEMBRO DE 2024, Art. 38, § 5º  Inciso III</p>`.
+  - **O que NÃO fazer no futuro**: Não reverter o subtítulo para "Portaria COLOG" nos relatórios de controle de acesso/check-ins.
 
 - **Obrigatoriedade e Bloqueio de Check-in sem Geolocalização GPS (`server.ts`, `ClubCheckinModal.tsx`)**:
   - **Problema Relatado pelo Usuário**: "Para dar o check-in e ter validade junto ao exercito tem que ter a geolocalização, se não conseguir carregar a geolocalização não segue com o check-in".
