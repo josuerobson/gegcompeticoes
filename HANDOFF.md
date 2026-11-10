@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(checkin): exibir Nome do Estande/Clube oficial na foto, modal e listagens` |
-| Data/hora | 2026-11-09T21:30:00-03:00 |
+| Mensagem | `feat(checkin): bloquear check-in sem geolocalizacao gps para validade perante o exercito` |
+| Data/hora | 2026-11-10T09:17:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,20 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Obrigatoriedade e Bloqueio de Check-in sem Geolocalização GPS (`server.ts`, `ClubCheckinModal.tsx`)**:
+  - **Problema Relatado pelo Usuário**: "Para dar o check-in e ter validade junto ao exercito tem que ter a geolocalização, se não conseguir carregar a geolocalização não segue com o check-in".
+  - **Causa/Requisito Legal**: Conforme Portarias COLOG e Decreto nº 11.615/2023, a habitualidade e o controle de acesso de atiradores desportivos exigem comprovação técnica pericial de presença física no estande mediante coordenadas geográficas de satélite (GPS). Se um check-in fosse emitido sem geolocalização, perderia a validade probatória perante o Exército Brasileiro (SFPC).
+  - **Solução Implementada**:
+    1. **Bloqueio no Backend (`server.ts`)**: Em `POST /api/checkins`, latitude e longitude agora são parâmetros obrigatórios e validados rigorosamente. Se forem nulos, vazios ou não numéricos, a API aborta com HTTP 400 informando: *"Geolocalização obrigatória: As coordenadas GPS do estande são exigidas para validade jurídica e comprovação perante o Exército Brasileiro. Não é permitido efetuar check-in sem sinal de localização."*
+    2. **Algoritmo de GPS Resiliente (`ClubCheckinModal.tsx`)**: `requestLocation()` inicia a busca com alta precisão (`enableHighAccuracy: true`, satélite direto). Se houver lentidão ou falha de visada, faz fallback automático para precisão padrão (redes de celular / Wi-Fi), maximizando o sucesso de localização em estandes fechados ou galpões sem violar a regra de geolocalização.
+    3. **Bloqueio no Frontend antes do Reconhecimento Facial**: `startFacialRecognition()` impede o início do escaneamento e o timer de 3s se `gpsStatus !== 'ready'` ou se as coordenadas não estiverem carregadas, emitindo alerta descritivo.
+    4. **Estado Dinâmico dos Botões de Ação**:
+       - Enquanto o GPS está sendo capturado (`gpsStatus === 'locating'`), o botão principal é desabilitado e exibe: *"Obtendo geolocalização GPS (obrigatório para o Exército)..."* com spinner.
+       - Se o sinal falhar ou a permissão for negada (`gpsStatus === 'error'`), o botão principal é substituído por um botão de ação âmbar: *"Ativar GPS Obrigatório para Iniciar"* que chama `requestLocation()`.
+       - O botão verde *"Iniciar reconhecimento facial"* só se torna interativo após o GPS estar ativo e com coordenadas confirmadas.
+       - Na tela de confirmação após a captura, o botão *"Confirmar Check-in"* também é bloqueado caso as coordenadas não estejam presentes.
+  - **O que NÃO fazer no futuro**: Nunca permitir o envio de check-in com latitude/longitude nulos ou fictícios, e nunca desabilitar a trava de geolocalização no modal.
 
 - **Exibição do "Nome do estande/Clube" Oficial na Foto e Dados de Check-in (`ClubCheckinModal.tsx`, `CheckinsManager.tsx`, `server.ts`)**:
   - **Problema Relatado pelo Usuário**: No popup e nos relatórios de check-in, o sistema estava exibindo o "Nome Fantasia" (`club.fantasyName`, ex: "G&G Competições") em vez do "Nome do estande/Clube" (`club.name`, ex: "Clube de Tiro e Caça Aranãs"), além de não conter o nome do estande/clube estampado diretamente na foto para auditoria do Exército Brasileiro.

@@ -81,6 +81,7 @@ export default function ClubCheckinModal({
         const { latitude, longitude, accuracy } = pos.coords;
         setCoords({ latitude, longitude, accuracy });
         setGpsStatus('ready');
+        setGpsError('');
 
         if (club?.latitude != null && club?.longitude != null) {
           const dist = calculateDistance(latitude, longitude, Number(club.latitude), Number(club.longitude));
@@ -93,18 +94,43 @@ export default function ClubCheckinModal({
         }
       },
       (err) => {
-        console.warn('Geolocation error:', err);
-        setGpsStatus('error');
-        if (err.code === err.PERMISSION_DENIED) {
-          setGpsError('Permissão de GPS negada. Por favor, autorize a localização nas permissões do navegador.');
-        } else {
-          setGpsError('Não foi possível obter a localização exata do GPS.');
-        }
+        console.warn('Geolocation high accuracy error, trying standard accuracy fallback:', err);
+        // Fallback para precisão normal se GPS de alta precisão demorar ou falhar
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude, longitude, accuracy } = pos.coords;
+            setCoords({ latitude, longitude, accuracy });
+            setGpsStatus('ready');
+            setGpsError('');
+
+            if (club?.latitude != null && club?.longitude != null) {
+              const dist = calculateDistance(latitude, longitude, Number(club.latitude), Number(club.longitude));
+              setDistanceMeters(dist);
+              const maxRadius = club.checkinRadiusMeters || 500;
+              setIsWithinRadius(dist <= maxRadius);
+            } else {
+              setDistanceMeters(null);
+              setIsWithinRadius(true);
+            }
+          },
+          (secondErr) => {
+            console.warn('Geolocation fallback error:', secondErr);
+            setGpsStatus('error');
+            if (secondErr.code === secondErr.PERMISSION_DENIED || err.code === err.PERMISSION_DENIED) {
+              setGpsError('Permissão de GPS negada. É obrigatório autorizar a localização nas permissões do navegador para que o check-in tenha validade junto ao Exército.');
+            } else if (secondErr.code === secondErr.TIMEOUT || err.code === err.TIMEOUT) {
+              setGpsError('Tempo esgotado ao buscar GPS. Verifique se a localização do aparelho está ativada.');
+            } else {
+              setGpsError('Não foi possível obter o sinal de geolocalização. O GPS é obrigatório para comprovação perante o Exército.');
+            }
+          },
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 }
+        );
       },
       {
         enableHighAccuracy: true,
-        timeout: 12000,
-        maximumAge: 0,
+        timeout: 10000,
+        maximumAge: 10000,
       }
     );
   };
@@ -261,14 +287,20 @@ export default function ClubCheckinModal({
 
   // Envio do Checkin
   const submitCheckinWithPhoto = async (photoToSend: string) => {
+    if (!coords || coords.latitude == null || coords.longitude == null) {
+      setSubmitError('Para ter validade junto ao Exército Brasileiro é obrigatório carregar a geolocalização. Não é possível concluir o check-in sem o sinal de GPS.');
+      setSubmitting(false);
+      return;
+    }
+
     setSubmitting(true);
     setSubmitError('');
 
     try {
       const payload = {
-        latitude: coords?.latitude ?? null,
-        longitude: coords?.longitude ?? null,
-        accuracy: coords?.accuracy ?? null,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy ?? null,
         photo: photoToSend,
         clubId: club?.id || currentUser?.clubId,
       };
@@ -300,6 +332,10 @@ export default function ClubCheckinModal({
   };
 
   const handleSubmitCheckin = async () => {
+    if (!coords || coords.latitude == null || coords.longitude == null) {
+      setSubmitError('A geolocalização é obrigatória para validade do check-in junto ao Exército Brasileiro.');
+      return;
+    }
     if (!capturedPhoto) {
       setSubmitError('Por favor, realize o reconhecimento facial antes de confirmar.');
       return;
@@ -309,6 +345,10 @@ export default function ClubCheckinModal({
 
   // Iniciar sequência de 3 segundos para reconhecimento facial
   const startFacialRecognition = () => {
+    if (!coords || coords.latitude == null || coords.longitude == null || gpsStatus !== 'ready') {
+      setSubmitError('Para ter validade junto ao Exército Brasileiro, é obrigatório obter a geolocalização (GPS) antes de iniciar o reconhecimento facial.');
+      return;
+    }
     if (!cameraActive || isScanning || submitting) return;
     setIsScanning(true);
     setScanCountdown(3);
@@ -457,22 +497,42 @@ export default function ClubCheckinModal({
             ) : (
               /* Capture Screen */
               <div className="space-y-3.5">
-                {/* 1. Geolocation Status Pill */}
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-start gap-2.5">
-                  <div className="p-1.5 rounded-lg bg-emerald-100 text-emerald-700 shrink-0 mt-0.5">
+                {/* 1. Geolocation Status Pill (Obrigatório para o Exército Brasileiro) */}
+                <div className={`border rounded-xl p-3 flex items-start gap-2.5 transition ${
+                  gpsStatus === 'ready'
+                    ? 'bg-slate-50 border-slate-200'
+                    : gpsStatus === 'locating'
+                    ? 'bg-amber-50/80 border-amber-300'
+                    : 'bg-red-50 border-red-300'
+                }`}>
+                  <div className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${
+                    gpsStatus === 'ready'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : gpsStatus === 'locating'
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-red-100 text-red-700'
+                  }`}>
                     <Navigation className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-800 text-[11px]">Geolocalização no Estande</span>
+                      <span className="font-bold text-slate-800 text-[11px] flex items-center gap-1">
+                        Geolocalização no Estande
+                        <span className="text-[9px] font-normal text-slate-500 hidden sm:inline">(Exigência Exército)</span>
+                      </span>
                       {gpsStatus === 'ready' && (
-                        <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                           GPS Ativo (±{Math.round(coords?.accuracy || 0)}m)
                         </span>
                       )}
                       {gpsStatus === 'locating' && (
-                        <span className="text-[10px] text-amber-600 font-semibold flex items-center gap-1">
-                          <Loader2 className="w-3 h-3 animate-spin" /> Buscando sinal...
+                        <span className="text-[10px] text-amber-700 font-semibold flex items-center gap-1 bg-amber-100/70 px-2 py-0.5 rounded-full border border-amber-200">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Buscando GPS...
+                        </span>
+                      )}
+                      {gpsStatus === 'error' && (
+                        <span className="text-[10px] text-red-700 font-semibold bg-red-100/70 px-2 py-0.5 rounded-full border border-red-200">
+                          GPS Não Detectado
                         </span>
                       )}
                     </div>
@@ -488,17 +548,22 @@ export default function ClubCheckinModal({
                           : `⚠️ Você está a ${distanceMeters} metros do clube (raio padrão: ${club?.checkinRadiusMeters || 500}m).`}
                       </p>
                     ) : coords ? (
-                      <p className="text-[10px] text-slate-500 mt-0.5">
-                        Coordenadas capturadas: {coords.latitude.toFixed(5)}, {coords.longitude.toFixed(5)}
+                      <p className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                        Coordenadas: {coords.latitude.toFixed(5)}, {coords.longitude.toFixed(5)}
                       </p>
-                    ) : null}
+                    ) : (
+                      <p className="text-[10px] text-amber-800 mt-0.5 font-medium">
+                        O sinal de satélite é obrigatório. Aguarde a captura para liberar o check-in.
+                      </p>
+                    )}
 
                     {gpsError && (
-                      <div className="mt-1 text-[11px] text-red-600 flex items-center justify-between">
-                        <span>{gpsError}</span>
+                      <div className="mt-1.5 p-2 bg-white/90 rounded-lg border border-red-200 text-[11px] text-red-700 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                        <span className="leading-tight">⚠️ {gpsError}</span>
                         <button
+                          type="button"
                           onClick={requestLocation}
-                          className="text-emerald-700 underline font-bold cursor-pointer text-[10px] ml-1"
+                          className="text-blue-700 hover:text-blue-900 underline font-bold cursor-pointer text-[10px] shrink-0"
                         >
                           Tentar novamente
                         </button>
@@ -623,28 +688,48 @@ export default function ClubCheckinModal({
                 {/* Actions */}
                 <div className="pt-1">
                   {!capturedPhoto ? (
-                    <button
-                      onClick={startFacialRecognition}
-                      disabled={!cameraActive || isScanning || submitting}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white py-3 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 cursor-pointer"
-                    >
-                      {isScanning ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Escaneando posicionamento facial... ({scanCountdown}s)
-                        </>
-                      ) : submitting ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Validando Reconhecimento Facial...
-                        </>
-                      ) : (
-                        <>
-                          <ScanFace className="w-4 h-4" />
-                          Iniciar reconhecimento facial
-                        </>
-                      )}
-                    </button>
+                    gpsStatus === 'error' ? (
+                      <button
+                        type="button"
+                        onClick={requestLocation}
+                        className="w-full bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-amber-600/20 cursor-pointer"
+                      >
+                        <Navigation className="w-4 h-4" />
+                        Ativar GPS Obrigatório para Iniciar
+                      </button>
+                    ) : gpsStatus === 'locating' ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="w-full bg-slate-200 text-slate-500 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-not-allowed border border-slate-300"
+                      >
+                        <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
+                        Obtendo geolocalização GPS (obrigatório para o Exército)...
+                      </button>
+                    ) : (
+                      <button
+                        onClick={startFacialRecognition}
+                        disabled={!cameraActive || isScanning || submitting || gpsStatus !== 'ready' || !coords}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white py-3 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 cursor-pointer"
+                      >
+                        {isScanning ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Escaneando posicionamento facial... ({scanCountdown}s)
+                          </>
+                        ) : submitting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Validando Reconhecimento Facial...
+                          </>
+                        ) : (
+                          <>
+                            <ScanFace className="w-4 h-4" />
+                            Iniciar reconhecimento facial
+                          </>
+                        )}
+                      </button>
+                    )
                   ) : (
                     <div className="flex gap-2">
                       <button
@@ -657,7 +742,7 @@ export default function ClubCheckinModal({
                       </button>
                       <button
                         onClick={handleSubmitCheckin}
-                        disabled={submitting}
+                        disabled={submitting || gpsStatus !== 'ready' || !coords}
                         className="flex-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white py-3 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 cursor-pointer"
                       >
                         {submitting ? (

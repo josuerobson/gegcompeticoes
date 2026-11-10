@@ -8272,6 +8272,12 @@ app.post('/api/checkins', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Foto de identificação facial é obrigatória.' });
   }
 
+  if (latitude == null || longitude == null || isNaN(Number(latitude)) || isNaN(Number(longitude))) {
+    return res.status(400).json({
+      error: 'Geolocalização obrigatória: As coordenadas GPS do estande são exigidas para validade jurídica e comprovação perante o Exército Brasileiro. Não é permitido efetuar check-in sem sinal de localização.'
+    });
+  }
+
   try {
     let targetClubId = clubId || currentUser.clubId;
     if (!targetClubId) {
