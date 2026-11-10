@@ -213,28 +213,34 @@ export default function ClubCheckinModal({
     ctx.restore();
 
     // Faixa inferior de auditoria biométrica (Exército / SFPC)
-    const barHeight = Math.round(size * 0.15);
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.90)';
+    const barHeight = Math.round(size * 0.18);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
     ctx.fillRect(0, size - barHeight, size, barHeight);
 
     // Linha de realce verde esmeralda
     ctx.fillStyle = '#10b981';
     ctx.fillRect(0, size - barHeight, size, Math.max(2, Math.round(size * 0.007)));
 
-    // Linha 1: Atleta e CPF
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `bold ${Math.max(11, Math.round(size * 0.028))}px sans-serif`;
-    const athleteLabel = `${currentUser?.fullName || 'Atleta'} • CPF: ${currentUser?.cpf || '—'}`;
-    ctx.fillText(athleteLabel, 10, size - barHeight + Math.round(barHeight * 0.38));
+    // Linha 1: Nome do Estande / Clube Oficial
+    const clubDisplayName = club?.name || club?.fantasyName || 'Clube de Tiro';
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = `bold ${Math.max(10, Math.round(size * 0.025))}px sans-serif`;
+    ctx.fillText(`Estande/Clube: ${clubDisplayName}`, 10, size - barHeight + Math.round(barHeight * 0.28));
 
-    // Linha 2: Data, Hora e Coordenadas GPS Exatas
+    // Linha 2: Atleta e CPF
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${Math.max(10.5, Math.round(size * 0.026))}px sans-serif`;
+    const athleteLabel = `${currentUser?.fullName || 'Atleta'} • CPF: ${currentUser?.cpf || '—'}`;
+    ctx.fillText(athleteLabel, 10, size - barHeight + Math.round(barHeight * 0.58));
+
+    // Linha 3: Data, Hora e Coordenadas GPS Exatas
     ctx.fillStyle = '#a7f3d0';
-    ctx.font = `${Math.max(10, Math.round(size * 0.023))}px monospace`;
+    ctx.font = `${Math.max(9.5, Math.round(size * 0.022))}px monospace`;
     const nowStr = new Date().toLocaleString('pt-BR');
     const coordsStr = coords?.latitude != null && coords?.longitude != null
       ? `GPS: ${Number(coords.latitude).toFixed(5)}, ${Number(coords.longitude).toFixed(5)} (±${coords.accuracy ? Math.round(coords.accuracy) : 0}m)`
       : 'GPS: Registrado no sistema';
-    ctx.fillText(`${nowStr} | ${coordsStr}`, 10, size - barHeight + Math.round(barHeight * 0.78));
+    ctx.fillText(`${nowStr} | ${coordsStr}`, 10, size - barHeight + Math.round(barHeight * 0.86));
 
     // Compress to 480x480 jpeg
     const dataUrl = canvas.toDataURL('image/jpeg', 0.84);
@@ -327,7 +333,7 @@ export default function ClubCheckinModal({
     }, 1000);
   };
 
-  const clubDisplayName = club?.fantasyName || club?.name || 'Clube de Tiro';
+  const clubDisplayName = club?.name || club?.fantasyName || 'Clube de Tiro';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-sm animate-in fade-in duration-200">
@@ -401,7 +407,7 @@ export default function ClubCheckinModal({
                     <span className="font-bold text-slate-800">{currentUser?.fullName}</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
-                    <span className="text-slate-500 font-medium">Clube:</span>
+                    <span className="text-slate-500 font-medium">Nome do estande/Clube:</span>
                     <span className="font-bold text-emerald-800">{successCheckin.clubName || clubDisplayName}</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
@@ -721,7 +727,7 @@ export default function ClubCheckinModal({
                         )}
                         <div className="min-w-0">
                           <p className="font-bold text-slate-800 text-xs truncate">
-                            {chk.clubName || 'Clube de Tiro'}
+                            {chk.clubName || clubDisplayName}
                           </p>
                           <p className="text-[10px] text-slate-500 font-mono">
                             {new Date(chk.checkinAt).toLocaleString('pt-BR')}

@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(checkin): popup responsivo com scroll vertical, fechamento por ESC e clique no backdrop` |
-| Data/hora | 2026-11-09T18:40:00-03:00 |
+| Mensagem | `fix(checkin): exibir Nome do Estande/Clube oficial na foto, modal e listagens` |
+| Data/hora | 2026-11-09T21:30:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,15 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Exibição do "Nome do estande/Clube" Oficial na Foto e Dados de Check-in (`ClubCheckinModal.tsx`, `CheckinsManager.tsx`, `server.ts`)**:
+  - **Problema Relatado pelo Usuário**: No popup e nos relatórios de check-in, o sistema estava exibindo o "Nome Fantasia" (`club.fantasyName`, ex: "G&G Competições") em vez do "Nome do estande/Clube" (`club.name`, ex: "Clube de Tiro e Caça Aranãs"), além de não conter o nome do estande/clube estampado diretamente na foto para auditoria do Exército Brasileiro.
+  - **Solução Implementada**:
+    1. **Estampa na Foto**: Na barra inferior de auditoria gravada na foto no momento da captura facial, adicionada a linha oficial: `Estande/Clube: ${clubDisplayName}`, priorizando estritamente `club.name`.
+    2. **Modal de Detalhes da Foto**: O rótulo foi alterado de `"Clube:"` para `"Nome do estande/Clube:"` e o valor foi alinhado para exibir prioritariamente `photoModalTarget.clubName || activeClub?.name`. Foi adicionado também um badge visual sobre a foto indicando `🏛️ {Nome do estande/Clube}`.
+    3. **Backend e Queries SQL**: Em `POST /api/checkins` e `GET /api/checkins`, a query foi ajustada com `COALESCE(NULLIF(cl.name, ''), cl.fantasy_name, 'Clube de Tiro') as club_name` e `LEFT JOIN clubs cl ON cl.id = COALESCE(c.club_id, u.club_id)`, garantindo que o nome do clube vinculado ao atleta ou estande seja sempre o oficial da entidade.
+    4. **Listagem e Relatórios Oficiais**: Na tabela de gerenciamento de check-ins, a coluna foi atualizada para `"Nome do estande/Clube"`, assim como nos cabeçalhos dos relatórios em PDF do SFPC/Exército e planilhas CSV.
+  - **O que NÃO fazer no futuro**: Nunca dar prioridade ao `fantasyName` sobre o `name` (`Nome do Estande/Clube`) em telas e comprovantes que exijam a razão social/identificação oficial do estande.
 
 - **Correção de Dimensões e Fechamento por ESC do Popup de Check-in (`CheckinsManager.tsx`)**:
   - **Problema Relatado pelo Usuário**: Ao clicar na foto do check-in, abria um popup que estourava a altura da tela (especialmente em telas de notebooks comuns com 768px de altura), cortando o cabeçalho e impedindo visualizar o botão de fechar (obrigando o usuário a reduzir o zoom do navegador para 67% ou 50% para conseguir fechar), além de não responder à tecla `ESC`.

@@ -8289,7 +8289,7 @@ app.post('/api/checkins', requireAuth, async (req, res) => {
       const clubRes = await pool.query(`SELECT id, name, fantasy_name, latitude, longitude, checkin_radius_meters FROM clubs WHERE id = $1`, [targetClubId]);
       if (clubRes.rows.length > 0) {
         const c = clubRes.rows[0];
-        clubName = c.fantasy_name || c.name;
+        clubName = c.name || c.fantasy_name || 'Clube de Tiro';
         if (c.latitude != null && c.longitude != null && latitude != null && longitude != null) {
           distanceMeters = calculateHaversineDistance(
             Number(latitude),
@@ -8556,9 +8556,9 @@ app.get('/api/members/:userId/recent-checkins', requireAdmin, async (req, res) =
 
   try {
     let query = `
-      SELECT c.*, cl.name as club_name, cl.fantasy_name as club_fantasy
+      SELECT c.*, COALESCE(NULLIF(cl.name, ''), cl.fantasy_name, 'Clube de Tiro') as club_name, cl.fantasy_name as club_fantasy
       FROM club_checkins c
-      LEFT JOIN clubs cl ON cl.id = c.club_id
+      LEFT JOIN clubs cl ON cl.id = COALESCE(c.club_id, (SELECT club_id FROM users WHERE id = c.user_id))
       WHERE c.user_id = $1
     `;
     const params: any[] = [userId];
@@ -8727,10 +8727,12 @@ app.get('/api/checkins', requireAuth, async (req, res) => {
     let query = `
       SELECT c.*, u.full_name as athlete_name, u.cpf as athlete_cpf, u.cr_number as athlete_cr,
              u.avatar_url as athlete_avatar, u.phone as athlete_phone, u.email as athlete_email,
-             cl.name as club_name, cl.fantasy_name as club_fantasy, cl.cnpj as club_cnpj, cl.cr_number as club_cr, cl.city as club_city, cl.state as club_state
+             COALESCE(NULLIF(cl.name, ''), cl.fantasy_name, 'Clube de Tiro') as club_name,
+             cl.name as club_official_name,
+             cl.fantasy_name as club_fantasy, cl.cnpj as club_cnpj, cl.cr_number as club_cr, cl.city as club_city, cl.state as club_state
       FROM club_checkins c
       LEFT JOIN users u ON u.id = c.user_id
-      LEFT JOIN clubs cl ON cl.id = c.club_id
+      LEFT JOIN clubs cl ON cl.id = COALESCE(c.club_id, u.club_id)
     `;
     const params: any[] = [];
     const conditions: string[] = [];

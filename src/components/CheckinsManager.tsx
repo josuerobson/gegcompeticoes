@@ -80,7 +80,7 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
       c.athleteName || '',
       c.athleteCpf || '',
       c.athleteCr || '',
-      c.clubName || activeClub?.fantasyName || activeClub?.name || '',
+      c.clubName || activeClub?.name || activeClub?.fantasyName || '',
       new Date(c.checkinAt).toLocaleDateString('pt-BR'),
       new Date(c.checkinAt).toLocaleTimeString('pt-BR'),
       c.checkoutAt ? new Date(c.checkoutAt).toLocaleDateString('pt-BR') : 'No Estande',
@@ -121,7 +121,7 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
     setExportingPdf(true);
     try {
       const nowStr = new Date().toLocaleString('pt-BR');
-      const clubName = activeClub?.fantasyName || activeClub?.name || 'Clube de Tiro e Caça';
+      const clubName = activeClub?.name || activeClub?.fantasyName || 'Clube de Tiro e Caça';
       const clubCnpj = activeClub?.cnpj || '—';
       const clubCr = activeClub?.crNumber || '—';
       const clubAddress = [activeClub?.address, activeClub?.addressNumber, activeClub?.city, activeClub?.state].filter(Boolean).join(', ') || 'Endereço da sede do estande';
@@ -211,7 +211,7 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
                 <h1 class="title">LIVRO ELETRÔNICO DE ENTRADA, SAÍDA E BIOMETRIA FACIAL</h1>
                 <p class="subtitle">Relatório Oficial de Controle de Acesso e Presença no Estande de Tiro — Portaria COLOG / Exército Brasileiro</p>
                 <div style="font-size: 9.5px; color: #1e293b; line-height: 1.35;">
-                  <strong>Clube / Estande:</strong> ${clubName} &nbsp;|&nbsp; <strong>CNPJ:</strong> ${clubCnpj} &nbsp;|&nbsp; <strong>CR do Clube:</strong> ${clubCr}<br/>
+                  <strong>Nome do Estande/Clube:</strong> ${clubName} &nbsp;|&nbsp; <strong>CNPJ:</strong> ${clubCnpj} &nbsp;|&nbsp; <strong>CR do Clube:</strong> ${clubCr}<br/>
                   <strong>Endereço:</strong> ${clubAddress}
                 </div>
               </div>
@@ -286,7 +286,7 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
   const exportSingleCheckinPdf = async (chk: ClubCheckin) => {
     try {
       const nowStr = new Date().toLocaleString('pt-BR');
-      const clubName = chk.clubName || activeClub?.fantasyName || activeClub?.name || 'Clube de Tiro e Caça';
+      const clubName = chk.clubName || activeClub?.name || activeClub?.fantasyName || 'Clube de Tiro e Caça';
       const clubCnpj = chk.clubCnpj || activeClub?.cnpj || '—';
       const clubCr = chk.clubCr || activeClub?.crNumber || '—';
       const entrance = new Date(chk.checkinAt);
@@ -332,7 +332,7 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
                   <tr><td class="label">Atirador Desportivo:</td><td class="val">${chk.athleteName || 'Atleta'}</td></tr>
                   <tr><td class="label">CPF:</td><td class="val-mono">${chk.athleteCpf || '—'}</td></tr>
                   <tr><td class="label">CR (Exército):</td><td class="val-mono" style="color: #1e3a8a;">${chk.athleteCr || '—'}</td></tr>
-                  <tr><td class="label">Clube / Estande:</td><td class="val">${clubName}</td></tr>
+                  <tr><td class="label">Nome do Estande/Clube:</td><td class="val">${clubName}</td></tr>
                   <tr><td class="label">CNPJ do Clube:</td><td class="val-mono">${clubCnpj}</td></tr>
                   <tr><td class="label">CR do Clube:</td><td class="val-mono">${clubCr}</td></tr>
                 </table>
@@ -551,7 +551,7 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
             {currentUser?.role === 'club_admin' && activeClub ? (
-              <span>Controle de fluxo de entrada, saída e auditoria biométrica facial dos atletas no <strong>{activeClub.fantasyName || activeClub.name}</strong>.</span>
+              <span>Controle de fluxo de entrada, saída e auditoria biométrica facial dos atletas no <strong>{activeClub.name || activeClub.fantasyName}</strong>.</span>
             ) : (
               <span>Controle de fluxo de entrada e saída, tempo de permanência no estande e auditoria biométrica facial.</span>
             )}
@@ -692,7 +692,7 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
                 <option value="">Todos os Clubes</option>
                 {clubs.slice().sort((a, b) => a.name.localeCompare(b.name)).map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.fantasyName || c.name}
+                    {c.name || c.fantasyName}
                   </option>
                 ))}
               </select>
@@ -746,7 +746,7 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
               <tr>
                 <th className="px-4 py-3">Atleta</th>
-                <th className="px-4 py-3">Clube</th>
+                <th className="px-4 py-3">Nome do estande/Clube</th>
                 <th className="px-4 py-3">Entrada (Check-in)</th>
                 <th className="px-4 py-3">Saída (Check-out)</th>
                 <th className="px-4 py-3">Permanência</th>
@@ -801,10 +801,13 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
                         </div>
                       </td>
 
-                      {/* Clube */}
+                      {/* Nome do estande/Clube */}
                       <td className="px-4 py-3">
-                        <span className="font-medium text-slate-800 text-[11px] truncate block max-w-[140px]">
-                          {chk.clubName || 'Clube de Tiro'}
+                        <span
+                          className="font-semibold text-slate-800 text-[11px] truncate block max-w-[170px]"
+                          title={chk.clubName || activeClub?.name || activeClub?.fantasyName || 'Clube de Tiro'}
+                        >
+                          {chk.clubName || activeClub?.name || activeClub?.fantasyName || 'Clube de Tiro'}
                         </span>
                       </td>
 
@@ -1072,6 +1075,9 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
                     alt="Selfie Check-in"
                     className="w-full max-h-64 sm:max-h-72 object-contain bg-slate-950"
                   />
+                  <span className="absolute bottom-2 left-2 bg-slate-900/90 text-white text-[10px] font-bold px-2.5 py-1 rounded-md shadow backdrop-blur-xs flex items-center gap-1.5 border border-slate-700/60 max-w-[85%] truncate">
+                    🏛️ {photoModalTarget.clubName || activeClub?.name || activeClub?.fantasyName || 'Estande / Clube'}
+                  </span>
                   {photoModalTarget.facialMatchScore != null && (
                     <span className="absolute top-2 right-2 bg-emerald-600/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow backdrop-blur-xs flex items-center gap-1">
                       <ShieldCheck className="w-3 h-3" />
@@ -1137,8 +1143,8 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
                   <span className="font-mono font-bold text-blue-700">{photoModalTarget.athleteCr || '—'}</span>
                 </div>
                 <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
-                  <span className="text-slate-500 font-medium">Clube:</span>
-                  <span className="font-semibold text-slate-800">{photoModalTarget.clubName || activeClub?.fantasyName || activeClub?.name || 'Clube de Tiro'}</span>
+                  <span className="text-slate-500 font-medium">Nome do estande/Clube:</span>
+                  <span className="font-semibold text-slate-800">{photoModalTarget.clubName || activeClub?.name || activeClub?.fantasyName || 'Clube de Tiro'}</span>
                 </div>
                 <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
                   <span className="text-slate-500 font-medium">Entrada:</span>
