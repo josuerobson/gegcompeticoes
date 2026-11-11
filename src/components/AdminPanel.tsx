@@ -19,7 +19,7 @@ import {
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
   Eye, EyeOff, Check, Trash2, Search, X, Pencil, ArrowLeft, ArrowRight, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn, QrCode, KeyRound, Copy, AlertTriangle, ChevronLeft, ChevronRight, Download,
-  MapPin, Clock
+  MapPin, Clock, Crosshair
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -2286,6 +2286,9 @@ interface TreinamentosCompeticoesAdminPanelProps {
   users: User[];
   weapons: Weapon[];
   weaponLookupOptions: WeaponLookupOption[];
+  clubs?: Club[];
+  scopeClubId?: string;
+  isClubView?: boolean;
   onAddWeapon: (weapon: any) => Promise<void>;
   onRefreshData?: () => Promise<void>;
 }
@@ -2295,14 +2298,47 @@ function TreinamentosCompeticoesAdminPanel({
   users,
   weapons,
   weaponLookupOptions,
+  clubs = [],
+  scopeClubId,
+  isClubView = false,
   onAddWeapon,
   onRefreshData,
 }: TreinamentosCompeticoesAdminPanelProps) {
+  const [selectedClubId, setSelectedClubId] = React.useState<string>(() => {
+    if (scopeClubId) return scopeClubId;
+    if (currentUser?.clubId) return currentUser.clubId;
+    return clubs[0]?.id || '';
+  });
+
+  const effectiveClubId = scopeClubId || selectedClubId || currentUser?.clubId || clubs[0]?.id || '';
+  const currentClub = React.useMemo(() => {
+    return clubs.find(c => c.id === effectiveClubId) || null;
+  }, [clubs, effectiveClubId]);
+
+  // Athletes eligible for selection (strictly restricted to the club when in club view)
+  const clubAthletes = React.useMemo(() => {
+    if (!isClubView) return users;
+    return users.filter(u => {
+      if (effectiveClubId === 'club_aranas') {
+        return u.clubId === effectiveClubId || !u.clubId;
+      }
+      return u.clubId === effectiveClubId;
+    });
+  }, [users, isClubView, effectiveClubId]);
+
   // Athlete Search State
   const [athleteSearchQuery, setAthleteSearchQuery] = React.useState('');
   const [selectedAthlete, setSelectedAthlete] = React.useState<User | null>(null);
   const [isAthleteDropdownOpen, setIsAthleteDropdownOpen] = React.useState(false);
   const [athleteAmmoBalances, setAthleteAmmoBalances] = React.useState<AmmoAthleteBalance[]>([]);
+
+  // Reset athlete selection when club changes
+  React.useEffect(() => {
+    setSelectedAthlete(null);
+    setAthleteAmmoBalances([]);
+    setTrainingSuccess('');
+    setTrainingError('');
+  }, [effectiveClubId]);
 
   // Training Form State
   const [trainingForm, setTrainingForm] = React.useState({
@@ -2348,12 +2384,15 @@ function TreinamentosCompeticoesAdminPanel({
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [hidingId, setHidingId] = React.useState<string | null>(null);
 
-  // Fetch all trainings
+  // Fetch all trainings (scoped to club when in club view)
   const loadAllTrainings = React.useCallback(async () => {
     if (!currentUser) return;
     setLoadingTrainings(true);
     try {
-      const res = await fetch('/api/trainings?all=true', {
+      const url = isClubView && effectiveClubId
+        ? `/api/trainings?all=true&clubId=${encodeURIComponent(effectiveClubId)}`
+        : `/api/trainings?all=true`;
+      const res = await fetch(url, {
         headers: { 'x-user-id': currentUser.id }
       });
       if (res.ok) {
@@ -2365,7 +2404,7 @@ function TreinamentosCompeticoesAdminPanel({
     } finally {
       setLoadingTrainings(false);
     }
-  }, [currentUser]);
+  }, [currentUser, isClubView, effectiveClubId]);
 
   React.useEffect(() => {
     loadAllTrainings();
@@ -2389,23 +2428,25 @@ function TreinamentosCompeticoesAdminPanel({
   const searchFilteredAthletes = React.useMemo(() => {
     const q = normalizeSearchText(athleteSearchQuery.trim());
     if (q.length < 2) return [];
-    return users.filter(u =>
+    return clubAthletes.filter(u =>
       normalizeSearchText(u.fullName).includes(q) ||
       (u.cpf || '').includes(q) ||
       normalizeSearchText(u.crNumber).includes(q) ||
       normalizeSearchText(u.username).includes(q)
     );
-  }, [users, athleteSearchQuery]);
+  }, [clubAthletes, athleteSearchQuery]);
 
   // Weapons available for the selected athlete (athlete's weapons + club weapons)
   const availableWeapons = React.useMemo(() => {
     if (!selectedAthlete) return weapons;
     return weapons.filter(w =>
       w.ownerId === selectedAthlete.id ||
-      w.ownerId === currentUser?.clubId ||
+      (w.cpf && selectedAthlete.cpf && w.cpf.replace(/\D/g, '') === selectedAthlete.cpf.replace(/\D/g, '')) ||
+      w.ownerId === effectiveClubId ||
+      w.clubId === effectiveClubId ||
       (w as any).ownerType === 'clube'
     );
-  }, [weapons, selectedAthlete, currentUser]);
+  }, [weapons, selectedAthlete, effectiveClubId]);
 
   // Filtered weapons for autocomplete search
   const searchFilteredWeapons = React.useMemo(() => {
@@ -2439,7 +2480,7 @@ function TreinamentosCompeticoesAdminPanel({
       await onAddWeapon({
         ownerId: selectedAthlete.id,
         cpf: selectedAthlete.cpf,
-        clubId: selectedAthlete.clubId,
+        clubId: selectedAthlete.clubId || effectiveClubId,
         gtExpirationDate: newWeaponData.gtExpirationDate,
         ownerType: 'atleta',
         manufacturer: newWeaponData.manufacturer,
@@ -2497,6 +2538,7 @@ function TreinamentosCompeticoesAdminPanel({
         },
         body: JSON.stringify({
           targetUserId: selectedAthlete.id,
+          clubId: effectiveClubId,
           dateTime: trainingForm.dateTime,
           weaponId: trainingForm.selectedWeapon?.id || null,
           weaponName: trainingForm.weaponName,
@@ -2605,25 +2647,75 @@ function TreinamentosCompeticoesAdminPanel({
   return (
     <div className="space-y-6 text-slate-800">
       {/* Header Banner */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
-        <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100">
           <div>
             <h3 className="font-display font-bold text-slate-900 text-base flex items-center gap-2">
-              <Briefcase className="w-5 h-5 text-blue-600" />
-              Lançamento de Treinamentos / Habitualidade (ADM)
+              <Crosshair className="w-5 h-5 text-blue-600" />
+              {isClubView ? 'Registrar Treinamentos dos Atletas' : 'Lançamento de Treinamentos / Habitualidade (ADM)'}
             </h3>
             <p className="text-xs text-slate-400">
-              Cadastre treinos de habitualidade para qualquer atleta federado da plataforma com abate automático do saldo de munições do clube.
+              {isClubView
+                ? 'Registre treinamentos e habitualidades com qualquer data para os atletas filiados ao clube com abate automático do saldo de munições.'
+                : 'Cadastre treinos de habitualidade para qualquer atleta federado da plataforma com abate automático do saldo de munições do clube.'}
             </p>
           </div>
-          <Activity className="w-5 h-5 text-blue-600 animate-pulse" />
+          {isClubView && currentUser?.role === 'master_admin' && (clubs || []).length > 1 ? (
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-600">Clube:</label>
+              <select
+                value={selectedClubId}
+                onChange={e => {
+                  setSelectedClubId(e.target.value);
+                  setSelectedAthlete(null);
+                }}
+                className="bg-slate-50 border border-slate-200 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:border-blue-500 cursor-pointer"
+              >
+                {(clubs || []).map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <Activity className="w-5 h-5 text-blue-600 animate-pulse" />
+          )}
         </div>
+
+        {/* Club Details Header (matches ClubReportsViewer style) */}
+        {isClubView && currentClub && (
+          <div className="bg-gradient-to-r from-blue-50/70 to-indigo-50/40 p-4 rounded-xl border border-blue-200/80 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-blue-950 text-sm">{currentClub.name}</span>
+                {currentClub.fantasyName && (
+                  <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded">
+                    Fantasia: {currentClub.fantasyName}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                CR: {currentClub.crNumber || 'N/A'} • CNPJ: {currentClub.cnpj || 'N/A'} • Sede: {[currentClub.address, currentClub.city, currentClub.state].filter(Boolean).join(', ') || 'Não informada'}
+              </p>
+            </div>
+            <div className="bg-white/90 border border-blue-200 px-3.5 py-1.5 rounded-xl shadow-2xs text-center shrink-0">
+              <span className="text-base font-black text-blue-900 block leading-tight">{clubAthletes.length}</span>
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Atleta(s) Vinculado(s)</span>
+            </div>
+          </div>
+        )}
 
         {/* 1. SELEÇÃO / PESQUISA DE ATLETA */}
         <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
-          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-            1. Pesquisa de Atleta <span className="text-red-500">*</span> (Busque por Nome, CPF ou CR)
-          </label>
+          <div className="flex justify-between items-center">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+              1. Pesquisa de Atleta <span className="text-red-500">*</span> {isClubView ? '(Apenas atletas vinculados ao clube)' : '(Busque por Nome, CPF ou CR)'}
+            </label>
+            {isClubView && (
+              <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+                {clubAthletes.length} atleta(s) filiado(s)
+              </span>
+            )}
+          </div>
 
           {!selectedAthlete ? (
             <div className="relative">
@@ -2636,7 +2728,7 @@ function TreinamentosCompeticoesAdminPanel({
                     setAthleteSearchQuery(e.target.value);
                     setIsAthleteDropdownOpen(true);
                   }}
-                  placeholder="Digite o nome, CPF ou CR do atirador..."
+                  placeholder={isClubView ? "Digite o nome, CPF ou CR do atleta vinculado..." : "Digite o nome, CPF ou CR do atirador..."}
                   className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-xs font-semibold text-slate-800 shadow-xs"
                 />
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -2652,7 +2744,7 @@ function TreinamentosCompeticoesAdminPanel({
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-60 overflow-y-auto divide-y divide-slate-100">
                   {searchFilteredAthletes.length === 0 ? (
                     <div className="p-3 text-center text-slate-500 text-xs">
-                      Nenhum atleta encontrado para "{athleteSearchQuery}".
+                      Nenhum atleta {isClubView ? 'vinculado ao clube' : ''} encontrado para "{athleteSearchQuery}".
                     </div>
                   ) : (
                     searchFilteredAthletes.map((u) => (
@@ -2682,7 +2774,7 @@ function TreinamentosCompeticoesAdminPanel({
                           </div>
                         </div>
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
-                          Selecionar
+                          {isClubView ? 'Selecionar Atleta' : 'Selecionar'}
                         </span>
                       </button>
                     ))
@@ -2767,9 +2859,14 @@ function TreinamentosCompeticoesAdminPanel({
 
             {/* Data e Hora */}
             <div>
-              <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
-                Data e Hora do Treinamento <span className="text-red-500">*</span>
-              </label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-[11px] text-slate-600 font-bold uppercase">
+                  Data e Hora do Treinamento <span className="text-red-500">*</span>
+                </label>
+                <span className="text-[10px] text-blue-600 font-medium">
+                  Qualquer data (presente ou retroativa)
+                </span>
+              </div>
               <input
                 type="datetime-local"
                 required
@@ -3169,7 +3266,7 @@ function TreinamentosCompeticoesAdminPanel({
           <div>
             <h4 className="font-display font-bold text-slate-900 text-base flex items-center gap-2">
               <FileText className="w-5 h-5 text-blue-600" />
-              Histórico Geral de Treinamentos ({filteredTrainingsList.length})
+              Histórico {isClubView ? 'de Treinamentos do Clube' : 'Geral de Treinamentos'} ({filteredTrainingsList.length})
             </h4>
             <p className="text-xs text-slate-400">Visão consolidada de todas as sessões de treinamento registradas no estande. Treinos ocultos não contam na habitualidade nem aparecem nos relatórios do atleta.</p>
           </div>
@@ -11921,6 +12018,21 @@ export default function AdminPanel({
       case 'checkins':
         return <CheckinsManager currentUser={currentUser} clubs={clubs || []} />;
 
+      case 'registrar_treinamentos':
+        return (
+          <TreinamentosCompeticoesAdminPanel
+            currentUser={currentUser}
+            users={users}
+            weapons={weapons}
+            weaponLookupOptions={weaponLookupOptions}
+            clubs={clubs}
+            scopeClubId={currentUser?.clubId}
+            isClubView={true}
+            onAddWeapon={onAddWeapon}
+            onRefreshData={onRefreshData}
+          />
+        );
+
       case 'relatorios_declaracoes':
         return (
           <ClubReportsViewer
@@ -15521,6 +15633,8 @@ export default function AdminPanel({
             users={users}
             weapons={weapons}
             weaponLookupOptions={weaponLookupOptions}
+            clubs={clubs}
+            isClubView={false}
             onAddWeapon={onAddWeapon}
             onRefreshData={onRefreshData}
           />
@@ -16066,6 +16180,7 @@ export default function AdminPanel({
                 { id: 'certificados', label: 'Certificados', icon: Award },
                 { id: 'cadastrar_membros', label: 'Cadastrar Membros', icon: UserPlus },
                 { id: 'checkins', label: 'Gerenciamento de Check-ins', icon: Clock },
+                { id: 'registrar_treinamentos', label: 'Registrar Treinamentos', icon: Crosshair },
                 { id: 'relatorios_declaracoes', label: 'Relatórios e Declarações', icon: FileText }
               ].map((item) => {
                 const Icon = item.icon;

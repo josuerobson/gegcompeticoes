@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(checkin): atualizar fundamentacao legal nos relatorios para Decreto 12.345/2024 art 38` |
-| Data/hora | 2026-11-10T10:18:00-03:00 |
+| Mensagem | `feat(club): adicionar menu Registrar Treinamentos para atletas vinculados ao clube` |
+| Data/hora | 2026-11-11T12:22:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,20 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Menu "Registrar Treinamentos" em Gerenciamento Clube (`AdminPanel.tsx`, `server.ts`, `src/db.ts`)**:
+  - **Solicitação do Usuário**: "Preciso adicionar em Gerenciamento clube o menu "Registrar Treinamentos" onde o clube pode registrar os treinamentos para os atletas com qualquer data seguindo o mesmo padrão disponível para o atleta, o clube só pode cadastrar para os atletas vinculados a ele."
+  - **O que foi feito**:
+    1. **Adição ao menu lateral**: Novo item `{ id: 'registrar_treinamentos', label: 'Registrar Treinamentos', icon: Crosshair }` inserido em Menus Clube (`AdminPanel.tsx`), integrado logo após `checkins` e antes de `relatorios_declaracoes`.
+    2. **Filtro estrito de atletas do clube**: Na visualização do clube (`isClubView={true}`), a lista e autocomplete de atiradores é estritamente restrita aos atletas vinculados ao clube (`u.clubId === effectiveClubId`). Clubes não enxergam nem podem selecionar atletas de outros clubes.
+    3. **Validação e segurança no Backend (`server.ts`)**:
+       - Em `POST /api/trainings`, verifica se `currentUser.role === 'club_admin'` e bloqueia com HTTP 403 Forbidden caso o atleta alvo não seja filiado ao clube do usuário logado.
+       - Em `GET /api/trainings`, filtra treinos do clube via `clubId` ou pelo clube do `currentUser`.
+       - Em `DELETE /api/trainings/:id` e `PATCH /api/trainings/:id/hidden`, gestores de clube só podem excluir ou ocultar treinos de atletas pertencentes ao seu estande.
+    4. **Seleção livre de datas**: Campo `datetime-local` sem restrições de datas mínimas ou máximas, permitindo o lançamento de treinos retroativos ou em tempo real seguindo o mesmo padrão do perfil do atleta.
+    5. **Padrão idêntico ao atleta**: Seleção e busca de armas em tempo real (mínimo 3 caracteres), opção rápida de cadastrar nova arma para o atleta (`QuickAddWeaponModal` com Guia de Trânsito), seletor de arma própria vs clube, munição própria vs clube (com abate de saldo individual), modalidade, pontuação e notas.
+    6. **Índice no banco**: Adicionado `idx_trainings_club_id` em `trainings(club_id)` para consultas de alta performance por estande.
+  - **O que NÃO fazer no futuro**: Nunca remover o filtro de clube nem a validação de vínculo no backend, permitindo que um clube lance treinos para atletas de outros clubes.
 
 - **Atualização da Fundamentação Legal nos Relatórios Oficiais de Check-in (`CheckinsManager.tsx`)**:
   - **Solicitação do Usuário**: Substituir nos relatórios oficiais de check-in (Livro Eletrônico e Comprovante Individual) o texto `"Portaria COLOG / Exército Brasileiro"` por `"DECRETO Nº 12.345, DE 30 DE DEZEMBRO DE 2024, Art. 38, § 5º  Inciso III"`.

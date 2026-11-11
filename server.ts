@@ -7930,6 +7930,7 @@ app.post('/api/annuity-charges/bulk-generate', requireFranchiseAdmin, async (req
 app.get('/api/trainings', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
   const targetUserId = req.query.userId as string;
+  const requestedClubId = req.query.clubId as string;
   const fetchAll = req.query.all === 'true' && ['admin', 'master_admin', 'club_admin'].includes(currentUser.role);
   try {
     let query = `
@@ -7942,12 +7943,30 @@ app.get('/api/trainings', requireAuth, async (req, res) => {
       LEFT JOIN weapons w ON w.id = t.weapon_id
     `;
     const params: any[] = [];
+    const whereConditions: string[] = [];
+
     if (!fetchAll) {
       // Visão do atleta (diário, habitualidade e declarações): treinos
       // ocultos pelo gestor não aparecem nem contam. Só o histórico geral do
       // admin (all=true) os lista, para poderem ser reexibidos.
-      query += ` WHERE t.user_id = $1 AND t.hidden = false `;
       params.push(targetUserId || currentUser.id);
+      whereConditions.push(`t.user_id = $${params.length} AND t.hidden = false`);
+    } else {
+      if (targetUserId) {
+        params.push(targetUserId);
+        whereConditions.push(`t.user_id = $${params.length}`);
+      }
+      const filterClubId = currentUser.role === 'club_admin'
+        ? currentUser.clubId
+        : (requestedClubId || null);
+      if (filterClubId) {
+        params.push(filterClubId);
+        whereConditions.push(`(t.club_id = $${params.length} OR u.club_id = $${params.length})`);
+      }
+    }
+
+    if (whereConditions.length > 0) {
+      query += ` WHERE ` + whereConditions.join(' AND ');
     }
     query += ` ORDER BY t.date_time DESC`;
     const r = await pool.query(query, params);
@@ -7975,6 +7994,7 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
     score,
     notes,
     checkinId,
+    clubId,
   } = req.body;
 
   if (!dateTime || !weaponName) {
@@ -7985,6 +8005,24 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
   const finalUserId = (['admin', 'master_admin', 'club_admin'].includes(currentUser.role) && requestedUserId)
     ? requestedUserId
     : currentUser.id;
+
+  // Obter dados do atleta alvo
+  const userRes = await pool.query(`SELECT id, full_name, cr_number, club_id FROM users WHERE id = $1`, [finalUserId]);
+  if (userRes.rows.length === 0) {
+    return res.status(404).json({ error: 'Atleta não encontrado.' });
+  }
+  const targetUser = userRes.rows[0];
+
+  // Regra de segurança: Clube só pode cadastrar para os atletas vinculados a ele
+  if (currentUser.role === 'club_admin') {
+    if (!currentUser.clubId || targetUser.club_id !== currentUser.clubId) {
+      return res.status(403).json({ error: 'Você só pode registrar treinamentos para atletas vinculados ao seu clube.' });
+    }
+  }
+
+  const effectiveClubId = currentUser.role === 'club_admin'
+    ? (currentUser.clubId || targetUser.club_id)
+    : (clubId || targetUser.club_id || currentUser.clubId || null);
 
   const own = Math.max(0, Number(ownAmmoShots) || 0);
   const club = Math.max(0, Number(clubAmmoShots) || 0);
@@ -8003,7 +8041,7 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
       [
         id,
         finalUserId,
-        currentUser.clubId || null,
+        effectiveClubId,
         dateTime,
         weaponId || null,
         weaponName,
@@ -8038,12 +8076,9 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
     }
 
     // Retorna o treinamento com os dados do usuário para atualização do frontend
-    const userRes = await pool.query(`SELECT full_name, cr_number FROM users WHERE id = $1`, [finalUserId]);
     const createdRow = r.rows[0];
-    if (userRes.rows.length > 0) {
-      createdRow.athlete_name = userRes.rows[0].full_name;
-      createdRow.athlete_cr = userRes.rows[0].cr_number;
-    }
+    createdRow.athlete_name = targetUser.full_name;
+    createdRow.athlete_cr = targetUser.cr_number;
 
     res.status(201).json({ training: mapTraining(createdRow) });
   } catch (err) {
@@ -8055,9 +8090,25 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
 // Oculta/reexibe um treino (só gestor). Oculto = fora da habitualidade e dos
 // relatórios do atleta, sem apagar o registro.
 app.patch('/api/trainings/:id/hidden', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
   const { id } = req.params;
   const hidden = Boolean(req.body?.hidden);
   try {
+    if (currentUser.role === 'club_admin' && currentUser.clubId) {
+      const chk = await pool.query(
+        `SELECT t.club_id, u.club_id as user_club_id
+         FROM trainings t
+         LEFT JOIN users u ON u.id = t.user_id
+         WHERE t.id = $1`,
+        [id]
+      );
+      if (chk.rows.length > 0) {
+        const belongsToClub = chk.rows[0].club_id === currentUser.clubId || chk.rows[0].user_club_id === currentUser.clubId;
+        if (!belongsToClub) {
+          return res.status(403).json({ error: 'Você só pode alterar treinamentos do seu clube.' });
+        }
+      }
+    }
     const r = await pool.query(`UPDATE trainings SET hidden = $1 WHERE id = $2 RETURNING id, hidden`, [hidden, id]);
     if (r.rowCount === 0) {
       return res.status(404).json({ error: 'Treinamento não encontrado.' });
@@ -8073,13 +8124,25 @@ app.delete('/api/trainings/:id', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
   const { id } = req.params;
   try {
-    const r = await pool.query(`SELECT * FROM trainings WHERE id = $1`, [id]);
+    const r = await pool.query(
+      `SELECT t.*, u.club_id as user_club_id
+       FROM trainings t
+       LEFT JOIN users u ON u.id = t.user_id
+       WHERE t.id = $1`,
+      [id]
+    );
     if (r.rows.length === 0) {
       return res.status(404).json({ error: 'Treinamento não encontrado.' });
     }
     const training = r.rows[0];
     if (training.user_id !== currentUser.id && !['admin', 'master_admin', 'club_admin'].includes(currentUser.role)) {
       return res.status(403).json({ error: 'Você não tem permissão para excluir este treinamento.' });
+    }
+    if (currentUser.role === 'club_admin' && currentUser.clubId) {
+      const belongsToClub = training.club_id === currentUser.clubId || training.user_club_id === currentUser.clubId;
+      if (!belongsToClub) {
+        return res.status(403).json({ error: 'Você só pode excluir treinamentos do seu clube.' });
+      }
     }
     await pool.query(`DELETE FROM trainings WHERE id = $1`, [id]);
     res.json({ success: true });
