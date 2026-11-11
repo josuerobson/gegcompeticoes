@@ -1920,6 +1920,7 @@ app.post('/api/idsc/registrations/:id/result', requireAdmin, async (req, res) =>
 
 // 1. Session & Auth Endpoints
 app.get('/api/auth/me', (req, res) => {
+  res.set('Cache-Control', 'no-store');
   if ((req as any).user) {
     res.json({ user: (req as any).user });
   } else {

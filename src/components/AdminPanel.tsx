@@ -118,7 +118,7 @@ interface AdminPanelProps {
   onConsumeClubBulkRegistrationPrefill?: () => void;
   // "Entrar como" — troca a sessão local para o usuário informado (o atleta,
   // ou o club_admin de um clube), preservando a conta original para retorno.
-  onLoginAs?: (userId: string) => void;
+  onLoginAs?: (userId: string) => void | Promise<void>;
 }
 
 // Labeled input matching this panel's existing form style (see the
@@ -9101,7 +9101,7 @@ export default function AdminPanel({
   // (donos do próprio tenant). master_admin sempre tem acesso.
   const currentUserClub = clubs.find(c => c.id === currentUser?.clubId);
   const isAffiliatedChildClub = Boolean(currentUserClub?.parentClubId) && !currentUserClub?.isPremium;
-  const canSeePlataforma = currentUser?.role === 'master_admin' || !isAffiliatedChildClub;
+  const canSeePlataforma = currentUser?.role === 'master_admin' || (Boolean(currentUserClub) && !isAffiliatedChildClub);
 
   // Main tabs: 'clube' | 'plataforma' | 'master'
   const [mainTab, setMainTab] = useState<'clube' | 'plataforma' | 'master'>('clube');
@@ -10006,8 +10006,12 @@ export default function AdminPanel({
       if (q.trim()) params.set('q', q.trim());
       if (clubId) params.set('clubId', clubId);
       if (annuityStatusFilter) params.set('annuityStatus', annuityStatusFilter);
+      const token = localStorage.getItem('gg_token');
       const r = await fetch(`/api/admin/athletes?${params.toString()}`, {
-        headers: { 'x-user-id': currentUser.id }
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          'x-user-id': currentUser.id
+        }
       });
       const data = await r.json();
       if (r.ok) {
@@ -10407,8 +10411,12 @@ export default function AdminPanel({
         alert(`O clube "${club.name}" ainda não possui um usuário administrador configurado.`);
         return;
       }
+      if (admin.id === currentUser?.id) {
+        alert(`Você já está logado como o administrador do clube "${club.name}".`);
+        return;
+      }
       if (window.confirm(`Entrar como o clube "${club.name}" (usuário ${admin.fullName})? Você pode voltar para sua conta a qualquer momento pela barra que vai aparecer no topo.`)) {
-        onLoginAs(admin.id);
+        await onLoginAs(admin.id);
       }
     } finally {
       setLoginAsClubLoadingId(null);
@@ -16121,8 +16129,13 @@ export default function AdminPanel({
           <Trophy className="w-48 h-48 text-white -mr-10 -mt-10" />
         </div>
         <div className="space-y-1 relative text-left">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="bg-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase">Painel Diretor</span>
+            {currentUserClub && (
+              <span className="bg-white/10 text-blue-200 text-[11px] font-semibold px-2.5 py-0.5 rounded-md">
+                {currentUserClub.fantasyName || currentUserClub.name}
+              </span>
+            )}
             <span className="text-amber-400 text-xs font-semibold flex items-center gap-1 font-mono">
               ★ Diretoria G&G Competições
             </span>

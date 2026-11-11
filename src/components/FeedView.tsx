@@ -2017,7 +2017,11 @@ export default function FeedView({
             </div>
             <div className="flex flex-col items-end">
               <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold font-mono">
-                {currentUser.role === 'admin' ? 'ADMIN' : 'ATLETA G&G'}
+                {currentUser.role === 'master_admin' || currentUser.role === 'admin'
+                  ? 'ADMIN'
+                  : currentUser.role === 'club_admin'
+                    ? 'CLUBE'
+                    : 'ATLETA G&G'}
               </span>
               <span className="text-[10px] text-slate-400 mt-1">
                 CR: {currentUser.crNumber || 'Sem CR'}

@@ -148,13 +148,23 @@ export default function App() {
   // real, para permitir voltar. Só existe enquanto a sessão local aponta para
   // outro usuário; sobrevive a reloads, mas nunca é aninhado (não sobrescreve
   // um impersonador já salvo).
-  const [impersonatorInfo] = useState<{ id: string; name: string } | null>(() => {
+  const [impersonatorInfo, setImpersonatorInfo] = useState<{ id: string; name: string } | null>(() => {
     const id = localStorage.getItem('gg_impersonator_id');
     if (!id) return null;
     return { id, name: localStorage.getItem('gg_impersonator_name') || 'Administrador' };
   });
+  const clearImpersonatorStorage = () => {
+    localStorage.removeItem('gg_impersonator_id');
+    localStorage.removeItem('gg_impersonator_name');
+    localStorage.removeItem('gg_impersonator_token');
+    setImpersonatorInfo(null);
+  };
   const handleLoginAs = async (userId: string) => {
-    if (!currentUser || userId === currentUser.id) return;
+    if (!currentUser) return;
+    if (userId === currentUser.id) {
+      alert('Você já está logado como este usuário.');
+      return;
+    }
     try {
       const token = localStorage.getItem('gg_token');
       const res = await fetch('/api/auth/impersonate', {
@@ -195,9 +205,7 @@ export default function App() {
     } else {
       localStorage.removeItem('gg_token');
     }
-    localStorage.removeItem('gg_impersonator_id');
-    localStorage.removeItem('gg_impersonator_name');
-    localStorage.removeItem('gg_impersonator_token');
+    clearImpersonatorStorage();
     window.location.reload();
   };
   const [users, setUsers] = useState<User[]>([]);
@@ -312,6 +320,7 @@ export default function App() {
   const [registerSubmitting, setRegisterSubmitting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [booting, setBooting] = useState(true);
+  const [initialRouteApplied, setInitialRouteApplied] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [validationUserId, setValidationUserId] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
@@ -434,15 +443,34 @@ export default function App() {
     if (multiR.multiChampionships) setMultiChampionships(multiR.multiChampionships);
   };
 
-  // Load backend session and DB contents — all requests fire in parallel
-  const syncWithBackend = async (userIdForHeader?: string) => {
+  // Load backend session and DB contents — all requests fire in parallel,
+  // but /api/auth/me resolves currentUser immediately without waiting for
+  // heavy catalog endpoints (/api/users, /api/clubs, /api/scores).
+  const syncWithBackend = async (userIdForHeader?: string, onSessionResolved?: () => void) => {
     setIsSyncing(true);
     const authHeaders = buildAuthHeaders(userIdForHeader);
     const targetUserId = userIdForHeader || currentUser?.id || localStorage.getItem('gg_user_id');
 
     try {
+      const mePromise = fetch('/api/auth/me', { headers: authHeaders, cache: 'no-store' })
+        .then(r => r.json())
+        .then((meData) => {
+          if (meData?.user) {
+            setCurrentUser(meData.user);
+            localStorage.setItem('gg_user_id', meData.user.id);
+          } else if (!userIdForHeader) {
+            setCurrentUser(null);
+            localStorage.removeItem('gg_user_id');
+          }
+          return { status: 'fulfilled' as const, value: meData };
+        })
+        .catch(() => ({ status: 'rejected' as const, value: null }))
+        .finally(() => {
+          onSessionResolved?.();
+        });
+
       const [
-        meResult,
+        _meResult,
         usersResult,
         postsResult,
         champResult,
@@ -456,7 +484,7 @@ export default function App() {
         settingsResult,
         multiChampResult
       ] = await Promise.allSettled([
-        fetch('/api/auth/me', { headers: authHeaders }).then(r => r.json()),
+        mePromise,
         fetch('/api/users', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/posts?limit=12', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/championships', { headers: authHeaders }).then(r => r.json()),
@@ -470,16 +498,6 @@ export default function App() {
         fetch('/api/settings', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/multi-championships').then(r => r.json())
       ]);
-
-      if (meResult.status === 'fulfilled') {
-        if (meResult.value?.user) {
-          setCurrentUser(meResult.value.user);
-          localStorage.setItem('gg_user_id', meResult.value.user.id);
-        } else if (!userIdForHeader) {
-          setCurrentUser(null);
-          localStorage.removeItem('gg_user_id');
-        }
-      }
 
       if (usersResult.status === 'fulfilled' && usersResult.value?.users) {
         setUsers(usersResult.value.users);
@@ -549,7 +567,7 @@ export default function App() {
 
   // Sincronização automática do estado com a URL do navegador e Título de SEO
   useEffect(() => {
-    if (booting) return;
+    if (booting || !initialRouteApplied) return;
     
     if (validationUserId) {
       document.title = 'G&G Competições - Autenticidade da Carteirinha';
@@ -581,6 +599,9 @@ export default function App() {
       targetPath = '/admin';
       document.title = 'G&G Competições - Painel Diretor';
     } else if (activeTab === 'profile') {
+      if (!selectedProfileUser && window.location.pathname.startsWith('/perfil/')) {
+        return;
+      }
       const isSelf = !selectedProfileUser || selectedProfileUser.id === currentUser.id;
       if (isSelf) {
         targetPath = '/perfil';
@@ -594,7 +615,7 @@ export default function App() {
     if (window.location.pathname !== targetPath) {
       window.history.pushState(null, '', targetPath);
     }
-  }, [activeTab, selectedProfileUser, currentUser, showLoginModal, booting, validationUserId]);
+  }, [activeTab, selectedProfileUser, currentUser, showLoginModal, booting, initialRouteApplied, validationUserId]);
 
   // Handler para processar a rota da URL e setar os estados
   const handleRouteNavigation = (pathname: string) => {
@@ -655,9 +676,11 @@ export default function App() {
       if (targetUser) {
         setActiveTab('profile');
         setSelectedProfileUser(targetUser);
-      } else {
+      } else if (users.length > 0) {
         setActiveTab('profile');
         setSelectedProfileUser(currentUser);
+      } else {
+        setActiveTab('profile');
       }
     } else {
       setActiveTab('championships');
@@ -678,12 +701,12 @@ export default function App() {
   useEffect(() => {
     let isSubscribed = true;
 
-    // Safety fallback: Libera a tela de boot rapidamente (máximo 1.2s) para a abertura ser ágil
+    // Safety fallback caso a rede trave por completo antes de /api/auth/me responder
     const bootTimer = setTimeout(() => {
       if (isSubscribed) {
         setBooting(false);
       }
-    }, 1200);
+    }, 5000);
 
     const initApp = async () => {
       const cleanPath = window.location.pathname.replace(/\/$/, '') || '/';
@@ -699,7 +722,8 @@ export default function App() {
         }
       } else {
         const userId = localStorage.getItem('gg_user_id');
-        if (!userId) {
+        const token = localStorage.getItem('gg_token');
+        if (!userId && !token) {
           if (cleanPath === '/login') {
             setShowLoginModal(true);
           } else {
@@ -711,8 +735,8 @@ export default function App() {
         }
       }
 
-      // Dispara a sincronização e libera a tela de boot tão logo conclua
-      syncWithBackend().finally(() => {
+      // Libera a tela de boot assim que /api/auth/me responder (sem esperar /api/users)
+      syncWithBackend(undefined, () => {
         if (isSubscribed) {
           clearTimeout(bootTimer);
           setBooting(false);
@@ -728,12 +752,16 @@ export default function App() {
     };
   }, []);
 
-  // Analisa rota caso o currentUser mude (e.g. após o login ou restauração de sessão)
+  // Analisa rota inicial após o boot resolver a sessão, e resolve /perfil/:username quando users carregar
   useEffect(() => {
-    if (!booting) {
+    if (booting) return;
+    if (!initialRouteApplied) {
+      handleRouteNavigation(window.location.pathname);
+      setInitialRouteApplied(true);
+    } else if (window.location.pathname.startsWith('/perfil/') && users.length > 0) {
       handleRouteNavigation(window.location.pathname);
     }
-  }, [booting, currentUser, users]);
+  }, [booting, currentUser, users, initialRouteApplied]);
 
   // Recalculate rankings locally or from API whenever scores or registrations change
   useEffect(() => {
@@ -767,6 +795,7 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.user) {
+        clearImpersonatorStorage();
         if (data.token) {
           localStorage.setItem('gg_token', data.token);
         }
@@ -797,6 +826,7 @@ export default function App() {
     setCurrentUser(null);
     localStorage.removeItem('gg_token');
     localStorage.removeItem('gg_user_id');
+    clearImpersonatorStorage();
     setSelectedProfileUser(null);
     setActiveTab('feed');
   };
@@ -854,6 +884,7 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.user) {
+        clearImpersonatorStorage();
         if (data.token) {
           localStorage.setItem('gg_token', data.token);
         }
@@ -1019,7 +1050,8 @@ export default function App() {
     if (!currentUser) return null;
     try {
       const res = await fetch(`/api/admin/clubs/${clubId}/admin`, {
-        headers: { 'x-user-id': currentUser.id }
+        headers: buildAuthHeaders(),
+        cache: 'no-store'
       });
       const data = await res.json();
       return res.ok ? (data.admin || null) : null;
@@ -2505,7 +2537,7 @@ export default function App() {
       {/* Impersonação ("Entrar como") — sempre visível enquanto durar */}
       {impersonatorInfo && (
         <div className="sticky top-0 z-50 bg-amber-500 text-white py-2 px-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] sm:text-xs font-bold text-center">
-          <span>🔧 Modo suporte: você está logado como <strong>{currentUser?.fullName}</strong> (entrou como {impersonatorInfo.name})</span>
+          <span>🔧 Modo suporte: você está logado como <strong>{currentUser?.fullName}</strong> (sua conta: {impersonatorInfo.name})</span>
           <button
             onClick={handleReturnToAdmin}
             className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg transition cursor-pointer shrink-0"

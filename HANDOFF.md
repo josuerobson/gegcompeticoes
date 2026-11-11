@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(club): adicionar menu Registrar Treinamentos para atletas vinculados ao clube` |
-| Data/hora | 2026-11-11T12:22:00-03:00 |
+| Mensagem | `fix(auth): corrigir redirecionamento, boot e banner em Entrar como Clube e Atleta` |
+| Data/hora | 2026-11-11T13:10:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,15 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Correção do fluxo "Entrar como Clube", "Entrar como Atleta", boot da sessão e banner de impersonação (`src/App.tsx`, `src/components/AdminPanel.tsx`, `src/components/FeedView.tsx`, `server.ts`)**:
+  - **Problema Relatado pelo Usuário**: Após deploy anterior, ao clicar em `"Entrar como Clube"` ou `"Entrar como Atleta"`, o sistema caía no `/feed` fora do `Painel Diretor` e exibia o banner ambíguo `(entrou como Clube de Tiro Aranãs)` + badge `ATLETA G&G` e listagem de atletas da franquia, dando a impressão de que havia entrado como o próprio Clube de Tiro Aranãs em vez do clube alvo.
+  - **Causas Raiz Identificadas**:
+    1. **Race condition no boot (`src/App.tsx`)**: Em `51dcfec`, o `bootTimer` foi reduzido para `1200ms` enquanto `syncWithBackend()` ainda aguardava `Promise.allSettled` de todos os endpoints pesados (`/api/users`, `/api/clubs`, `/api/scores`) antes de chamar `setCurrentUser`. Como `/api/users` + `/api/clubs` levam >5–10s em produção, o timer estourava com `currentUser === null`, reescrevendo `/admin` para `/` e depois `/feed`.
+    2. **Ordem dos `useEffect` de rota (`src/App.tsx`)**: Ao concluir o boot, o `useEffect` que sincroniza `activeTab` com `window.history.pushState` rodava *antes* do `useEffect` que lê `window.location.pathname` (`handleRouteNavigation`), sobrescrevendo `/admin` com `/feed` antes da restauração da rota. Adicionado `initialRouteApplied` para segurar o `pushState` até que `handleRouteNavigation` aplique a rota inicial.
+    3. **Chaves residuais e cache de sessão**: `handleLogout`, `handleLogin` e `handleRegister` não limpavam `gg_impersonator_id/name/token`, permitindo vazamento do modo suporte após logout. Adicionado `clearImpersonatorStorage()` e `Cache-Control: no-store` em `GET /api/auth/me`. `handleGetClubAdmin` e `loadPagedAthletes` passaram a enviar `buildAuthHeaders()` / `Authorization: Bearer <token>`.
+    4. **Clareza visual e flash de aba**: Banner de suporte atualizado para `(sua conta: ${impersonatorInfo.name})`, badge do `FeedView` atualizado para distinguir `ADMIN`, `CLUBE` e `ATLETA G&G`, `Painel Diretor` exibe badge com o nome do clube ativo (`currentUserClub.fantasyName || currentUserClub.name`), e `canSeePlataforma` aguarda `Boolean(currentUserClub)` para não piscar `Gerenciamento Plataforma` durante carregamento de `/api/clubs` para clubes filiados impersonados.
+  - **O que NÃO fazer no futuro**: Nunca bloquear `setCurrentUser` ou a liberação de `booting` atrás de endpoints pesados (`/api/users`, `/api/clubs`, `/api/scores`) — `mePromise` deve sempre resolver a sessão imediatamente — e nunca permitir que o `useEffect` de `pushState` rode antes de `initialRouteApplied === true`.
 
 - **Menu "Registrar Treinamentos" em Gerenciamento Clube (`AdminPanel.tsx`, `server.ts`, `src/db.ts`)**:
   - **Solicitação do Usuário**: "Preciso adicionar em Gerenciamento clube o menu "Registrar Treinamentos" onde o clube pode registrar os treinamentos para os atletas com qualquer data seguindo o mesmo padrão disponível para o atleta, o clube só pode cadastrar para os atletas vinculados a ele."
