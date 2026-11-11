@@ -4,7 +4,8 @@ import {
   Loader2, ArrowLeft, ShieldCheck, ChevronRight, CheckSquare, Square
 } from 'lucide-react';
 import { User, Weapon, Modality, ClubCheckin, TrainingSession, Championship, Stage, Registration } from '../types';
-import { resolveWeaponSerial, filterSelectableWeapons, isWeaponLinkedToAthlete } from '../utils/textSearch';
+import ClaimWeaponModal from './ClaimWeaponModal';
+import { resolveWeaponSerial, filterSelectableWeapons, isWeaponLinkedToAthlete, isWeaponClaimable } from '../utils/textSearch';
 
 interface LinkedCompetitionItem {
   id: string;
@@ -36,6 +37,7 @@ interface CheckoutActivityModalProps {
   staySeconds: number;
   onClose: () => void;
   onCheckoutComplete: () => void;
+  onWeaponClaimed?: (weapon: Weapon) => void | Promise<void>;
 }
 
 export default function CheckoutActivityModal({
@@ -48,6 +50,7 @@ export default function CheckoutActivityModal({
   staySeconds,
   onClose,
   onCheckoutComplete,
+  onWeaponClaimed,
 }: CheckoutActivityModalProps) {
   // Step: 'activities' | 'add_training' | 'competition'
   const [step, setStep] = useState<'activities' | 'add_training' | 'competition'>('activities');
@@ -246,6 +249,7 @@ export default function CheckoutActivityModal({
 
   const [exactWeaponSearchResults, setExactWeaponSearchResults] = useState<Weapon[]>([]);
   const [searchingExactWeapon, setSearchingExactWeapon] = useState(false);
+  const [claimModalState, setClaimModalState] = useState<{ weapon: Weapon; searchedIdentifier: string } | null>(null);
 
   // Busca remota apenas para localizar armas não vinculadas por Série/SIGMA exato completo
   useEffect(() => {
@@ -797,36 +801,61 @@ export default function CheckoutActivityModal({
                         ) : (
                           searchFilteredWeapons.map((w) => {
                             const isMine = isWeaponLinkedToAthlete(w, currentUser);
+                            const claimable = isWeaponClaimable(w);
                             return (
-                              <button
+                              <div
                                 key={w.id}
-                                type="button"
-                                onMouseDown={(e) => {
-                                  e.preventDefault();
-                                  setTrainingForm({
-                                    ...trainingForm,
-                                    selectedWeapon: w,
-                                    weaponSearchQuery: `${w.manufacturer || ''} ${w.model || ''}`.trim(),
-                                    weaponName: `${w.manufacturer || ''} ${w.model || ''}`.trim(),
-                                    weaponCaliber: w.caliber || '',
-                                    weaponOwnerType: isMine ? 'propria' : 'clube',
-                                  });
-                                  setIsWeaponDropdownOpen(false);
-                                }}
-                                className="w-full text-left p-2.5 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
+                                className="w-full p-2.5 hover:bg-blue-50 transition flex items-center justify-between gap-2"
                               >
-                                <div>
-                                  <p className="font-bold text-slate-800 text-xs">
+                                <button
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setTrainingForm({
+                                      ...trainingForm,
+                                      selectedWeapon: w,
+                                      weaponSearchQuery: `${w.manufacturer || ''} ${w.model || ''}`.trim(),
+                                      weaponName: `${w.manufacturer || ''} ${w.model || ''}`.trim(),
+                                      weaponCaliber: w.caliber || '',
+                                      weaponOwnerType: isMine ? 'propria' : 'clube',
+                                    });
+                                    setIsWeaponDropdownOpen(false);
+                                  }}
+                                  className="flex-1 text-left min-w-0 cursor-pointer"
+                                >
+                                  <p className="font-bold text-slate-800 text-xs truncate">
                                     {w.manufacturer} {w.model}
                                   </p>
-                                  <p className="text-[10px] text-slate-500 font-mono">
+                                  <p className="text-[10px] text-slate-500 font-mono truncate">
                                     Cal: {w.caliber} • Série: {resolveWeaponSerial(w) || 'S/N'} • Sigma: {w.sigmaNumber || '—'}
+                                    {claimable && <span className="text-amber-600 font-sans font-semibold"> • Sem CPF</span>}
                                   </p>
+                                </button>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {claimable && (
+                                    <button
+                                      type="button"
+                                      onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setClaimModalState({
+                                          weapon: w,
+                                          searchedIdentifier: trainingForm.weaponSearchQuery.trim(),
+                                        });
+                                        setIsWeaponDropdownOpen(false);
+                                      }}
+                                      className="text-[9px] font-black text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1 transition cursor-pointer"
+                                      title="Requerer posse desta arma para o seu CPF"
+                                    >
+                                      <ShieldCheck className="w-2.5 h-2.5" />
+                                      Requerer Posse
+                                    </button>
+                                  )}
+                                  <span className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-semibold">
+                                    {isMine ? 'Minha' : claimable ? 'Livre' : 'Clube'}
+                                  </span>
                                 </div>
-                                <span className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-semibold">
-                                  {isMine ? 'Minha' : 'Clube'}
-                                </span>
-                              </button>
+                              </div>
                             );
                           })
                         )}
@@ -1099,6 +1128,28 @@ export default function CheckoutActivityModal({
           )}
         </div>
       </div>
+
+      <ClaimWeaponModal
+        isOpen={Boolean(claimModalState)}
+        weapon={claimModalState?.weapon || null}
+        athlete={currentUser ? { id: currentUser.id, fullName: currentUser.fullName, cpf: currentUser.cpf } : null}
+        actingUserId={currentUser?.id}
+        searchedIdentifier={claimModalState?.searchedIdentifier || ''}
+        onClose={() => setClaimModalState(null)}
+        onClaimed={async (claimedWeapon) => {
+          setExactWeaponSearchResults(prev => [...prev.filter(x => x.id !== claimedWeapon.id), claimedWeapon]);
+          setTrainingForm(prev => ({
+            ...prev,
+            selectedWeapon: claimedWeapon,
+            weaponSearchQuery: `${claimedWeapon.manufacturer || ''} ${claimedWeapon.model || ''}`.trim(),
+            weaponName: `${claimedWeapon.manufacturer || ''} ${claimedWeapon.model || ''}`.trim(),
+            weaponCaliber: claimedWeapon.caliber || prev.weaponCaliber,
+            weaponOwnerType: 'propria',
+          }));
+          setIsWeaponDropdownOpen(false);
+          await onWeaponClaimed?.(claimedWeapon);
+        }}
+      />
     </div>
   );
 }

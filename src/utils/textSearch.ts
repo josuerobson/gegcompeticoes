@@ -123,6 +123,19 @@ export function matchesLinkedWeaponQuery(
 }
 
 /**
+ * Retorna true se a arma não possui CPF/proprietário vinculado (e não pertence ao acervo do clube),
+ * podendo ter sua posse requerida por um atleta via Série ou SIGMA exato.
+ */
+export function isWeaponClaimable(w: SelectableWeaponFields | null | undefined): boolean {
+  if (!w) return false;
+  const ownerType = String(w.ownerType || '').trim().toLowerCase();
+  if (ownerType === 'clube') return false;
+  if (ownerType === 'pendente') return true;
+  const cleanCpf = String(w.cpf || '').replace(/\D/g, '');
+  return !cleanCpf && !w.ownerId;
+}
+
+/**
  * Separa e filtra armas selecionáveis:
  * - linked: lista normal das armas vinculadas ao atleta (busca livre/listagem completa).
  * - exactUnlinked: armas não vinculadas encontradas SOMENTE por Nº de Série ou SIGMA exato completo.

@@ -1497,6 +1497,15 @@ export default function App() {
     }
   };
 
+  const handleWeaponClaimed = async (claimedWeapon: Weapon) => {
+    setWeapons(prev =>
+      prev.some(w => w.id === claimedWeapon.id)
+        ? prev.map(w => (w.id === claimedWeapon.id ? claimedWeapon : w))
+        : [claimedWeapon, ...prev]
+    );
+    await refreshWeapons();
+  };
+
 
 
   const handleAddStage = async (data: StageInput): Promise<{ stage?: Stage; error?: string }> => {
@@ -2698,6 +2707,7 @@ export default function App() {
               onViewProfile={handleViewProfile}
               multiChampionships={multiChampionships}
               onRefreshData={syncWithBackend}
+              onWeaponClaimed={handleWeaponClaimed}
               onClubBulkRegister={(prefill) => {
                 setClubBulkRegistrationPrefill(prefill);
                 setActiveTab('admin');
@@ -2752,6 +2762,7 @@ export default function App() {
               multiChampionships={multiChampionships}
               clubBulkRegistrationPrefill={clubBulkRegistrationPrefill}
               onConsumeClubBulkRegistrationPrefill={() => setClubBulkRegistrationPrefill(null)}
+              onWeaponClaimed={handleWeaponClaimed}
               onLoginAs={handleLoginAs}
             />
             </Suspense>
@@ -2773,6 +2784,7 @@ export default function App() {
               weapons={weapons}
               weaponLookupOptions={weaponLookupOptions}
               onAddWeapon={handleAddWeapon}
+              onWeaponClaimed={handleWeaponClaimed}
               onToggleFollow={handleToggleFollow}
               onLogout={handleLogout}
               onAddPost={handleAddPost}

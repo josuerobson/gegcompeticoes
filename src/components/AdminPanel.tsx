@@ -9,7 +9,8 @@ import { SicoobPixManager } from './SicoobPixManager';
 import { downloadPdfFromElement } from '../utils/pdfDownloader';
 import { MercadoPagoManager } from './MercadoPagoManager';
 import { PixPaymentModal } from './PixPaymentModal';
-import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel, filterSelectableWeapons, isWeaponLinkedToAthlete, matchesExactWeaponIdentifier } from '../utils/textSearch';
+import ClaimWeaponModal from './ClaimWeaponModal';
+import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel, filterSelectableWeapons, isWeaponLinkedToAthlete, matchesExactWeaponIdentifier, isWeaponClaimable } from '../utils/textSearch';
 import { RevenueReport, AnnuityRoster, ReceiptsStatement } from './FranchiseReports';
 import ChampionshipFinanceReport from './ChampionshipFinanceReport';
 import { PixReconciliation } from './PixReconciliation';
@@ -116,6 +117,7 @@ interface AdminPanelProps {
   multiChampionships?: MultiChampionship[];
   clubBulkRegistrationPrefill?: ClubBulkRegistrationPrefill | null;
   onConsumeClubBulkRegistrationPrefill?: () => void;
+  onWeaponClaimed?: (weapon: Weapon) => void | Promise<void>;
   // "Entrar como" — troca a sessão local para o usuário informado (o atleta,
   // ou o club_admin de um clube), preservando a conta original para retorno.
   onLoginAs?: (userId: string) => void | Promise<void>;
@@ -1459,10 +1461,11 @@ interface InscricaoClubePanelProps {
   onPrefillApplied?: () => void;
   registrations?: Registration[];
   onRefreshData?: () => Promise<void>;
+  onWeaponClaimed?: (weapon: Weapon) => void | Promise<void>;
   weaponLookupOptions?: WeaponLookupOption[];
 }
 
-function InscricaoClubePanel({ championships, stages, modalities, currentUser, multiChampionships = [], initialPrefill, onPrefillApplied, registrations = [], onRefreshData, weaponLookupOptions = [] }: InscricaoClubePanelProps) {
+function InscricaoClubePanel({ championships, stages, modalities, currentUser, multiChampionships = [], initialPrefill, onPrefillApplied, registrations = [], onRefreshData, onWeaponClaimed, weaponLookupOptions = [] }: InscricaoClubePanelProps) {
   const [mode, setMode] = React.useState<'individual' | 'multi'>(() => initialPrefill?.mode || 'individual');
   const [champId, setChampId] = React.useState(() => initialPrefill?.mode === 'individual' ? initialPrefill.championshipId : '');
   const [stageId, setStageId] = React.useState(() => initialPrefill?.mode === 'individual' ? initialPrefill.stageId : '');
@@ -1500,6 +1503,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
   const [addWeaponInitialSearch, setAddWeaponInitialSearch] = React.useState('');
   const [editingWeaponTarget, setEditingWeaponTarget] = React.useState<Weapon | null>(null);
   const [showEditWeaponModal, setShowEditWeaponModal] = React.useState(false);
+  const [claimWeaponState, setClaimWeaponState] = React.useState<{ weapon: Weapon; member: User; searchedIdentifier: string } | null>(null);
   React.useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
     const update = () => setIsMobile(window.innerWidth <= 767);
@@ -1889,22 +1893,52 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
               const serial = resolveWeaponSerial(w);
               const sigma = (w.sigmaNumber || '').trim() || 'N/A';
               const modelText = `${w.manufacturer || ''} ${w.model || ''} ${w.caliber ? `(${w.caliber})` : ''}`.trim();
-              const clubText = w.clubName ? `• Clube: ${w.clubName}` : (w.ownerName ? `• Atleta: ${w.ownerName}` : '');
+              const claimable = isWeaponClaimable(w);
+              const clubText = claimable
+                ? '• Sem CPF vinculado'
+                : (w.clubName ? `• Clube: ${w.clubName}` : (w.ownerName ? `• Atleta: ${w.ownerName}` : ''));
               const label = formatWeaponLabel(w);
               return (
-                <button
+                <div
                   key={w.id}
-                  type="button"
-                  onMouseDown={e => { e.preventDefault(); selectWeapon(w, label); }}
-                  className="w-full text-left px-3 py-2 hover:bg-blue-50 transition border-b border-slate-50 last:border-0"
+                  className="w-full px-3 py-2 hover:bg-blue-50 transition border-b border-slate-50 last:border-0 flex items-center justify-between gap-2"
                 >
-                  <div className="font-bold text-slate-900 font-mono text-[11px]">
-                    Série: <span className="text-blue-700 font-black">{serial}</span> • Sigma: <span className="text-slate-800">{sigma}</span>
-                  </div>
-                  <div className="text-[10px] text-slate-600 font-medium">
-                    {modelText} {clubText}
-                  </div>
-                </button>
+                  <button
+                    type="button"
+                    onMouseDown={e => { e.preventDefault(); selectWeapon(w, label); }}
+                    className="flex-1 text-left min-w-0 cursor-pointer"
+                  >
+                    <div className="font-bold text-slate-900 font-mono text-[11px] truncate">
+                      Série: <span className="text-blue-700 font-black">{serial}</span> • Sigma: <span className="text-slate-800">{sigma}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-600 font-medium truncate">
+                      {modelText}{' '}
+                      {clubText && (
+                        <span className={claimable ? 'text-amber-600 font-semibold' : ''}>{clubText}</span>
+                      )}
+                    </div>
+                  </button>
+                  {claimable && (
+                    <button
+                      type="button"
+                      onMouseDown={e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setClaimWeaponState({
+                          weapon: w,
+                          member,
+                          searchedIdentifier: searchInput.trim(),
+                        });
+                        setOpenWeaponFieldId(null);
+                      }}
+                      className="shrink-0 text-[10px] font-black text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-2.5 py-1 rounded-full flex items-center gap-1 transition cursor-pointer"
+                      title="Requerer posse desta arma para o CPF do atleta"
+                    >
+                      <ShieldCheck className="w-3 h-3" />
+                      Requerer Posse
+                    </button>
+                  )}
+                </div>
               );
             })}
             <div className="p-2 bg-slate-50 text-center border-t border-slate-100">
@@ -2282,6 +2316,32 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
           if (onRefreshData) onRefreshData();
         }}
       />
+      <ClaimWeaponModal
+        isOpen={Boolean(claimWeaponState)}
+        weapon={claimWeaponState?.weapon || null}
+        athlete={claimWeaponState?.member ? { id: claimWeaponState.member.id, fullName: claimWeaponState.member.fullName, cpf: claimWeaponState.member.cpf } : null}
+        actingUserId={currentUser?.id}
+        searchedIdentifier={claimWeaponState?.searchedIdentifier || ''}
+        onClose={() => setClaimWeaponState(null)}
+        onClaimed={async (claimedWeapon) => {
+          if (!claimWeaponState?.member) return;
+          const targetId = claimWeaponState.member.id;
+          const label = formatWeaponLabel(claimedWeapon);
+          setClubWeapons(prev => prev.some(x => x.id === claimedWeapon.id) ? prev.map(x => x.id === claimedWeapon.id ? claimedWeapon : x) : [...prev, claimedWeapon]);
+          setSelectedAthletes(prev => ({
+            ...prev,
+            [targetId]: { weaponId: claimedWeapon.id, weaponSource: 'propria', checked: true },
+          }));
+          setSearchQueries(prev => ({ ...prev, [targetId]: label }));
+          setSearchResults(prev => ({ ...prev, [targetId]: [] }));
+          setOpenWeaponFieldId(null);
+          if (onWeaponClaimed) {
+            await onWeaponClaimed(claimedWeapon);
+          } else if (onRefreshData) {
+            await onRefreshData();
+          }
+        }}
+      />
     </div>
   );
 }
@@ -2299,6 +2359,7 @@ interface TreinamentosCompeticoesAdminPanelProps {
   isClubView?: boolean;
   onAddWeapon: (weapon: any) => Promise<void>;
   onRefreshData?: () => Promise<void>;
+  onWeaponClaimed?: (weapon: Weapon) => void | Promise<void>;
 }
 
 function TreinamentosCompeticoesAdminPanel({
@@ -2311,6 +2372,7 @@ function TreinamentosCompeticoesAdminPanel({
   isClubView = false,
   onAddWeapon,
   onRefreshData,
+  onWeaponClaimed,
 }: TreinamentosCompeticoesAdminPanelProps) {
   const [selectedClubId, setSelectedClubId] = React.useState<string>(() => {
     if (scopeClubId) return scopeClubId;
@@ -2446,6 +2508,7 @@ function TreinamentosCompeticoesAdminPanel({
 
   const [exactWeaponSearchResults, setExactWeaponSearchResults] = React.useState<Weapon[]>([]);
   const [searchingExactWeapon, setSearchingExactWeapon] = React.useState(false);
+  const [claimTrainingWeaponState, setClaimTrainingWeaponState] = React.useState<{ weapon: Weapon; searchedIdentifier: string } | null>(null);
 
   // Busca remota apenas para localizar arma não vinculada ao atleta por Nº de Série ou SIGMA exato completo
   React.useEffect(() => {
@@ -2987,36 +3050,61 @@ function TreinamentosCompeticoesAdminPanel({
                   ) : (
                     searchFilteredWeapons.map(w => {
                       const isAthleteOwn = isWeaponLinkedToAthlete(w, selectedAthlete);
+                      const claimable = isWeaponClaimable(w);
                       return (
-                        <button
+                        <div
                           key={w.id}
-                          type="button"
-                          onMouseDown={e => {
-                            e.preventDefault();
-                            setTrainingForm(prev => ({
-                              ...prev,
-                              selectedWeapon: w,
-                              weaponName: `${w.manufacturer || ''} ${w.model || ''}`.trim() || w.weaponNumber || 'Arma Cadastrada',
-                              weaponCaliber: w.caliber || prev.weaponCaliber,
-                              weaponOwnerType: isAthleteOwn ? 'propria' : 'clube',
-                              weaponSearchQuery: formatWeaponLabel(w),
-                            }));
-                            setIsWeaponDropdownOpen(false);
-                          }}
-                          className="w-full text-left p-3 hover:bg-blue-50/70 transition flex items-center justify-between cursor-pointer"
+                          className="w-full p-2.5 hover:bg-blue-50/70 transition flex items-center justify-between gap-2"
                         >
-                          <div>
-                            <div className="font-mono text-xs font-bold text-slate-900">
+                          <button
+                            type="button"
+                            onMouseDown={e => {
+                              e.preventDefault();
+                              setTrainingForm(prev => ({
+                                ...prev,
+                                selectedWeapon: w,
+                                weaponName: `${w.manufacturer || ''} ${w.model || ''}`.trim() || w.weaponNumber || 'Arma Cadastrada',
+                                weaponCaliber: w.caliber || prev.weaponCaliber,
+                                weaponOwnerType: isAthleteOwn ? 'propria' : 'clube',
+                                weaponSearchQuery: formatWeaponLabel(w),
+                              }));
+                              setIsWeaponDropdownOpen(false);
+                            }}
+                            className="flex-1 text-left min-w-0 cursor-pointer"
+                          >
+                            <div className="font-mono text-xs font-bold text-slate-900 truncate">
                               Série: {resolveWeaponSerial(w)} • Sigma: {w.sigmaNumber || '—'}
                             </div>
-                            <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+                            <div className="text-[11px] text-slate-600 font-medium mt-0.5 truncate">
                               {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[10px]">({w.caliber || 'Sem calibre'})</span>
+                              {claimable && <span className="text-amber-600 font-semibold"> • Sem CPF vinculado</span>}
                             </div>
+                          </button>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {claimable && selectedAthlete && (
+                              <button
+                                type="button"
+                                onMouseDown={e => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setClaimTrainingWeaponState({
+                                    weapon: w,
+                                    searchedIdentifier: trainingForm.weaponSearchQuery.trim(),
+                                  });
+                                  setIsWeaponDropdownOpen(false);
+                                }}
+                                className="text-[10px] font-black text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-2.5 py-1 rounded-full flex items-center gap-1 transition cursor-pointer"
+                                title="Requerer posse desta arma para o CPF do atleta"
+                              >
+                                <ShieldCheck className="w-3 h-3" />
+                                Requerer Posse
+                              </button>
+                            )}
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isAthleteOwn ? 'bg-blue-100 text-blue-800 border border-blue-200' : claimable ? 'bg-slate-100 text-slate-700 border border-slate-200' : 'bg-purple-100 text-purple-800 border border-purple-200'}`}>
+                              {isAthleteOwn ? '🎯 Própria' : claimable ? 'Sem Dono' : '🏛️ Clube'}
+                            </span>
                           </div>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isAthleteOwn ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-purple-100 text-purple-800 border border-purple-200'}`}>
-                            {isAthleteOwn ? '🎯 Própria' : '🏛️ Clube'}
-                          </span>
-                        </button>
+                        </div>
                       );
                     })
                   )}
@@ -3421,6 +3509,32 @@ function TreinamentosCompeticoesAdminPanel({
           </div>
         )}
       </div>
+
+      <ClaimWeaponModal
+        isOpen={Boolean(claimTrainingWeaponState)}
+        weapon={claimTrainingWeaponState?.weapon || null}
+        athlete={selectedAthlete ? { id: selectedAthlete.id, fullName: selectedAthlete.fullName, cpf: selectedAthlete.cpf } : null}
+        actingUserId={currentUser?.id}
+        searchedIdentifier={claimTrainingWeaponState?.searchedIdentifier || ''}
+        onClose={() => setClaimTrainingWeaponState(null)}
+        onClaimed={async (claimedWeapon) => {
+          setExactWeaponSearchResults(prev => [...prev.filter(x => x.id !== claimedWeapon.id), claimedWeapon]);
+          setTrainingForm(prev => ({
+            ...prev,
+            selectedWeapon: claimedWeapon,
+            weaponName: `${claimedWeapon.manufacturer || ''} ${claimedWeapon.model || ''}`.trim() || claimedWeapon.weaponNumber || 'Arma Cadastrada',
+            weaponCaliber: claimedWeapon.caliber || prev.weaponCaliber,
+            weaponOwnerType: 'propria',
+            weaponSearchQuery: formatWeaponLabel(claimedWeapon),
+          }));
+          setIsWeaponDropdownOpen(false);
+          if (onWeaponClaimed) {
+            await onWeaponClaimed(claimedWeapon);
+          } else if (onRefreshData) {
+            await onRefreshData();
+          }
+        }}
+      />
     </div>
   );
 }
@@ -5330,9 +5444,10 @@ interface IdscInscricaoPanelProps {
   onPrefillApplied?: () => void;
   weaponLookupOptions?: WeaponLookupOption[];
   onRefreshData?: () => Promise<void>;
+  onWeaponClaimed?: (weapon: Weapon) => void | Promise<void>;
 }
 
-function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, weaponLookupOptions = [], onRefreshData }: IdscInscricaoPanelProps) {
+function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, weaponLookupOptions = [], onRefreshData, onWeaponClaimed }: IdscInscricaoPanelProps) {
   const [championships, setChampionships] = React.useState<IdscChampionship[]>([]);
   const [championshipId, setChampionshipId] = React.useState(() => initialPrefill?.mode === 'idsc' ? initialPrefill.championshipId : '');
   const [stages, setStages] = React.useState<IdscStage[]>([]);
@@ -5354,6 +5469,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
 
   const [editingWeaponTarget, setEditingWeaponTarget] = React.useState<Weapon | null>(null);
   const [showEditWeaponModal, setShowEditWeaponModal] = React.useState(false);
+  const [claimWeaponState, setClaimWeaponState] = React.useState<{ weapon: Weapon; member: User; searchedIdentifier: string } | null>(null);
 
   // Atletas que já têm inscrição nesta pista (qualquer situação de pagamento): se inscritos de
   // novo, será Re-inscrição.
@@ -5634,22 +5750,52 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
               const serial = resolveWeaponSerial(w);
               const sigma = (w.sigmaNumber || '').trim() || 'N/A';
               const modelText = `${w.manufacturer || ''} ${w.model || ''} ${w.caliber ? `(${w.caliber})` : ''}`.trim();
-              const clubText = w.clubName ? `• Clube: ${w.clubName}` : (w.ownerName ? `• Atleta: ${w.ownerName}` : '');
+              const claimable = isWeaponClaimable(w);
+              const clubText = claimable
+                ? '• Sem CPF vinculado'
+                : (w.clubName ? `• Clube: ${w.clubName}` : (w.ownerName ? `• Atleta: ${w.ownerName}` : ''));
               const label = formatWeaponLabel(w);
               return (
-                <button
+                <div
                   key={w.id}
-                  type="button"
-                  onMouseDown={e => { e.preventDefault(); selectWeapon(w, label); }}
-                  className="w-full text-left px-3 py-2 hover:bg-blue-50 transition border-b border-slate-50 last:border-0"
+                  className="w-full px-3 py-2 hover:bg-blue-50 transition border-b border-slate-50 last:border-0 flex items-center justify-between gap-2"
                 >
-                  <div className="font-bold text-slate-900 font-mono text-[11px]">
-                    Série: <span className="text-blue-700 font-black">{serial}</span> • Sigma: <span className="text-slate-800">{sigma}</span>
-                  </div>
-                  <div className="text-[10px] text-slate-600 font-medium">
-                    {modelText} {clubText}
-                  </div>
-                </button>
+                  <button
+                    type="button"
+                    onMouseDown={e => { e.preventDefault(); selectWeapon(w, label); }}
+                    className="flex-1 text-left min-w-0 cursor-pointer"
+                  >
+                    <div className="font-bold text-slate-900 font-mono text-[11px] truncate">
+                      Série: <span className="text-blue-700 font-black">{serial}</span> • Sigma: <span className="text-slate-800">{sigma}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-600 font-medium truncate">
+                      {modelText}{' '}
+                      {clubText && (
+                        <span className={claimable ? 'text-amber-600 font-semibold' : ''}>{clubText}</span>
+                      )}
+                    </div>
+                  </button>
+                  {claimable && (
+                    <button
+                      type="button"
+                      onMouseDown={e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setClaimWeaponState({
+                          weapon: w,
+                          member,
+                          searchedIdentifier: searchInput.trim(),
+                        });
+                        setOpenWeaponFieldId(null);
+                      }}
+                      className="shrink-0 text-[10px] font-black text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-2.5 py-1 rounded-full flex items-center gap-1 transition cursor-pointer"
+                      title="Requerer posse desta arma para o CPF do atleta"
+                    >
+                      <ShieldCheck className="w-3 h-3" />
+                      Requerer Posse
+                    </button>
+                  )}
+                </div>
               );
             })}
             <div className="p-2 bg-slate-50 text-center border-t border-slate-100">
@@ -5975,6 +6121,32 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
         onWeaponUpdated={(updatedWeapon, formatted) => {
           setClubWeapons(prev => prev.map(w => w.id === updatedWeapon.id ? { ...w, ...updatedWeapon } : w));
           if (onRefreshData) onRefreshData();
+        }}
+      />
+      <ClaimWeaponModal
+        isOpen={Boolean(claimWeaponState)}
+        weapon={claimWeaponState?.weapon || null}
+        athlete={claimWeaponState?.member ? { id: claimWeaponState.member.id, fullName: claimWeaponState.member.fullName, cpf: claimWeaponState.member.cpf } : null}
+        actingUserId={currentUser?.id}
+        searchedIdentifier={claimWeaponState?.searchedIdentifier || ''}
+        onClose={() => setClaimWeaponState(null)}
+        onClaimed={async (claimedWeapon) => {
+          if (!claimWeaponState?.member) return;
+          const targetId = claimWeaponState.member.id;
+          const label = formatWeaponLabel(claimedWeapon);
+          setClubWeapons(prev => prev.some(x => x.id === claimedWeapon.id) ? prev.map(x => x.id === claimedWeapon.id ? claimedWeapon : x) : [...prev, claimedWeapon]);
+          setSelectedAthletes(prev => ({
+            ...prev,
+            [targetId]: { weaponId: claimedWeapon.id, weaponSource: 'propria', checked: true },
+          }));
+          setSearchQueries(prev => ({ ...prev, [targetId]: label }));
+          setSearchResults(prev => ({ ...prev, [targetId]: [] }));
+          setOpenWeaponFieldId(null);
+          if (onWeaponClaimed) {
+            await onWeaponClaimed(claimedWeapon);
+          } else if (onRefreshData) {
+            await onRefreshData();
+          }
         }}
       />
     </div>
@@ -8761,6 +8933,7 @@ export default function AdminPanel({
   multiChampionships = [],
   clubBulkRegistrationPrefill,
   onConsumeClubBulkRegistrationPrefill,
+  onWeaponClaimed,
   onLoginAs
 }: AdminPanelProps) {
   const modalityName = (id: string) => modalities.find(m => m.id === id)?.name || id;
@@ -11269,6 +11442,7 @@ export default function AdminPanel({
                 onPrefillApplied={() => setPendingClubPrefill(null)}
                 weaponLookupOptions={weaponLookupOptions}
                 onRefreshData={onRefreshData}
+                onWeaponClaimed={onWeaponClaimed}
               />
             ) : (
               <InscricaoClubePanel
@@ -11281,6 +11455,7 @@ export default function AdminPanel({
                 onPrefillApplied={() => setPendingClubPrefill(null)}
                 registrations={registrations}
                 onRefreshData={onRefreshData}
+                onWeaponClaimed={onWeaponClaimed}
                 weaponLookupOptions={weaponLookupOptions}
               />
             )}
@@ -12105,6 +12280,7 @@ export default function AdminPanel({
             isClubView={true}
             onAddWeapon={onAddWeapon}
             onRefreshData={onRefreshData}
+            onWeaponClaimed={onWeaponClaimed}
           />
         );
 
@@ -15712,6 +15888,7 @@ export default function AdminPanel({
             isClubView={false}
             onAddWeapon={onAddWeapon}
             onRefreshData={onRefreshData}
+            onWeaponClaimed={onWeaponClaimed}
           />
         );
 
@@ -15915,6 +16092,7 @@ export default function AdminPanel({
           onPrefillApplied={() => setPendingClubPrefill(null)}
           weaponLookupOptions={weaponLookupOptions}
           onRefreshData={onRefreshData}
+          onWeaponClaimed={onWeaponClaimed}
         />;
 
       case 'idsc_resultados':

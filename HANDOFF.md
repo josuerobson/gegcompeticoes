@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(weapons): exigir Série ou SIGMA exato completo para selecionar armas não vinculadas ao atleta` |
-| Data/hora | 2026-11-11T14:25:00-03:00 |
+| Mensagem | `feat(weapons): permitir requerer posse de arma sem CPF vinculado via Série/SIGMA exato com validade de Guia de Trânsito` |
+| Data/hora | `2026-11-11T15:25:00-03:00` |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,14 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Requerimento de posse de armas sem CPF vinculado via Série ou SIGMA exato (`POST /api/weapons/:id/claim`, `ClaimWeaponModal.tsx`, `src/utils/textSearch.ts`, `ChampionshipsView.tsx`, `MemberProfile.tsx`, `CheckoutActivityModal.tsx`, `AdminPanel.tsx`, `App.tsx`)**:
+  - **Solicitação do Usuário**: Em qualquer campo onde o atleta (ou clube em seu nome) pesquise uma arma pelo Nº de Série completo ou Nº do SIGMA completo e ela não estiver vinculada a nenhum CPF, permitir requerer a posse da arma vinculando-a ao CPF do atleta e registrando a data de vencimento da Guia de Trânsito.
+  - **Implementação**:
+    1. **Endpoint dedicado no Backend (`POST /api/weapons/:id/claim` em `server.ts`)**: Autenticado via `requireAuth`; bloqueia armas de acervo do clube (`owner_type = 'clube'`) e armas que já possuam CPF/proprietário vinculado (HTTP 409); exige confirmação exata de `identifier` contra `weapon_number`/`serial_number`/`sigma_number`, data válida de `gtExpirationDate` (`YYYY-MM-DD`) e CPF válido cadastrado no perfil do atleta alvo (com suporte a `targetUserId` para gestores de clube atuarem em atletas do mesmo estande); atualiza atomicamente `owner_id`, `owner_cpf`, `club_id`, `gt_expiration_date` e `owner_type = 'atleta'`.
+    2. **Helper + Modal reutilizável (`isWeaponClaimable` em `src/utils/textSearch.ts` e `src/components/ClaimWeaponModal.tsx`)**: Detecta armas livres de CPF (`ownerType === 'pendente'` ou sem `cpf`/`ownerId`, excluindo `clube`) e abre modal exibindo os dados da arma, CPF do atleta e campo obrigatório de validade da Guia de Trânsito.
+    3. **Integração em todos os seletores de arma**: Botão `"Requerer Posse"` presente em `ChampionshipsView.tsx` (`renderWeaponSelector` — Individual, Multi e IDSC), `MemberProfile.tsx` (Treinamentos), `CheckoutActivityModal.tsx` (Check-out Treinamentos) e `AdminPanel.tsx` (`InscricaoClubePanel`, `IdscInscricaoPanel`, `TreinamentosCompeticoesAdminPanel`), atualizando estado global via `handleWeaponClaimed` (`App.tsx`) e selecionando a arma automaticamente como própria.
+  - **O que NÃO fazer no futuro**: Nunca permitir reivindicar armas que já possuam CPF vinculado ou pertençam ao acervo do clube (`owner_type = 'clube'`), nem liberar posse sem validar o Série/SIGMA exato completo e a data da Guia de Trânsito.
 
 - **Restrição estrita na busca de armas não vinculadas ao atleta — Competições, Treinamentos e Cessão (`src/utils/textSearch.ts`, `server.ts`, `ChampionshipsView.tsx`, `MemberProfile.tsx`, `CheckoutActivityModal.tsx`, `AdminPanel.tsx`)**:
   - **Solicitação do Usuário**: Em todos os locais onde se vincula/seleciona arma (competições e treinamentos), quando o atleta pesquisa por uma arma que não está vinculada a ele, o sistema deve retornar SOMENTE se ele digitar exatamente o Nº de Série completo ou Nº do SIGMA completo (sem exibir listas de armas não vinculadas), enquanto a lista de armas vinculadas ao atleta continua exibindo normalmente.

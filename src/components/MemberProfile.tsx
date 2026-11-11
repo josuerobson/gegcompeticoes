@@ -7,7 +7,8 @@ import { QRCodeView } from './QRCodeView';
 import { PixPaymentModal } from './PixPaymentModal';
 import ClubCheckinModal from './ClubCheckinModal';
 import CheckoutActivityModal from './CheckoutActivityModal';
-import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel, filterSelectableWeapons, isWeaponLinkedToAthlete } from '../utils/textSearch';
+import ClaimWeaponModal from './ClaimWeaponModal';
+import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel, filterSelectableWeapons, isWeaponLinkedToAthlete, isWeaponClaimable } from '../utils/textSearch';
 import { annuityStatus, ANNUITY_STATUS_LABELS } from '../utils/financeReports';
 import { downloadPdfFromElement, downloadPdfFromHtml, sanitizePdfFilename } from '../utils/pdfDownloader';
 import {
@@ -36,6 +37,7 @@ interface MemberProfileProps {
   weapons?: Weapon[];
   weaponLookupOptions?: WeaponLookupOption[];
   onAddWeapon?: (weapon: Partial<Weapon>) => Promise<any>;
+  onWeaponClaimed?: (weapon: Weapon) => void | Promise<void>;
   onToggleFollow: (userId: string) => Promise<void>;
   onLogout: () => void;
   onAddPost: (content: string, imageUrl?: string, targetScore?: any, imageUrls?: string[], sharedPost?: SharedPostInfo) => Promise<void>;
@@ -288,6 +290,7 @@ export default function MemberProfile({
   weapons = [],
   weaponLookupOptions = [],
   onAddWeapon,
+  onWeaponClaimed,
   onToggleFollow,
   onLogout,
   onAddPost,
@@ -1404,6 +1407,7 @@ export default function MemberProfile({
 
   const [exactWeaponSearchResults, setExactWeaponSearchResults] = useState<Weapon[]>([]);
   const [searchingExactWeapon, setSearchingExactWeapon] = useState(false);
+  const [claimModalState, setClaimModalState] = useState<{ weapon: Weapon; searchedIdentifier: string } | null>(null);
 
   // Busca remota apenas quando há 2+ caracteres para localizar arma não vinculada por Série/SIGMA exato
   useEffect(() => {
@@ -4195,36 +4199,61 @@ export default function MemberProfile({
                           ) : (
                             searchFilteredWeapons.map(w => {
                               const isMine = isWeaponLinkedToAthlete(w, currentUser);
+                              const claimable = isWeaponClaimable(w);
                               return (
-                                <button
+                                <div
                                   key={w.id}
-                                  type="button"
-                                  onMouseDown={e => {
-                                    e.preventDefault();
-                                    setTrainingForm(prev => ({
-                                      ...prev,
-                                      selectedWeapon: w,
-                                      weaponName: `${w.manufacturer || ''} ${w.model || ''}`.trim() || w.weaponNumber || 'Arma Cadastrada',
-                                      weaponCaliber: w.caliber || prev.weaponCaliber,
-                                      weaponOwnerType: isMine ? 'propria' : 'clube',
-                                      weaponSearchQuery: formatWeaponLabel(w),
-                                    }));
-                                    setIsWeaponDropdownOpen(false);
-                                  }}
-                                  className="w-full text-left p-3 hover:bg-blue-50/70 transition flex items-center justify-between cursor-pointer"
+                                  className="w-full p-2.5 hover:bg-blue-50/70 transition flex items-center justify-between gap-2"
                                 >
-                                  <div>
-                                    <div className="font-mono text-xs font-bold text-slate-900">
+                                  <button
+                                    type="button"
+                                    onMouseDown={e => {
+                                      e.preventDefault();
+                                      setTrainingForm(prev => ({
+                                        ...prev,
+                                        selectedWeapon: w,
+                                        weaponName: `${w.manufacturer || ''} ${w.model || ''}`.trim() || w.weaponNumber || 'Arma Cadastrada',
+                                        weaponCaliber: w.caliber || prev.weaponCaliber,
+                                        weaponOwnerType: isMine ? 'propria' : 'clube',
+                                        weaponSearchQuery: formatWeaponLabel(w),
+                                      }));
+                                      setIsWeaponDropdownOpen(false);
+                                    }}
+                                    className="flex-1 text-left min-w-0 cursor-pointer"
+                                  >
+                                    <div className="font-mono text-xs font-bold text-slate-900 truncate">
                                       Série: {resolveWeaponSerial(w)} • Sigma: {w.sigmaNumber || '—'}
                                     </div>
-                                    <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+                                    <div className="text-[11px] text-slate-600 font-medium mt-0.5 truncate">
                                       {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[10px]">({w.caliber || 'Sem calibre'})</span>
+                                      {claimable && <span className="text-amber-600 font-semibold"> • Sem CPF vinculado</span>}
                                     </div>
+                                  </button>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {claimable && (
+                                      <button
+                                        type="button"
+                                        onMouseDown={e => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          setClaimModalState({
+                                            weapon: w,
+                                            searchedIdentifier: trainingForm.weaponSearchQuery.trim(),
+                                          });
+                                          setIsWeaponDropdownOpen(false);
+                                        }}
+                                        className="text-[10px] font-black text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-2.5 py-1 rounded-full flex items-center gap-1 transition cursor-pointer"
+                                        title="Requerer posse desta arma para o seu CPF"
+                                      >
+                                        <ShieldCheck className="w-3 h-3" />
+                                        Requerer Posse
+                                      </button>
+                                    )}
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isMine ? 'bg-blue-100 text-blue-800 border border-blue-200' : claimable ? 'bg-slate-100 text-slate-700 border border-slate-200' : 'bg-purple-100 text-purple-800 border border-purple-200'}`}>
+                                      {isMine ? '🎯 Própria' : claimable ? 'Sem Dono' : '🏛️ Clube'}
+                                    </span>
                                   </div>
-                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isMine ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-purple-100 text-purple-800 border border-purple-200'}`}>
-                                    {isMine ? '🎯 Própria' : '🏛️ Clube'}
-                                  </span>
-                                </button>
+                                </div>
                               );
                             })
                           )}
@@ -5159,6 +5188,7 @@ export default function MemberProfile({
           registrations={registrations}
           staySeconds={staySeconds}
           onClose={() => setIsCheckoutConfirmOpen(false)}
+          onWeaponClaimed={onWeaponClaimed}
           onCheckoutComplete={() => {
             setActiveCheckin(null);
             setIsCheckoutConfirmOpen(false);
@@ -6290,6 +6320,28 @@ export default function MemberProfile({
           </div>
         )}
       </AnimatePresence>
+
+      <ClaimWeaponModal
+        isOpen={Boolean(claimModalState)}
+        weapon={claimModalState?.weapon || null}
+        athlete={currentUser ? { id: currentUser.id, fullName: currentUser.fullName, cpf: currentUser.cpf } : null}
+        actingUserId={currentUser?.id}
+        searchedIdentifier={claimModalState?.searchedIdentifier || ''}
+        onClose={() => setClaimModalState(null)}
+        onClaimed={async (claimedWeapon) => {
+          setExactWeaponSearchResults(prev => [...prev.filter(x => x.id !== claimedWeapon.id), claimedWeapon]);
+          setTrainingForm(prev => ({
+            ...prev,
+            selectedWeapon: claimedWeapon,
+            weaponName: `${claimedWeapon.manufacturer || ''} ${claimedWeapon.model || ''}`.trim() || claimedWeapon.weaponNumber || 'Arma Cadastrada',
+            weaponCaliber: claimedWeapon.caliber || prev.weaponCaliber,
+            weaponOwnerType: 'propria',
+            weaponSearchQuery: formatWeaponLabel(claimedWeapon),
+          }));
+          setIsWeaponDropdownOpen(false);
+          await onWeaponClaimed?.(claimedWeapon);
+        }}
+      />
 
     </div>
   );

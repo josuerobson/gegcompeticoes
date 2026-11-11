@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Championship, User, Registration, StageScore, RankingItem, Modality, Stage, Weapon, WeaponLookupOption, MultiChampionship, ClubBulkRegistrationPrefill, IdscChampionship, IdscStage, IdscCourse } from '../types';
-import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, CreditCard, ChevronRight, Download, Medal, PlusCircle, X, Search, Layers, Zap, Copy } from 'lucide-react';
+import { Trophy, Calendar, DollarSign, Target, CheckCircle, Shield, ShieldCheck, CreditCard, ChevronRight, Download, Medal, PlusCircle, X, Search, Layers, Zap, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PixPaymentModal } from './PixPaymentModal';
-import { resolveWeaponSerial, formatWeaponLabel, filterSelectableWeapons } from '../utils/textSearch';
+import ClaimWeaponModal from './ClaimWeaponModal';
+import { resolveWeaponSerial, formatWeaponLabel, filterSelectableWeapons, isWeaponClaimable } from '../utils/textSearch';
 import { computeRevenueBreakdown, computeTodasEtapasPrize } from '../utils/championshipFinance';
 
 interface ChampionshipsProps {
@@ -40,6 +41,7 @@ interface ChampionshipsProps {
   onViewProfile?: (username: string) => void;
   multiChampionships?: MultiChampionship[];
   onRefreshData?: () => Promise<void>;
+  onWeaponClaimed?: (weapon: Weapon) => void | Promise<void>;
   onClubBulkRegister?: (prefill: ClubBulkRegistrationPrefill) => void;
 }
 
@@ -61,6 +63,7 @@ export default function ChampionshipsView({
   onViewProfile,
   multiChampionships = [],
   onRefreshData,
+  onWeaponClaimed,
   onClubBulkRegister
 }: ChampionshipsProps) {
   // Navigation states
@@ -195,6 +198,7 @@ export default function ChampionshipsView({
   const [weaponSearchResults, setWeaponSearchResults] = useState<Weapon[]>([]);
   const [isWeaponDropdownOpen, setIsWeaponDropdownOpen] = useState(false);
   const [searchingWeapon, setSearchingWeapon] = useState(false);
+  const [claimModalState, setClaimModalState] = useState<{ weapon: Weapon; searchedIdentifier: string; isMulti: boolean } | null>(null);
 
   const displayedWeaponResults = React.useMemo(() => {
     const mergedMap = new Map<string, Weapon>();
@@ -567,34 +571,76 @@ export default function ChampionshipsView({
               <>
                 {displayedWeaponResults.map(w => {
                   const serial = resolveWeaponSerial(w);
-                  const ownerOrClub = w.ownerName ? `Atleta: ${w.ownerName}` : (w.clubName ? `Clube: ${w.clubName}` : '');
+                  const claimable = isWeaponClaimable(w);
+                  const ownerOrClub = claimable
+                    ? 'Sem CPF vinculado'
+                    : (w.ownerName ? `Atleta: ${w.ownerName}` : (w.clubName ? `Clube: ${w.clubName}` : ''));
                   return (
-                    <button
+                    <div
                       key={w.id}
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        if (isMulti) setMultiWeaponId(w.id);
-                        setSelectedWeaponId(w.id);
-                        setWeaponSearchQuery(formatWeaponLabel(w));
-                        setWeaponSearchResults([]);
-                        setIsWeaponDropdownOpen(false);
-                      }}
-                      className="w-full text-left p-3 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
+                      className="w-full p-2.5 hover:bg-blue-50/70 transition flex items-center justify-between gap-2"
                     >
-                      <div>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          if (isMulti) setMultiWeaponId(w.id);
+                          setSelectedWeaponId(w.id);
+                          setWeaponSearchQuery(formatWeaponLabel(w));
+                          setWeaponSearchResults([]);
+                          setIsWeaponDropdownOpen(false);
+                        }}
+                        className="flex-1 text-left cursor-pointer min-w-0"
+                      >
                         <div className="font-mono text-xs font-bold text-slate-900">
                           Série: {serial} • Sigma: {w.sigmaNumber || '—'}
                         </div>
-                        <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+                        <div className="text-[11px] text-slate-600 font-medium mt-0.5 truncate">
                           {w.manufacturer} {w.model} <span className="text-blue-600 font-mono text-[10px]">({w.caliber || 'Sem calibre'})</span>
-                          {ownerOrClub && <span className="text-slate-400 font-normal"> • {ownerOrClub}</span>}
+                          {ownerOrClub && (
+                            <span className={`font-normal ${claimable ? 'text-amber-600 font-semibold' : 'text-slate-400'}`}>
+                              {' '}• {ownerOrClub}
+                            </span>
+                          )}
                         </div>
+                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {claimable && (
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setClaimModalState({
+                                weapon: w,
+                                searchedIdentifier: weaponSearchQuery.trim(),
+                                isMulti,
+                              });
+                              setIsWeaponDropdownOpen(false);
+                            }}
+                            className="text-[10px] font-black text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-2.5 py-1 rounded-full flex items-center gap-1 transition cursor-pointer"
+                            title="Requerer posse desta arma para o seu CPF"
+                          >
+                            <ShieldCheck className="w-3 h-3" />
+                            Requerer Posse
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            if (isMulti) setMultiWeaponId(w.id);
+                            setSelectedWeaponId(w.id);
+                            setWeaponSearchQuery(formatWeaponLabel(w));
+                            setWeaponSearchResults([]);
+                            setIsWeaponDropdownOpen(false);
+                          }}
+                          className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-full border border-blue-100 cursor-pointer"
+                        >
+                          Selecionar
+                        </button>
                       </div>
-                      <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-                        Selecionar
-                      </span>
-                    </button>
+                    </div>
                   );
                 })}
                 <div className="p-2.5 bg-slate-50 text-center">
@@ -2223,6 +2269,33 @@ export default function ChampionshipsView({
           onClose={() => setPixModal(null)}
         />
       )}
+
+      <ClaimWeaponModal
+        isOpen={Boolean(claimModalState)}
+        weapon={claimModalState?.weapon || null}
+        athlete={currentUser ? { id: currentUser.id, fullName: currentUser.fullName, cpf: currentUser.cpf } : null}
+        actingUserId={currentUser?.id}
+        searchedIdentifier={claimModalState?.searchedIdentifier || ''}
+        onClose={() => setClaimModalState(null)}
+        onClaimed={async (claimedWeapon) => {
+          if (claimModalState?.isMulti) {
+            setMultiWeaponId(claimedWeapon.id);
+            setMultiWeaponSource('propria');
+          } else {
+            setWeaponSource('propria');
+            setIdscWeaponSource('propria');
+          }
+          setSelectedWeaponId(claimedWeapon.id);
+          setWeaponSearchQuery(formatWeaponLabel(claimedWeapon));
+          setWeaponSearchResults(prev => [...prev.filter(x => x.id !== claimedWeapon.id), claimedWeapon]);
+          setIsWeaponDropdownOpen(false);
+          if (onWeaponClaimed) {
+            await onWeaponClaimed(claimedWeapon);
+          } else if (onRefreshData) {
+            await onRefreshData();
+          }
+        }}
+      />
 
     </div>
   );

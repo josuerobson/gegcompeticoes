@@ -5270,6 +5270,118 @@ app.put('/api/weapons/:id', requireAuth, async (req, res) => {
   }
 });
 
+// Requerer posse de arma sem CPF vinculado via Nº de Série ou SIGMA exato + validade da Guia de Trânsito
+app.post('/api/weapons/:id/claim', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const weaponId = req.params.id;
+  const { identifier, gtExpirationDate, targetUserId } = req.body || {};
+
+  const cleanGtDate = String(gtExpirationDate || '').trim();
+  if (!cleanGtDate || !/^\d{4}-\d{2}-\d{2}$/.test(cleanGtDate) || Number.isNaN(Date.parse(cleanGtDate))) {
+    return res.status(400).json({ error: 'Informe uma data de vencimento válida para a Guia de Trânsito.' });
+  }
+
+  const normalizedIdentifier = String(identifier || '').trim().replace(/\s+/g, ' ').toUpperCase();
+  const invalidCodes = new Set(['', 'S/N', 'N/A', 'SN', '-', '--', '—']);
+  if (invalidCodes.has(normalizedIdentifier)) {
+    return res.status(400).json({ error: 'Informe o número de série ou SIGMA completo da arma para requerer a posse.' });
+  }
+
+  try {
+    const existingRes = await pool.query(
+      `SELECT w.*, u.cpf as owner_cpf_user
+       FROM weapons w
+       LEFT JOIN users u ON u.id = w.owner_id
+       WHERE w.id = $1`,
+      [weaponId]
+    );
+    if (existingRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Arma não encontrada.' });
+    }
+    const existingRow = existingRes.rows[0];
+    const rawOwnerType = String(existingRow.owner_type || '').trim().toLowerCase();
+
+    if (rawOwnerType === 'clube') {
+      return res.status(409).json({ error: 'Armas do acervo do clube não podem ser requeridas por atleta.' });
+    }
+
+    const existingLinkedCpf = String(existingRow.owner_cpf || existingRow.owner_cpf_user || '').replace(/\D/g, '');
+    if (rawOwnerType !== 'pendente' && (existingLinkedCpf.length > 0 || existingRow.owner_id)) {
+      return res.status(409).json({ error: 'Esta arma já está vinculada a um CPF e não pode ser requerida.' });
+    }
+
+    const candidates = [existingRow.weapon_number, existingRow.serial_number, existingRow.sigma_number]
+      .map(v => String(v || '').trim().replace(/\s+/g, ' ').toUpperCase())
+      .filter(v => !invalidCodes.has(v));
+    if (!candidates.includes(normalizedIdentifier)) {
+      return res.status(403).json({ error: 'O número de série ou SIGMA informado não confere com a arma selecionada.' });
+    }
+
+    let resolvedTargetUserId = currentUser.id;
+    if (targetUserId && String(targetUserId) !== currentUser.id) {
+      if (!ADMIN_ROLES.includes(currentUser.role)) {
+        return res.status(403).json({ error: 'Você não tem permissão para requerer arma para outro atleta.' });
+      }
+      resolvedTargetUserId = String(targetUserId);
+    }
+
+    const athleteRes = await pool.query(
+      'SELECT id, full_name, cpf, club_id FROM users WHERE id = $1 LIMIT 1',
+      [resolvedTargetUserId]
+    );
+    if (athleteRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Atleta não encontrado.' });
+    }
+    const athlete = athleteRes.rows[0];
+    if (
+      resolvedTargetUserId !== currentUser.id &&
+      currentUser.role !== 'master_admin' &&
+      athlete.club_id !== currentUser.clubId
+    ) {
+      return res.status(403).json({ error: 'Clubes só podem requerer armas para atletas vinculados ao próprio clube.' });
+    }
+
+    const cleanAthleteCpf = String(athlete.cpf || '').replace(/\D/g, '');
+    if (!cleanAthleteCpf || cleanAthleteCpf.length < 11) {
+      return res.status(400).json({ error: 'O atleta não possui um CPF válido cadastrado no perfil. Atualize o CPF antes de requerer a posse da arma.' });
+    }
+
+    const resolvedClubId = athlete.club_id || existingRow.club_id || null;
+    const updRes = await pool.query(
+      `UPDATE weapons
+       SET owner_id = $1,
+           owner_cpf = $2,
+           club_id = $3,
+           gt_expiration_date = $4,
+           owner_type = 'atleta'
+       WHERE id = $5
+         AND COALESCE(owner_type, '') <> 'clube'
+         AND (
+           COALESCE(owner_type, '') = 'pendente'
+           OR (NULLIF(BTRIM(COALESCE(owner_cpf, '')), '') IS NULL AND owner_id IS NULL)
+         )
+       RETURNING id`,
+      [athlete.id, athlete.cpf, resolvedClubId, cleanGtDate, weaponId]
+    );
+    if (updRes.rows.length === 0) {
+      return res.status(409).json({ error: 'Esta arma já foi vinculada a outro atleta.' });
+    }
+
+    const updated = await pool.query(
+      `SELECT w.*, u.cpf as owner_cpf_user, u.full_name as owner_name_user, c.name as club_name_joined
+       FROM weapons w
+       LEFT JOIN users u ON u.id = w.owner_id
+       LEFT JOIN clubs c ON c.id = COALESCE(w.club_id, u.club_id)
+       WHERE w.id = $1`,
+      [weaponId]
+    );
+    res.json({ weapon: mapWeapon(updated.rows[0]) });
+  } catch (err) {
+    console.error('Claim weapon error:', err);
+    res.status(500).json({ error: 'Erro ao requerer posse da arma.' });
+  }
+});
+
 
 
 // Managed dropdown lists for the weapon form (Classe/Modelo/Calibre/Fabricante/
