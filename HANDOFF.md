@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(auth): corrigir redirecionamento, boot e banner em Entrar como Clube e Atleta` |
-| Data/hora | 2026-11-11T13:10:00-03:00 |
+| Mensagem | `fix(weapons): exigir Série ou SIGMA exato completo para selecionar armas não vinculadas ao atleta` |
+| Data/hora | 2026-11-11T14:25:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,14 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Restrição estrita na busca de armas não vinculadas ao atleta — Competições, Treinamentos e Cessão (`src/utils/textSearch.ts`, `server.ts`, `ChampionshipsView.tsx`, `MemberProfile.tsx`, `CheckoutActivityModal.tsx`, `AdminPanel.tsx`)**:
+  - **Solicitação do Usuário**: Em todos os locais onde se vincula/seleciona arma (competições e treinamentos), quando o atleta pesquisa por uma arma que não está vinculada a ele, o sistema deve retornar SOMENTE se ele digitar exatamente o Nº de Série completo ou Nº do SIGMA completo (sem exibir listas de armas não vinculadas), enquanto a lista de armas vinculadas ao atleta continua exibindo normalmente.
+  - **Implementação**:
+    1. **Helpers compartilhados (`src/utils/textSearch.ts`)**: `isWeaponLinkedToAthlete`, `matchesExactWeaponIdentifier`, `matchesLinkedWeaponQuery` e `filterSelectableWeapons`. Armas vinculadas ao atleta alvo (`ownerId` ou `cpf` correspondente, excluindo `ownerType === 'pendente' | 'clube'`) seguem visíveis em lista normal com busca parcial; armas não vinculadas nunca entram na listagem nem em busca parcial, retornando apenas quando a pesquisa corresponde exatamente ao `weaponNumber`, `serialNumber` ou `sigmaNumber` completo (trim + case-insensitive, ignorando placeholders como `S/N`/`N/A`).
+    2. **Blindagem no Backend (`GET /api/weapons/search` em `server.ts`)**: Aceita `targetUserId` (quando solicitado por admin) e aplica a mesma regra no SQL — busca `LIKE` somente nas armas vinculadas ao atleta alvo, e igualdade exata (`UPPER(BTRIM(...)) = UPPER($4)`) de Série/SIGMA para qualquer arma não vinculada.
+    3. **Aplicação universal no Frontend**: `ChampionshipsView.tsx` (`renderWeaponSelector` unificado para Campeonato Individual, Multicampeonato e IDSC), `MemberProfile.tsx` (Treinamentos), `CheckoutActivityModal.tsx` (Treinamentos no check-out) e `AdminPanel.tsx` (`InscricaoClubePanel`, `IdscInscricaoPanel`, `TreinamentosCompeticoesAdminPanel` e `CessaoArma`), mantendo o módulo administrativo `Cadastro de Armas do Clube` inalterado para apontamento pelo gestor.
+  - **O que NÃO fazer no futuro**: Nunca voltar a fazer `LIKE '%q%'` ou exibir lista de armas não vinculadas ao atleta (incluindo armas do clube ou pendentes) em seletores de competição ou treinamento — sempre exigir correspondência exata do Nº de Série completo ou Nº SIGMA completo.
 
 - **Correção do fluxo "Entrar como Clube", "Entrar como Atleta", boot da sessão e banner de impersonação (`src/App.tsx`, `src/components/AdminPanel.tsx`, `src/components/FeedView.tsx`, `server.ts`)**:
   - **Problema Relatado pelo Usuário**: Após deploy anterior, ao clicar em `"Entrar como Clube"` ou `"Entrar como Atleta"`, o sistema caía no `/feed` fora do `Painel Diretor` e exibia o banner ambíguo `(entrou como Clube de Tiro Aranãs)` + badge `ATLETA G&G` e listagem de atletas da franquia, dando a impressão de que havia entrado como o próprio Clube de Tiro Aranãs em vez do clube alvo.

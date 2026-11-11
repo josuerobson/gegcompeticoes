@@ -7,7 +7,7 @@ import { QRCodeView } from './QRCodeView';
 import { PixPaymentModal } from './PixPaymentModal';
 import ClubCheckinModal from './ClubCheckinModal';
 import CheckoutActivityModal from './CheckoutActivityModal';
-import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel } from '../utils/textSearch';
+import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel, filterSelectableWeapons, isWeaponLinkedToAthlete } from '../utils/textSearch';
 import { annuityStatus, ANNUITY_STATUS_LABELS } from '../utils/financeReports';
 import { downloadPdfFromElement, downloadPdfFromHtml, sanitizePdfFilename } from '../utils/pdfDownloader';
 import {
@@ -1402,16 +1402,55 @@ export default function MemberProfile({
     notes: ''
   });
 
-  // Weapon live search (minimum 3 characters)
+  const [exactWeaponSearchResults, setExactWeaponSearchResults] = useState<Weapon[]>([]);
+  const [searchingExactWeapon, setSearchingExactWeapon] = useState(false);
+
+  // Busca remota apenas quando há 2+ caracteres para localizar arma não vinculada por Série/SIGMA exato
+  useEffect(() => {
+    const q = trainingForm.weaponSearchQuery.trim();
+    if (q.length < 2 || !currentUser) {
+      setExactWeaponSearchResults([]);
+      setSearchingExactWeapon(false);
+      return;
+    }
+    let cancelled = false;
+    setSearchingExactWeapon(true);
+    const timer = setTimeout(async () => {
+      try {
+        const token = localStorage.getItem('gg_token');
+        const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(q)}`, {
+          headers: {
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            'x-user-id': currentUser.id,
+          },
+        });
+        if (!cancelled && r.ok) {
+          const data = await r.json();
+          setExactWeaponSearchResults(data.weapons || []);
+        }
+      } catch {
+        if (!cancelled) setExactWeaponSearchResults([]);
+      } finally {
+        if (!cancelled) setSearchingExactWeapon(false);
+      }
+    }, 180);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [trainingForm.weaponSearchQuery, currentUser?.id]);
+
+  // Exibe normalmente armas vinculadas ao atleta; armas não vinculadas exigem Nº de Série ou SIGMA exato completo
   const searchFilteredWeapons = useMemo(() => {
-    const q = normalizeSearchText(trainingForm.weaponSearchQuery.trim());
-    if (q.length < 3) return [];
-    const allWeapons = weapons || [];
-    return allWeapons.filter(w => {
-      const fullText = normalizeSearchText(`${w.manufacturer || ''} ${w.model || ''} ${w.caliber || ''} ${w.sigmaNumber || ''} ${w.weaponNumber || ''} ${w.serialNumber || ''} ${w.weaponClass || ''}`);
-      return fullText.includes(q);
-    });
-  }, [trainingForm.weaponSearchQuery, weapons]);
+    const mergedMap = new Map<string, Weapon>();
+    for (const w of weapons || []) {
+      if (w?.id) mergedMap.set(w.id, w);
+    }
+    for (const w of exactWeaponSearchResults || []) {
+      if (w?.id) mergedMap.set(w.id, w);
+    }
+    return filterSelectableWeapons(Array.from(mergedMap.values()), currentUser, trainingForm.weaponSearchQuery).all;
+  }, [trainingForm.weaponSearchQuery, weapons, exactWeaponSearchResults, currentUser]);
 
   const [showAddAmmo, setShowAddAmmo] = useState(false);
   const [ammoForm, setAmmoForm] = useState({
@@ -4091,11 +4130,11 @@ export default function MemberProfile({
                       />
                     </div>
 
-                    {/* 2. Seleciona a Arma Utilizada com Busca em Tempo Real (Mínimo 3 Caracteres) */}
+                    {/* 2. Seleciona a Arma Utilizada (armas vinculadas + busca exata por Série/SIGMA) */}
                     <div className="relative">
                       <div className="flex justify-between items-center mb-1">
                         <label className="block text-[11px] text-slate-600 font-bold uppercase">
-                          Arma Utilizada <span className="text-red-500">*</span> (Pesquise digitando no mínimo 3 caracteres)
+                          Arma Utilizada <span className="text-red-500">*</span> (Suas armas ou Nº de Série / SIGMA completo)
                         </label>
                         <button
                           type="button"
@@ -4124,6 +4163,7 @@ export default function MemberProfile({
                           type="text"
                           value={trainingForm.weaponSearchQuery}
                           onFocus={() => setIsWeaponDropdownOpen(true)}
+                          onBlur={() => setTimeout(() => setIsWeaponDropdownOpen(false), 180)}
                           onChange={e => {
                             const val = e.target.value;
                             setTrainingForm({
@@ -4134,33 +4174,33 @@ export default function MemberProfile({
                             });
                             setIsWeaponDropdownOpen(true);
                           }}
-                          placeholder="Digite modelo, marca, calibre, sigma ou proprietário..."
+                          placeholder="Selecione sua arma ou digite o Nº de Série / SIGMA completo..."
                           className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-4 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
                         />
                         <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                        {searchingExactWeapon && <span className="absolute right-3 top-2.5 text-[10px] text-blue-600 font-bold">Buscando...</span>}
                       </div>
 
-                      {trainingForm.weaponSearchQuery.length > 0 && trainingForm.weaponSearchQuery.length < 3 && (
-                        <p className="text-[10.5px] text-amber-600 mt-1 font-medium">
-                          Digite mais {3 - trainingForm.weaponSearchQuery.length} caractere(s) para pesquisar nas armas do banco de dados...
-                        </p>
-                      )}
-
                       {/* Weapon Search Results Dropdown */}
-                      {isWeaponDropdownOpen && trainingForm.weaponSearchQuery.length >= 3 && (
+                      {isWeaponDropdownOpen && (
                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-56 overflow-y-auto divide-y divide-slate-100">
                           {searchFilteredWeapons.length === 0 ? (
                             <div className="p-3 text-center text-slate-500 text-xs">
-                              Nenhuma arma cadastrada encontrada para "{trainingForm.weaponSearchQuery}". Você pode continuar digitando o nome da arma.
+                              {searchingExactWeapon
+                                ? 'Buscando...'
+                                : trainingForm.weaponSearchQuery.trim()
+                                  ? `Nenhuma arma vinculada encontrada para "${trainingForm.weaponSearchQuery}". Para arma não vinculada, digite o Nº de Série completo ou Nº SIGMA completo.`
+                                  : 'Você ainda não possui armas vinculadas. Para usar outra arma, digite o Nº de Série completo ou Nº SIGMA completo.'}
                             </div>
                           ) : (
                             searchFilteredWeapons.map(w => {
-                              const isMine = currentUser && w.ownerId === currentUser.id;
+                              const isMine = isWeaponLinkedToAthlete(w, currentUser);
                               return (
                                 <button
                                   key={w.id}
                                   type="button"
-                                  onClick={() => {
+                                  onMouseDown={e => {
+                                    e.preventDefault();
                                     setTrainingForm(prev => ({
                                       ...prev,
                                       selectedWeapon: w,

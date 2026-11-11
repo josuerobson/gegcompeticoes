@@ -5358,11 +5358,25 @@ app.delete('/api/weapon-lookups/:id', requireMasterAdmin, async (req, res) => {
 });
 
 // ---- NEW: Weapon search by serial/sigma number ----
+// Armas vinculadas ao atleta alvo respondem a busca parcial normalmente;
+// armas NÃO vinculadas ao atleta só retornam por correspondência EXATA do
+// Nº de Série completo ou Nº do SIGMA completo (impede exposição/listagem).
 app.get('/api/weapons/search', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
   const q = (req.query.q as string || '').trim();
   if (!q || q.length < 2) return res.json({ weapons: [] });
   try {
+    const requestedTargetId = typeof req.query.targetUserId === 'string' ? req.query.targetUserId.trim() : '';
+    const targetAthleteId = (ADMIN_ROLES.includes(currentUser.role) && requestedTargetId)
+      ? requestedTargetId
+      : currentUser.id;
+
+    let targetAthleteCpfDigits = (currentUser.cpf || '').replace(/\D/g, '');
+    if (targetAthleteId !== currentUser.id) {
+      const targetUserRes = await pool.query('SELECT cpf FROM users WHERE id = $1', [targetAthleteId]);
+      targetAthleteCpfDigits = (targetUserRes.rows[0]?.cpf || '').replace(/\D/g, '');
+    }
+
     const searchPattern = `%${q}%`;
     const targetClubId = currentUser.clubId || '';
     const r = await pool.query(
@@ -5371,28 +5385,42 @@ app.get('/api/weapons/search', requireAuth, async (req, res) => {
        LEFT JOIN users u ON u.id = w.owner_id
        LEFT JOIN clubs c ON c.id = COALESCE(w.club_id, u.club_id, w.owner_id)
        WHERE (
-         unaccent_lower(COALESCE(w.weapon_number, '')) LIKE unaccent_lower($1)
-         OR unaccent_lower(COALESCE(w.serial_number, '')) LIKE unaccent_lower($1)
-         OR unaccent_lower(COALESCE(w.sigma_number, '')) LIKE unaccent_lower($1)
-         OR unaccent_lower(COALESCE(w.model, '')) LIKE unaccent_lower($1)
-         OR unaccent_lower(COALESCE(w.manufacturer, '')) LIKE unaccent_lower($1)
-         OR unaccent_lower(COALESCE(w.caliber, '')) LIKE unaccent_lower($1)
-         OR unaccent_lower(COALESCE(w.class, '')) LIKE unaccent_lower($1)
-         OR unaccent_lower(COALESCE(w.registry_system, '')) LIKE unaccent_lower($1)
-         OR unaccent_lower(COALESCE(w.owner_cpf, u.cpf, '')) LIKE unaccent_lower($1)
-         OR unaccent_lower(COALESCE(u.full_name, '')) LIKE unaccent_lower($1)
-         OR unaccent_lower(COALESCE(c.name, '')) LIKE unaccent_lower($1)
+         (
+           COALESCE(w.owner_type, '') NOT IN ('pendente', 'clube')
+           AND (
+             w.owner_id = $2
+             OR ($3 <> '' AND regexp_replace(COALESCE(w.owner_cpf, u.cpf, ''), '[^0-9]', '', 'g') = $3)
+           )
+           AND (
+             unaccent_lower(COALESCE(w.weapon_number, '')) LIKE unaccent_lower($1)
+             OR unaccent_lower(COALESCE(w.serial_number, '')) LIKE unaccent_lower($1)
+             OR unaccent_lower(COALESCE(w.sigma_number, '')) LIKE unaccent_lower($1)
+             OR unaccent_lower(COALESCE(w.model, '')) LIKE unaccent_lower($1)
+             OR unaccent_lower(COALESCE(w.manufacturer, '')) LIKE unaccent_lower($1)
+             OR unaccent_lower(COALESCE(w.caliber, '')) LIKE unaccent_lower($1)
+             OR unaccent_lower(COALESCE(w.class, '')) LIKE unaccent_lower($1)
+             OR unaccent_lower(COALESCE(w.registry_system, '')) LIKE unaccent_lower($1)
+           )
+         )
+         OR (
+           UPPER($4) NOT IN ('S/N', 'N/A', 'SN', '-', '--', '—')
+           AND (
+             (NULLIF(BTRIM(COALESCE(w.weapon_number, '')), '') IS NOT NULL AND UPPER(BTRIM(w.weapon_number)) = UPPER($4))
+             OR (NULLIF(BTRIM(COALESCE(w.serial_number, '')), '') IS NOT NULL AND UPPER(BTRIM(w.serial_number)) = UPPER($4))
+             OR (NULLIF(BTRIM(COALESCE(w.sigma_number, '')), '') IS NOT NULL AND UPPER(BTRIM(w.sigma_number)) = UPPER($4))
+           )
+         )
        )
-       ORDER BY 
-         CASE 
-           WHEN w.owner_id = $2 THEN 1 
-           WHEN w.owner_id = $3 THEN 2 
-           WHEN u.club_id = $3 THEN 3 
-           ELSE 4 
-         END, 
-         w.model, w.manufacturer 
+       ORDER BY
+         CASE
+           WHEN w.owner_id = $2 THEN 1
+           WHEN w.owner_id = $5 THEN 2
+           WHEN u.club_id = $5 THEN 3
+           ELSE 4
+         END,
+         w.model, w.manufacturer
        LIMIT 50`,
-      [searchPattern, currentUser.id, targetClubId]
+      [searchPattern, targetAthleteId, targetAthleteCpfDigits, q, targetClubId]
     );
     res.json({ weapons: r.rows.map(mapWeapon) });
   } catch (err) {

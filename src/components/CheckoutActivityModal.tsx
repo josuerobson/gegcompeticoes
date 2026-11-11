@@ -4,7 +4,7 @@ import {
   Loader2, ArrowLeft, ShieldCheck, ChevronRight, CheckSquare, Square
 } from 'lucide-react';
 import { User, Weapon, Modality, ClubCheckin, TrainingSession, Championship, Stage, Registration } from '../types';
-import { normalizeSearchText, resolveWeaponSerial } from '../utils/textSearch';
+import { resolveWeaponSerial, filterSelectableWeapons, isWeaponLinkedToAthlete } from '../utils/textSearch';
 
 interface LinkedCompetitionItem {
   id: string;
@@ -244,25 +244,55 @@ export default function CheckoutActivityModal({
     }
   };
 
-  // Weapons filter for autocomplete
+  const [exactWeaponSearchResults, setExactWeaponSearchResults] = useState<Weapon[]>([]);
+  const [searchingExactWeapon, setSearchingExactWeapon] = useState(false);
+
+  // Busca remota apenas para localizar armas não vinculadas por Série/SIGMA exato completo
+  useEffect(() => {
+    const q = trainingForm.weaponSearchQuery.trim();
+    if (q.length < 2 || !currentUser) {
+      setExactWeaponSearchResults([]);
+      setSearchingExactWeapon(false);
+      return;
+    }
+    let cancelled = false;
+    setSearchingExactWeapon(true);
+    const timer = setTimeout(async () => {
+      try {
+        const token = localStorage.getItem('gg_token');
+        const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(q)}`, {
+          headers: {
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            'x-user-id': currentUser.id,
+          },
+        });
+        if (!cancelled && r.ok) {
+          const data = await r.json();
+          setExactWeaponSearchResults(data.weapons || []);
+        }
+      } catch {
+        if (!cancelled) setExactWeaponSearchResults([]);
+      } finally {
+        if (!cancelled) setSearchingExactWeapon(false);
+      }
+    }, 180);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [trainingForm.weaponSearchQuery, currentUser?.id]);
+
+  // Exibe normalmente armas vinculadas ao atleta; armas não vinculadas exigem Nº de Série ou SIGMA exato completo
   const searchFilteredWeapons = useMemo(() => {
-    const q = normalizeSearchText(trainingForm.weaponSearchQuery.trim());
-    if (q.length < 2) return [];
-    return weapons.filter((w) => {
-      const isOwner = w.ownerId === currentUser?.id;
-      const isClubWeapon = w.ownerId === activeCheckin.clubId || w.ownerId === currentUser?.clubId;
-      if (!isOwner && !isClubWeapon) return false;
-
-      const model = normalizeSearchText(w.model || '');
-      const fab = normalizeSearchText(w.manufacturer || '');
-      const num = normalizeSearchText(w.weaponNumber || '');
-      const serial = normalizeSearchText(resolveWeaponSerial(w));
-      const sigma = normalizeSearchText(w.sigmaNumber || '');
-      const caliber = normalizeSearchText(w.caliber || '');
-
-      return model.includes(q) || fab.includes(q) || num.includes(q) || serial.includes(q) || sigma.includes(q) || caliber.includes(q);
-    });
-  }, [trainingForm.weaponSearchQuery, weapons, currentUser?.id, activeCheckin.clubId, currentUser?.clubId]);
+    const mergedMap = new Map<string, Weapon>();
+    for (const w of weapons || []) {
+      if (w?.id) mergedMap.set(w.id, w);
+    }
+    for (const w of exactWeaponSearchResults || []) {
+      if (w?.id) mergedMap.set(w.id, w);
+    }
+    return filterSelectableWeapons(Array.from(mergedMap.values()), currentUser, trainingForm.weaponSearchQuery).all;
+  }, [trainingForm.weaponSearchQuery, weapons, exactWeaponSearchResults, currentUser]);
 
   // Handle Training Save
   const handleSaveTraining = async (e: React.FormEvent) => {
@@ -741,7 +771,7 @@ export default function CheckoutActivityModal({
                   <div>
                     <input
                       type="text"
-                      placeholder="Digite modelo, calibre ou fabricante..."
+                      placeholder="Suas armas ou Nº de Série / SIGMA completo..."
                       value={trainingForm.weaponSearchQuery}
                       onChange={(e) => {
                         setTrainingForm({
@@ -752,40 +782,54 @@ export default function CheckoutActivityModal({
                         setIsWeaponDropdownOpen(true);
                       }}
                       onFocus={() => setIsWeaponDropdownOpen(true)}
+                      onBlur={() => setTimeout(() => setIsWeaponDropdownOpen(false), 180)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:bg-white focus:border-blue-500 outline-none transition"
                     />
 
-                    {isWeaponDropdownOpen && searchFilteredWeapons.length > 0 && (
+                    {isWeaponDropdownOpen && (searchFilteredWeapons.length > 0 || trainingForm.weaponSearchQuery.trim().length > 0 || searchingExactWeapon) && (
                       <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-48 overflow-y-auto divide-y divide-slate-100">
-                        {searchFilteredWeapons.map((w) => (
-                          <button
-                            key={w.id}
-                            type="button"
-                            onClick={() => {
-                              setTrainingForm({
-                                ...trainingForm,
-                                selectedWeapon: w,
-                                weaponSearchQuery: `${w.manufacturer || ''} ${w.model || ''}`.trim(),
-                                weaponName: `${w.manufacturer || ''} ${w.model || ''}`.trim(),
-                                weaponCaliber: w.caliber || '',
-                              });
-                              setIsWeaponDropdownOpen(false);
-                            }}
-                            className="w-full text-left p-2.5 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
-                          >
-                            <div>
-                              <p className="font-bold text-slate-800 text-xs">
-                                {w.manufacturer} {w.model}
-                              </p>
-                              <p className="text-[10px] text-slate-500 font-mono">
-                                Cal: {w.caliber} • Nº: {resolveWeaponSerial(w) || 'S/N'}
-                              </p>
-                            </div>
-                            <span className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-semibold">
-                              {w.ownerId === currentUser?.id ? 'Minha' : 'Clube'}
-                            </span>
-                          </button>
-                        ))}
+                        {searchFilteredWeapons.length === 0 ? (
+                          <div className="p-3 text-center text-[11px] text-slate-500">
+                            {searchingExactWeapon
+                              ? 'Buscando...'
+                              : `Nenhuma arma vinculada encontrada para "${trainingForm.weaponSearchQuery}". Para arma não vinculada, digite o Nº de Série completo ou Nº SIGMA completo.`}
+                          </div>
+                        ) : (
+                          searchFilteredWeapons.map((w) => {
+                            const isMine = isWeaponLinkedToAthlete(w, currentUser);
+                            return (
+                              <button
+                                key={w.id}
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setTrainingForm({
+                                    ...trainingForm,
+                                    selectedWeapon: w,
+                                    weaponSearchQuery: `${w.manufacturer || ''} ${w.model || ''}`.trim(),
+                                    weaponName: `${w.manufacturer || ''} ${w.model || ''}`.trim(),
+                                    weaponCaliber: w.caliber || '',
+                                    weaponOwnerType: isMine ? 'propria' : 'clube',
+                                  });
+                                  setIsWeaponDropdownOpen(false);
+                                }}
+                                className="w-full text-left p-2.5 hover:bg-blue-50 transition flex items-center justify-between cursor-pointer"
+                              >
+                                <div>
+                                  <p className="font-bold text-slate-800 text-xs">
+                                    {w.manufacturer} {w.model}
+                                  </p>
+                                  <p className="text-[10px] text-slate-500 font-mono">
+                                    Cal: {w.caliber} • Série: {resolveWeaponSerial(w) || 'S/N'} • Sigma: {w.sigmaNumber || '—'}
+                                  </p>
+                                </div>
+                                <span className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-semibold">
+                                  {isMine ? 'Minha' : 'Clube'}
+                                </span>
+                              </button>
+                            );
+                          })
+                        )}
                       </div>
                     )}
                   </div>

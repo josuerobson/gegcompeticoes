@@ -9,7 +9,7 @@ import { SicoobPixManager } from './SicoobPixManager';
 import { downloadPdfFromElement } from '../utils/pdfDownloader';
 import { MercadoPagoManager } from './MercadoPagoManager';
 import { PixPaymentModal } from './PixPaymentModal';
-import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel } from '../utils/textSearch';
+import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel, filterSelectableWeapons, isWeaponLinkedToAthlete, matchesExactWeaponIdentifier } from '../utils/textSearch';
 import { RevenueReport, AnnuityRoster, ReceiptsStatement } from './FranchiseReports';
 import ChampionshipFinanceReport from './ChampionshipFinanceReport';
 import { PixReconciliation } from './PixReconciliation';
@@ -1661,8 +1661,12 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
     }
     setSearchingWeapon(prev => ({ ...prev, [userId]: true }));
     try {
-      const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(q)}`, {
-        headers: { 'x-user-id': currentUser?.id || '' }
+      const token = localStorage.getItem('gg_token');
+      const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(q)}&targetUserId=${encodeURIComponent(userId)}`, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          'x-user-id': currentUser?.id || ''
+        }
       });
       const data = await r.json();
       setSearchResults(prev => ({ ...prev, [userId]: data.weapons || [] }));
@@ -1742,11 +1746,11 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
   // Compartilhado entre a célula inline (desktop) e o popup de arma (mobile)
   const renderWeaponFields = (member: User, state: { weaponId: string; weaponSource: 'propria' | 'clube' | ''; checked: boolean }, athleteWeapons: Weapon[], searchInput: string, results: Weapon[], searching: boolean) => {
     const isOpen = openWeaponFieldId === member.id;
-    const query = normalizeSearchText((searchInput || '').trim());
-    const filteredOwn = athleteWeapons.filter(w =>
-      !query || normalizeSearchText(`${w.model} ${w.caliber} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`).includes(query)
+    const filteredOwn = filterSelectableWeapons(athleteWeapons, member, searchInput).linked;
+    const extraResults = results.filter(
+      w => !filteredOwn.some(fw => fw.id === w.id) &&
+           (isWeaponLinkedToAthlete(w, member) || matchesExactWeaponIdentifier(w, searchInput))
     );
-    const extraResults = results.filter(w => !filteredOwn.some(fw => fw.id === w.id));
 
     const selectWeapon = (w: Weapon, label: string) => {
       handleSelectWeapon(member.id, w.id);
@@ -1786,7 +1790,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
         <div className="relative">
           <input
             type="text"
-            placeholder="Selecione a arma..."
+            placeholder="Suas armas ou Nº Série / SIGMA completo..."
           value={searchInput}
           onFocus={() => setOpenWeaponFieldId(member.id)}
           onChange={e => handleSearchWeapon(member.id, e.target.value)}
@@ -1800,7 +1804,11 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
             {filteredOwn.length === 0 && extraResults.length === 0 && (
               <div className="p-3 text-center space-y-2">
                 <div className="text-[11px] text-slate-500 font-medium">
-                  {searching ? 'Buscando...' : (searchInput ? `Nenhuma arma encontrada para "${searchInput}".` : 'Nenhuma arma encontrada.')}
+                  {searching
+                    ? 'Buscando...'
+                    : (searchInput
+                        ? `Nenhuma arma vinculada encontrada para "${searchInput}". Para arma não vinculada, digite o Nº de Série completo ou Nº SIGMA completo.`
+                        : 'Nenhuma arma vinculada ao atleta. Para outra arma, digite o Nº de Série completo ou Nº SIGMA completo.')}
                 </div>
                 <button
                   type="button"
@@ -2055,7 +2063,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {displayedMembers.map(member => {
                   const state = selectedAthletes[member.id] || { weaponId: '', checked: false };
-                  const athleteWeapons = clubWeapons.filter(w => w.ownerId === member.id);
+                  const athleteWeapons = clubWeapons.filter(w => isWeaponLinkedToAthlete(w, member));
                   const searchInput = searchQueries[member.id] || '';
                   const results = searchResults[member.id] || [];
                   const searching = searchingWeapon[member.id] || false;
@@ -2128,7 +2136,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
         const modalMember = members.find(m => m.id === weaponModalMemberId);
         if (!modalMember) return null;
         const modalState = selectedAthletes[modalMember.id] || { weaponId: '', checked: false };
-        const modalAthleteWeapons = clubWeapons.filter(w => w.ownerId === modalMember.id);
+        const modalAthleteWeapons = clubWeapons.filter(w => isWeaponLinkedToAthlete(w, modalMember));
         const modalSearchInput = searchQueries[modalMember.id] || '';
         const modalResults = searchResults[modalMember.id] || [];
         const modalSearching = searchingWeapon[modalMember.id] || false;
@@ -2436,30 +2444,59 @@ function TreinamentosCompeticoesAdminPanel({
     );
   }, [clubAthletes, athleteSearchQuery]);
 
-  // Weapons available for the selected athlete (athlete's weapons + club weapons)
-  const availableWeapons = React.useMemo(() => {
-    if (!selectedAthlete) return weapons;
-    return weapons.filter(w =>
-      w.ownerId === selectedAthlete.id ||
-      (w.cpf && selectedAthlete.cpf && w.cpf.replace(/\D/g, '') === selectedAthlete.cpf.replace(/\D/g, '')) ||
-      w.ownerId === effectiveClubId ||
-      w.clubId === effectiveClubId ||
-      (w as any).ownerType === 'clube'
-    );
-  }, [weapons, selectedAthlete, effectiveClubId]);
+  const [exactWeaponSearchResults, setExactWeaponSearchResults] = React.useState<Weapon[]>([]);
+  const [searchingExactWeapon, setSearchingExactWeapon] = React.useState(false);
 
-  // Filtered weapons for autocomplete search
+  // Busca remota apenas para localizar arma não vinculada ao atleta por Nº de Série ou SIGMA exato completo
+  React.useEffect(() => {
+    const q = trainingForm.weaponSearchQuery.trim();
+    if (!selectedAthlete || q.length < 2 || !currentUser) {
+      setExactWeaponSearchResults([]);
+      setSearchingExactWeapon(false);
+      return;
+    }
+    let cancelled = false;
+    setSearchingExactWeapon(true);
+    const timer = setTimeout(async () => {
+      try {
+        const token = localStorage.getItem('gg_token');
+        const r = await fetch(
+          `/api/weapons/search?q=${encodeURIComponent(q)}&targetUserId=${encodeURIComponent(selectedAthlete.id)}`,
+          {
+            headers: {
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+              'x-user-id': currentUser.id,
+            },
+          }
+        );
+        if (!cancelled && r.ok) {
+          const data = await r.json();
+          setExactWeaponSearchResults(data.weapons || []);
+        }
+      } catch {
+        if (!cancelled) setExactWeaponSearchResults([]);
+      } finally {
+        if (!cancelled) setSearchingExactWeapon(false);
+      }
+    }, 180);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [trainingForm.weaponSearchQuery, selectedAthlete?.id, currentUser?.id]);
+
+  // Exibe normalmente armas vinculadas ao atleta; armas não vinculadas exigem Nº de Série ou SIGMA exato completo
   const searchFilteredWeapons = React.useMemo(() => {
-    const q = normalizeSearchText(trainingForm.weaponSearchQuery.trim());
-    if (!q) return availableWeapons;
-    return availableWeapons.filter(w =>
-      normalizeSearchText(w.manufacturer).includes(q) ||
-      normalizeSearchText(w.model).includes(q) ||
-      normalizeSearchText(w.caliber).includes(q) ||
-      normalizeSearchText(w.sigmaNumber).includes(q) ||
-      normalizeSearchText(w.weaponNumber).includes(q)
-    );
-  }, [availableWeapons, trainingForm.weaponSearchQuery]);
+    if (!selectedAthlete) return [];
+    const mergedMap = new Map<string, Weapon>();
+    for (const w of weapons || []) {
+      if (w?.id) mergedMap.set(w.id, w);
+    }
+    for (const w of exactWeaponSearchResults || []) {
+      if (w?.id) mergedMap.set(w.id, w);
+    }
+    return filterSelectableWeapons(Array.from(mergedMap.values()), selectedAthlete, trainingForm.weaponSearchQuery).all;
+  }, [weapons, exactWeaponSearchResults, selectedAthlete, trainingForm.weaponSearchQuery]);
 
   const weaponLookup = (kind: string) => weaponLookupOptions.filter(o => o.kind === kind);
 
@@ -2822,6 +2859,14 @@ function TreinamentosCompeticoesAdminPanel({
                 onClick={() => {
                   setSelectedAthlete(null);
                   setAthleteAmmoBalances([]);
+                  setExactWeaponSearchResults([]);
+                  setTrainingForm(prev => ({
+                    ...prev,
+                    weaponSearchQuery: '',
+                    selectedWeapon: null,
+                    weaponName: '',
+                    weaponCaliber: '',
+                  }));
                   setTrainingSuccess('');
                   setTrainingError('');
                 }}
@@ -2880,7 +2925,7 @@ function TreinamentosCompeticoesAdminPanel({
             <div className="relative">
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-[11px] text-slate-600 font-bold uppercase">
-                  Arma Utilizada <span className="text-red-500">*</span> (Pesquise digitando marca, modelo ou calibre)
+                  Arma Utilizada <span className="text-red-500">*</span> (Armas do atleta ou Nº de Série / SIGMA completo)
                 </label>
                 <button
                   type="button"
@@ -2895,6 +2940,7 @@ function TreinamentosCompeticoesAdminPanel({
                       weaponClass: '',
                       permissionStatus: '',
                       registrySystem: '',
+                      gtExpirationDate: '',
                     });
                     setShowAddWeaponModal(true);
                   }}
@@ -2909,6 +2955,7 @@ function TreinamentosCompeticoesAdminPanel({
                   type="text"
                   value={trainingForm.weaponSearchQuery}
                   onFocus={() => setIsWeaponDropdownOpen(true)}
+                  onBlur={() => setTimeout(() => setIsWeaponDropdownOpen(false), 180)}
                   onChange={e => {
                     const val = e.target.value;
                     setTrainingForm({
@@ -2919,10 +2966,11 @@ function TreinamentosCompeticoesAdminPanel({
                     });
                     setIsWeaponDropdownOpen(true);
                   }}
-                  placeholder="Digite modelo, marca, calibre, sigma ou número da arma..."
+                  placeholder="Armas do atleta ou digite o Nº de Série / SIGMA completo..."
                   className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-4 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
                 />
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                {searchingExactWeapon && <span className="absolute right-3 top-2.5 text-[10px] text-blue-600 font-bold">Buscando...</span>}
               </div>
 
               {/* Weapon Autocomplete Dropdown */}
@@ -2930,16 +2978,21 @@ function TreinamentosCompeticoesAdminPanel({
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-56 overflow-y-auto divide-y divide-slate-100">
                   {searchFilteredWeapons.length === 0 ? (
                     <div className="p-3 text-center text-slate-500 text-xs">
-                      Nenhuma arma cadastrada encontrada para "{trainingForm.weaponSearchQuery}". Você pode continuar digitando o nome da arma livremente.
+                      {searchingExactWeapon
+                        ? 'Buscando...'
+                        : trainingForm.weaponSearchQuery.trim()
+                          ? `Nenhuma arma vinculada encontrada para "${trainingForm.weaponSearchQuery}". Para arma não vinculada, digite o Nº de Série completo ou Nº SIGMA completo.`
+                          : 'Este atleta não possui armas vinculadas. Para usar outra arma, digite o Nº de Série completo ou Nº SIGMA completo.'}
                     </div>
                   ) : (
                     searchFilteredWeapons.map(w => {
-                      const isAthleteOwn = w.ownerId === selectedAthlete.id;
+                      const isAthleteOwn = isWeaponLinkedToAthlete(w, selectedAthlete);
                       return (
                         <button
                           key={w.id}
                           type="button"
-                          onClick={() => {
+                          onMouseDown={e => {
+                            e.preventDefault();
                             setTrainingForm(prev => ({
                               ...prev,
                               selectedWeapon: w,
@@ -3609,8 +3662,7 @@ function CadastrarResultadosPanel({
     const list = (weapons || []).filter(w =>
       w && (
         w.ownerId === selectedReg.userId ||
-        w.ownerId === selectedReg.clubId ||
-        (w.ownerId ? w.ownerId.startsWith('club_') : false)
+        (selectedReg.clubId && w.ownerId === selectedReg.clubId)
       )
     );
     if (selectedReg.weaponId && !list.some(w => w.id === selectedReg.weaponId)) {
@@ -5420,8 +5472,12 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
     }
     setSearchingWeapon(prev => ({ ...prev, [userId]: true }));
     try {
-      const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(q)}`, {
-        headers: { 'x-user-id': currentUser?.id || '' }
+      const token = localStorage.getItem('gg_token');
+      const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(q)}&targetUserId=${encodeURIComponent(userId)}`, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          'x-user-id': currentUser?.id || ''
+        }
       });
       const data = await r.json();
       setSearchResults(prev => ({ ...prev, [userId]: data.weapons || [] }));
@@ -5435,11 +5491,11 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
   // Compartilhado entre a célula inline (desktop) e o popup de arma (mobile)
   const renderWeaponFields = (member: User, state: { weaponId: string; weaponSource: 'propria' | 'clube' | ''; checked: boolean }, athleteWeapons: Weapon[], searchInput: string, results: Weapon[], searching: boolean) => {
     const isOpen = openWeaponFieldId === member.id;
-    const query = normalizeSearchText((searchInput || '').trim());
-    const filteredOwn = athleteWeapons.filter(w =>
-      !query || normalizeSearchText(`${w.manufacturer || ''} ${w.model} ${w.caliber} ${w.weaponNumber || ''} ${w.sigmaNumber || ''} ${w.serialNumber || ''}`).includes(query)
+    const filteredOwn = filterSelectableWeapons(athleteWeapons, member, searchInput).linked;
+    const extraResults = results.filter(
+      w => !filteredOwn.some(fw => fw.id === w.id) &&
+           (isWeaponLinkedToAthlete(w, member) || matchesExactWeaponIdentifier(w, searchInput))
     );
-    const extraResults = results.filter(w => !filteredOwn.some(fw => fw.id === w.id));
 
     const selectWeapon = (w: Weapon, label: string) => {
       handleWeapon(member.id, w.id);
@@ -5479,7 +5535,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
         <div className="relative">
           <input
             type="text"
-            placeholder="Selecione a arma..."
+            placeholder="Suas armas ou Nº Série / SIGMA completo..."
             value={searchInput}
             onFocus={() => setOpenWeaponFieldId(member.id)}
             onChange={e => handleSearchWeapon(member.id, e.target.value)}
@@ -5493,7 +5549,11 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
             {filteredOwn.length === 0 && extraResults.length === 0 && (
               <div className="p-3 text-center space-y-2">
                 <div className="text-[11px] text-slate-500 font-medium">
-                  {searching ? 'Buscando...' : (searchInput ? `Nenhuma arma encontrada para "${searchInput}".` : 'Nenhuma arma encontrada.')}
+                  {searching
+                    ? 'Buscando...'
+                    : (searchInput
+                        ? `Nenhuma arma vinculada encontrada para "${searchInput}". Para arma não vinculada, digite o Nº de Série completo ou Nº SIGMA completo.`
+                        : 'Nenhuma arma vinculada ao atleta. Para outra arma, digite o Nº de Série completo ou Nº SIGMA completo.')}
                 </div>
                 <button
                   type="button"
@@ -5727,7 +5787,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {displayedMembers.map(member => {
                   const state = selectedAthletes[member.id] || { weaponId: '', checked: false };
-                  const athleteWeapons = clubWeapons.filter(w => w.ownerId === member.id);
+                  const athleteWeapons = clubWeapons.filter(w => isWeaponLinkedToAthlete(w, member));
                   return (
                     <tr key={member.id} className={state.checked ? 'bg-blue-50/20' : 'hover:bg-slate-50/50'}>
                       <td className="py-3 px-3">
@@ -5784,7 +5844,7 @@ function IdscInscricaoPanel({ currentUser, initialPrefill, onPrefillApplied, wea
         const modalMember = members.find(m => m.id === weaponModalMemberId);
         if (!modalMember) return null;
         const modalState = selectedAthletes[modalMember.id] || { weaponId: '', checked: false };
-        const modalAthleteWeapons = clubWeapons.filter(w => w.ownerId === modalMember.id);
+        const modalAthleteWeapons = clubWeapons.filter(w => isWeaponLinkedToAthlete(w, modalMember));
         const modalSearchInput = searchQueries[modalMember.id] || '';
         const modalResults = searchResults[modalMember.id] || [];
         const modalSearching = searchingWeapon[modalMember.id] || false;
@@ -11813,15 +11873,22 @@ export default function AdminPanel({
                     <div className="relative">
                       <input
                         type="text"
-                        placeholder="Digite número da arma, SIGMA ou modelo..."
+                        placeholder="Digite Nº de Série ou SIGMA completo..."
                         value={cessaoArmaQuery}
                         onChange={async (e) => {
                           const val = e.target.value;
                           setCessaoArmaQuery(val);
                           setCessaoSalva(null);
-                          if (val.length < 3) { setCessaoArmaResults([]); return; }
+                          if (val.trim().length < 2) { setCessaoArmaResults([]); return; }
                           try {
-                            const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(val)}`, { headers: { 'x-user-id': currentUser?.id || '' } });
+                            const token = localStorage.getItem('gg_token');
+                            const targetParam = cessaoAtletaSelecionado?.id ? `&targetUserId=${encodeURIComponent(cessaoAtletaSelecionado.id)}` : '';
+                            const r = await fetch(`/api/weapons/search?q=${encodeURIComponent(val)}${targetParam}`, {
+                              headers: {
+                                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                                'x-user-id': currentUser?.id || ''
+                              }
+                            });
                             const d = await r.json();
                             setCessaoArmaResults(d.weapons || []);
                           } catch { setCessaoArmaResults([]); }
