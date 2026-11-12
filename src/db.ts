@@ -452,6 +452,12 @@ export async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_trainings_club_id ON trainings(club_id);
       ALTER TABLE trainings ADD COLUMN IF NOT EXISTS checkin_id TEXT REFERENCES club_checkins(id) ON DELETE SET NULL;
       CREATE INDEX IF NOT EXISTS idx_trainings_checkin_id ON trainings(checkin_id);
+      ALTER TABLE trainings
+        ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pendente',
+        ADD COLUMN IF NOT EXISTS validated_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS validated_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS validation_notes TEXT;
+      CREATE INDEX IF NOT EXISTS idx_trainings_status ON trainings(status);
     `);
 
     // Sanitize championships.modalities JSONB array: remove any deleted/orphaned modality IDs
@@ -1798,8 +1804,12 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS checkout_at TIMESTAMPTZ,
         ADD COLUMN IF NOT EXISTS checkout_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
         ADD COLUMN IF NOT EXISTS checkout_notes TEXT,
-        ADD COLUMN IF NOT EXISTS duration_minutes INT;
+        ADD COLUMN IF NOT EXISTS duration_minutes INT,
+        ADD COLUMN IF NOT EXISTS validated_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS validated_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS validation_notes TEXT;
       CREATE INDEX IF NOT EXISTS idx_club_checkins_checkout_at ON club_checkins(checkout_at);
+      CREATE INDEX IF NOT EXISTS idx_club_checkins_status ON club_checkins(status);
     `);
 
     console.log('Database seed check complete.');

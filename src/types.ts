@@ -448,6 +448,7 @@ export interface TrainingSession {
   id: string;
   userId: string;
   athleteName?: string;
+  athleteCpf?: string;
   athleteCr?: string;
   clubId?: string;
   dateTime: string;
@@ -465,6 +466,11 @@ export interface TrainingSession {
   hidden?: boolean;
   selectedWeapon?: Weapon;
   checkinId?: string;
+  status?: 'pendente' | 'aprovado' | 'reprovado';
+  validatedAt?: string;
+  validatedByUserId?: string;
+  validatorName?: string;
+  validationNotes?: string;
   createdAt?: string;
 }
 
@@ -695,6 +701,10 @@ export interface ClubCheckin {
   facialMatchStatus: 'confirmed' | 'mismatch' | 'review';
   facialNotes?: string;
   photoData?: string;
-  status: 'confirmed' | 'rejected' | 'manual_review';
+  status: 'confirmed' | 'rejected' | 'manual_review' | 'pendente' | 'aprovado' | 'reprovado' | string;
+  validatedAt?: string;
+  validatedByUserId?: string;
+  validatorName?: string;
+  validationNotes?: string;
   createdAt: string;
 }

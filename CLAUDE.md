@@ -35,9 +35,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Legacy system parity.** Several `Painel Diretor` cadastro screens were rebuilt to match field-for-field specs from a legacy PHP system the user is migrating off of (raw HTML forms with generic field names like `info1`, `id4` were used as the source of truth — those internal names are not meaningful, only the field's label/position/options matter). Where this repo's data model needed to diverge from a first guess based on the legacy system, the actual legacy HTML always won. See "Painel Diretor module status" below for what's been aligned this way — don't assume an unconverted screen's fields are correct without checking for a legacy reference first.
 
-## Painel Diretor module status (as of 2026-11-11)
+## Painel Diretor module status (as of 2026-11-12)
 
 Real (backed by actual DB tables/endpoints, tested end-to-end):
+- **Gerenciamento Clube e Plataforma > Validar Treinamento e Validar Check-in (`ValidarTreinamentosPanel.tsx`, `ValidarCheckinsPanel.tsx`, `AdminPanel.tsx`, `server.ts`, `src/db.ts`, `MemberProfile.tsx`, `ClubReportsViewer.tsx`, `CheckinsManager.tsx`)** — validação e homologação obrigatória de todos os treinamentos e check-ins pelo clube ao qual o atleta pertence:
+  - **Menus Dedicados no Painel Diretor**: novos menus "Validar Check-in" e "Validar Treinamento" em Menus Clube e sob Gerenciamento Plataforma (ADM).
+  - **Fluxo com Campo para Aprovar e Reprovar**: modal interativo permitindo ao gestor do clube aprovar (com observações opcionais) ou reprovar (com justificativa obrigatória) qualquer treinamento ou check-in. Registro completo de data/hora da validação, identificação do gestor validador e motivo.
+  - **Filtro Estrito por Vínculo de Clube**: clubes parceiros só visualizam e validam os registros de atletas vinculados ao seu estande (`u.clubId === effectiveClubId` ou `t.clubId === effectiveClubId`), blindado no backend com HTTP 403 Forbidden para tentativas não autorizadas.
+  - **Métricas e Filtros em Tempo Real**: cartões dinâmicos com contagem de Pendentes, Aprovados, Reprovados e Total, com abas de filtro rápido, busca textual por atirador (nome, CPF, CR), arma ou modalidade, e intervalo de datas.
+  - **Reflexo Universal no Sistema**:
+    - Perfil do Atleta (`MemberProfile.tsx`): exibição clara de badges de status nos treinos ("Aprovado pelo Clube", "Reprovado pelo Clube" com aviso explicativo do motivo da reprovação, ou "Aguardando Validação") e nos check-ins em `ClubCheckinModal.tsx`.
+    - Relatórios e Declarações para o Exército (`ClubReportsViewer.tsx`): treinos com status reprovado são desconsiderados de certidões e declarações de habitualidade oficiais emitidas para o Exército Brasileiro (SFPC).
+    - Gerenciamento de Check-ins (`CheckinsManager.tsx`): coluna e badges de status de validação integrados à tabela oficial e auditoria de presença.
 - **Gerenciamento Clube > Registrar Treinamentos (`AdminPanel.tsx`, `server.ts`, `src/db.ts`)** — novo menu em Menus Clube permitindo aos clubes registrar sessões de treinamentos de habitualidade com qualquer data (presente ou retroativa) exclusivamente para os atletas vinculados ao clube:
   - **Filtro Estrito por Vínculo de Clube**: a pesquisa e seleção de atiradores é restrita unicamente aos atletas vinculados ao clube (`u.clubId === effectiveClubId`). No backend (`POST /api/trainings`, `PATCH /api/trainings/:id/hidden`, `DELETE /api/trainings/:id`), valida que gestores de clubes só podem registrar, ocultar e excluir treinamentos de atletas filiados ao seu respectivo estande (retornando HTTP 403 Forbidden caso haja tentativa não autorizada).
   - **Flexibilidade Total de Datas**: permite selecionar qualquer data e hora no componente `datetime-local` sem travas temporais, garantindo o lançamento de treinos passados ou atuais no mesmo padrão do perfil do atleta.
@@ -77,7 +86,7 @@ Real (backed by actual DB tables/endpoints, tested end-to-end):
 
 Still decorative/mock (local `useState` arrays, no backing table, don't trust the UI at face value):
 - **Administrador Master > Gerenciar Clubes** (`masterClubs`) and **Gestão de Cobranças** (`billingList`) — separate from the real "Novo Clube" list under Gerenciamento Plataforma.
-- Most of **ADM** beyond Cadastro de armas, Cadastrar Resultados e Munições (Filtro Resultados, Relatórios e declarações, Treinamento/competições, Validar treinamentos), all of **IDSC**, e menus estáticos restantes.
+- Most of **ADM** beyond Cadastro de armas, Cadastrar Resultados, Munições, Validar Treinamentos e Validar Check-ins (Filtro Resultados, Relatórios e declarações, Treinamento/competições), all of **IDSC**, e menus estáticos restantes.
 
 ## Deploy
 

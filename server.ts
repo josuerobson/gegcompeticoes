@@ -787,6 +787,7 @@ function mapTraining(t: any): TrainingSession {
     id: t.id,
     userId: t.user_id,
     athleteName: t.athlete_name || undefined,
+    athleteCpf: t.athlete_cpf || undefined,
     athleteCr: t.athlete_cr || undefined,
     clubId: t.club_id || undefined,
     dateTime: t.date_time,
@@ -803,6 +804,11 @@ function mapTraining(t: any): TrainingSession {
     notes: t.notes || undefined,
     hidden: Boolean(t.hidden),
     checkinId: t.checkin_id || undefined,
+    status: (t.status as 'pendente' | 'aprovado' | 'reprovado') || 'pendente',
+    validatedAt: t.validated_at ? new Date(t.validated_at).toISOString() : undefined,
+    validatedByUserId: t.validated_by_user_id || undefined,
+    validatorName: t.validator_name || undefined,
+    validationNotes: t.validation_notes || undefined,
     createdAt: t.created_at,
     selectedWeapon: t.w_model ? {
       id: t.weapon_id,
@@ -8072,15 +8078,19 @@ app.get('/api/trainings', requireAuth, async (req, res) => {
   const currentUser = (req as any).user as User;
   const targetUserId = req.query.userId as string;
   const requestedClubId = req.query.clubId as string;
+  const statusFilter = req.query.status as string;
+  const searchQuery = req.query.query as string;
   const fetchAll = req.query.all === 'true' && ['admin', 'master_admin', 'club_admin'].includes(currentUser.role);
   try {
     let query = `
-      SELECT t.*, u.full_name as athlete_name, u.cr_number as athlete_cr,
+      SELECT t.*, u.full_name as athlete_name, u.cpf as athlete_cpf, u.cr_number as athlete_cr,
+             val_u.full_name as validator_name,
              w.model as w_model, w.weapon_number as w_weapon_number, w.serial_number as w_serial_number,
              w.sigma_number as w_sigma_number, w.caliber as w_caliber, w.manufacturer as w_manufacturer,
              w.class as w_weapon_class, w.permission_status as w_permission_status, w.owner_id as w_owner_id
       FROM trainings t
       LEFT JOIN users u ON u.id = t.user_id
+      LEFT JOIN users val_u ON val_u.id = t.validated_by_user_id
       LEFT JOIN weapons w ON w.id = t.weapon_id
     `;
     const params: any[] = [];
@@ -8104,6 +8114,16 @@ app.get('/api/trainings', requireAuth, async (req, res) => {
         params.push(filterClubId);
         whereConditions.push(`(t.club_id = $${params.length} OR u.club_id = $${params.length})`);
       }
+    }
+
+    if (statusFilter && statusFilter !== 'all') {
+      params.push(statusFilter);
+      whereConditions.push(`t.status = $${params.length}`);
+    }
+
+    if (searchQuery && searchQuery.trim()) {
+      params.push(`%${searchQuery.trim()}%`);
+      whereConditions.push(`(u.full_name ILIKE $${params.length} OR u.cpf ILIKE $${params.length} OR t.weapon_name ILIKE $${params.length} OR t.modality ILIKE $${params.length})`);
     }
 
     if (whereConditions.length > 0) {
@@ -8136,6 +8156,7 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
     notes,
     checkinId,
     clubId,
+    status: requestedStatus,
   } = req.body;
 
   if (!dateTime || !weaponName) {
@@ -8171,13 +8192,14 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
   const total = own + club;
   const ownerType = weaponOwnerType === 'clube' ? 'clube' : 'propria';
   const id = `training_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+  const initialStatus = requestedStatus || 'pendente';
 
   try {
     const r = await pool.query(
       `INSERT INTO trainings (
         id, user_id, club_id, date_time, weapon_id, weapon_name, weapon_caliber,
-        weapon_owner_type, total_shots, own_ammo_shots, club_ammo_shots, club_ammo_type, modality, score, notes, checkin_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        weapon_owner_type, total_shots, own_ammo_shots, club_ammo_shots, club_ammo_type, modality, score, notes, checkin_id, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *`,
       [
         id,
@@ -8196,6 +8218,7 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
         Number(score) || 0,
         notes || null,
         checkinId || null,
+        initialStatus,
       ]
     );
 
@@ -8225,6 +8248,70 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Create training error:', err);
     res.status(500).json({ error: 'Erro ao registrar treinamento.' });
+  }
+});
+
+// Endpoint para validar (aprovar ou reprovar) um treinamento pelo clube
+app.patch('/api/trainings/:id/validate', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { id } = req.params;
+  const { status, validationNotes } = req.body;
+
+  if (!status || !['aprovado', 'reprovado', 'pendente'].includes(status)) {
+    return res.status(400).json({ error: 'Status de validação inválido. Escolha entre aprovado ou reprovado.' });
+  }
+
+  try {
+    const trRes = await pool.query(
+      `SELECT t.*, u.club_id as athlete_club_id
+       FROM trainings t
+       LEFT JOIN users u ON u.id = t.user_id
+       WHERE t.id = $1`,
+      [id]
+    );
+
+    if (trRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Treinamento não encontrado.' });
+    }
+
+    const training = trRes.rows[0];
+
+    // Regra estrita: Clube só pode validar treinamentos de atletas vinculados ao seu estande
+    if (currentUser.role === 'club_admin') {
+      const allowedClubId = currentUser.clubId;
+      if (!allowedClubId || (training.club_id !== allowedClubId && training.athlete_club_id !== allowedClubId)) {
+        return res.status(403).json({ error: 'Você só pode validar treinamentos de atletas vinculados ao seu clube.' });
+      }
+    }
+
+    await pool.query(
+      `UPDATE trainings
+       SET status = $1,
+           validated_at = NOW(),
+           validated_by_user_id = $2,
+           validation_notes = $3
+       WHERE id = $4`,
+      [status, currentUser.id, validationNotes || null, id]
+    );
+
+    const fullRes = await pool.query(
+      `SELECT t.*, u.full_name as athlete_name, u.cpf as athlete_cpf, u.cr_number as athlete_cr,
+              val_u.full_name as validator_name,
+              w.model as w_model, w.weapon_number as w_weapon_number, w.serial_number as w_serial_number,
+              w.sigma_number as w_sigma_number, w.caliber as w_caliber, w.manufacturer as w_manufacturer,
+              w.class as w_weapon_class, w.permission_status as w_permission_status, w.owner_id as w_owner_id
+       FROM trainings t
+       LEFT JOIN users u ON u.id = t.user_id
+       LEFT JOIN users val_u ON val_u.id = t.validated_by_user_id
+       LEFT JOIN weapons w ON w.id = t.weapon_id
+       WHERE t.id = $1`,
+      [id]
+    );
+
+    res.json({ success: true, training: mapTraining(fullRes.rows[0]) });
+  } catch (err) {
+    console.error('Validate training error:', err);
+    res.status(500).json({ error: 'Erro ao validar treinamento.' });
   }
 });
 
@@ -8340,7 +8427,11 @@ function mapCheckin(r: any): ClubCheckin {
     facialMatchStatus: r.facial_match_status || 'confirmed',
     facialNotes: r.facial_notes || undefined,
     photoData: r.photo_data || undefined,
-    status: r.status || 'confirmed',
+    status: r.status || 'pendente',
+    validatedAt: r.validated_at ? new Date(r.validated_at).toISOString() : undefined,
+    validatedByUserId: r.validated_by_user_id || undefined,
+    validatorName: r.validator_name || undefined,
+    validationNotes: r.validation_notes || undefined,
     checkoutAt: r.checkout_at ? new Date(r.checkout_at).toISOString() : undefined,
     checkoutByUserId: r.checkout_by_user_id || undefined,
     checkoutNotes: r.checkout_notes || undefined,
@@ -8519,7 +8610,7 @@ app.post('/api/checkins', requireAuth, async (req, res) => {
     const facialResult = await verifyFacialMatch(photo, rawAvatar);
 
     const id = `chk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const overallStatus = (!isWithinRadius || facialResult.status === 'mismatch') ? 'manual_review' : 'confirmed';
+    const overallStatus = 'pendente';
 
     const insertRes = await pool.query(
       `INSERT INTO club_checkins (
@@ -8930,18 +9021,20 @@ app.get('/api/checkins', requireAuth, async (req, res) => {
     return res.status(403).json({ error: 'Acesso restrito à diretoria do clube.' });
   }
 
-  const { clubId, athleteQuery, startDate, endDate, isOpen } = req.query;
+  const { clubId, athleteQuery, startDate, endDate, isOpen, status: statusFilter } = req.query;
   const targetClubId = (isMaster && clubId) ? String(clubId) : (isMaster ? null : currentUser.clubId);
 
   try {
     let query = `
       SELECT c.*, u.full_name as athlete_name, u.cpf as athlete_cpf, u.cr_number as athlete_cr,
              u.avatar_url as athlete_avatar, u.phone as athlete_phone, u.email as athlete_email,
+             val_u.full_name as validator_name,
              COALESCE(NULLIF(cl.name, ''), cl.fantasy_name, 'Clube de Tiro') as club_name,
              cl.name as club_official_name,
              cl.fantasy_name as club_fantasy, cl.cnpj as club_cnpj, cl.cr_number as club_cr, cl.city as club_city, cl.state as club_state
       FROM club_checkins c
       LEFT JOIN users u ON u.id = c.user_id
+      LEFT JOIN users val_u ON val_u.id = c.validated_by_user_id
       LEFT JOIN clubs cl ON cl.id = COALESCE(c.club_id, u.club_id)
     `;
     const params: any[] = [];
@@ -8949,7 +9042,7 @@ app.get('/api/checkins', requireAuth, async (req, res) => {
 
     if (targetClubId) {
       params.push(targetClubId);
-      conditions.push(`c.club_id = $${params.length}`);
+      conditions.push(`(c.club_id = $${params.length} OR u.club_id = $${params.length})`);
     }
 
     if (athleteQuery && String(athleteQuery).trim()) {
@@ -8973,6 +9066,11 @@ app.get('/api/checkins', requireAuth, async (req, res) => {
       conditions.push(`c.checkout_at IS NOT NULL`);
     }
 
+    if (statusFilter && statusFilter !== 'all') {
+      params.push(statusFilter);
+      conditions.push(`c.status = $${params.length}`);
+    }
+
     if (conditions.length > 0) {
       query += ` WHERE ` + conditions.join(' AND ');
     }
@@ -8989,6 +9087,75 @@ app.get('/api/checkins', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Fetch club checkins error:', err);
     res.status(500).json({ error: 'Erro ao buscar check-ins do clube.' });
+  }
+});
+
+// Endpoint para validar (aprovar ou reprovar) um check-in pelo clube
+app.patch('/api/checkins/:id/validate', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { id } = req.params;
+  const { status, validationNotes } = req.body;
+
+  if (!status || !['aprovado', 'reprovado', 'pendente', 'confirmed', 'rejected'].includes(status)) {
+    return res.status(400).json({ error: 'Status de validação inválido. Escolha entre aprovado ou reprovado.' });
+  }
+
+  const normalizedStatus = status === 'confirmed' ? 'aprovado' : (status === 'rejected' ? 'reprovado' : status);
+
+  try {
+    const chkRes = await pool.query(
+      `SELECT c.*, u.club_id as athlete_club_id
+       FROM club_checkins c
+       LEFT JOIN users u ON u.id = c.user_id
+       WHERE c.id = $1`,
+      [id]
+    );
+
+    if (chkRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Check-in não encontrado.' });
+    }
+
+    const checkin = chkRes.rows[0];
+
+    // Regra estrita: Clube só pode validar check-ins de atletas vinculados ao seu estande
+    if (currentUser.role === 'club_admin') {
+      const allowedClubId = currentUser.clubId;
+      if (!allowedClubId || (checkin.club_id !== allowedClubId && checkin.athlete_club_id !== allowedClubId)) {
+        return res.status(403).json({ error: 'Você só pode validar check-ins de atletas vinculados ao seu clube.' });
+      }
+    }
+
+    await pool.query(
+      `UPDATE club_checkins
+       SET status = $1,
+           validated_at = NOW(),
+           validated_by_user_id = $2,
+           validation_notes = $3
+       WHERE id = $4`,
+      [normalizedStatus, currentUser.id, validationNotes || null, id]
+    );
+
+    const fullRes = await pool.query(
+      `SELECT c.*, u.full_name as athlete_name, u.cpf as athlete_cpf, u.cr_number as athlete_cr,
+              u.avatar_url as athlete_avatar, u.phone as athlete_phone, u.email as athlete_email,
+              val_u.full_name as validator_name,
+              COALESCE(NULLIF(cl.name, ''), cl.fantasy_name, 'Clube de Tiro') as club_name,
+              cl.name as club_official_name,
+              cl.fantasy_name as club_fantasy, cl.cnpj as club_cnpj, cl.cr_number as club_cr, cl.city as club_city, cl.state as club_state
+       FROM club_checkins c
+       LEFT JOIN users u ON u.id = c.user_id
+       LEFT JOIN users val_u ON val_u.id = c.validated_by_user_id
+       LEFT JOIN clubs cl ON cl.id = COALESCE(c.club_id, u.club_id)
+       WHERE c.id = $1`,
+      [id]
+    );
+
+    const row = fullRes.rows[0];
+    row.club_name = row.club_fantasy || row.club_name;
+    res.json({ success: true, checkin: mapCheckin(row) });
+  } catch (err) {
+    console.error('Validate checkin error:', err);
+    res.status(500).json({ error: 'Erro ao validar check-in.' });
   }
 });
 

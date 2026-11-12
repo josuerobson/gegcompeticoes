@@ -752,20 +752,21 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
                 <th className="px-4 py-3">Permanência</th>
                 <th className="px-4 py-3">GPS / Distância</th>
                 <th className="px-4 py-3">Biometria</th>
+                <th className="px-4 py-3">Validação</th>
                 <th className="px-4 py-3 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading && checkins.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600 mb-2" />
                     Carregando check-ins...
                   </td>
                 </tr>
               ) : checkins.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     <Clock className="w-8 h-8 mx-auto text-slate-300 mb-2" />
                     Nenhum registro de check-in encontrado com os filtros aplicados.
                   </td>
@@ -887,6 +888,25 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
                           }`}
                         >
                           {chk.facialMatchScore != null ? `${Math.round(chk.facialMatchScore)}%` : 'Salva'}
+                        </span>
+                      </td>
+
+                      {/* Validação do Clube */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            chk.status === 'confirmed' || chk.status === 'aprovado'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : chk.status === 'reprovado' || chk.status === 'rejected'
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}
+                        >
+                          {chk.status === 'confirmed' || chk.status === 'aprovado'
+                            ? 'Aprovado'
+                            : chk.status === 'reprovado' || chk.status === 'rejected'
+                            ? 'Reprovado'
+                            : 'Pendente'}
                         </span>
                       </td>
 

@@ -12,7 +12,7 @@ import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel, filterSele
 import { annuityStatus, ANNUITY_STATUS_LABELS } from '../utils/financeReports';
 import { downloadPdfFromElement, downloadPdfFromHtml, sanitizePdfFilename } from '../utils/pdfDownloader';
 import {
-  ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2, MapPin,
+  ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2, XCircle, MapPin,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
   Disc, Printer, Plus, Trash2, ShieldAlert, ChevronRight, ChevronLeft, ChevronDown, Info, PlusCircle, X, UserCog, Camera, Pencil,
   Clock, Copy, QrCode, Images, Heart, MessageCircle, Send, Bookmark, Maximize2, Share2, Repeat, Loader2, Menu, Search, Eye, Download
@@ -4628,6 +4628,21 @@ export default function MemberProfile({
                                   <CheckCircle2 className="w-3 h-3" /> Check-in Validado
                                 </span>
                               )}
+                              {t.status === 'aprovado' && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 flex items-center gap-1" title={t.validatorName ? `Aprovado por ${t.validatorName}` : 'Aprovado pelo Clube'}>
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Aprovado pelo Clube
+                                </span>
+                              )}
+                              {t.status === 'reprovado' && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-rose-50 text-rose-700 border-rose-200 flex items-center gap-1" title={t.validationNotes || 'Reprovado pelo Clube'}>
+                                  <XCircle className="w-3 h-3 text-rose-600" /> Reprovado pelo Clube
+                                </span>
+                              )}
+                              {(!t.status || t.status === 'pendente') && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1" title="Aguardando validação do clube ao qual você pertence">
+                                  <Clock className="w-3 h-3 text-amber-600" /> Aguardando Validação
+                                </span>
+                              )}
                             </div>
                             <div className="text-[11px] text-slate-500 flex items-center gap-3">
                               <span className="flex items-center gap-1 font-mono">
@@ -4671,6 +4686,13 @@ export default function MemberProfile({
                           <p className="text-[11px] text-slate-600 italic mt-2.5 font-sans pl-2 border-l-2 border-slate-300">
                             "{t.notes}"
                           </p>
+                        )}
+
+                        {t.status === 'reprovado' && t.validationNotes && (
+                          <div className="mt-2.5 p-2 bg-rose-50 border border-rose-200 rounded-lg text-[11px] text-rose-800">
+                            <span className="font-bold">Motivo da reprovação pelo clube: </span>
+                            {t.validationNotes}
+                          </div>
                         )}
                       </div>
                     );

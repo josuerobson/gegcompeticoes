@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(admin): filtrar lista de campeonatos na Inscrição Clube para exibir apenas com etapas não homologadas e abertas para resultados` |
-| Data/hora | `2026-11-12T15:17:00-03:00` |
+| Mensagem | `feat(admin): criar menus e fluxos para validação de treinamentos e check-ins com aprovação e reprovação pelo clube` |
+| Data/hora | `2026-11-12T19:50:00-03:00` |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,27 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Validação e Homologação de Treinamentos e Check-ins pelo Clube do Atleta (`ValidarTreinamentosPanel.tsx`, `ValidarCheckinsPanel.tsx`, `AdminPanel.tsx`, `server.ts`, `src/db.ts`, `MemberProfile.tsx`, `ClubReportsViewer.tsx`, `CheckinsManager.tsx`)**:
+  - **Solicitação do Usuário**: "Todo treinametno e todo check-in tem que ser aprovado pelo clube ao qual o atleta pertencie, crie um menu para validar treinamento e validar check-in, com campo para aprovar e reprovar."
+  - **O que foi feito**:
+    1. **Schema do Banco de Dados (`src/db.ts`)**:
+       - Tabela `trainings`: Adicionadas colunas aditivas `status TEXT DEFAULT 'pendente'`, `validated_at TIMESTAMPTZ`, `validated_by_user_id TEXT`, `validation_notes TEXT` e índice `idx_trainings_status`.
+       - Tabela `club_checkins`: Adicionadas colunas aditivas `validated_at TIMESTAMPTZ`, `validated_by_user_id TEXT`, `validation_notes TEXT` e índice `idx_club_checkins_status`. Novos check-ins cadastrados iniciam com `status = 'pendente'`.
+    2. **Endpoints no Backend (`server.ts`)**:
+       - `PATCH /api/trainings/:id/validate`: Autenticado via `requireAdmin`. Valida status (`aprovado`, `reprovado`, `pendente`), verifica vínculo restrito do clube (`club_admin` só pode validar atletas vinculados ao seu próprio clube — retorna 403 Forbidden caso contrário), atualiza `status`, `validated_at = NOW()`, `validated_by_user_id` e `validation_notes`.
+       - `PATCH /api/checkins/:id/validate`: Autenticado via `requireAdmin`. Valida status, verifica vínculo estrito de clube (`club_admin` só pode validar check-ins do seu clube ou de seus atletas — retorna 403 Forbidden caso contrário) e persiste auditoria de validação.
+       - `GET /api/trainings` e `GET /api/checkins`: Suporte a filtro por `status` e `query`, retornando dados completos do validador e status.
+    3. **Interfaces Dedicadas de Validação (`src/components/ValidarTreinamentosPanel.tsx` e `src/components/ValidarCheckinsPanel.tsx`)**:
+       - Novos menus integrados em Menus Clube (`AdminPanel.tsx`) e em Gerenciamento Plataforma (ADM).
+       - Exibição de cards de métricas (Aguardando Validação, Aprovados, Reprovados, Total).
+       - Abas de filtragem rápida por status, busca por atirador (nome, CPF, CR), arma ou modalidade, e intervalo de datas.
+       - Modal de ação ("Campo para aprovar e reprovar"): campo de texto para observações na aprovação ou justificativa obrigatória na reprovação, gravando no banco e exibindo quem validou, quando e o motivo.
+    4. **Reflexo Universal em Todas as Telas**:
+       - Perfil do Atleta (`MemberProfile.tsx` e `ClubCheckinModal.tsx`): exibição de badges claros de validação ("Aprovado pelo Clube", "Reprovado pelo Clube" com aviso explicativo do motivo da reprovação, ou "Aguardando Validação").
+       - Relatórios Oficiais para o Exército Brasileiro (`ClubReportsViewer.tsx`): treinos reprovados pelo clube são desconsiderados de certidões e declarações de habitualidade para o SFPC.
+       - Gerenciamento de Check-ins (`CheckinsManager.tsx`): coluna e badges de status de validação integrados à listagem oficial de presença.
+  - **O que NÃO fazer no futuro**: Nunca permitir que um clube aprove ou reprove treinamentos ou check-ins de atletas de outro clube (sempre checar `u.club_id === effectiveClubId` ou `t.club_id === effectiveClubId`), e nunca incluir treinos reprovados em declarações oficiais de habitualidade para o Exército.
 
 - **Filtro de campeonatos na Inscrição Clube (`InscricaoClubePanel` em `AdminPanel.tsx`)**:
   - **Solicitação do Usuário**: Só exibir no select de campeonatos da Inscrição Clube os campeonatos que possuem etapas não homologadas e abertas para resultados.

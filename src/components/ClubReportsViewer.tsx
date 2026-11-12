@@ -133,7 +133,7 @@ export default function ClubReportsViewer({
 
     // 1. Real Trainings (comprovados com arma e tiros válidos)
     (loadedTrainings || []).forEach(t => {
-      if (t.userId !== athlete.id) return;
+      if (t.userId !== athlete.id || t.hidden || t.status === 'reprovado') return;
       const rawDateStr = t.dateTime || ((t as any).date ? `${(t as any).date}T15:00:00` : '') || t.createdAt || '';
       if (!rawDateStr) return;
       const rawDate = new Date(rawDateStr);

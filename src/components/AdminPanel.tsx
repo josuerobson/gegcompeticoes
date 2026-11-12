@@ -5,6 +5,8 @@ import { ClubTemplatesManager } from './ClubTemplatesManager';
 import { ClubCertificatesViewer } from './ClubCertificatesViewer';
 import ClubReportsViewer from './ClubReportsViewer';
 import CheckinsManager from './CheckinsManager';
+import ValidarTreinamentosPanel from './ValidarTreinamentosPanel';
+import ValidarCheckinsPanel from './ValidarCheckinsPanel';
 import { SicoobPixManager } from './SicoobPixManager';
 import { downloadPdfFromElement } from '../utils/pdfDownloader';
 import { MercadoPagoManager } from './MercadoPagoManager';
@@ -16,7 +18,7 @@ import ChampionshipFinanceReport from './ChampionshipFinanceReport';
 import { PixReconciliation } from './PixReconciliation';
 import { annuityStatus, parseExpiry, ANNUITY_STATUS_LABELS } from '../utils/financeReports';
 import {
-  ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, Calendar, Trophy, AlertCircle, Sparkles,
+  ShieldAlert, PlusCircle, Award, Target, Save, CheckCircle, CheckCircle2, Calendar, Trophy, AlertCircle, Sparkles,
   DollarSign, CreditCard, FileText, Users, Disc, Globe, Activity, ChevronDown, ChevronUp, Printer,
   UserPlus, FileCheck, Layers, Landmark, Briefcase, FileSignature, Database, Settings, ShieldCheck,
   Eye, EyeOff, Check, Trash2, Search, X, Pencil, ArrowLeft, ArrowRight, RotateCcw, Package, Loader2, Plus, Medal, User as UserIcon, LogIn, QrCode, KeyRound, Copy, AlertTriangle, ChevronLeft, ChevronRight, Download,
@@ -12288,6 +12290,16 @@ export default function AdminPanel({
       case 'checkins':
         return <CheckinsManager currentUser={currentUser} clubs={clubs || []} />;
 
+      case 'validar_checkins':
+        return (
+          <ValidarCheckinsPanel
+            currentUser={currentUser}
+            clubs={clubs || []}
+            users={users}
+            onRefreshData={onRefreshData}
+          />
+        );
+
       case 'registrar_treinamentos':
         return (
           <TreinamentosCompeticoesAdminPanel
@@ -12301,6 +12313,17 @@ export default function AdminPanel({
             onAddWeapon={onAddWeapon}
             onRefreshData={onRefreshData}
             onWeaponClaimed={onWeaponClaimed}
+          />
+        );
+
+      case 'validar_treinamentos':
+        return (
+          <ValidarTreinamentosPanel
+            currentUser={currentUser}
+            clubs={clubs || []}
+            users={users}
+            weapons={weapons}
+            onRefreshData={onRefreshData}
           />
         );
 
@@ -15914,29 +15937,23 @@ export default function AdminPanel({
 
       case 'validar_treinamentos':
         return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-xs">
-            <h3 className="font-display font-bold text-slate-900 text-base">Validar Treinamentos de Habitualidade</h3>
-            <p className="text-xs text-slate-500">Homologar passagens de treino inseridas pelos atiradores para contagem de habitualidades no Exército.</p>
+          <ValidarTreinamentosPanel
+            currentUser={currentUser}
+            clubs={clubs || []}
+            users={users}
+            weapons={weapons}
+            onRefreshData={onRefreshData}
+          />
+        );
 
-            <div className="space-y-3 pt-2">
-              {[
-                { u: 'Guilherme Guedes', c: '9mm', s: 150, d: '15/05/2026', dp: 'IPSC Handgun' },
-                { u: 'Ana Clara', c: '9mm', s: 200, d: '05/06/2026', dp: 'Precisão 25m' }
-              ].map((t, idx) => (
-                <div key={idx} className="border border-slate-100 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-slate-50/50">
-                  <div className="text-xs leading-normal leading-tight">
-                    <h4 className="font-bold text-slate-800">{t.u}</h4>
-                    <p className="text-slate-500">Atividade: {t.dp} • Calibre: {t.c} • Tiros: {t.s}</p>
-                    <span className="text-[10px] text-slate-450 font-mono">Realizado em: {t.d}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-[10px] px-3.5 py-2 rounded-xl transition">Homologar</button>
-                    <button className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[10px] px-3.5 py-2 rounded-xl transition">Recusar</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+      case 'validar_checkins':
+        return (
+          <ValidarCheckinsPanel
+            currentUser={currentUser}
+            clubs={clubs || []}
+            users={users}
+            onRefreshData={onRefreshData}
+          />
         );
 
       // site, idsc, and other menus placeholders
@@ -16458,7 +16475,9 @@ export default function AdminPanel({
                 { id: 'certificados', label: 'Certificados', icon: Award },
                 { id: 'cadastrar_membros', label: 'Cadastrar Membros', icon: UserPlus },
                 { id: 'checkins', label: 'Gerenciamento de Check-ins', icon: Clock },
+                { id: 'validar_checkins', label: 'Validar Check-in', icon: ShieldCheck },
                 { id: 'registrar_treinamentos', label: 'Registrar Treinamentos', icon: Crosshair },
+                { id: 'validar_treinamentos', label: 'Validar Treinamento', icon: CheckCircle2 },
                 { id: 'relatorios_declaracoes', label: 'Relatórios e Declarações', icon: FileText }
               ].map((item) => {
                 const Icon = item.icon;
@@ -16546,6 +16565,7 @@ export default function AdminPanel({
                     <button onClick={() => setPlataformaMenu('relatorios_declaracoes')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'relatorios_declaracoes' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Relatórios e declarações</button>
                     <button onClick={() => setPlataformaMenu('treinamentos_competicoes')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'treinamentos_competicoes' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-655'}`}>Treinamento/competições</button>
                     <button onClick={() => setPlataformaMenu('validar_treinamentos')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'validar_treinamentos' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Validar treinamentos</button>
+                    <button onClick={() => setPlataformaMenu('validar_checkins')} className={`w-full text-left px-3 py-2 rounded text-[11px] font-semibold transition ${plataformaMenu === 'validar_checkins' ? 'text-blue-600 bg-blue-50/50' : 'text-slate-650 hover:bg-slate-50'}`}>Validar check-ins</button>
                   </div>
                 )}
               </div>
