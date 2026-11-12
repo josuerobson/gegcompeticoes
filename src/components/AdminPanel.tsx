@@ -4270,10 +4270,10 @@ function CadastrarResultadosPanel({
                 type="button"
                 onClick={handleBackToStageCards}
                 className="p-2.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-700 hover:text-slate-900 transition flex items-center gap-1.5 text-xs font-bold cursor-pointer shrink-0 shadow-2xs"
-                title="Voltar para a seleção de etapas"
+                title="Voltar para a seleção de campeonatos e etapas"
               >
                 <ArrowLeft className="w-4 h-4 text-blue-600" />
-                <span>Trocar Etapa</span>
+                <span>Trocar campeonato</span>
               </button>
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">

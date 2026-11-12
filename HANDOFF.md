@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(weapons): permitir requerer posse de arma sem CPF vinculado via Série/SIGMA exato com validade de Guia de Trânsito` |
-| Data/hora | `2026-11-11T15:25:00-03:00` |
+| Mensagem | `fix(admin): alterar texto do botao de voltar para 'Trocar campeonato' em Cadastrar Resultados` |
+| Data/hora | `2026-11-12T14:55:00-03:00` |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,10 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Ajuste de label de navegação em Cadastrar Resultados (`AdminPanel.tsx`)**:
+  - **Solicitação do Usuário**: Alterar o texto do botão de voltar da etapa selecionada para "Trocar campeonato".
+  - **Implementação**: No header da etapa ativa de `CadastrarResultadosPanel` (`src/components/AdminPanel.tsx`), o botão de retorno que executa `handleBackToStageCards` teve o texto alterado de `"Trocar Etapa"` para `"Trocar campeonato"`.
 
 - **Requerimento de posse de armas sem CPF vinculado via Série ou SIGMA exato (`POST /api/weapons/:id/claim`, `ClaimWeaponModal.tsx`, `src/utils/textSearch.ts`, `ChampionshipsView.tsx`, `MemberProfile.tsx`, `CheckoutActivityModal.tsx`, `AdminPanel.tsx`, `App.tsx`)**:
   - **Solicitação do Usuário**: Em qualquer campo onde o atleta (ou clube em seu nome) pesquise uma arma pelo Nº de Série completo ou Nº do SIGMA completo e ela não estiver vinculada a nenhum CPF, permitir requerer a posse da arma vinculando-a ao CPF do atleta e registrando a data de vencimento da Guia de Trânsito.
