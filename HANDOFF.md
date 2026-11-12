@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(admin): alterar texto do botao de voltar para 'Trocar campeonato' em Cadastrar Resultados` |
-| Data/hora | `2026-11-12T14:55:00-03:00` |
+| Mensagem | `fix(admin): filtrar lista de campeonatos na Inscrição Clube para exibir apenas com etapas não homologadas e abertas para resultados` |
+| Data/hora | `2026-11-12T15:17:00-03:00` |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,11 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Filtro de campeonatos na Inscrição Clube (`InscricaoClubePanel` em `AdminPanel.tsx`)**:
+  - **Solicitação do Usuário**: Só exibir no select de campeonatos da Inscrição Clube os campeonatos que possuem etapas não homologadas e abertas para resultados.
+  - **Implementação**: Criado `activeChampionshipsWithOpenStages` filtrando a lista `championships` para manter apenas aqueles que possuem ao menos uma etapa com `homologarResultado !== 'sim'` e `abertoParaResultados === 'sim'`, e atualizado `champStages` para que as opções de etapas também apresentem apenas as etapas não homologadas e abertas para resultados.
+  - **O que NÃO fazer no futuro**: Não listar campeonatos antigos/finalizados cujas etapas já foram todas homologadas ou fechadas para resultados no select de inscrição do clube.
 
 - **Ajuste de label de navegação em Cadastrar Resultados (`AdminPanel.tsx`)**:
   - **Solicitação do Usuário**: Alterar o texto do botão de voltar da etapa selecionada para "Trocar campeonato".

@@ -1536,7 +1536,27 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
     return modalities.filter(m => commonIds.includes(m.id));
   }, [selectedMulti, multiItems, championships, modalities]);
 
-  const champStages = stages.filter(s => s.championshipId === champId);
+  // Apenas campeonatos que possuem etapas abertas para resultados e não homologadas
+  const activeChampionshipsWithOpenStages = React.useMemo(() => {
+    return championships.filter(c => {
+      const cStages = stages.filter(s => s.championshipId === c.id);
+      return cStages.some(s => {
+        const isHomologada = (s.homologarResultado || '').toLowerCase() === 'sim';
+        const isAberta = (s.abertoParaResultados || '').toLowerCase() === 'sim';
+        return !isHomologada && isAberta;
+      });
+    });
+  }, [championships, stages]);
+
+  const champStages = React.useMemo(() => {
+    return stages.filter(s => {
+      if (s.championshipId !== champId) return false;
+      const isHomologada = (s.homologarResultado || '').toLowerCase() === 'sim';
+      const isAberta = (s.abertoParaResultados || '').toLowerCase() === 'sim';
+      return !isHomologada && isAberta;
+    });
+  }, [stages, champId]);
+
   const currentStage = stages.find(s => s.id === stageId);
   const selectedChamp = championships.find(c => c.id === champId);
   const champAvailableModalities = modalities.filter(m => (selectedChamp?.modalities || []).includes(m.id));
@@ -1997,7 +2017,7 @@ function InscricaoClubePanel({ championships, stages, modalities, currentUser, m
             <select value={champId} onChange={e => { setChampId(e.target.value); setStageId(''); setModalityId(''); }}
               className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold">
               <option value="">Selecione...</option>
-              {championships.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+              {activeChampionshipsWithOpenStages.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
             </select>
           </div>
           <div className="space-y-1">
