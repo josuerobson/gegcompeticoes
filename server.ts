@@ -8950,7 +8950,8 @@ app.post('/api/checkins/:id/checkout', requireAuth, async (req, res) => {
        SET checkout_at = $1,
            checkout_by_user_id = $2,
            checkout_notes = $3,
-           duration_minutes = $4
+           duration_minutes = $4,
+           status = CASE WHEN validated_by_user_id IS NOT NULL THEN status ELSE 'pendente' END
        WHERE id = $5
        RETURNING *`,
       [effectiveCheckout.toISOString(), currentUser.id, finalNotes, durationMinutes, id]

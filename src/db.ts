@@ -417,7 +417,7 @@ export async function initDB() {
         facial_match_status TEXT DEFAULT 'confirmed',
         facial_notes TEXT,
         photo_data TEXT,
-        status TEXT DEFAULT 'confirmed',
+        status TEXT DEFAULT 'pendente',
         checkout_at TIMESTAMPTZ,
         checkout_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
         checkout_notes TEXT,
@@ -1790,7 +1790,7 @@ export async function initDB() {
         facial_match_status TEXT DEFAULT 'confirmed',
         facial_notes TEXT,
         photo_data TEXT,
-        status TEXT DEFAULT 'confirmed',
+        status TEXT DEFAULT 'pendente',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS idx_club_checkins_user_id ON club_checkins(user_id);
@@ -1808,6 +1808,9 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS validated_at TIMESTAMPTZ,
         ADD COLUMN IF NOT EXISTS validated_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
         ADD COLUMN IF NOT EXISTS validation_notes TEXT;
+      ALTER TABLE club_checkins ALTER COLUMN status SET DEFAULT 'pendente';
+      -- Qualquer check-in sem aprovacao expressa de um gestor permanece ou volta para pendente
+      UPDATE club_checkins SET status = 'pendente' WHERE validated_by_user_id IS NULL AND (status = 'confirmed' OR status IS NULL);
       CREATE INDEX IF NOT EXISTS idx_club_checkins_checkout_at ON club_checkins(checkout_at);
       CREATE INDEX IF NOT EXISTS idx_club_checkins_status ON club_checkins(status);
     `);

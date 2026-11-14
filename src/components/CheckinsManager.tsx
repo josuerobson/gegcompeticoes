@@ -895,18 +895,18 @@ export default function CheckinsManager({ currentUser, clubs }: CheckinsManagerP
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span
                           className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            chk.status === 'confirmed' || chk.status === 'aprovado'
+                            chk.status === 'aprovado'
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : chk.status === 'reprovado' || chk.status === 'rejected'
                               ? 'bg-rose-50 text-rose-700 border border-rose-200'
                               : 'bg-amber-50 text-amber-700 border border-amber-200'
                           }`}
                         >
-                          {chk.status === 'confirmed' || chk.status === 'aprovado'
-                            ? 'Aprovado'
+                          {chk.status === 'aprovado'
+                            ? 'Aprovado pelo Gestor'
                             : chk.status === 'reprovado' || chk.status === 'rejected'
-                            ? 'Reprovado'
-                            : 'Pendente'}
+                            ? 'Reprovado pelo Gestor'
+                            : 'Pendente (Aguardando Gestor)'}
                         </span>
                       </td>
 

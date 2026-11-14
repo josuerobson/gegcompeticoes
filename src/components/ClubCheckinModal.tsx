@@ -835,18 +835,18 @@ export default function ClubCheckinModal({
                       <div className="text-right shrink-0">
                         <span
                           className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            chk.status === 'confirmed' || chk.status === 'aprovado'
+                            chk.status === 'aprovado'
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                               : chk.status === 'reprovado' || chk.status === 'rejected'
                               ? 'bg-rose-100 text-rose-800 border border-rose-200'
                               : 'bg-amber-100 text-amber-800 border border-amber-200'
                           }`}
                         >
-                          {chk.status === 'confirmed' || chk.status === 'aprovado'
-                            ? 'Aprovado pelo Clube'
+                          {chk.status === 'aprovado'
+                            ? 'Aprovado pelo Gestor'
                             : chk.status === 'reprovado' || chk.status === 'rejected'
-                            ? 'Reprovado pelo Clube'
-                            : 'Aguardando Validação'}
+                            ? 'Reprovado pelo Gestor'
+                            : 'Aguardando Validação do Gestor'}
                         </span>
                       </div>
                     </div>

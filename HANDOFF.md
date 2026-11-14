@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(admin): criar menus e fluxos para validação de treinamentos e check-ins com aprovação e reprovação pelo clube` |
-| Data/hora | `2026-11-12T19:50:00-03:00` |
+| Mensagem | `fix(checkin): blindar check-out para nunca auto-aprovar presenca e garantir validacao exclusiva pelo gestor` |
+| Data/hora | `2026-11-13T21:55:00-03:00` |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,19 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Blindagem do Check-out para não Auto-Aprovar Check-in e Validação Global Exclusiva pelo Gestor do Clube (`server.ts`, `src/db.ts`, `ValidarCheckinsPanel.tsx`, `CheckinsManager.tsx`, `ClubCheckinModal.tsx`, `MemberProfile.tsx`)**:
+  - **Solicitação do Usuário**: "Quando eu falo sobre aprovação do check-in, engloba o Check-in e check-out, significa que o gestor do clube tem que aprovar ou não se realmente o atleta esteve no clube, então o processo de aprovação só pode ser feito pelo gestor do clube. Confirme para mim se esta desta forma, cliente esta alegando que quando o atrega da o check-out esta auto aprovando o check-in, quando a aprovação é global , só para confirmar que realmente o atleta foi visto no clube pelo gestor. Confirme se foi planejado assim."
+  - **Investigação e Causa Raiz Identificada**:
+    1. No schema original (`src/db.ts`), a coluna `status` de `club_checkins` possuía default histórico `'confirmed'`. Qualquer registro legado ou criado sem validação formal carregava `status = 'confirmed'`.
+    2. No frontend (`ValidarCheckinsPanel.tsx`, `CheckinsManager.tsx`, `ClubCheckinModal.tsx`), o código tratava `'confirmed'` como sinônimo de `'aprovado'`. Logo, quando o atleta realizava o check-in e dava baixa de check-out, o registro aparecia com badge verde de "Aprovado / Confirmado", dando a impressão de que o check-out havia "auto-aprovado" a visita.
+    3. Em `MemberProfile.tsx`, qualquer inscrição ou sessão que possuísse `checkinId` vinculado exibia um badge verde escrito em caixa alta `CHECK-IN VALIDADO`, mesmo quando o check-in ainda não havia sido apreciado pelo gestor.
+  - **Correções e Blindagem Implementadas**:
+    1. **Banco de Dados (`src/db.ts`)**: `ALTER TABLE club_checkins ALTER COLUMN status SET DEFAULT 'pendente'` e query corretiva que redefine para `'pendente'` qualquer check-in onde `validated_by_user_id IS NULL`, impedindo auto-aprovação residual.
+    2. **Backend (`server.ts`)**: No endpoint `POST /api/checkins/:id/checkout`, blindado o update com `status = CASE WHEN validated_by_user_id IS NOT NULL THEN status ELSE 'pendente' END`, assegurando que dar check-out apenas registra a saída (`checkout_at`, `duration_minutes`) e NUNCA altera o status para aprovado.
+    3. **Frontend de Gestão (`ValidarCheckinsPanel.tsx`, `CheckinsManager.tsx`)**: O status `'aprovado'` agora só é concedido se o gestor tiver realizado a ação explícita de validação (`status === 'aprovado'`). Inserido banner explicativo esclarecendo que check-in e check-out são o ciclo de presença, mas a homologação de que o atleta foi visto é prerrogativa exclusiva do gestor.
+    4. **Perfil do Atleta (`MemberProfile.tsx`, `ClubCheckinModal.tsx`)**: Badges de check-in vinculado foram renomeados de "CHECK-IN VALIDADO" para "CHECK-IN VINCULADO" (azul neutro), reservando o selo verde "Aprovado pelo Gestor" estritamente para visitas aprovadas via menu de validação.
+  - **O que NÃO fazer no futuro**: Nunca tratar `checkout` como homologação ou auto-aprovação de check-in, e nunca tratar registros sem `validated_by_user_id` como aprovados.
 
 - **Validação e Homologação de Treinamentos e Check-ins pelo Clube do Atleta (`ValidarTreinamentosPanel.tsx`, `ValidarCheckinsPanel.tsx`, `AdminPanel.tsx`, `server.ts`, `src/db.ts`, `MemberProfile.tsx`, `ClubReportsViewer.tsx`, `CheckinsManager.tsx`)**:
   - **Solicitação do Usuário**: "Todo treinametno e todo check-in tem que ser aprovado pelo clube ao qual o atleta pertencie, crie um menu para validar treinamento e validar check-in, com campo para aprovar e reprovar."

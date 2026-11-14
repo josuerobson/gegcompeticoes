@@ -98,9 +98,10 @@ export default function ValidarCheckinsPanel({
   }, [loadCheckins]);
 
   // Normalização de status de checkin para contagem
+  // SOMENTE é aprovado se status for 'aprovado' (validação formal do gestor)
   const getNormalizedStatus = (chk: ClubCheckin): 'pendente' | 'aprovado' | 'reprovado' => {
     const s = (chk.status || '').toLowerCase();
-    if (s === 'aprovado' || s === 'confirmed') return 'aprovado';
+    if (s === 'aprovado') return 'aprovado';
     if (s === 'reprovado' || s === 'rejected') return 'reprovado';
     return 'pendente';
   };
@@ -262,6 +263,17 @@ export default function ValidarCheckinsPanel({
             {error}
           </div>
         )}
+
+        {/* Informação sobre aprovação e check-out */}
+        <div className="mt-4 p-3.5 bg-blue-50/80 border border-blue-200/80 rounded-xl flex items-start gap-3 text-xs text-blue-900">
+          <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <span className="font-bold">Aprovação Global de Presença (Entrada + Saída):</span>
+            <p className="text-[11px] text-blue-800 leading-relaxed">
+              O check-in (entrada) e o check-out (saída) registram o fluxo de permanência do atirador. O check-out <strong>não auto-aprova a presença</strong>. A validação se o atleta realmente esteve presente no clube é um processo <strong>exclusivo do gestor do clube</strong> através desta tela, confirmando visualmente a foto, biometria e coordenadas GPS antes de homologar.
+            </p>
+          </div>
+        </div>
 
         {/* Cards de Métricas */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">

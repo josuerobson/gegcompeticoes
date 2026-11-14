@@ -3775,9 +3775,9 @@ export default function MemberProfile({
                                 </span>
                               )}
                               {reg.checkinId && (
-                                <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-2xs" title="Presença validada por Check-in facial e GPS no clube">
-                                  <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700" />
-                                  CHECK-IN VALIDADO
+                                <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 shadow-2xs" title="Presença com check-in facial e GPS registrado no estande">
+                                  <MapPin className="w-2.5 h-2.5 text-blue-600" />
+                                  CHECK-IN VINCULADO
                                 </span>
                               )}
                               <span className="font-bold text-xs text-slate-900">
@@ -4624,8 +4624,8 @@ export default function MemberProfile({
                                 {isClubWeapon ? '🏛️ Arma do Clube' : '🎯 Arma Própria'}
                               </span>
                               {t.checkinId && (
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 flex items-center gap-1" title="Presença validada por check-in no estande">
-                                  <CheckCircle2 className="w-3 h-3" /> Check-in Validado
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-1" title="Presença com check-in facial e GPS registrado no estande">
+                                  <MapPin className="w-3 h-3 text-blue-600" /> Check-in Vinculado
                                 </span>
                               )}
                               {t.status === 'aprovado' && (
@@ -6218,11 +6218,11 @@ export default function MemberProfile({
                                   </span>
                                   {item.checkinId && (
                                     <span
-                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 mt-1"
-                                      title="Presença validada por Check-in facial e GPS no estande"
+                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200 mt-1"
+                                      title="Presença com check-in facial e GPS registrado no estande"
                                     >
-                                      <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
-                                      Check-in Validado
+                                      <MapPin className="w-2.5 h-2.5 text-blue-600" />
+                                      Check-in Vinculado
                                     </span>
                                   )}
                                 </td>
