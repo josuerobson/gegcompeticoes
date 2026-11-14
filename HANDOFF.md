@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(pdf): implementar quebra inteligente de paginas para evitar corte de frases e assinaturas` |
-| Data/hora | `2026-11-13T22:10:00-03:00` |
+| Mensagem | `feat(admin): permitir aos clubes entrar como atleta em Cadastrar Membros restrito ao seu clube` |
+| Data/hora | `2026-11-14T09:50:00-03:00` |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,20 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Permitir aos Clubes "Entrar como Atleta" em Cadastrar Membros com Restrição Estrita ao seu Próprio Clube (`AdminPanel.tsx`, `server.ts`)**:
+  - **Solicitação do Usuário**: "Quero que os clubes tenham acesso a entrar como atleta no menu 'Gerenciamento clube> Cadastrar Membros' assim como já tem em 'Gerenciamento Plataforma > Novo altleta' mas tendo acesso somente aos atletas do seu clube, como já é." (imagens anexadas destacando o menu Cadastrar Membros e o botão "Entrar como Atleta" presente em Novo Atleta).
+  - **O que foi feito**:
+    1. **Frontend (`AdminPanel.tsx`)**:
+       - Adicionado o botão `-> Entrar como Atleta` (com ícone `LogIn`) com estilo âmbar idêntico ao de "Novo Atleta" em cada linha da listagem de "Membros do Clube".
+       - Adicionado também o botão `-> Entrar como Atleta` no topo do card de edição do membro (`selectedMember`), facilitando o acesso ao editar os dados do atleta.
+       - A listagem `baseClubMembers` é restrita estritamente aos atletas com `role === 'member'` vinculados ao clube (`u.clubId === effectiveClubId`).
+    2. **Backend (`server.ts`)**:
+       - No endpoint `POST /api/auth/impersonate`, blindada a checagem para `club_admin` e `admin`, validando que `target.clubId === requester.clubId || (requester.clubId === 'club_aranas' && !target.clubId)` e proibindo expressamente a impersonação de outros administradores (`ADMIN_ROLES`). Tentativas de entrar como membros de outro clube retornam erro `403 Forbidden: Você só pode entrar como membros do seu próprio clube.`
+    3. **Experiência de Uso (Modo Suporte)**:
+       - Ao clicar no botão e confirmar, o gestor do clube assume a visualização e contexto do atleta.
+       - A barra amarela fixada no topo (`App.tsx`) sinaliza "🔧 Modo suporte: você está logado como [Nome do Atleta] (sua conta: [Nome do Clube])" e disponibiliza o botão "Voltar para minha conta", que restaura instantaneamente a sessão de administrador do clube sem necessidade de refazer login.
+  - **O que NÃO fazer no futuro**: Nunca permitir que `club_admin` entre como atleta de outro clube ou escale privilégios para outros administradores.
 
 - **Quebra Inteligente de Páginas em PDF sem Cortes Horizontais de Frases, Assinaturas ou Tabelas (`pdfDownloader.ts`, `ClubReportsViewer.tsx`, `MemberProfile.tsx`)**:
   - **Solicitação do Usuário**: "Avalie a quebra de pagina do pdf gerado pelo sistema, esta contrando metade da frase, parte de cima leteral, e outra parte em baixo, ou a frase fica inteira em baixo." (com imagem anexada demonstrando a frase "Atestamos a veracidade e exatidão dos registros de habitualidade acima especificados." fatiada ao meio entre o rodapé da página 1 e o topo da página 2).

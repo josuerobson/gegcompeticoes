@@ -2022,8 +2022,15 @@ app.post('/api/auth/impersonate', requireAuth, requireAdmin, async (req, res) =>
       if (ADMIN_ROLES.includes(target.role)) {
         return res.status(403).json({ error: 'Você não tem permissão para entrar como este usuário.' });
       }
+      if (requester.clubId) {
+        const isTargetSameClub = target.clubId === requester.clubId || (requester.clubId === 'club_aranas' && !target.clubId);
+        if (!isTargetSameClub) {
+          return res.status(403).json({ error: 'Você só pode entrar como membros do seu próprio clube.' });
+        }
+      }
     } else if (requester.role === 'club_admin') {
-      if (target.clubId !== requester.clubId || ADMIN_ROLES.includes(target.role)) {
+      const isTargetSameClub = target.clubId === requester.clubId || (requester.clubId === 'club_aranas' && !target.clubId);
+      if (!isTargetSameClub || ADMIN_ROLES.includes(target.role)) {
         return res.status(403).json({ error: 'Você só pode entrar como membros do seu próprio clube.' });
       }
     }

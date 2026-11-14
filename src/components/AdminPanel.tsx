@@ -10108,8 +10108,14 @@ export default function AdminPanel({
   };
 
   const baseClubMembers = React.useMemo(() => {
-    return users.filter(u => u.clubId === currentUser?.clubId && u.role === 'member');
-  }, [users, currentUser?.clubId]);
+    const targetClubId = currentUser?.clubId || clubs[0]?.id || 'club_aranas';
+    return users.filter(u => {
+      const matchClub = targetClubId === 'club_aranas'
+        ? (u.clubId === targetClubId || !u.clubId)
+        : (u.clubId === targetClubId);
+      return matchClub && u.role === 'member';
+    });
+  }, [users, currentUser?.clubId, clubs]);
 
   const clubMembers = React.useMemo(() => {
     return baseClubMembers.filter(m => {
@@ -11543,14 +11549,31 @@ export default function AdminPanel({
                         </p>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedMemberId(null)}
-                      className="bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold px-3.5 py-2 rounded-xl transition cursor-pointer self-start sm:self-auto shrink-0 flex items-center gap-1.5 shadow-xs"
-                    >
-                      <X className="w-4 h-4 text-slate-500" />
-                      Fechar Edição / Cadastrar Novo
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto shrink-0">
+                      {onLoginAs && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`Entrar como o atleta "${selectedMember.fullName}"? Você pode voltar para sua conta a qualquer momento pela barra que vai aparecer no topo.`)) {
+                              onLoginAs(selectedMember.id);
+                            }
+                          }}
+                          className="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-bold px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95"
+                          title="Entrar no sistema como este atleta"
+                        >
+                          <LogIn className="w-3.5 h-3.5" />
+                          Entrar como Atleta
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedMemberId(null)}
+                        className="bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                      >
+                        <X className="w-4 h-4 text-slate-500" />
+                        Fechar Edição / Cadastrar Novo
+                      </button>
+                    </div>
                   </div>
 
                   {/* Dados de Login e Acesso (CPF, E-mail, Senha) */}
@@ -11942,7 +11965,22 @@ export default function AdminPanel({
                           </p>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+                          {onLoginAs && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`Entrar como o atleta "${m.fullName}"? Você pode voltar para sua conta a qualquer momento pela barra que vai aparecer no topo.`)) {
+                                  onLoginAs(m.id);
+                                }
+                              }}
+                              className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold text-[11px] px-3 py-1.5 rounded-lg transition cursor-pointer shadow-xs active:scale-95"
+                              title="Entrar no sistema como este atleta"
+                            >
+                              <LogIn className="w-3.5 h-3.5" />
+                              Entrar como Atleta
+                            </button>
+                          )}
                           {anuidadeExpiry && (
                             <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full font-mono ${isAnuidadeActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
                               Anuidade: {isAnuidadeActive ? 'Ativa' : 'Vencida'}
