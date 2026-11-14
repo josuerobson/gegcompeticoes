@@ -2131,7 +2131,7 @@ export default function MemberProfile({
 
       const activitiesHtml = sortedActivities.length > 0
         ? sortedActivities.map((item, idx) => `
-        <div style="border: 1px solid #0f172a; margin-bottom: 8px; page-break-inside: avoid; overflow: hidden; background-color: #ffffff;">
+        <div class="pdf-avoid-break" style="border: 1px solid #0f172a; margin-bottom: 8px; page-break-inside: avoid; break-inside: avoid; overflow: hidden; background-color: #ffffff;">
           <table style="width: 100%; border-collapse: collapse; font-size: 9.5px; color: #0f172a;">
             <tbody>
               <tr style="border-bottom: 1px solid #0f172a; background-color: #f8fafc;">
@@ -2186,7 +2186,7 @@ export default function MemberProfile({
       const pageHtml = `
         <div style="padding: 20px 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #0f172a; background: #ffffff; box-sizing: border-box;">
           <!-- Official Timbre Header -->
-          <div style="text-align: center; border-bottom: 2px solid #cbd5e1; padding-bottom: 8px; margin-bottom: 10px;">
+          <div class="pdf-avoid-break" style="text-align: center; border-bottom: 2px solid #cbd5e1; padding-bottom: 8px; margin-bottom: 10px; page-break-inside: avoid; break-inside: avoid;">
             <h1 style="font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; margin: 0; line-height: 1.3;">
               Declaração de habitualidade COMPROVAÇÃO DE PARTICIPAÇÕES EM TREINAMENTOS E/OU COMPETIÇÕES DE TIRO
             </h1>
@@ -2196,7 +2196,7 @@ export default function MemberProfile({
           </div>
 
           <!-- Official Declaration Text -->
-          <div style="text-align: justify; font-size: 10.5px; line-height: 1.5; color: #1e293b; margin-bottom: 12px;">
+          <div class="pdf-avoid-break" style="text-align: justify; font-size: 10.5px; line-height: 1.5; color: #1e293b; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
             <p style="margin: 0;">
               <strong>${clubName}</strong>, Nome Fantasia: <strong>${clubFantasy}</strong>, CR: Nº <strong>${clubCr}</strong> inscrito no CNPJ sob o nº <strong>${clubCnpj}</strong>, com endereço sede, na <strong>${clubAddress}</strong>, <strong>DECLARA</strong>, para fim de comprovação junto ao Exército Brasileiro e a Polícia Federal, que, <strong>${selectedUser.fullName}</strong>, CPF <strong>${selectedUser.cpf || 'Não informado'}</strong>, CR <strong>${selectedUser.crNumber || '000.330.311-00'}</strong>, com endereço: <strong>${athleteAddr}</strong> está regularmente inscrito nesta entidade sob o nº <strong>${athleteRegNum}</strong>, datado de <strong>${affiliationDateExtensive}</strong> e que participou de treinamentos/competições que justificam a aquisição de munição/insumos pleiteada/pleiteados. <strong>O TREINAMENTO FOI REALIZADO CONFORME DESCRIÇÕES</strong>
             </p>
@@ -2206,8 +2206,8 @@ export default function MemberProfile({
           ${activitiesHtml}
 
           <!-- Signatures & Footer -->
-          <div style="margin-top: 16px; padding-top: 10px; border-top: 1px solid #cbd5e1; page-break-inside: avoid; text-align: center;">
-            <p style="font-size: 10px; color: #1e293b; margin: 0 0 3px 0;">Atestamos a veracidade e exatidão dos registros de habitualidade acima especificados.</p>
+          <div class="pdf-avoid-break signature-block" style="margin-top: 16px; padding-top: 10px; border-top: 1px solid #cbd5e1; page-break-inside: avoid; break-inside: avoid; text-align: center;">
+            <p style="font-size: 10px; color: #1e293b; margin: 0 0 3px 0; page-break-inside: avoid; break-inside: avoid;">Atestamos a veracidade e exatidão dos registros de habitualidade acima especificados.</p>
             <p style="font-size: 10px; color: #334155; margin: 0 0 16px 0;">${clubCityState}, ${new Date().toLocaleDateString('pt-BR')}.</p>
 
             <div style="display: inline-block; text-align: center; font-size: 9.5px; margin-top: 6px;">
@@ -2255,7 +2255,7 @@ export default function MemberProfile({
 
       const pageHtml = `
         <div style="padding: 24px 28px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #0f172a; background: #ffffff; box-sizing: border-box;">
-          <div style="text-align: center; border-bottom: 2px solid #cbd5e1; padding-bottom: 10px; margin-bottom: 20px;">
+          <div class="pdf-avoid-break" style="text-align: center; border-bottom: 2px solid #cbd5e1; padding-bottom: 10px; margin-bottom: 20px; page-break-inside: avoid; break-inside: avoid;">
             <h1 style="font-size: 13.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; margin: 0; line-height: 1.3;">
               DECLARAÇÃO DE FILIAÇÃO AO CLUBE DE TIRO
             </h1>
@@ -2264,7 +2264,7 @@ export default function MemberProfile({
             </p>
           </div>
 
-          <div style="text-align: justify; font-size: 11.5px; line-height: 1.8; color: #1e293b; margin: 24px 0 32px 0;">
+          <div class="pdf-avoid-break" style="text-align: justify; font-size: 11.5px; line-height: 1.8; color: #1e293b; margin: 24px 0 32px 0; page-break-inside: avoid; break-inside: avoid;">
             <p style="margin-bottom: 16px;">
               Declaramos, para os devidos fins de direito junto ao Sistema de Fiscalização de Produtos Controlados (SFPC) do Exército Brasileiro e à Polícia Federal, que <strong>${selectedUser.fullName}</strong>, inscrito no CPF sob o nº <strong>${selectedUser.cpf || 'Não informado'}</strong> e portador do Certificado de Registro (CR) nº <strong>${selectedUser.crNumber || 'Emissão pendente'}</strong>, é filiado ativo regular sob o registro nº <strong>${athleteRegNum}</strong> nesta entidade de tiro desportivo <strong>${clubName}</strong> (Nome Fantasia: <strong>${clubFantasy}</strong>), CNPJ: <strong>${clubCnpj}</strong>, CR nº <strong>${clubCr}</strong>.
             </p>
@@ -2273,8 +2273,8 @@ export default function MemberProfile({
             </p>
           </div>
 
-          <div style="margin-top: 40px; padding-top: 16px; border-top: 1px solid #cbd5e1; page-break-inside: avoid; text-align: center;">
-            <p style="font-size: 11px; color: #1e293b; margin: 0 0 4px 0;">Atestamos a veracidade e exatidão das informações acima especificadas.</p>
+          <div class="pdf-avoid-break signature-block" style="margin-top: 40px; padding-top: 16px; border-top: 1px solid #cbd5e1; page-break-inside: avoid; break-inside: avoid; text-align: center;">
+            <p style="font-size: 11px; color: #1e293b; margin: 0 0 4px 0; page-break-inside: avoid; break-inside: avoid;">Atestamos a veracidade e exatidão das informações acima especificadas.</p>
             <p style="font-size: 11px; color: #334155; margin: 0 0 24px 0;">${clubCityState}, ${new Date().toLocaleDateString('pt-BR')}.</p>
 
             <div style="display: inline-block; text-align: center; font-size: 10px; margin-top: 10px;">

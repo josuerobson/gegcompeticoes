@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(checkin): blindar check-out para nunca auto-aprovar presenca e garantir validacao exclusiva pelo gestor` |
-| Data/hora | `2026-11-13T21:55:00-03:00` |
+| Mensagem | `fix(pdf): implementar quebra inteligente de paginas para evitar corte de frases e assinaturas` |
+| Data/hora | `2026-11-13T22:10:00-03:00` |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,19 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Quebra Inteligente de Páginas em PDF sem Cortes Horizontais de Frases, Assinaturas ou Tabelas (`pdfDownloader.ts`, `ClubReportsViewer.tsx`, `MemberProfile.tsx`)**:
+  - **Solicitação do Usuário**: "Avalie a quebra de pagina do pdf gerado pelo sistema, esta contrando metade da frase, parte de cima leteral, e outra parte em baixo, ou a frase fica inteira em baixo." (com imagem anexada demonstrando a frase "Atestamos a veracidade e exatidão dos registros de habitualidade acima especificados." fatiada ao meio entre o rodapé da página 1 e o topo da página 2).
+  - **Investigação e Causa Raiz**: O motor de exportação `downloadMultiSectionPdfFromHtml` em `src/utils/pdfDownloader.ts` renderizava o HTML em canvas e fatiava a imagem utilizando uma fórmula matemática cega de altura fixa de página (`sliceHeightPx = (printableHeightMm * canvas.width) / printableWidthMm`), desconsiderando os limites dos elementos do DOM e propriedades CSS `page-break-inside: avoid`. Quando o cálculo de pixel coincidia com o meio de uma linha de texto, os glifos eram cortados pela metade (metade de cima no fim de uma página e metade de baixo no início da outra). Além disso, `sourceY` avançava cegamente por `sliceHeightPx` ao invés da altura fatiada real.
+  - **Solução Implementada**:
+    1. **Motor de Corte Inteligente (`findSmartSliceHeight` em `pdfDownloader.ts`)**:
+       - Função `getAvoidBoundaries`: Mapeia todos os elementos estruturais e blocos que não podem ser cortados ao meio (`.pdf-avoid-break`, `.signature-block`, `[style*="break-inside: avoid"]`, tabelas, linhas `tr`, parágrafos `p`, títulos `h1..h6`).
+       - Ao detectar que a linha de quebra teórica cruzaria qualquer elemento sensível, o corte é antecipado para antes do elemento (`el.top - 2px`), movendo a frase/assinatura/tabela inteira para a página seguinte.
+       - **Refinamento por varredura de pixels no canvas**: A partir do ponto de corte candidato, o motor escaneia linhas horizontais de pixels para cima via `ctx.getImageData` e `isRowBlank`, localizando a linha horizontal 100% branca mais próxima para realizar o corte. Isso garante fisicamente que nenhum traço de fonte ou borda seja fatiado.
+       - Atualizado o avanço para `sourceY += currentSliceHeight`, sincronizando perfeitamente cada página.
+    2. **Marcação nos Modelos de Documentos (`ClubReportsViewer.tsx` e `MemberProfile.tsx`)**:
+       - Adicionadas classes `pdf-avoid-break signature-block` e estilos `page-break-inside: avoid; break-inside: avoid;` a todos os cartões de habitualidade, textos de ateste e blocos de assinatura.
+  - **O que NÃO fazer no futuro**: Nunca utilizar fatiamento cego de pixels em canvas sem verificação de limites DOM e linhas em branco no canvas.
 
 - **Blindagem do Check-out para não Auto-Aprovar Check-in e Validação Global Exclusiva pelo Gestor do Clube (`server.ts`, `src/db.ts`, `ValidarCheckinsPanel.tsx`, `CheckinsManager.tsx`, `ClubCheckinModal.tsx`, `MemberProfile.tsx`)**:
   - **Solicitação do Usuário**: "Quando eu falo sobre aprovação do check-in, engloba o Check-in e check-out, significa que o gestor do clube tem que aprovar ou não se realmente o atleta esteve no clube, então o processo de aprovação só pode ser feito pelo gestor do clube. Confirme para mim se esta desta forma, cliente esta alegando que quando o atrega da o check-out esta auto aprovando o check-in, quando a aprovação é global , só para confirmar que realmente o atleta foi visto no clube pelo gestor. Confirme se foi planejado assim."
