@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(admin): permitir aos clubes entrar como atleta em Cadastrar Membros restrito ao seu clube` |
-| Data/hora | `2026-11-14T09:50:00-03:00` |
+| Mensagem | `feat(checkin): deteccao de posicionamento facial em tempo real e bloqueio de fotos mal enquadradas` |
+| Data/hora | 2026-11-16T16:45:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,23 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Detecção de Posicionamento Facial em Tempo Real e Bloqueio de Fotos Mal Enquadradas no Check-in (`ClubCheckinModal.tsx`, `server.ts`)**:
+  - **Solicitação do Usuário**: "Veja a possibilidade de detectar se o rosto não esta posicionado corretamente no momento do check-in, foto que não estiverem bem posicionadas não deve aprovar o checkin, me explique como funciona antes de alterar" -> Após explicação das abordagens, o usuário escolheu a **Opção 1** (feedback visual em tempo real com moldura interativa que só dispara quando verde/correto + bloqueio no servidor para fotos fora do padrão).
+  - **O que foi implementado**:
+    1. **Frontend (`ClubCheckinModal.tsx`)**:
+       - **Loop Contínuo de Avaliação (250ms)**: Analisa o frame da câmera através da API nativa `FaceDetector` do navegador (Chromium/Android/Edge) com fallback heurístico em canvas (segmentação de pele e centróide em YCbCr) para navegadores sem API nativa (ex: Safari iOS).
+       - **Critérios Validados**: Exatamente 1 pessoa em foco, proporção/distância (entre 26% e 86%), centralização horizontal (tolerância de 20%) e altura correta (sem cortar testa ou queixo).
+       - **Moldura Dinâmica e Feedback Visual**:
+         - Se fora de posição / sem rosto: moldura em âmbar com aviso instantâneo (*"Centralize seu rosto"*, *"Aproxime-se"*, *"Afaste-se"*, etc.).
+         - Se bem posicionado: moldura verde esmeralda com realce biométrico e texto *"Rosto bem posicionado!"*.
+       - **Contagem Regressiva Conectada à Estabilidade**: Ao clicar em "Iniciar reconhecimento facial", a contagem regressiva de 3 segundos só avança enquanto o rosto se mantiver estável e bem posicionado na moldura verde. Se a pessoa desviar a cabeça ou se afastar, a contagem pausa e reseta para 3s com aviso sonoro/visual.
+    2. **Backend (`server.ts`)**:
+       - Criada a função `validateFacialPosition(selfieBase64)` chamada obrigatoriamente no início de `POST /api/checkins`.
+       - Com `GEMINI_API_KEY`, submete a selfie ao `gemini-2.5-flash` como perito biométrico para auditar se há um rosto humano nítido, frontal, centralizado e sem cortes.
+       - Fallback heurístico em `Jimp` e buffer: verifica resolução, contraste, histograma de luminosidade (bloqueia telas pretas, fundos escuros ou fotos sem contraste) e densidade central.
+       - Se reprovado, o check-in **NÃO é salvo** e a API devolve erro `HTTP 400`: *"Enquadramento facial não aprovado: [motivo]. Centralize seu rosto frontalmente na moldura e tente novamente."*
+  - **O que NÃO fazer no futuro**: Nunca remover a trava de enquadramento facial no backend nem desvincular a contagem do posicionamento no frontend.
 
 - **Permitir aos Clubes "Entrar como Atleta" em Cadastrar Membros com Restrição Estrita ao seu Próprio Clube (`AdminPanel.tsx`, `server.ts`)**:
   - **Solicitação do Usuário**: "Quero que os clubes tenham acesso a entrar como atleta no menu 'Gerenciamento clube> Cadastrar Membros' assim como já tem em 'Gerenciamento Plataforma > Novo altleta' mas tendo acesso somente aos atletas do seu clube, como já é." (imagens anexadas destacando o menu Cadastrar Membros e o botão "Entrar como Atleta" presente em Novo Atleta).

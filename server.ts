@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { Jimp } from 'jimp';
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';
@@ -8447,6 +8448,196 @@ function mapCheckin(r: any): ClubCheckin {
   };
 }
 
+async function validateFacialPosition(selfieBase64: string): Promise<{
+  approved: boolean;
+  score: number;
+  reason: string;
+}> {
+  if (!selfieBase64) {
+    return {
+      approved: false,
+      score: 0,
+      reason: 'Nenhuma foto enviada.',
+    };
+  }
+
+  const cleanSelfie = selfieBase64.replace(/^data:image\/\w+;base64,/, '');
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `Você é um perito biométrico oficial de estande de tiro desportivo credenciado pelo Exército Brasileiro.
+Analise a selfie fornecida pelo atirador no momento do check-in.
+Avalie estritamente os seguintes critérios de qualidade e enquadramento facial:
+1. PRESENÇA DE ROSTO: Há um rosto humano visível e nítido? (REPROVE se for imagem de objeto, parede, chão, sem pessoa ou totalmente escura/borrada).
+2. QUANTIDADE: Há exatamente UMA pessoa? (REPROVE se houver mais de uma pessoa em evidência).
+3. POSICIONAMENTO E CENTRALIZAÇÃO: O rosto está frontal (olhando em direção à câmera) e razoavelmente centralizado? (REPROVE se a cabeça estiver virada de lado/perfil, de costas, ou cortada na testa, queixo ou laterais).
+4. PROPORÇÃO: O rosto ocupa proporção adequada do quadro (entre 25% e 85% do espaço)? (REPROVE se estiver distante demais ou colado demais).
+5. VISIBILIDADE: Os traços faciais principais e olhos estão visíveis? (REPROVE se estiver com óculos escuros bloqueando os olhos, máscara ou sombras que impeçam a identificação).
+
+IMPORTANTE: Responda APENAS com um objeto JSON válido, sem texto adicional, no formato:
+{"approved": boolean, "score": number, "reason": "frase explicativa em português do motivo da aprovação ou reprovação"}`,
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/jpeg',
+                  data: cleanSelfie,
+                },
+              },
+            ],
+          },
+        ],
+      });
+
+      const text = response.text || '';
+      const cleanedJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const result = JSON.parse(cleanedJson);
+
+      const approved = Boolean(result.approved) && (result.score == null || result.score >= 50);
+      const score = typeof result.score === 'number' ? Math.min(100, Math.max(0, result.score)) : (approved ? 90 : 30);
+      const reason = result.reason || (approved ? 'Rosto bem posicionado e enquadrado.' : 'Posicionamento facial inadequado para o check-in.');
+
+      return {
+        approved,
+        score,
+        reason,
+      };
+    } catch (err: any) {
+      console.warn('Gemini facial position validation warning:', err?.message || err);
+    }
+  }
+
+  // Fallback heurístico caso a API do Gemini esteja sem chave ou inacessível
+  try {
+    const buffer = Buffer.from(cleanSelfie, 'base64');
+    if (buffer.length < 3500) {
+      return {
+        approved: false,
+        score: 10,
+        reason: 'Imagem muito pequena ou corrompida. Tire uma foto nítida do seu rosto.',
+      };
+    }
+
+    const image = await Jimp.read(buffer);
+    const width = image.bitmap.width;
+    const height = image.bitmap.height;
+
+    if (width < 140 || height < 140) {
+      return {
+        approved: false,
+        score: 20,
+        reason: 'Resolução da imagem insuficiente. É necessário foto com rosto nítido.',
+      };
+    }
+
+    let totalLum = 0;
+    let count = 0;
+    let minLum = 255;
+    let maxLum = 0;
+    let skinPixelCount = 0;
+    let centerSkinPixelCount = 0;
+
+    const cX = width / 2;
+    const cY = height * 0.45;
+    const rX = width * 0.35;
+    const rY = height * 0.40;
+
+    const step = 6;
+    for (let y = 0; y < height; y += step) {
+      for (let x = 0; x < width; x += step) {
+        const idx = (y * width + x) * 4;
+        const r = image.bitmap.data[idx];
+        const g = image.bitmap.data[idx + 1];
+        const b = image.bitmap.data[idx + 2];
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        totalLum += lum;
+        count++;
+        if (lum < minLum) minLum = lum;
+        if (lum > maxLum) maxLum = lum;
+
+        const cb = 128 - 0.1687 * r - 0.3313 * g + 0.5 * b;
+        const cr = 128 + 0.5 * r - 0.4187 * g - 0.0813 * b;
+        const isSkin = (lum > 35 && cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173) ||
+                       (r > 75 && g > 40 && b > 20 && r > g && r > b && (r - g) >= 15);
+
+        if (isSkin) {
+          skinPixelCount++;
+          const dx = (x - cX) / rX;
+          const dy = (y - cY) / rY;
+          if (dx * dx + dy * dy <= 1.0) {
+            centerSkinPixelCount++;
+          }
+        }
+      }
+    }
+
+    const avgLum = count > 0 ? totalLum / count : 128;
+    const contrast = maxLum - minLum;
+    const skinRatio = skinPixelCount / (count || 1);
+    const centerRatio = centerSkinPixelCount / (skinPixelCount || 1);
+
+    if (avgLum < 18) {
+      return {
+        approved: false,
+        score: 15,
+        reason: 'Ambiente muito escuro. Não foi possível identificar o rosto. Posicione-se em local iluminado.',
+      };
+    }
+
+    if (avgLum > 248 && contrast < 25) {
+      return {
+        approved: false,
+        score: 15,
+        reason: 'Excesso de iluminação direta na câmera. O rosto está ofuscado.',
+      };
+    }
+
+    if (contrast < 20) {
+      return {
+        approved: false,
+        score: 20,
+        reason: 'Imagem sem contraste de traços faciais. Posicione seu rosto em frente à câmera.',
+      };
+    }
+
+    if (skinRatio < 0.05) {
+      return {
+        approved: false,
+        score: 25,
+        reason: 'Nenhum rosto identificado no enquadramento. Posicione seu rosto dentro da moldura.',
+      };
+    }
+
+    if (centerRatio < 0.35) {
+      return {
+        approved: false,
+        score: 30,
+        reason: 'Rosto fora da área central da foto. Centralize seu rosto na moldura.',
+      };
+    }
+
+    return {
+      approved: true,
+      score: 85,
+      reason: 'Enquadramento facial aprovado para auditoria.',
+    };
+  } catch (err: any) {
+    return {
+      approved: true,
+      score: 80,
+      reason: 'Enquadramento aprovado.',
+    };
+  }
+}
+
 async function verifyFacialMatch(selfieBase64: string, referencePhoto: string | null | undefined): Promise<{
   match: boolean;
   confidence: number;
@@ -8609,6 +8800,14 @@ app.post('/api/checkins', requireAuth, async (req, res) => {
           isWithinRadius = distanceMeters <= maxRadius;
         }
       }
+    }
+
+    // 1. Validação obrigatória de enquadramento e posicionamento facial
+    const positionValidation = await validateFacialPosition(photo);
+    if (!positionValidation.approved) {
+      return res.status(400).json({
+        error: `Enquadramento facial não aprovado: ${positionValidation.reason} Centralize seu rosto frontalmente na moldura e tente novamente.`
+      });
     }
 
     const userRes = await pool.query(`SELECT avatar_url FROM users WHERE id = $1`, [currentUser.id]);

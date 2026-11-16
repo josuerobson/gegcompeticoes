@@ -32,13 +32,17 @@ export default function ClubCheckinModal({
   // Estados de escaneamento e contagem de 3 segundos
   const [isScanning, setIsScanning] = useState(false);
   const [scanCountdown, setScanCountdown] = useState(3);
-  const countdownTimerRef = useRef<any>(null);
+  const isScanningRef = useRef<boolean>(false);
+  const consecutiveGoodFramesRef = useRef<number>(0);
+  const scanLoopRef = useRef<any>(null);
 
-  useEffect(() => {
-    return () => {
-      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
-    };
-  }, []);
+  // Estados de detecção e posicionamento facial em tempo real
+  type FacePositionStatus = 'searching' | 'uncentered' | 'too_far' | 'too_close' | 'multiple' | 'good';
+  const [faceStatus, setFaceStatus] = useState<FacePositionStatus>('searching');
+  const [faceGuideText, setFaceGuideText] = useState<string>('Centralize seu rosto na moldura');
+  const [isFacePositionOk, setIsFacePositionOk] = useState<boolean>(false);
+  const faceDetectorRef = useRef<any>(null);
+  const isFacePositionOkRef = useRef<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string>('');
   const [successCheckin, setSuccessCheckin] = useState<ClubCheckin | null>(null);
@@ -168,6 +172,10 @@ export default function ClubCheckinModal({
   };
 
   const stopCamera = () => {
+    if (scanLoopRef.current) clearInterval(scanLoopRef.current);
+    scanLoopRef.current = null;
+    isScanningRef.current = false;
+    consecutiveGoodFramesRef.current = 0;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -276,14 +284,278 @@ export default function ClubCheckinModal({
   };
 
   const handleRetake = () => {
-    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
-    countdownTimerRef.current = null;
+    if (scanLoopRef.current) clearInterval(scanLoopRef.current);
+    scanLoopRef.current = null;
+    isScanningRef.current = false;
+    consecutiveGoodFramesRef.current = 0;
     setIsScanning(false);
     setScanCountdown(3);
+    setFaceStatus('searching');
+    setFaceGuideText('Centralize seu rosto na moldura');
+    setIsFacePositionOk(false);
+    isFacePositionOkRef.current = false;
     setCapturedPhoto(null);
     setSubmitError('');
     startCamera();
   };
+
+  // 1. Inicializar FaceDetector se suportado pelo navegador
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'FaceDetector' in window) {
+      try {
+        faceDetectorRef.current = new (window as any).FaceDetector({
+          fastMode: true,
+          maxDetectedFaces: 3,
+        });
+      } catch (e) {
+        console.warn('FaceDetector init:', e);
+      }
+    }
+  }, []);
+
+  // 2. Avaliar enquadramento, posicionamento e proporção do rosto em tempo real
+  const evaluateFaceFrame = async (): Promise<boolean> => {
+    if (!videoRef.current || !cameraActive || videoRef.current.readyState < 2) return false;
+    const video = videoRef.current;
+    const vw = video.videoWidth || 640;
+    const vh = video.videoHeight || 480;
+    if (vw === 0 || vh === 0) return false;
+
+    const size = Math.min(vw, vh);
+    const startX = (vw - size) / 2;
+    const startY = (vh - size) / 2;
+
+    // 1. FaceDetector nativo do navegador (Google Chrome, Edge, Android)
+    if (faceDetectorRef.current) {
+      try {
+        const detectedFaces = await faceDetectorRef.current.detect(video);
+        if (!detectedFaces || detectedFaces.length === 0) {
+          setFaceStatus('searching');
+          setFaceGuideText('Nenhum rosto detectado na moldura');
+          setIsFacePositionOk(false);
+          isFacePositionOkRef.current = false;
+          return false;
+        }
+
+        if (detectedFaces.length > 1) {
+          setFaceStatus('multiple');
+          setFaceGuideText('Apenas 1 atirador deve estar em frente à câmera');
+          setIsFacePositionOk(false);
+          isFacePositionOkRef.current = false;
+          return false;
+        }
+
+        const box = detectedFaces[0].boundingBox;
+        const faceRelX = (box.x + box.width / 2 - startX) / size;
+        const faceRelY = (box.y + box.height / 2 - startY) / size;
+        const faceRelH = box.height / size;
+        const faceRelW = box.width / size;
+
+        if (faceRelH < 0.26 || faceRelW < 0.20) {
+          setFaceStatus('too_far');
+          setFaceGuideText('Rosto muito distante. Aproxime-se da câmera');
+          setIsFacePositionOk(false);
+          isFacePositionOkRef.current = false;
+          return false;
+        }
+
+        if (faceRelH > 0.86 || faceRelW > 0.82) {
+          setFaceStatus('too_close');
+          setFaceGuideText('Rosto muito próximo. Afaste-se um pouco');
+          setIsFacePositionOk(false);
+          isFacePositionOkRef.current = false;
+          return false;
+        }
+
+        if (Math.abs(faceRelX - 0.5) > 0.20) {
+          setFaceStatus('uncentered');
+          setFaceGuideText('Centralize seu rosto horizontalmente no círculo');
+          setIsFacePositionOk(false);
+          isFacePositionOkRef.current = false;
+          return false;
+        }
+
+        if (faceRelY < 0.24) {
+          setFaceStatus('uncentered');
+          setFaceGuideText('Abaixe a câmera (rosto cortado no topo)');
+          setIsFacePositionOk(false);
+          isFacePositionOkRef.current = false;
+          return false;
+        }
+        if (faceRelY > 0.74) {
+          setFaceStatus('uncentered');
+          setFaceGuideText('Levante a câmera (rosto cortado embaixo)');
+          setIsFacePositionOk(false);
+          isFacePositionOkRef.current = false;
+          return false;
+        }
+
+        setFaceStatus('good');
+        setFaceGuideText('Rosto bem posicionado!');
+        setIsFacePositionOk(true);
+        isFacePositionOkRef.current = true;
+        return true;
+      } catch (err) {
+        // Fallback para detector heurístico
+      }
+    }
+
+    // 2. Fallback Heurístico Universal (Canvas Color, Luminance & Centroid)
+    try {
+      const helperCanvas = document.createElement('canvas');
+      const sampleSize = 120;
+      helperCanvas.width = sampleSize;
+      helperCanvas.height = sampleSize;
+      const ctx = helperCanvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return false;
+
+      ctx.drawImage(video, startX, startY, size, size, 0, 0, sampleSize, sampleSize);
+      const imgData = ctx.getImageData(0, 0, sampleSize, sampleSize);
+      const data = imgData.data;
+
+      let skinCount = 0;
+      let totalX = 0;
+      let totalY = 0;
+      let centerSkinCount = 0;
+
+      const cX = sampleSize / 2;
+      const cY = sampleSize / 2;
+      const rX = sampleSize * 0.34;
+      const rY = sampleSize * 0.44;
+
+      for (let y = 0; y < sampleSize; y += 2) {
+        for (let x = 0; x < sampleSize; x += 2) {
+          const idx = (y * sampleSize + x) * 4;
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+
+          const yVal = 0.299 * r + 0.587 * g + 0.114 * b;
+          const cb = 128 - 0.1687 * r - 0.3313 * g + 0.5 * b;
+          const cr = 128 + 0.5 * r - 0.4187 * g - 0.0813 * b;
+
+          const isSkin = (yVal > 35 && cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173) ||
+                         (r > 75 && g > 40 && b > 20 && r > g && r > b && (r - g) >= 15);
+
+          if (isSkin) {
+            skinCount++;
+            totalX += x;
+            totalY += y;
+
+            const dx = (x - cX) / rX;
+            const dy = (y - cY) / rY;
+            if (dx * dx + dy * dy <= 1.0) {
+              centerSkinCount++;
+            }
+          }
+        }
+      }
+
+      const totalSamples = (sampleSize / 2) * (sampleSize / 2);
+      const skinRatio = skinCount / totalSamples;
+      const centerRatio = centerSkinCount / (skinCount || 1);
+
+      if (skinRatio < 0.06) {
+        setFaceStatus('searching');
+        setFaceGuideText('Posicione seu rosto dentro da moldura');
+        setIsFacePositionOk(false);
+        isFacePositionOkRef.current = false;
+        return false;
+      }
+
+      if (skinRatio > 0.90) {
+        setFaceStatus('too_close');
+        setFaceGuideText('Rosto muito próximo. Afaste-se um pouco');
+        setIsFacePositionOk(false);
+        isFacePositionOkRef.current = false;
+        return false;
+      }
+
+      const avgX = (totalX / (skinCount || 1)) / sampleSize;
+      const avgY = (totalY / (skinCount || 1)) / sampleSize;
+
+      if (Math.abs(avgX - 0.5) > 0.22) {
+        setFaceStatus('uncentered');
+        setFaceGuideText('Centralize seu rosto no centro da moldura');
+        setIsFacePositionOk(false);
+        isFacePositionOkRef.current = false;
+        return false;
+      }
+
+      if (avgY < 0.24 || avgY > 0.76) {
+        setFaceStatus('uncentered');
+        setFaceGuideText('Ajuste a altura do seu rosto dentro do círculo');
+        setIsFacePositionOk(false);
+        isFacePositionOkRef.current = false;
+        return false;
+      }
+
+      if (centerRatio < 0.35) {
+        setFaceStatus('uncentered');
+        setFaceGuideText('Rosto fora do centro. Centralize-se na moldura');
+        setIsFacePositionOk(false);
+        isFacePositionOkRef.current = false;
+        return false;
+      }
+
+      setFaceStatus('good');
+      setFaceGuideText('Rosto bem posicionado!');
+      setIsFacePositionOk(true);
+      isFacePositionOkRef.current = true;
+      return true;
+    } catch (e) {
+      setFaceStatus('good');
+      setIsFacePositionOk(true);
+      isFacePositionOkRef.current = true;
+      return true;
+    }
+  };
+
+  // 3. Monitoramento contínuo a cada 250ms com disparo do reconhecimento
+  useEffect(() => {
+    if (!cameraActive || capturedPhoto) {
+      if (scanLoopRef.current) clearInterval(scanLoopRef.current);
+      scanLoopRef.current = null;
+      return;
+    }
+
+    scanLoopRef.current = setInterval(async () => {
+      const isGood = await evaluateFaceFrame();
+
+      if (isScanningRef.current) {
+        if (!isGood) {
+          consecutiveGoodFramesRef.current = 0;
+          setScanCountdown(3);
+        } else {
+          consecutiveGoodFramesRef.current += 1;
+          const frames = consecutiveGoodFramesRef.current;
+          // 4 quadros consecutivos bem posicionados = 1 segundo
+          if (frames < 4) {
+            setScanCountdown(3);
+          } else if (frames < 8) {
+            setScanCountdown(2);
+          } else if (frames < 12) {
+            setScanCountdown(1);
+          } else {
+            // Concluiu os 3 segundos com posicionamento perfeito mantido
+            if (scanLoopRef.current) clearInterval(scanLoopRef.current);
+            scanLoopRef.current = null;
+            isScanningRef.current = false;
+            setIsScanning(false);
+            const photo = handleCapture();
+            if (photo) {
+              submitCheckinWithPhoto(photo);
+            }
+          }
+        }
+      }
+    }, 250);
+
+    return () => {
+      if (scanLoopRef.current) clearInterval(scanLoopRef.current);
+      scanLoopRef.current = null;
+    };
+  }, [cameraActive, capturedPhoto]);
 
   // Envio do Checkin
   const submitCheckinWithPhoto = async (photoToSend: string) => {
@@ -343,34 +615,20 @@ export default function ClubCheckinModal({
     await submitCheckinWithPhoto(capturedPhoto);
   };
 
-  // Iniciar sequência de 3 segundos para reconhecimento facial
+  // Iniciar sequência de escaneamento facial com validação de posicionamento
   const startFacialRecognition = () => {
     if (!coords || coords.latitude == null || coords.longitude == null || gpsStatus !== 'ready') {
       setSubmitError('Para ter validade junto ao Exército Brasileiro, é obrigatório obter a geolocalização (GPS) antes de iniciar o reconhecimento facial.');
       return;
     }
     if (!cameraActive || isScanning || submitting) return;
-    setIsScanning(true);
-    setScanCountdown(3);
+
     setSubmitError('');
-
-    let currentSec = 3;
-    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
-
-    countdownTimerRef.current = setInterval(() => {
-      currentSec -= 1;
-      if (currentSec > 0) {
-        setScanCountdown(currentSec);
-      } else {
-        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
-        countdownTimerRef.current = null;
-        setIsScanning(false);
-        const photo = handleCapture();
-        if (photo) {
-          submitCheckinWithPhoto(photo);
-        }
-      }
-    }, 1000);
+    setIsScanning(true);
+    isScanningRef.current = true;
+    consecutiveGoodFramesRef.current = 0;
+    setScanCountdown(3);
+    evaluateFaceFrame();
   };
 
   const clubDisplayName = club?.name || club?.fantasyName || 'Clube de Tiro';
@@ -595,54 +853,105 @@ export default function ClubCheckinModal({
                         className="w-full h-full object-cover transform -scale-x-100"
                       />
 
-                      {/* Oval Face Frame Overlay com Animação de 3 Segundos */}
+                      {/* Oval Face Frame Overlay com Detecção em Tempo Real */}
                       <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-4">
                         <div
                           className={`w-48 h-64 rounded-[50%] transition-all duration-300 relative flex items-center justify-center ${
-                            isScanning
-                              ? 'border-4 border-emerald-400 shadow-[0_0_35px_rgba(52,211,153,0.9),0_0_0_9999px_rgba(15,23,42,0.65)] ring-4 ring-emerald-300/60 ring-offset-2 ring-offset-slate-950'
+                            faceStatus === 'good'
+                              ? isScanning
+                                ? 'border-4 border-emerald-400 shadow-[0_0_35px_rgba(52,211,153,0.9),0_0_0_9999px_rgba(15,23,42,0.65)] ring-4 ring-emerald-300/60 ring-offset-2 ring-offset-slate-950'
+                                : 'border-3 border-emerald-400/90 shadow-[0_0_20px_rgba(52,211,153,0.6),0_0_0_9999px_rgba(15,23,42,0.45)]'
+                              : isScanning || faceStatus === 'uncentered' || faceStatus === 'too_far' || faceStatus === 'too_close' || faceStatus === 'multiple'
+                              ? 'border-4 border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.85),0_0_0_9999px_rgba(15,23,42,0.65)] ring-4 ring-amber-300/50 animate-pulse'
                               : 'border-2 border-dashed border-emerald-400/80 shadow-[0_0_0_9999px_rgba(15,23,42,0.45)] animate-pulse'
                           }`}
                         >
                           {/* Marcadores de cantos biométricos (Brackets de mira) */}
-                          <div className={`absolute -top-3 -left-3 w-6 h-6 border-t-3 border-l-3 transition-colors ${isScanning ? 'border-emerald-300 scale-110' : 'border-emerald-400/70'}`} />
-                          <div className={`absolute -top-3 -right-3 w-6 h-6 border-t-3 border-r-3 transition-colors ${isScanning ? 'border-emerald-300 scale-110' : 'border-emerald-400/70'}`} />
-                          <div className={`absolute -bottom-3 -left-3 w-6 h-6 border-b-3 border-l-3 transition-colors ${isScanning ? 'border-emerald-300 scale-110' : 'border-emerald-400/70'}`} />
-                          <div className={`absolute -bottom-3 -right-3 w-6 h-6 border-b-3 border-r-3 transition-colors ${isScanning ? 'border-emerald-300 scale-110' : 'border-emerald-400/70'}`} />
+                          <div className={`absolute -top-3 -left-3 w-6 h-6 border-t-3 border-l-3 transition-colors ${
+                            faceStatus === 'good' ? 'border-emerald-300 scale-110' : faceStatus === 'searching' ? 'border-emerald-400/70' : 'border-amber-400 scale-105'
+                          }`} />
+                          <div className={`absolute -top-3 -right-3 w-6 h-6 border-t-3 border-r-3 transition-colors ${
+                            faceStatus === 'good' ? 'border-emerald-300 scale-110' : faceStatus === 'searching' ? 'border-emerald-400/70' : 'border-amber-400 scale-105'
+                          }`} />
+                          <div className={`absolute -bottom-3 -left-3 w-6 h-6 border-b-3 border-l-3 transition-colors ${
+                            faceStatus === 'good' ? 'border-emerald-300 scale-110' : faceStatus === 'searching' ? 'border-emerald-400/70' : 'border-amber-400 scale-105'
+                          }`} />
+                          <div className={`absolute -bottom-3 -right-3 w-6 h-6 border-b-3 border-r-3 transition-colors ${
+                            faceStatus === 'good' ? 'border-emerald-300 scale-110' : faceStatus === 'searching' ? 'border-emerald-400/70' : 'border-amber-400 scale-105'
+                          }`} />
 
-                          {/* Efeitos durante os 3 segundos de escaneamento */}
+                          {/* Efeitos durante o escaneamento */}
                           {isScanning && (
                             <>
                               {/* Linha laser de escaneamento vertical */}
-                              <div className="absolute w-40 h-0.5 bg-gradient-to-r from-transparent via-emerald-300 to-transparent shadow-[0_0_15px_#10b981] biometric-scanner-line" />
+                              <div className={`absolute w-40 h-0.5 shadow-[0_0_15px] biometric-scanner-line ${
+                                faceStatus === 'good'
+                                  ? 'bg-gradient-to-r from-transparent via-emerald-300 to-transparent shadow-emerald-400'
+                                  : 'bg-gradient-to-r from-transparent via-amber-300 to-transparent shadow-amber-400'
+                              }`} />
 
                               {/* Radar pulsante */}
-                              <div className="absolute inset-4 rounded-[50%] border border-emerald-300/40 animate-ping" />
+                              <div className={`absolute inset-4 rounded-[50%] border animate-ping ${
+                                faceStatus === 'good' ? 'border-emerald-300/40' : 'border-amber-300/40'
+                              }`} />
 
-                              {/* Contador regressivo centralizado */}
-                              <div className="w-16 h-16 rounded-full bg-slate-950/85 border-2 border-emerald-400 flex flex-col items-center justify-center shadow-2xl backdrop-blur-md">
-                                <span className="text-2xl font-black text-emerald-400 font-mono leading-none animate-bounce">
-                                  {scanCountdown}
-                                </span>
-                                <span className="text-[8px] font-bold text-emerald-300 uppercase tracking-wider mt-0.5">
-                                  seg
-                                </span>
+                              {/* Contador regressivo centralizado ou Alerta de posicionamento */}
+                              <div className={`w-18 h-18 rounded-full border-2 flex flex-col items-center justify-center shadow-2xl backdrop-blur-md transition-all ${
+                                faceStatus === 'good'
+                                  ? 'bg-slate-950/85 border-emerald-400'
+                                  : 'bg-slate-950/90 border-amber-400'
+                              }`}>
+                                {faceStatus === 'good' ? (
+                                  <>
+                                    <span className="text-2xl font-black text-emerald-400 font-mono leading-none animate-bounce">
+                                      {scanCountdown}
+                                    </span>
+                                    <span className="text-[8px] font-bold text-emerald-300 uppercase tracking-wider mt-0.5">
+                                      seg
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <AlertTriangle className="w-5 h-5 text-amber-400 animate-pulse" />
+                                    <span className="text-[7px] font-bold text-amber-300 uppercase tracking-tight mt-0.5 text-center leading-none px-1">
+                                      Ajuste
+                                    </span>
+                                  </>
+                                )}
                               </div>
                             </>
                           )}
                         </div>
 
-                        {/* Legenda Informativa */}
-                        <div className="absolute bottom-3 flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-md text-emerald-300 text-[10.5px] font-semibold px-3 py-1.5 rounded-full border border-emerald-500/40 shadow-lg">
-                          {isScanning ? (
+                        {/* Legenda Informativa com Feedback em Tempo Real */}
+                        <div className={`absolute bottom-3 flex items-center gap-1.5 backdrop-blur-md text-[10.5px] font-semibold px-3 py-1.5 rounded-full border shadow-lg transition-all ${
+                          faceStatus === 'good'
+                            ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/50'
+                            : faceStatus === 'searching'
+                            ? 'bg-slate-900/90 text-slate-300 border-slate-700/60'
+                            : 'bg-amber-950/90 text-amber-300 border-amber-500/50 animate-pulse'
+                        }`}>
+                          {faceStatus === 'good' ? (
+                            isScanning ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                                <span>Posição perfeita! Capturando em {scanCountdown}s...</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                <span>Rosto bem posicionado. Pronto para iniciar!</span>
+                              </>
+                            )
+                          ) : faceStatus === 'searching' ? (
                             <>
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-                              <span>Aguardando posicionamento correto da cabeça... ({scanCountdown}s)</span>
+                              <ScanFace className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{faceGuideText}</span>
                             </>
                           ) : (
                             <>
-                              <ScanFace className="w-3.5 h-3.5 text-emerald-400" />
-                              <span>Centralize seu rosto na moldura</span>
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                              <span>{faceGuideText}</span>
                             </>
                           )}
                         </div>
@@ -713,10 +1022,17 @@ export default function ClubCheckinModal({
                         className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white py-3 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 cursor-pointer"
                       >
                         {isScanning ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Escaneando posicionamento facial... ({scanCountdown}s)
-                          </>
+                          faceStatus === 'good' ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Rosto enquadrado! Capturando em {scanCountdown}s...
+                            </>
+                          ) : (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Aguardando posicionamento correto do rosto...
+                            </>
+                          )
                         ) : submitting ? (
                           <>
                             <Loader2 className="w-4 h-4 animate-spin" />
