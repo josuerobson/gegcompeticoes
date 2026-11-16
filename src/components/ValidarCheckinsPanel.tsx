@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ShieldCheck, CheckCircle2, XCircle, Clock, MapPin, Search, Calendar,
   User as UserIcon, RefreshCw, AlertTriangle, Eye, Check, X, LogOut,
-  ExternalLink, Navigation, Camera
+  ExternalLink, Navigation, Camera, Layers, Info
 } from 'lucide-react';
 import { User, Club, ClubCheckin } from '../types';
 
@@ -11,6 +11,37 @@ interface ValidarCheckinsPanelProps {
   clubs: Club[];
   users?: User[];
   onRefreshData?: () => void;
+}
+
+// Formatador seguro de data e hora para evitar "Invalid Date"
+function formatDisplayDateTime(val?: string | null): string {
+  if (!val) return 'Data não informada';
+  const str = String(val).trim();
+  if (!str) return 'Data não informada';
+
+  // 1. Formato brasileiro: DD/MM/YYYY ou DD/MM/YYYY HH:mm(:ss)
+  const brMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (brMatch) {
+    const [, d, m, y, hh, mm] = brMatch;
+    const timePart = hh !== undefined ? ` às ${hh.padStart(2, '0')}:${mm.padStart(2, '0')}` : '';
+    return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}${timePart}`;
+  }
+
+  // 2. Formato ISO / SQL: YYYY-MM-DD ou YYYY-MM-DD HH:mm(:ss) ou YYYY-MM-DDTHH:mm(:ss)
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (isoMatch) {
+    const [, y, m, d, hh, mm] = isoMatch;
+    const timePart = hh !== undefined ? ` às ${hh.padStart(2, '0')}:${mm.padStart(2, '0')}` : '';
+    return `${d}/${m}/${y}${timePart}`;
+  }
+
+  // 3. Fallback com parse do Date
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).replace(',', ' às');
+  }
+
+  return str;
 }
 
 export default function ValidarCheckinsPanel({
@@ -35,12 +66,22 @@ export default function ValidarCheckinsPanel({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  // Modal de Ação de Validação (Aprovar / Reprovar com campo de observação/justificativa)
+  // Seleção em Lote (Bulk Selection)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Modal de Ação de Validação Individual
   const [actionModalTarget, setActionModalTarget] = useState<ClubCheckin | null>(null);
   const [actionType, setActionType] = useState<'aprovado' | 'reprovado'>('aprovado');
   const [validationNotes, setValidationNotes] = useState('');
   const [submittingAction, setSubmittingAction] = useState(false);
   const [actionError, setActionError] = useState('');
+
+  // Modal de Validação em Lote (Batch)
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
+  const [batchActionType, setBatchActionType] = useState<'aprovado' | 'reprovado'>('aprovado');
+  const [batchNotes, setBatchNotes] = useState('');
+  const [submittingBatch, setSubmittingBatch] = useState(false);
+  const [batchError, setBatchError] = useState('');
 
   // Modal de Zoom da Foto
   const [photoModalTarget, setPhotoModalTarget] = useState<ClubCheckin | null>(null);
@@ -97,8 +138,12 @@ export default function ValidarCheckinsPanel({
     loadCheckins();
   }, [loadCheckins]);
 
+  // Limpar seleção quando trocar de filtro
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [statusFilter, effectiveClubId]);
+
   // Normalização de status de checkin para contagem
-  // SOMENTE é aprovado se status for 'aprovado' (validação formal do gestor)
   const getNormalizedStatus = (chk: ClubCheckin): 'pendente' | 'aprovado' | 'reprovado' => {
     const s = (chk.status || '').toLowerCase();
     if (s === 'aprovado') return 'aprovado';
@@ -136,7 +181,42 @@ export default function ValidarCheckinsPanel({
     });
   }, [checkins, statusFilter]);
 
-  // Abrir modal de validação
+  // Gerenciamento de Seleção em Massa
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const isAllSelected = useMemo(() => {
+    if (filteredCheckins.length === 0) return false;
+    return filteredCheckins.every(c => selectedIds.has(c.id));
+  }, [filteredCheckins, selectedIds]);
+
+  const isIndeterminate = useMemo(() => {
+    if (filteredCheckins.length === 0) return false;
+    const someSelected = filteredCheckins.some(c => selectedIds.has(c.id));
+    return someSelected && !isAllSelected;
+  }, [filteredCheckins, selectedIds, isAllSelected]);
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds(new Set());
+    } else {
+      const next = new Set(selectedIds);
+      filteredCheckins.forEach(c => next.add(c.id));
+      setSelectedIds(next);
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  // Abrir modal de validação individual
   const openActionModal = (chk: ClubCheckin, type: 'aprovado' | 'reprovado') => {
     setActionModalTarget(chk);
     setActionType(type);
@@ -144,7 +224,16 @@ export default function ValidarCheckinsPanel({
     setActionError('');
   };
 
-  // Submeter validação
+  // Abrir modal de validação em lote
+  const openBatchModal = (type: 'aprovado' | 'reprovado') => {
+    if (selectedIds.size === 0) return;
+    setBatchActionType(type);
+    setBatchNotes('');
+    setBatchError('');
+    setBatchModalOpen(true);
+  };
+
+  // Submeter validação individual
   const handleSubmitValidation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!actionModalTarget) return;
@@ -197,6 +286,70 @@ export default function ValidarCheckinsPanel({
     }
   };
 
+  // Submeter validação em lote de check-ins
+  const handleSubmitBatchValidation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedIds.size === 0) return;
+
+    if (batchActionType === 'reprovado' && !batchNotes.trim()) {
+      setBatchError('Por favor, informe a justificativa da reprovação para os check-ins selecionados.');
+      return;
+    }
+
+    setSubmittingBatch(true);
+    setBatchError('');
+
+    try {
+      const idsArray = Array.from(selectedIds);
+      const res = await fetch('/api/checkins/validate-batch', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentUser?.id ? { 'x-user-id': currentUser.id } : {})
+        },
+        body: JSON.stringify({
+          ids: idsArray,
+          status: batchActionType,
+          validationNotes: batchNotes.trim() || undefined
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Erro ao processar validação em lote de check-ins.');
+      }
+
+      const data = await res.json();
+      const affectedIds = new Set<string>(data.updatedIds || idsArray);
+
+      setCheckins(prev => prev.map(c => {
+        if (affectedIds.has(c.id)) {
+          return {
+            ...c,
+            status: batchActionType,
+            validationNotes: batchNotes.trim() || c.validationNotes,
+            validatedAt: new Date().toISOString()
+          };
+        }
+        return c;
+      }));
+
+      setSuccessMessage(
+        data.message || `${idsArray.length} check-in(s) ${batchActionType === 'aprovado' ? 'aprovado(s)' : 'reprovado(s)'} em lote!`
+      );
+      setTimeout(() => setSuccessMessage(''), 4500);
+
+      setSelectedIds(new Set());
+      setBatchModalOpen(false);
+      if (onRefreshData) onRefreshData();
+    } catch (err: any) {
+      console.error('Error submitting batch checkin validation:', err);
+      setBatchError(err.message || 'Falha ao processar validação em lote.');
+    } finally {
+      setSubmittingBatch(false);
+    }
+  };
+
   // Formatador de duração
   const formatDuration = (mins?: number) => {
     if (mins == null) return '—';
@@ -207,7 +360,7 @@ export default function ValidarCheckinsPanel({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
       {/* Header */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -216,7 +369,12 @@ export default function ValidarCheckinsPanel({
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-slate-900 tracking-tight">Validar Check-ins</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold text-slate-900 tracking-tight">Validar Check-ins</h2>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
+                  Validação em Massa
+                </span>
+              </div>
               <p className="text-xs text-slate-500 mt-0.5">
                 Homologação e validação de presença no estande com biometria facial e satélite GPS.
               </p>
@@ -279,7 +437,7 @@ export default function ValidarCheckinsPanel({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
           <button
             onClick={() => setStatusFilter('pendente')}
-            className={`p-4 rounded-xl border text-left transition ${
+            className={`p-4 rounded-xl border text-left transition cursor-pointer ${
               statusFilter === 'pendente'
                 ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-400/30'
                 : 'bg-slate-50/70 border-slate-200 hover:bg-slate-100/70'
@@ -295,7 +453,7 @@ export default function ValidarCheckinsPanel({
 
           <button
             onClick={() => setStatusFilter('aprovado')}
-            className={`p-4 rounded-xl border text-left transition ${
+            className={`p-4 rounded-xl border text-left transition cursor-pointer ${
               statusFilter === 'aprovado'
                 ? 'bg-emerald-50/80 border-emerald-300 ring-2 ring-emerald-400/30'
                 : 'bg-slate-50/70 border-slate-200 hover:bg-slate-100/70'
@@ -311,7 +469,7 @@ export default function ValidarCheckinsPanel({
 
           <button
             onClick={() => setStatusFilter('reprovado')}
-            className={`p-4 rounded-xl border text-left transition ${
+            className={`p-4 rounded-xl border text-left transition cursor-pointer ${
               statusFilter === 'reprovado'
                 ? 'bg-rose-50/80 border-rose-300 ring-2 ring-rose-400/30'
                 : 'bg-slate-50/70 border-slate-200 hover:bg-slate-100/70'
@@ -327,7 +485,7 @@ export default function ValidarCheckinsPanel({
 
           <button
             onClick={() => setStatusFilter('todos')}
-            className={`p-4 rounded-xl border text-left transition ${
+            className={`p-4 rounded-xl border text-left transition cursor-pointer ${
               statusFilter === 'todos'
                 ? 'bg-blue-50/80 border-blue-300 ring-2 ring-blue-400/30'
                 : 'bg-slate-50/70 border-slate-200 hover:bg-slate-100/70'
@@ -343,7 +501,7 @@ export default function ValidarCheckinsPanel({
         </div>
       </div>
 
-      {/* Filtros */}
+      {/* Filtros e Barra de Seleção */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="flex-1 relative">
@@ -383,7 +541,7 @@ export default function ValidarCheckinsPanel({
             <button
               onClick={loadCheckins}
               disabled={loading}
-              className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-xl transition"
+              className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-xl transition cursor-pointer"
               title="Recarregar dados"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -418,6 +576,58 @@ export default function ValidarCheckinsPanel({
             );
           })}
         </div>
+
+        {/* Barra de Seleção em Massa Superior */}
+        {filteredCheckins.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs">
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 font-semibold text-slate-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  ref={el => {
+                    if (el) el.indeterminate = isIndeterminate;
+                  }}
+                  onChange={handleToggleSelectAll}
+                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
+                />
+                <span>Selecionar todos ({filteredCheckins.length})</span>
+              </label>
+
+              {selectedIds.size > 0 && (
+                <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                  {selectedIds.size} selecionado(s)
+                </span>
+              )}
+            </div>
+
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleClearSelection}
+                  className="text-xs text-slate-500 hover:text-slate-800 underline px-1 cursor-pointer"
+                >
+                  Desmarcar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openBatchModal('aprovado')}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Aprovar Selecionados ({selectedIds.size})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openBatchModal('reprovado')}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                >
+                  <XCircle className="w-3.5 h-3.5" /> Reprovar Selecionados ({selectedIds.size})
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Tabela de Check-ins */}
@@ -438,16 +648,28 @@ export default function ValidarCheckinsPanel({
             {filteredCheckins.map((chk) => {
               const currentStatus = getNormalizedStatus(chk);
               const isOpen = !chk.checkoutAt;
+              const isSelected = selectedIds.has(chk.id);
 
               return (
                 <div
                   key={chk.id}
-                  className={`p-5 transition hover:bg-slate-50/60 flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
-                    currentStatus === 'pendente' ? 'bg-amber-50/20' : ''
+                  className={`p-5 transition hover:bg-slate-50/70 flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
+                    isSelected ? 'bg-blue-50/40 border-l-4 border-l-blue-500' : currentStatus === 'pendente' ? 'bg-amber-50/20' : ''
                   }`}
                 >
-                  {/* Foto do Check-in + Dados do Atleta */}
-                  <div className="flex items-start gap-4 flex-1">
+                  {/* Checkbox de Seleção + Foto do Check-in + Dados do Atleta */}
+                  <div className="flex items-start gap-3.5 flex-1">
+                    {/* Checkbox */}
+                    <div className="pt-2 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleSelect(chk.id)}
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
+                        title="Selecionar para validação em lote"
+                      />
+                    </div>
+
                     {/* Selfie Biométrica Thumbnail */}
                     <div className="relative shrink-0">
                       {chk.photoData ? (
@@ -533,16 +755,14 @@ export default function ValidarCheckinsPanel({
                         <div>
                           <span className="text-[10px] text-slate-400 block font-semibold uppercase">Entrada</span>
                           <span className="font-semibold text-slate-800">
-                            {new Date(chk.checkinAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                            {formatDisplayDateTime(chk.checkinAt)}
                           </span>
                         </div>
 
                         <div>
                           <span className="text-[10px] text-slate-400 block font-semibold uppercase">Saída</span>
                           <span className="font-semibold text-slate-800">
-                            {chk.checkoutAt
-                              ? new Date(chk.checkoutAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
-                              : 'No estande'}
+                            {chk.checkoutAt ? formatDisplayDateTime(chk.checkoutAt) : 'No estande'}
                           </span>
                         </div>
 
@@ -587,7 +807,7 @@ export default function ValidarCheckinsPanel({
                             <span>{currentStatus === 'aprovado' ? '✅ Homologado' : '❌ Reprovado'} por: <strong>{chk.validatorName || 'Gestor do Clube'}</strong></span>
                             {chk.validatedAt && (
                               <span className="text-[10px] opacity-75">
-                                em {new Date(chk.validatedAt).toLocaleString('pt-BR')}
+                                em {formatDisplayDateTime(chk.validatedAt)}
                               </span>
                             )}
                           </div>
@@ -645,7 +865,45 @@ export default function ValidarCheckinsPanel({
         )}
       </div>
 
-      {/* Modal com Campo para Aprovar ou Reprovar Check-in */}
+      {/* Floating Action Bar quando houver check-ins selecionados */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 backdrop-blur-md text-white border border-slate-700 px-5 py-3 rounded-2xl shadow-2xl flex flex-wrap items-center gap-4 animate-in slide-in-from-bottom-5">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
+            <span className="text-xs font-bold">
+              {selectedIds.size} check-in(s) selecionado(s)
+            </span>
+          </div>
+
+          <div className="h-4 w-px bg-slate-700 hidden sm:block" />
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              className="px-3 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => openBatchModal('aprovado')}
+              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer"
+            >
+              <CheckCircle2 className="w-4 h-4" /> Aprovar em Lote ({selectedIds.size})
+            </button>
+            <button
+              type="button"
+              onClick={() => openBatchModal('reprovado')}
+              className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer"
+            >
+              <XCircle className="w-4 h-4" /> Reprovar em Lote ({selectedIds.size})
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal com Campo para Aprovar ou Reprovar Check-in Individual */}
       {actionModalTarget && (
         <div
           onClick={() => setActionModalTarget(null)}
@@ -699,7 +957,7 @@ export default function ValidarCheckinsPanel({
                 <div className="flex justify-between">
                   <span className="text-slate-500">Horário Check-in:</span>
                   <span className="font-semibold text-slate-800">
-                    {new Date(actionModalTarget.checkinAt).toLocaleString('pt-BR')}
+                    {formatDisplayDateTime(actionModalTarget.checkinAt)}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -781,6 +1039,107 @@ export default function ValidarCheckinsPanel({
         </div>
       )}
 
+      {/* Modal de Validação em Lote de Check-ins */}
+      {batchModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                  batchActionType === 'aprovado' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                }`}>
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    {batchActionType === 'aprovado' ? 'Aprovação de Check-ins em Lote' : 'Reprovação de Check-ins em Lote'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Processando <strong>{selectedIds.size}</strong> check-in(s) selecionado(s)
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setBatchModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitBatchValidation} className="space-y-4 mt-4">
+              {batchError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  {batchError}
+                </div>
+              )}
+
+              <div className="p-3.5 bg-blue-50/70 border border-blue-200/70 rounded-xl text-xs text-blue-900">
+                <p>
+                  Você está prestes a <strong>{batchActionType === 'aprovado' ? 'APROVAR' : 'REPROVAR'}</strong> a presença de {selectedIds.size} check-in(s) de uma só vez.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                  <span>
+                    {batchActionType === 'aprovado' ? 'Observações em Lote (Opcional):' : 'Justificativa da Reprovação (Obrigatória):'}
+                  </span>
+                  {batchActionType === 'reprovado' && (
+                    <span className="text-[10px] text-rose-600 font-bold uppercase">* Obrigatório</span>
+                  )}
+                </label>
+                <textarea
+                  rows={3}
+                  value={batchNotes}
+                  onChange={(e) => setBatchNotes(e.target.value)}
+                  placeholder={
+                    batchActionType === 'aprovado'
+                      ? 'Ex: Presenças validadas e homologadas pelo gestor do estande em lote.'
+                      : 'Ex: Descumprimento das normas de permanência no estande.'
+                  }
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Botões do Rodapé */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBatchModalOpen(false)}
+                  disabled={submittingBatch}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingBatch}
+                  className={`px-5 py-2 text-xs font-bold text-white rounded-xl transition flex items-center gap-1.5 shadow-sm cursor-pointer ${
+                    batchActionType === 'aprovado'
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : 'bg-rose-600 hover:bg-rose-700'
+                  }`}
+                >
+                  {submittingBatch ? (
+                    <>Processando em lote...</>
+                  ) : batchActionType === 'aprovado' ? (
+                    <>
+                      <Check className="w-4 h-4" /> Confirmar Aprovação de {selectedIds.size}
+                    </>
+                  ) : (
+                    <>
+                      <X className="w-4 h-4" /> Confirmar Reprovação de {selectedIds.size}
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Zoom da Foto */}
       {photoModalTarget && (
         <div
@@ -830,6 +1189,10 @@ export default function ValidarCheckinsPanel({
                     <span className="font-mono text-slate-700">{photoModalTarget.athleteCpf}</span>
                   </div>
                 )}
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Horário Entrada:</span>
+                  <span className="font-mono text-slate-700">{formatDisplayDateTime(photoModalTarget.checkinAt)}</span>
+                </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Coordenadas GPS:</span>
                   <span className="font-mono text-slate-700">

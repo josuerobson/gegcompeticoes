@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(checkin): deteccao de posicionamento facial em tempo real e bloqueio de fotos mal enquadradas` |
-| Data/hora | 2026-11-16T16:45:00-03:00 |
+| Mensagem | `feat: limitar validacao a treinos apos 01/10/2026 e adicionar aprovacao em lote com checkboxes para treinos e checkins` |
+| Data/hora | 2026-11-16T19:05:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,29 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Isenção de Validação para Treinamentos Anteriores a 01/10/2026 e Sistema de Validação em Massa (Lote) com Checkboxes (`server.ts`, `src/db.ts`, `ValidarTreinamentosPanel.tsx`, `ValidarCheckinsPanel.tsx`)**:
+  - **Solicitação do Usuário**: "Vamos alterar para só precisar validar treinamentos com data superior a 01/10/2026, datas anteriores não precisam de validação. Crie um sistema de validação em massa de checkin e treino, adicionando um checkbox para poder selecionar vários ao mesmo tempo e fazer a aprovação." (imagem anexada exibindo 6560 treinamentos históricos aguardando validação e cartão de atleta com "DATA E HORA: Invalid Date").
+  - **O que foi feito**:
+    1. **Isenção de Validação de Treinos Legados (<= 01/10/2026)**:
+       - **Banco de Dados (`src/db.ts`)**: Adicionada migração na inicialização que auto-aprova todos os treinamentos pendentes legados onde `SUBSTRING(date_time FROM 1 FOR 10) <= '2026-10-01'` ou `date_time IS NULL`, registrando na auditoria `validation_notes = 'Auto-aprovado: treinamento anterior ou igual a 01/10/2026 (regra de validação ativa apenas pós 01/10/2026)'`. Mais de 6.490 registros históricos foram regularizados.
+       - **Backend (`server.ts`)**: No endpoint `POST /api/trainings`, inserida verificação automática: qualquer treino lançado com data `<= '2026-10-01'` já nasce com status `'aprovado'` imediatamente, sem necessitar de validação posterior pelo gestor. Apenas treinos com data estritamente superior a 01/10/2026 passam a exigir validação.
+       - **Frontend (`ValidarTreinamentosPanel.tsx`)**: Atualizada a lógica de contagens dos cards e filtragem para tratar qualquer registro `<= '2026-10-01'` como aprovado / isento histórico, zerando imediatamente a fila de 6.560 treinos pendentes para apenas treinos reais recentes.
+    2. **Correção do Bug "Invalid Date"**:
+       - Implementado o formatador robusto `formatDisplayDateTime` (via regex para formatos brasileiros `DD/MM/YYYY [HH:mm]` e formatos ISO `YYYY-MM-DD[THH:mm]`), eliminando completamente discrepâncias de interpretação de navegadores e garantindo visualização limpa `DD/MM/AAAA às HH:mm`.
+    3. **Sistema de Validação e Aprovação em Massa (Bulk Selection)**:
+       - **Painel de Treinamentos (`ValidarTreinamentosPanel.tsx`)**:
+         - Checkbox de seleção individual em cada cartão de treino.
+         - Controle "Selecionar todos ({total})" no cabeçalho com estado indeterminado/parcial.
+         - Barra de ações rápida no cabeçalho e barra flutuante destacada na parte inferior da tela ao selecionar 1 ou mais treinos.
+         - Modal de validação em lote com opção de notas (opcionais na aprovação, obrigatórias na reprovação).
+         - Endpoint de lote no backend: `PATCH /api/trainings/validate-batch` que recebe `{ ids: string[], status, validationNotes }`, aplica escopo estrito de clube (`club_admin` só altera treinos de seu estande) e retorna a contagem atualizada.
+       - **Painel de Check-ins (`ValidarCheckinsPanel.tsx`)**:
+         - Checkbox de seleção em cada registro de presença/check-in.
+         - Controle "Selecionar todos" com barra de ações flutuante inferior.
+         - Modal de confirmação em lote para aprovação ou reprovação global de presenças.
+         - Endpoint de lote no backend: `PATCH /api/checkins/validate-batch` com escopo estrito de clube (`c.club_id = allowedClubId OR c.user_id IN (SELECT id FROM users WHERE club_id = allowedClubId)`).
+  - **O que NÃO fazer no futuro**: Nunca reverter a isenção de treinos de 01/10/2026 e anteriores, e nunca permitir validação em lote sem checagem de vínculo do clube.
 
 - **Detecção de Posicionamento Facial em Tempo Real e Bloqueio de Fotos Mal Enquadradas no Check-in (`ClubCheckinModal.tsx`, `server.ts`)**:
   - **Solicitação do Usuário**: "Veja a possibilidade de detectar se o rosto não esta posicionado corretamente no momento do check-in, foto que não estiverem bem posicionadas não deve aprovar o checkin, me explique como funciona antes de alterar" -> Após explicação das abordagens, o usuário escolheu a **Opção 1** (feedback visual em tempo real com moldura interativa que só dispara quando verde/correto + bloqueio no servidor para fotos fora do padrão).

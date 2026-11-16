@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   CheckCircle2, XCircle, Clock, Search, Calendar, User as UserIcon,
   Crosshair, ShieldCheck, AlertTriangle, RefreshCw, Filter, MessageSquare,
-  ChevronDown, ArrowRight, Eye, Check, X, ShieldAlert
+  ChevronDown, ArrowRight, Eye, Check, X, ShieldAlert, CheckSquare, Square,
+  Layers, Info
 } from 'lucide-react';
 import { User, Club, TrainingSession, Weapon } from '../types';
 
@@ -12,6 +13,66 @@ interface ValidarTreinamentosPanelProps {
   users?: User[];
   weapons?: Weapon[];
   onRefreshData?: () => void;
+}
+
+// Formatador seguro de data e hora para evitar qualquer "Invalid Date"
+function formatDisplayDateTime(val?: string | null): string {
+  if (!val) return 'Data não informada';
+  const str = String(val).trim();
+  if (!str) return 'Data não informada';
+
+  // 1. Formato brasileiro: DD/MM/YYYY ou DD/MM/YYYY HH:mm(:ss)
+  const brMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (brMatch) {
+    const [, d, m, y, hh, mm] = brMatch;
+    const timePart = hh !== undefined ? ` às ${hh.padStart(2, '0')}:${mm.padStart(2, '0')}` : '';
+    return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}${timePart}`;
+  }
+
+  // 2. Formato ISO / SQL: YYYY-MM-DD ou YYYY-MM-DD HH:mm(:ss) ou YYYY-MM-DDTHH:mm(:ss)
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (isoMatch) {
+    const [, y, m, d, hh, mm] = isoMatch;
+    const timePart = hh !== undefined ? ` às ${hh.padStart(2, '0')}:${mm.padStart(2, '0')}` : '';
+    return `${d}/${m}/${y}${timePart}`;
+  }
+
+  // 3. Fallback com parse do objeto Date
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).replace(',', ' às');
+  }
+
+  return str;
+}
+
+// Verifica se a data é estritamente superior a 01/10/2026
+function isPostOct2026(val?: string | null): boolean {
+  if (!val) return false;
+  const str = String(val).trim();
+
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const ymd = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    return ymd > '2026-10-01';
+  }
+
+  const brMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (brMatch) {
+    const ymd = `${brMatch[3]}-${brMatch[2].padStart(2, '0')}-${brMatch[1].padStart(2, '0')}`;
+    return ymd > '2026-10-01';
+  }
+
+  return false;
+}
+
+// Obter status efetivo considerando regra de isenção pré-01/10/2026
+function getEffectiveTrainingStatus(t: TrainingSession): 'pendente' | 'aprovado' | 'reprovado' {
+  if (t.status === 'aprovado') return 'aprovado';
+  if (t.status === 'reprovado') return 'reprovado';
+  // Datas <= 01/10/2026 não exigem validação (são auto-aprovadas/isentas)
+  if (!isPostOct2026(t.dateTime)) return 'aprovado';
+  return 'pendente';
 }
 
 export default function ValidarTreinamentosPanel({
@@ -37,12 +98,22 @@ export default function ValidarTreinamentosPanel({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  // Modal de Ação de Validação (Aprovar / Reprovar com campo de observação/justificativa)
+  // Seleção em lote (Bulk Selection)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Modal de Ação de Validação Individual
   const [actionModalTarget, setActionModalTarget] = useState<TrainingSession | null>(null);
   const [actionType, setActionType] = useState<'aprovado' | 'reprovado'>('aprovado');
   const [validationNotes, setValidationNotes] = useState('');
   const [submittingAction, setSubmittingAction] = useState(false);
   const [actionError, setActionError] = useState('');
+
+  // Modal de Validação em Lote (Batch)
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
+  const [batchActionType, setBatchActionType] = useState<'aprovado' | 'reprovado'>('aprovado');
+  const [batchNotes, setBatchNotes] = useState('');
+  const [submittingBatch, setSubmittingBatch] = useState(false);
+  const [batchError, setBatchError] = useState('');
 
   // Clube atual para escopo
   const activeClub = useMemo(() => {
@@ -86,18 +157,31 @@ export default function ValidarTreinamentosPanel({
     loadTrainings();
   }, [loadTrainings]);
 
-  // Contagens para os cards de métricas
+  // Limpar seleção ao mudar filtros
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [statusFilter, effectiveClubId]);
+
+  // Contagens para os cards de métricas considerando a regra pós-01/10/2026
   const counts = useMemo(() => {
-    const pendentes = trainings.filter(t => !t.status || t.status === 'pendente').length;
-    const aprovados = trainings.filter(t => t.status === 'aprovado').length;
-    const reprovados = trainings.filter(t => t.status === 'reprovado').length;
+    let pendentes = 0;
+    let aprovados = 0;
+    let reprovados = 0;
+
+    trainings.forEach(t => {
+      const st = getEffectiveTrainingStatus(t);
+      if (st === 'pendente') pendentes++;
+      else if (st === 'aprovado') aprovados++;
+      else if (st === 'reprovado') reprovados++;
+    });
+
     return { pendentes, aprovados, reprovados, total: trainings.length };
   }, [trainings]);
 
   // Lista filtrada na tela
   const filteredTrainings = useMemo(() => {
     return trainings.filter(t => {
-      const currentStatus = t.status || 'pendente';
+      const currentStatus = getEffectiveTrainingStatus(t);
       if (statusFilter !== 'todos' && currentStatus !== statusFilter) {
         return false;
       }
@@ -127,7 +211,42 @@ export default function ValidarTreinamentosPanel({
     });
   }, [trainings, statusFilter, searchQuery, startDate, endDate]);
 
-  // Abrir modal de aprovação ou reprovação
+  // Gerenciamento de Seleção em Massa
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const isAllSelected = useMemo(() => {
+    if (filteredTrainings.length === 0) return false;
+    return filteredTrainings.every(t => selectedIds.has(t.id));
+  }, [filteredTrainings, selectedIds]);
+
+  const isIndeterminate = useMemo(() => {
+    if (filteredTrainings.length === 0) return false;
+    const someSelected = filteredTrainings.some(t => selectedIds.has(t.id));
+    return someSelected && !isAllSelected;
+  }, [filteredTrainings, selectedIds, isAllSelected]);
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds(new Set());
+    } else {
+      const next = new Set(selectedIds);
+      filteredTrainings.forEach(t => next.add(t.id));
+      setSelectedIds(next);
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  // Abrir modal de validação individual
   const openActionModal = (training: TrainingSession, type: 'aprovado' | 'reprovado') => {
     setActionModalTarget(training);
     setActionType(type);
@@ -135,7 +254,16 @@ export default function ValidarTreinamentosPanel({
     setActionError('');
   };
 
-  // Submeter validação
+  // Abrir modal de validação em lote
+  const openBatchModal = (type: 'aprovado' | 'reprovado') => {
+    if (selectedIds.size === 0) return;
+    setBatchActionType(type);
+    setBatchNotes('');
+    setBatchError('');
+    setBatchModalOpen(true);
+  };
+
+  // Submeter validação individual
   const handleSubmitValidation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!actionModalTarget) return;
@@ -169,7 +297,6 @@ export default function ValidarTreinamentosPanel({
       const data = await res.json();
       const updatedTraining = data.training;
 
-      // Atualizar localmente
       setTrainings(prev => prev.map(t => t.id === updatedTraining.id ? updatedTraining : t));
 
       setSuccessMessage(
@@ -189,8 +316,71 @@ export default function ValidarTreinamentosPanel({
     }
   };
 
+  // Submeter validação em lote
+  const handleSubmitBatchValidation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedIds.size === 0) return;
+
+    if (batchActionType === 'reprovado' && !batchNotes.trim()) {
+      setBatchError('Por favor, informe a justificativa da reprovação para os itens selecionados.');
+      return;
+    }
+
+    setSubmittingBatch(true);
+    setBatchError('');
+
+    try {
+      const idsArray = Array.from(selectedIds);
+      const res = await fetch('/api/trainings/validate-batch', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentUser?.id ? { 'x-user-id': currentUser.id } : {})
+        },
+        body: JSON.stringify({
+          ids: idsArray,
+          status: batchActionType,
+          validationNotes: batchNotes.trim() || undefined
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Erro ao processar validação em lote.');
+      }
+
+      const data = await res.json();
+      const affectedIds = new Set<string>(data.updatedIds || idsArray);
+
+      setTrainings(prev => prev.map(t => {
+        if (affectedIds.has(t.id)) {
+          return {
+            ...t,
+            status: batchActionType,
+            validationNotes: batchNotes.trim() || t.validationNotes
+          };
+        }
+        return t;
+      }));
+
+      setSuccessMessage(
+        data.message || `${idsArray.length} treinamento(s) ${batchActionType === 'aprovado' ? 'aprovado(s)' : 'reprovado(s)'} em lote!`
+      );
+      setTimeout(() => setSuccessMessage(''), 4500);
+
+      setSelectedIds(new Set());
+      setBatchModalOpen(false);
+      if (onRefreshData) onRefreshData();
+    } catch (err: any) {
+      console.error('Error submitting batch training validation:', err);
+      setBatchError(err.message || 'Falha ao processar validação em lote.');
+    } finally {
+      setSubmittingBatch(false);
+    }
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
       {/* Header */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -199,7 +389,12 @@ export default function ValidarTreinamentosPanel({
               <CheckCircle2 className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-slate-900 tracking-tight">Validar Treinamentos</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold text-slate-900 tracking-tight">Validar Treinamentos</h2>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
+                  Validação em Massa
+                </span>
+              </div>
               <p className="text-xs text-slate-500 mt-0.5">
                 Validação e homologação oficial das passagens de treinamento dos atletas vinculados ao clube.
               </p>
@@ -233,6 +428,14 @@ export default function ValidarTreinamentosPanel({
           )}
         </div>
 
+        {/* Informação sobre a regra de corte de 01/10/2026 */}
+        <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-2.5 text-xs text-slate-600">
+          <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+          <p className="text-[11px] leading-relaxed">
+            <strong>Regra de Validação:</strong> Apenas treinamentos com data <strong>superior a 01/10/2026</strong> necessitam de validação pelo estande. Registros históricos de 01/10/2026 e anteriores foram homologados automaticamente e dispensam validação pendente.
+          </p>
+        </div>
+
         {/* Feedback Messages */}
         {successMessage && (
           <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-xs font-semibold text-emerald-800 animate-in fade-in">
@@ -251,7 +454,7 @@ export default function ValidarTreinamentosPanel({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
           <button
             onClick={() => setStatusFilter('pendente')}
-            className={`p-4 rounded-xl border text-left transition ${
+            className={`p-4 rounded-xl border text-left transition cursor-pointer ${
               statusFilter === 'pendente'
                 ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-400/30'
                 : 'bg-slate-50/70 border-slate-200 hover:bg-slate-100/70'
@@ -262,12 +465,12 @@ export default function ValidarTreinamentosPanel({
               <Clock className="w-4 h-4" />
             </div>
             <div className="text-2xl font-black text-amber-900">{counts.pendentes}</div>
-            <p className="text-[10px] text-amber-700/80 mt-0.5">Treinos a revisar</p>
+            <p className="text-[10px] text-amber-700/80 mt-0.5">Treinos pós 01/10/2026</p>
           </button>
 
           <button
             onClick={() => setStatusFilter('aprovado')}
-            className={`p-4 rounded-xl border text-left transition ${
+            className={`p-4 rounded-xl border text-left transition cursor-pointer ${
               statusFilter === 'aprovado'
                 ? 'bg-emerald-50/80 border-emerald-300 ring-2 ring-emerald-400/30'
                 : 'bg-slate-50/70 border-slate-200 hover:bg-slate-100/70'
@@ -283,7 +486,7 @@ export default function ValidarTreinamentosPanel({
 
           <button
             onClick={() => setStatusFilter('reprovado')}
-            className={`p-4 rounded-xl border text-left transition ${
+            className={`p-4 rounded-xl border text-left transition cursor-pointer ${
               statusFilter === 'reprovado'
                 ? 'bg-rose-50/80 border-rose-300 ring-2 ring-rose-400/30'
                 : 'bg-slate-50/70 border-slate-200 hover:bg-slate-100/70'
@@ -299,7 +502,7 @@ export default function ValidarTreinamentosPanel({
 
           <button
             onClick={() => setStatusFilter('todos')}
-            className={`p-4 rounded-xl border text-left transition ${
+            className={`p-4 rounded-xl border text-left transition cursor-pointer ${
               statusFilter === 'todos'
                 ? 'bg-blue-50/80 border-blue-300 ring-2 ring-blue-400/30'
                 : 'bg-slate-50/70 border-slate-200 hover:bg-slate-100/70'
@@ -357,7 +560,7 @@ export default function ValidarTreinamentosPanel({
             <button
               onClick={loadTrainings}
               disabled={loading}
-              className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-xl transition"
+              className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-xl transition cursor-pointer"
               title="Recarregar dados"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -392,6 +595,58 @@ export default function ValidarTreinamentosPanel({
             );
           })}
         </div>
+
+        {/* Barra de Seleção em Massa Superior */}
+        {filteredTrainings.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs">
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 font-semibold text-slate-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  ref={el => {
+                    if (el) el.indeterminate = isIndeterminate;
+                  }}
+                  onChange={handleToggleSelectAll}
+                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
+                />
+                <span>Selecionar todos ({filteredTrainings.length})</span>
+              </label>
+
+              {selectedIds.size > 0 && (
+                <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                  {selectedIds.size} selecionado(s)
+                </span>
+              )}
+            </div>
+
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleClearSelection}
+                  className="text-xs text-slate-500 hover:text-slate-800 underline px-1 cursor-pointer"
+                >
+                  Desmarcar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openBatchModal('aprovado')}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Aprovar Selecionados ({selectedIds.size})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openBatchModal('reprovado')}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                >
+                  <XCircle className="w-3.5 h-3.5" /> Reprovar Selecionados ({selectedIds.size})
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Listagem de Treinamentos */}
@@ -410,147 +665,154 @@ export default function ValidarTreinamentosPanel({
         ) : (
           <div className="divide-y divide-slate-100">
             {filteredTrainings.map((t) => {
-              const currentStatus = t.status || 'pendente';
-              const formattedDate = t.dateTime
-                ? new Date(t.dateTime).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
-                : 'Data não informada';
+              const currentStatus = getEffectiveTrainingStatus(t);
+              const formattedDate = formatDisplayDateTime(t.dateTime);
               const isClubWeapon = t.weaponOwnerType === 'clube';
+              const isSelected = selectedIds.has(t.id);
+              const isHistoricalApproved = (!t.status || t.status === 'pendente') && !isPostOct2026(t.dateTime);
 
               return (
                 <div
                   key={t.id}
-                  className={`p-5 transition hover:bg-slate-50/60 flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
-                    currentStatus === 'pendente' ? 'bg-amber-50/20' : ''
+                  className={`p-5 transition hover:bg-slate-50/70 flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
+                    isSelected ? 'bg-blue-50/40 border-l-4 border-l-blue-500' : currentStatus === 'pendente' ? 'bg-amber-50/20' : ''
                   }`}
                 >
-                  {/* Dados do Atirador e do Treino */}
-                  <div className="space-y-2 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="font-bold text-slate-900 text-sm">{t.athleteName || 'Atleta não identificado'}</h4>
-                      {t.athleteCpf && (
-                        <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                          CPF: {t.athleteCpf}
-                        </span>
-                      )}
-                      {t.athleteCr && (
-                        <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                          CR: {t.athleteCr}
-                        </span>
-                      )}
-
-                      {/* Badge de Status Atual */}
-                      {currentStatus === 'pendente' && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-                          <Clock className="w-3 h-3" /> Pendente de Aprovação
-                        </span>
-                      )}
-                      {currentStatus === 'aprovado' && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                          <CheckCircle2 className="w-3 h-3" /> Aprovado pelo Clube
-                        </span>
-                      )}
-                      {currentStatus === 'reprovado' && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
-                          <XCircle className="w-3 h-3" /> Reprovado pelo Clube
-                        </span>
-                      )}
-
-                      {/* Vínculo com Check-in */}
-                      {t.checkinId && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200" title="Presença registrada com biometria facial e GPS no estande">
-                          <ShieldCheck className="w-3 h-3" /> Check-in Validado
-                        </span>
-                      )}
+                  <div className="flex items-start gap-3.5 flex-1">
+                    {/* Checkbox de Seleção */}
+                    <div className="pt-1 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleSelect(t.id)}
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
+                        title="Selecionar para ação em massa"
+                      />
                     </div>
 
-                    {/* Detalhes Técnicos do Treino */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-slate-600 pt-1">
-                      <div>
-                        <span className="text-[10px] text-slate-400 block font-semibold uppercase">Data e Hora</span>
-                        <span className="font-semibold text-slate-800">{formattedDate}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block font-semibold uppercase">Arma Utilizada</span>
-                        <span className="font-semibold text-slate-800">{t.weaponName}</span>
-                        {t.weaponCaliber && <span className="text-slate-400"> ({t.weaponCaliber})</span>}
-                        <span className={`text-[9px] font-bold block mt-0.5 ${isClubWeapon ? 'text-amber-600' : 'text-blue-600'}`}>
-                          {isClubWeapon ? '🏛️ Arma do Clube' : '🎯 Arma Própria'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block font-semibold uppercase">Disparos / Tiros</span>
-                        <span className="font-semibold text-slate-800">{t.totalShots} disparos</span>
-                        <span className="text-[10px] text-slate-400 block">
-                          Próprios: {t.ownAmmoShots} • Clube: {t.clubAmmoShots}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block font-semibold uppercase">Modalidade</span>
-                        <span className="font-semibold text-slate-800">{t.modality || 'Treino Livre'}</span>
-                        {t.score ? <span className="text-[10px] text-slate-500 block">Pontos: {t.score}</span> : null}
-                      </div>
-                    </div>
+                    {/* Dados do Atirador e do Treino */}
+                    <div className="space-y-2 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="font-bold text-slate-900 text-sm">{t.athleteName || 'Atleta não identificado'}</h4>
+                        {t.athleteCpf && (
+                          <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                            CPF: {t.athleteCpf}
+                          </span>
+                        )}
+                        {t.athleteCr && (
+                          <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                            CR: {t.athleteCr}
+                          </span>
+                        )}
 
-                    {/* Observações do Atleta */}
-                    {t.notes && (
-                      <div className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-2">
-                        <span className="font-bold text-slate-600">Observações do atleta: </span>
-                        {t.notes}
-                      </div>
-                    )}
+                        {/* Badge de Status */}
+                        {currentStatus === 'pendente' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                            <Clock className="w-3 h-3" /> Pendente de Aprovação
+                          </span>
+                        )}
+                        {currentStatus === 'aprovado' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3" /> {isHistoricalApproved ? 'Aprovado (Histórico <= 01/10/2026)' : 'Aprovado pelo Clube'}
+                          </span>
+                        )}
+                        {currentStatus === 'reprovado' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
+                            <XCircle className="w-3 h-3" /> Reprovado pelo Clube
+                          </span>
+                        )}
 
-                    {/* Dados da Validação Registrada */}
-                    {currentStatus !== 'pendente' && (
-                      <div className={`text-[11px] p-2.5 rounded-xl border mt-2 ${
-                        currentStatus === 'aprovado'
-                          ? 'bg-emerald-50/50 border-emerald-200 text-emerald-900'
-                          : 'bg-rose-50/50 border-rose-200 text-rose-900'
-                      }`}>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold">
-                          <span>{currentStatus === 'aprovado' ? '✅ Homologado' : '❌ Reprovado'} por: <strong>{t.validatorName || 'Gestor do Clube'}</strong></span>
-                          {t.validatedAt && (
-                            <span className="text-[10px] opacity-75">
-                              em {new Date(t.validatedAt).toLocaleString('pt-BR')}
-                            </span>
-                          )}
-                        </div>
-                        {t.validationNotes && (
-                          <div className="mt-1 text-xs">
-                            <span className="font-bold">Motivo/Observação: </span>
-                            {t.validationNotes}
-                          </div>
+                        {/* Vínculo com Check-in */}
+                        {t.checkinId && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200" title="Presença registrada com biometria facial e GPS no estande">
+                            <ShieldCheck className="w-3 h-3 text-blue-600" /> Check-in Vinculado
+                          </span>
                         )}
                       </div>
-                    )}
+
+                      {/* Grade de Detalhes do Treino */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-white/70 p-3 rounded-xl border border-slate-100">
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Data e Hora</span>
+                          <span className="font-semibold text-slate-800">{formattedDate}</span>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Arma Utilizada</span>
+                          <div className="flex items-center gap-1">
+                            <span className="font-semibold text-slate-800">
+                              {t.weaponName || 'Arma informada'}
+                              {t.caliber ? ` (${t.caliber})` : ''}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                            {isClubWeapon ? '🏛️ Arma do Clube' : '👤 Arma Própria do Atleta'}
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Disparos / Tiros</span>
+                          <span className="font-bold text-blue-900">{t.shotsCount ?? 0} disparos</span>
+                          <span className="text-[10px] text-slate-400 block">
+                            Próprios: {t.roundsOwn ?? 0} • Clube: {t.roundsClub ?? 0}
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Modalidade</span>
+                          <span className="font-semibold text-slate-800">{t.modality || 'Treino Livre'}</span>
+                        </div>
+                      </div>
+
+                      {/* Observações de Validação (se houver) */}
+                      {t.validationNotes && (
+                        <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 flex items-start gap-2">
+                          <MessageSquare className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-bold text-[11px] text-slate-600">Observação da Validação: </span>
+                            <span className="text-[11px]">{t.validationNotes}</span>
+                            {t.validatedAt && (
+                              <span className="text-[10px] text-slate-400 block mt-0.5">
+                                Em {formatDisplayDateTime(t.validatedAt)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Botões de Ação com Campo para Aprovar e Reprovar */}
-                  <div className="flex sm:flex-col items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
-                    <button
-                      onClick={() => openActionModal(t, 'aprovado')}
-                      className={`w-full px-4 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs ${
-                        currentStatus === 'aprovado'
-                          ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                      }`}
-                      title="Aprovar este treinamento de habitualidade"
-                    >
-                      <Check className="w-4 h-4" />
-                      {currentStatus === 'aprovado' ? 'Editar Aprovação' : 'Aprovar'}
-                    </button>
+                  {/* Botões de Ação Individual */}
+                  <div className="flex sm:flex-col lg:flex-row items-center gap-2 shrink-0">
+                    {currentStatus !== 'aprovado' && (
+                      <button
+                        onClick={() => openActionModal(t, 'aprovado')}
+                        className="flex-1 sm:flex-initial px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer"
+                        title="Aprovar e homologar o treinamento do atirador"
+                      >
+                        <Check className="w-4 h-4" /> Aprovar
+                      </button>
+                    )}
 
-                    <button
-                      onClick={() => openActionModal(t, 'reprovado')}
-                      className={`w-full px-4 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                        currentStatus === 'reprovado'
-                          ? 'bg-rose-100 text-rose-800 hover:bg-rose-200'
-                          : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200'
-                      }`}
-                      title="Reprovar este treinamento"
-                    >
-                      <X className="w-4 h-4" />
-                      {currentStatus === 'reprovado' ? 'Editar Reprovação' : 'Reprovar'}
-                    </button>
+                    {currentStatus !== 'reprovado' && (
+                      <button
+                        onClick={() => openActionModal(t, 'reprovado')}
+                        className="flex-1 sm:flex-initial px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                        title="Reprovar o treinamento com justificativa"
+                      >
+                        <X className="w-4 h-4" /> Reprovar
+                      </button>
+                    )}
+
+                    {currentStatus === 'aprovado' && (
+                      <button
+                        onClick={() => openActionModal(t, 'reprovado')}
+                        className="px-3 py-1.5 text-[11px] text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 rounded-lg transition cursor-pointer"
+                        title="Revogar aprovação"
+                      >
+                        Revogar
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -559,74 +821,97 @@ export default function ValidarTreinamentosPanel({
         )}
       </div>
 
-      {/* Modal com Campo para Aprovar ou Reprovar */}
+      {/* Floating Action Bar quando houver itens selecionados */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 backdrop-blur-md text-white border border-slate-700 px-5 py-3 rounded-2xl shadow-2xl flex flex-wrap items-center gap-4 animate-in slide-in-from-bottom-5">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
+            <span className="text-xs font-bold">
+              {selectedIds.size} treinamento(s) selecionado(s)
+            </span>
+          </div>
+
+          <div className="h-4 w-px bg-slate-700 hidden sm:block" />
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              className="px-3 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => openBatchModal('aprovado')}
+              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer"
+            >
+              <CheckCircle2 className="w-4 h-4" /> Aprovar em Lote ({selectedIds.size})
+            </button>
+            <button
+              type="button"
+              onClick={() => openBatchModal('reprovado')}
+              className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer"
+            >
+              <XCircle className="w-4 h-4" /> Reprovar em Lote ({selectedIds.size})
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Validação Individual */}
       {actionModalTarget && (
-        <div
-          onClick={() => setActionModalTarget(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col"
-          >
-            {/* Header do Modal */}
-            <div className={`px-6 py-4 flex items-center justify-between text-white ${
-              actionType === 'aprovado'
-                ? 'bg-gradient-to-r from-emerald-600 to-teal-700'
-                : 'bg-gradient-to-r from-rose-600 to-red-700'
-            }`}>
-              <div className="flex items-center gap-2">
-                {actionType === 'aprovado' ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-                <h3 className="font-bold text-base">
-                  {actionType === 'aprovado' ? 'Aprovar Treinamento de Habitualidade' : 'Reprovar Treinamento'}
-                </h3>
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                  actionType === 'aprovado' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                }`}>
+                  {actionType === 'aprovado' ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    {actionType === 'aprovado' ? 'Homologar Treinamento' : 'Reprovar Treinamento'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    {actionModalTarget.athleteName || 'Atleta'}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setActionModalTarget(null)}
-                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Conteúdo e Formulário */}
-            <form onSubmit={handleSubmitValidation} className="p-6 space-y-4">
+            <form onSubmit={handleSubmitValidation} className="space-y-4 mt-4">
               {actionError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
                   {actionError}
                 </div>
               )}
 
-              {/* Resumo do Atleta e Sessão */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Atleta:</span>
-                  <span className="font-bold text-slate-800">{actionModalTarget.athleteName}</span>
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/70 text-xs space-y-1">
+                <div className="flex justify-between text-slate-600">
+                  <span>Data do Treinamento:</span>
+                  <strong className="text-slate-900">{formatDisplayDateTime(actionModalTarget.dateTime)}</strong>
                 </div>
-                {actionModalTarget.athleteCpf && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">CPF:</span>
-                    <span className="font-mono text-slate-700">{actionModalTarget.athleteCpf}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Data do Treino:</span>
-                  <span className="font-semibold text-slate-800">
-                    {actionModalTarget.dateTime ? new Date(actionModalTarget.dateTime).toLocaleString('pt-BR') : '—'}
-                  </span>
+                <div className="flex justify-between text-slate-600">
+                  <span>Arma & Calibre:</span>
+                  <strong className="text-slate-900">
+                    {actionModalTarget.weaponName || 'Arma'} {actionModalTarget.caliber ? `(${actionModalTarget.caliber})` : ''}
+                  </strong>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Arma:</span>
-                  <span className="font-semibold text-slate-800">{actionModalTarget.weaponName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Disparos:</span>
-                  <span className="font-semibold text-slate-800">{actionModalTarget.totalShots} tiros</span>
+                <div className="flex justify-between text-slate-600">
+                  <span>Disparos:</span>
+                  <strong className="text-blue-900">{actionModalTarget.shotsCount ?? 0} tiros</strong>
                 </div>
               </div>
 
-              {/* Campo para Aprovar e Reprovar: Observações / Justificativa */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
                   <span>
@@ -682,6 +967,107 @@ export default function ValidarTreinamentosPanel({
                   ) : (
                     <>
                       <X className="w-4 h-4" /> Confirmar Reprovação
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Validação em Lote */}
+      {batchModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                  batchActionType === 'aprovado' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                }`}>
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    {batchActionType === 'aprovado' ? 'Aprovação em Lote' : 'Reprovação em Lote'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Processando <strong>{selectedIds.size}</strong> treinamento(s) selecionado(s)
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setBatchModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitBatchValidation} className="space-y-4 mt-4">
+              {batchError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  {batchError}
+                </div>
+              )}
+
+              <div className="p-3.5 bg-blue-50/70 border border-blue-200/70 rounded-xl text-xs text-blue-900">
+                <p>
+                  Você está prestes a <strong>{batchActionType === 'aprovado' ? 'APROVAR' : 'REPROVAR'}</strong> {selectedIds.size} registros de treinamento de uma só vez.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                  <span>
+                    {batchActionType === 'aprovado' ? 'Observações em Lote (Opcional):' : 'Justificativa da Reprovação (Obrigatória):'}
+                  </span>
+                  {batchActionType === 'reprovado' && (
+                    <span className="text-[10px] text-rose-600 font-bold uppercase">* Obrigatório</span>
+                  )}
+                </label>
+                <textarea
+                  rows={3}
+                  value={batchNotes}
+                  onChange={(e) => setBatchNotes(e.target.value)}
+                  placeholder={
+                    batchActionType === 'aprovado'
+                      ? 'Ex: Passagens de treino homologadas pelo estande do clube em lote.'
+                      : 'Ex: Documentação de habitualidade inconsistente.'
+                  }
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Botões do Rodapé */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBatchModalOpen(false)}
+                  disabled={submittingBatch}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingBatch}
+                  className={`px-5 py-2 text-xs font-bold text-white rounded-xl transition flex items-center gap-1.5 shadow-sm cursor-pointer ${
+                    batchActionType === 'aprovado'
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : 'bg-rose-600 hover:bg-rose-700'
+                  }`}
+                >
+                  {submittingBatch ? (
+                    <>Processando em lote...</>
+                  ) : batchActionType === 'aprovado' ? (
+                    <>
+                      <Check className="w-4 h-4" /> Confirmar Aprovação de {selectedIds.size}
+                    </>
+                  ) : (
+                    <>
+                      <X className="w-4 h-4" /> Confirmar Reprovação de {selectedIds.size}
                     </>
                   )}
                 </button>

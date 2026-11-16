@@ -8200,7 +8200,10 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
   const total = own + club;
   const ownerType = weaponOwnerType === 'clube' ? 'clube' : 'propria';
   const id = `training_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-  const initialStatus = requestedStatus || 'pendente';
+  // Regra oficial: Somente treinamentos com data superior a 01/10/2026 necessitam de validação
+  const trainingDate = (dateTime || '').slice(0, 10);
+  const needsValidation = trainingDate ? trainingDate > '2026-10-01' : false;
+  const initialStatus = needsValidation ? (requestedStatus || 'pendente') : 'aprovado';
 
   try {
     const r = await pool.query(
@@ -8256,6 +8259,53 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Create training error:', err);
     res.status(500).json({ error: 'Erro ao registrar treinamento.' });
+  }
+});
+
+// Endpoint para validação em lote de treinamentos pelo clube
+app.patch('/api/trainings/validate-batch', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { ids, status, validationNotes } = req.body;
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'Nenhum treinamento selecionado para validação em lote.' });
+  }
+
+  if (!status || !['aprovado', 'reprovado', 'pendente'].includes(status)) {
+    return res.status(400).json({ error: 'Status de validação inválido. Escolha entre aprovado ou reprovado.' });
+  }
+
+  try {
+    const isClubAdmin = currentUser.role === 'club_admin';
+    const allowedClubId = isClubAdmin ? currentUser.clubId : null;
+
+    let updateQuery = `
+      UPDATE trainings t
+      SET status = $1,
+          validated_at = NOW(),
+          validated_by_user_id = $2,
+          validation_notes = $3
+      WHERE t.id = ANY($4::text[])
+    `;
+    const params: any[] = [status, currentUser.id, validationNotes || null, ids];
+
+    if (isClubAdmin && allowedClubId) {
+      params.push(allowedClubId);
+      updateQuery += ` AND (t.club_id = $5 OR t.user_id IN (SELECT id FROM users WHERE club_id = $5))`;
+    }
+
+    updateQuery += ` RETURNING t.id`;
+    const updated = await pool.query(updateQuery, params);
+
+    res.json({
+      success: true,
+      updatedCount: updated.rowCount,
+      updatedIds: updated.rows.map(r => r.id),
+      message: `${updated.rowCount} treinamento(s) ${status === 'aprovado' ? 'aprovado(s)' : 'reprovado(s)'} com sucesso.`
+    });
+  } catch (err) {
+    console.error('Validate trainings batch error:', err);
+    res.status(500).json({ error: 'Erro ao processar validação em lote de treinamentos.' });
   }
 });
 
@@ -9294,6 +9344,55 @@ app.get('/api/checkins', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Fetch club checkins error:', err);
     res.status(500).json({ error: 'Erro ao buscar check-ins do clube.' });
+  }
+});
+
+// Endpoint para validação em lote de check-ins pelo clube
+app.patch('/api/checkins/validate-batch', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { ids, status, validationNotes } = req.body;
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'Nenhum check-in selecionado para validação em lote.' });
+  }
+
+  if (!status || !['aprovado', 'reprovado', 'pendente', 'confirmed', 'rejected'].includes(status)) {
+    return res.status(400).json({ error: 'Status de validação inválido. Escolha entre aprovado ou reprovado.' });
+  }
+
+  const normalizedStatus = status === 'confirmed' ? 'aprovado' : (status === 'rejected' ? 'reprovado' : status);
+
+  try {
+    const isClubAdmin = currentUser.role === 'club_admin';
+    const allowedClubId = isClubAdmin ? currentUser.clubId : null;
+
+    let updateQuery = `
+      UPDATE club_checkins c
+      SET status = $1,
+          validated_at = NOW(),
+          validated_by_user_id = $2,
+          validation_notes = $3
+      WHERE c.id = ANY($4::text[])
+    `;
+    const params: any[] = [normalizedStatus, currentUser.id, validationNotes || null, ids];
+
+    if (isClubAdmin && allowedClubId) {
+      params.push(allowedClubId);
+      updateQuery += ` AND (c.club_id = $5 OR c.user_id IN (SELECT id FROM users WHERE club_id = $5))`;
+    }
+
+    updateQuery += ` RETURNING c.id`;
+    const updated = await pool.query(updateQuery, params);
+
+    res.json({
+      success: true,
+      updatedCount: updated.rowCount,
+      updatedIds: updated.rows.map(r => r.id),
+      message: `${updated.rowCount} check-in(s) ${normalizedStatus === 'aprovado' ? 'aprovado(s)' : 'reprovado(s)'} com sucesso.`
+    });
+  } catch (err) {
+    console.error('Validate checkins batch error:', err);
+    res.status(500).json({ error: 'Erro ao processar validação em lote de check-ins.' });
   }
 });
 

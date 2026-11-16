@@ -458,6 +458,15 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS validated_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
         ADD COLUMN IF NOT EXISTS validation_notes TEXT;
       CREATE INDEX IF NOT EXISTS idx_trainings_status ON trainings(status);
+
+      -- Regra oficial: Somente treinamentos com data superior a 01/10/2026 necessitam de validação.
+      -- Treinamentos anteriores a 01/10/2026 são automaticamente dispensados e marcados como aprovados.
+      UPDATE trainings
+      SET status = 'aprovado',
+          validated_at = COALESCE(validated_at, CURRENT_TIMESTAMP),
+          validation_notes = COALESCE(validation_notes, 'Dispensa de validação - registro com data até 01/10/2026')
+      WHERE status = 'pendente'
+        AND (SUBSTRING(date_time FROM 1 FOR 10) <= '2026-10-01' OR date_time IS NULL);
     `);
 
     // Sanitize championships.modalities JSONB array: remove any deleted/orphaned modality IDs
