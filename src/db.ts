@@ -21,9 +21,17 @@ export const pool = new Pool({
   ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
 });
 
+// Força que toda conexão com o PostgreSQL utilize estritamente o fuso horário de São Paulo / Brasília (UTC-3)
+pool.on('connect', (client) => {
+  client.query("SET timezone = 'America/Sao_Paulo'").catch((err) => {
+    console.error('Error setting timezone on client connect:', err);
+  });
+});
+
 export async function initDB() {
   const client = await pool.connect();
   try {
+    await client.query("SET timezone = 'America/Sao_Paulo'");
     await client.query('BEGIN');
 
     // Função auxiliar pra busca/filtro acento-insensível (minúsculas + sem
@@ -467,6 +475,21 @@ export async function initDB() {
           validation_notes = COALESCE(validation_notes, 'Dispensa de validação - registro com data até 01/10/2026')
       WHERE status = 'pendente'
         AND (SUBSTRING(date_time FROM 1 FOR 10) <= '2026-10-01' OR date_time IS NULL);
+
+      -- Correção de fuso horário: Treinamentos recentes gravados com hora 22:xx ou 23:xx
+      -- devido ao fuso UTC (+3h) são ajustados para o horário real de funcionamento do estande (-3h)
+      UPDATE trainings
+      SET date_time = to_char(
+            (
+              CASE 
+                WHEN date_time LIKE '%T%' THEN date_time::timestamp
+                ELSE (date_time || ':00')::timestamp
+              END
+            ) - INTERVAL '3 hours',
+            'YYYY-MM-DD"T"HH24:MI'
+          )
+      WHERE (date_time LIKE '%T22:%' OR date_time LIKE '%T23:%' OR date_time LIKE '% 22:%' OR date_time LIKE '% 23:%')
+        AND (SUBSTRING(date_time FROM 1 FOR 10) >= '2026-10-01');
     `);
 
     // Sanitize championships.modalities JSONB array: remove any deleted/orphaned modality IDs

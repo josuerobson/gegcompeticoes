@@ -3,6 +3,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+ENV TZ=America/Sao_Paulo
+RUN apk add --no-cache tzdata
+
 # Instala todas as dependências (incluindo devDependencies)
 COPY package*.json ./
 RUN npm ci
@@ -18,6 +21,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV TZ=America/Sao_Paulo
+
+RUN apk add --no-cache tzdata
 
 # Instala apenas dependências de produção
 COPY package*.json ./

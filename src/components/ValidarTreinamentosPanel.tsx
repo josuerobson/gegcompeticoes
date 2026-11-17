@@ -6,6 +6,7 @@ import {
   Layers, Info
 } from 'lucide-react';
 import { User, Club, TrainingSession, Weapon } from '../types';
+import { formatDisplayDateTime } from '../utils/dateUtils';
 
 interface ValidarTreinamentosPanelProps {
   currentUser: User | null;
@@ -13,37 +14,6 @@ interface ValidarTreinamentosPanelProps {
   users?: User[];
   weapons?: Weapon[];
   onRefreshData?: () => void;
-}
-
-// Formatador seguro de data e hora para evitar qualquer "Invalid Date"
-function formatDisplayDateTime(val?: string | null): string {
-  if (!val) return 'Data não informada';
-  const str = String(val).trim();
-  if (!str) return 'Data não informada';
-
-  // 1. Formato brasileiro: DD/MM/YYYY ou DD/MM/YYYY HH:mm(:ss)
-  const brMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-  if (brMatch) {
-    const [, d, m, y, hh, mm] = brMatch;
-    const timePart = hh !== undefined ? ` às ${hh.padStart(2, '0')}:${mm.padStart(2, '0')}` : '';
-    return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}${timePart}`;
-  }
-
-  // 2. Formato ISO / SQL: YYYY-MM-DD ou YYYY-MM-DD HH:mm(:ss) ou YYYY-MM-DDTHH:mm(:ss)
-  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-  if (isoMatch) {
-    const [, y, m, d, hh, mm] = isoMatch;
-    const timePart = hh !== undefined ? ` às ${hh.padStart(2, '0')}:${mm.padStart(2, '0')}` : '';
-    return `${d}/${m}/${y}${timePart}`;
-  }
-
-  // 3. Fallback com parse do objeto Date
-  const parsed = new Date(str);
-  if (!isNaN(parsed.getTime())) {
-    return parsed.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).replace(',', ' às');
-  }
-
-  return str;
 }
 
 // Verifica se a data é estritamente superior a 01/10/2026

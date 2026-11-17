@@ -38,6 +38,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Painel Diretor module status (as of 2026-11-16)
 
 Real (backed by actual DB tables/endpoints, tested end-to-end):
+- **Fuso Horário Estrito de Brasília / São Paulo (`America/Sao_Paulo` - UTC-3)**:
+  - **Motivo Regulatório Crítico**: Os estandes de tiro esportivo encerram atividades obrigatoriamente às **22:00** por regulamentação do Exército Brasileiro (SFPC) e leis municipais/federais. O fuso horário de São Paulo é padronizado em todas as camadas para impedir que o fuso padrão UTC (GMT+0) grave horários de treinos ou competições noturnos (ex: 19:12) com +3 horas (22:12), o que caracterizaria infração administrativa.
+  - **Camadas Sincronizadas**:
+    1. **Container Docker (`Dockerfile`)**: `apk add --no-cache tzdata` e `ENV TZ=America/Sao_Paulo` nos estágios `builder` e `runner`.
+    2. **Processo Node.js (`server.ts`)**: `process.env.TZ = 'America/Sao_Paulo'` na primeira linha do servidor.
+    3. **PostgreSQL (`src/db.ts`)**: `pool.on('connect')` e `initDB()` executam `SET timezone = 'America/Sao_Paulo'`. Rotina na inicialização ajusta automaticamente registros recentes gravados com deslocamento UTC.
+    4. **Frontend (`src/utils/dateUtils.ts`)**: utilitários universais `getLocalSaoPauloDateTime`, `getLocalSaoPauloDate`, `getLocalSaoPauloTime` e `formatDisplayDateTime` (com suporte a conversão de ISO UTC) substituem `new Date().toISOString().slice(0, 16)` em todos os modais de treino, check-in e competição.
+
 - **Gerenciamento Clube e Plataforma > Validar Treinamento e Validar Check-in (`ValidarTreinamentosPanel.tsx`, `ValidarCheckinsPanel.tsx`, `AdminPanel.tsx`, `server.ts`, `src/db.ts`, `MemberProfile.tsx`, `ClubReportsViewer.tsx`, `CheckinsManager.tsx`)** — validação e homologação obrigatória de treinamentos e check-ins pelo clube ao qual o atleta pertence:
   - **Regra de Isenção Temporal (Treinos > 01/10/2026)**: apenas treinamentos com data estritamente superior a 01/10/2026 necessitam de validação pelo estande. Todos os registros anteriores a 01/10/2026 foram homologados automaticamente no banco e no frontend, dispensando validação retroativa e zerando a fila pendente de registros históricos legados. Treinos novos criados com data <= 01/10/2026 iniciam automaticamente como aprovados.
   - **Sistema de Validação e Aprovação em Massa (Bulk Selection)**: adição de checkboxes individuais em cada card, controle "Selecionar Todos" com estado indeterminado no cabeçalho e barra de ações flutuante fixada ("Aprovar em Lote" / "Reprovar em Lote" com contadores e modal de confirmação). Endpoints dedicados `PATCH /api/trainings/validate-batch` e `PATCH /api/checkins/validate-batch` com verificação estrita de escopo por clube.

@@ -6,6 +6,7 @@ import {
 import { User, Weapon, Modality, ClubCheckin, TrainingSession, Championship, Stage, Registration } from '../types';
 import ClaimWeaponModal from './ClaimWeaponModal';
 import { resolveWeaponSerial, filterSelectableWeapons, isWeaponLinkedToAthlete, isWeaponClaimable } from '../utils/textSearch';
+import { getLocalSaoPauloDateTime } from '../utils/dateUtils';
 
 interface LinkedCompetitionItem {
   id: string;
@@ -73,7 +74,7 @@ export default function CheckoutActivityModal({
 
   // Training Form State
   const [trainingForm, setTrainingForm] = useState({
-    dateTime: new Date().toISOString().slice(0, 16),
+    dateTime: getLocalSaoPauloDateTime(),
     weaponSearchQuery: '',
     selectedWeapon: null as Weapon | null,
     weaponName: '',
@@ -354,7 +355,7 @@ export default function CheckoutActivityModal({
 
       // Reset form
       setTrainingForm({
-        dateTime: new Date().toISOString().slice(0, 16),
+        dateTime: getLocalSaoPauloDateTime(),
         weaponSearchQuery: '',
         selectedWeapon: null,
         weaponName: '',

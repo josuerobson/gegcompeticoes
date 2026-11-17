@@ -11,6 +11,7 @@ import ClaimWeaponModal from './ClaimWeaponModal';
 import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel, filterSelectableWeapons, isWeaponLinkedToAthlete, isWeaponClaimable } from '../utils/textSearch';
 import { annuityStatus, ANNUITY_STATUS_LABELS } from '../utils/financeReports';
 import { downloadPdfFromElement, downloadPdfFromHtml, sanitizePdfFilename } from '../utils/pdfDownloader';
+import { getLocalSaoPauloDateTime, formatDisplayDateTime } from '../utils/dateUtils';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2, XCircle, MapPin,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
@@ -1391,7 +1392,7 @@ export default function MemberProfile({
   const [ammoPurchases, setAmmoPurchases] = useState<AmmoPurchase[]>([]);
 
   const [trainingForm, setTrainingForm] = useState({
-    dateTime: new Date().toISOString().slice(0, 16),
+    dateTime: getLocalSaoPauloDateTime(),
     weaponSearchQuery: '',
     selectedWeapon: null as Weapon | null,
     weaponName: '',
@@ -1631,7 +1632,7 @@ export default function MemberProfile({
       if (res.ok) {
         setShowAddTraining(false);
         setTrainingForm({
-          dateTime: new Date().toISOString().slice(0, 16),
+          dateTime: getLocalSaoPauloDateTime(),
           weaponSearchQuery: '',
           selectedWeapon: null,
           weaponName: '',
@@ -1779,8 +1780,8 @@ export default function MemberProfile({
         return;
       }
 
-      const dateFormatted = rawDate.toLocaleDateString('pt-BR');
-      const timeFormatted = t.dateTime ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:00';
+      const dateFormatted = rawDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      const timeFormatted = t.dateTime ? rawDate.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '15:00';
 
       const weaponClass = w.weaponClass || 'Pistola';
       const model = w.model;
@@ -1882,8 +1883,8 @@ export default function MemberProfile({
         return;
       }
 
-      const dateFormatted = rawDate.toLocaleDateString('pt-BR');
-      const timeFormatted = reg?.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:54';
+      const dateFormatted = rawDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      const timeFormatted = reg?.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '15:54';
 
       const weaponClass = w.weaponClass || 'Pistola';
       const model = w.model;
@@ -1966,8 +1967,8 @@ export default function MemberProfile({
         return;
       }
 
-      const dateFormatted = rawDate.toLocaleDateString('pt-BR');
-      const timeFormatted = reg.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:54';
+      const dateFormatted = rawDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      const timeFormatted = reg.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '15:54';
 
       const weaponClass = w.weaponClass || 'Pistola';
       const model = w.model;
@@ -4606,7 +4607,7 @@ export default function MemberProfile({
               ) : (
                 <div className="space-y-3">
                   {trainings.map(t => {
-                    const formattedDate = t.dateTime ? new Date(t.dateTime).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'Data não informada';
+                    const formattedDate = formatDisplayDateTime(t.dateTime);
                     const isClubWeapon = t.weaponOwnerType === 'clube';
 
                     return (

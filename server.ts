@@ -1,3 +1,4 @@
+process.env.TZ = 'America/Sao_Paulo';
 import { GoogleGenAI } from '@google/genai';
 import { Jimp } from 'jimp';
 import 'dotenv/config';
@@ -8171,6 +8172,25 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Data/Hora e Arma são obrigatórias.' });
   }
 
+  // Normalizar dateTime para horário oficial de Brasília / São Paulo (America/Sao_Paulo - UTC-3)
+  // Caso venha em formato ISO com Z ou offset UTC, converte para o horário local real do estande
+  let normalizedDateTime = String(dateTime).trim();
+  const dParsed = new Date(normalizedDateTime);
+  if (!isNaN(dParsed.getTime()) && (normalizedDateTime.includes('Z') || /[+-]\d{2}/.test(normalizedDateTime))) {
+    const formatter = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    const parts: Record<string, string> = {};
+    formatter.formatToParts(dParsed).forEach(p => { parts[p.type] = p.value; });
+    normalizedDateTime = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+  }
+
   const requestedUserId = targetUserId || userId;
   const finalUserId = (['admin', 'master_admin', 'club_admin'].includes(currentUser.role) && requestedUserId)
     ? requestedUserId
@@ -8201,7 +8221,7 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
   const ownerType = weaponOwnerType === 'clube' ? 'clube' : 'propria';
   const id = `training_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
   // Regra oficial: Somente treinamentos com data superior a 01/10/2026 necessitam de validação
-  const trainingDate = (dateTime || '').slice(0, 10);
+  const trainingDate = (normalizedDateTime || '').slice(0, 10);
   const needsValidation = trainingDate ? trainingDate > '2026-10-01' : false;
   const initialStatus = needsValidation ? (requestedStatus || 'pendente') : 'aprovado';
 
@@ -8216,7 +8236,7 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
         id,
         finalUserId,
         effectiveClubId,
-        dateTime,
+        normalizedDateTime,
         weaponId || null,
         weaponName,
         weaponCaliber || null,

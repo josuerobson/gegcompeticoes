@@ -166,8 +166,8 @@ export default function ClubReportsViewer({
       items.push({
         id: `tr_${t.id}`,
         rawDate,
-        dateFormatted: rawDate.toLocaleDateString('pt-BR'),
-        timeFormatted: t.dateTime ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:00',
+        dateFormatted: rawDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+        timeFormatted: t.dateTime ? rawDate.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '15:00',
         eventType: 'Treinamento',
         eventName: 'TREINAMENTO NO ESTANDE',
         modality: t.modality || 'Treinamento Livre',
@@ -244,8 +244,8 @@ export default function ClubReportsViewer({
       items.push({
         id: `cmp_${s.id}`,
         rawDate,
-        dateFormatted: rawDate.toLocaleDateString('pt-BR'),
-        timeFormatted: reg?.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:54',
+        dateFormatted: rawDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+        timeFormatted: reg?.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '15:54',
         eventType: 'Competição',
         eventName: champ?.title?.toUpperCase() || 'CAMPEONATO DE TIRO ESPORTIVO',
         modality: s.modality || (reg?.modalityId ? (modalities.find(m => m.id === reg.modalityId)?.name || 'Modalidade Oficial') : (stage?.title || 'Modalidade Oficial')),
@@ -306,8 +306,8 @@ export default function ClubReportsViewer({
       items.push({
         id: `reg_${reg.id}`,
         rawDate,
-        dateFormatted: rawDate.toLocaleDateString('pt-BR'),
-        timeFormatted: reg.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '15:54',
+        dateFormatted: rawDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+        timeFormatted: reg.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '15:54',
         eventType: 'Competição',
         eventName: champ?.title?.toUpperCase() || 'CAMPEONATO DE TIRO ESPORTIVO',
         modality: reg.modalityId ? (modalities.find(m => m.id === reg.modalityId)?.name || 'Modalidade Oficial') : (stage?.title || 'Modalidade Oficial'),
@@ -501,7 +501,7 @@ export default function ClubReportsViewer({
         <!-- Signatures & Footer -->
         <div class="pdf-avoid-break signature-block" style="margin-top: 16px; padding-top: 10px; border-top: 1px solid #cbd5e1; page-break-inside: avoid; break-inside: avoid; text-align: center;">
           <p style="font-size: 10px; color: #1e293b; margin: 0 0 3px 0; page-break-inside: avoid; break-inside: avoid;">Atestamos a veracidade e exatidão dos registros de habitualidade acima especificados.</p>
-          <p style="font-size: 10px; color: #334155; margin: 0 0 16px 0;">${clubCityState}, ${new Date().toLocaleDateString('pt-BR')}.</p>
+          <p style="font-size: 10px; color: #334155; margin: 0 0 16px 0;">${clubCityState}, ${new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.</p>
 
           <div style="display: inline-block; text-align: center; font-size: 9.5px; margin-top: 6px;">
             <div style="height: 1px; background-color: #475569; width: 250px; margin: 0 auto 5px auto;"></div>
@@ -545,7 +545,7 @@ export default function ClubReportsViewer({
         <!-- Signatures -->
         <div class="pdf-avoid-break signature-block" style="margin-top: 40px; padding-top: 16px; border-top: 1px solid #cbd5e1; page-break-inside: avoid; break-inside: avoid; text-align: center;">
           <p style="font-size: 11px; color: #1e293b; margin: 0 0 4px 0; page-break-inside: avoid; break-inside: avoid;">Atestamos a veracidade e exatidão das informações acima especificadas.</p>
-          <p style="font-size: 11px; color: #334155; margin: 0 0 24px 0;">${clubCityState}, ${new Date().toLocaleDateString('pt-BR')}.</p>
+          <p style="font-size: 11px; color: #334155; margin: 0 0 24px 0;">${clubCityState}, ${new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.</p>
 
           <div style="display: inline-block; text-align: center; font-size: 10px; margin-top: 10px;">
             <div style="height: 1px; background-color: #475569; width: 260px; margin: 0 auto 6px auto;"></div>

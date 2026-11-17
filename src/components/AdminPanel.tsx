@@ -9,6 +9,7 @@ import ValidarTreinamentosPanel from './ValidarTreinamentosPanel';
 import ValidarCheckinsPanel from './ValidarCheckinsPanel';
 import { SicoobPixManager } from './SicoobPixManager';
 import { downloadPdfFromElement } from '../utils/pdfDownloader';
+import { getLocalSaoPauloDateTime, getLocalSaoPauloDate, getLocalSaoPauloTime } from '../utils/dateUtils';
 import { MercadoPagoManager } from './MercadoPagoManager';
 import { PixPaymentModal } from './PixPaymentModal';
 import ClaimWeaponModal from './ClaimWeaponModal';
@@ -2434,7 +2435,7 @@ function TreinamentosCompeticoesAdminPanel({
 
   // Training Form State
   const [trainingForm, setTrainingForm] = React.useState({
-    dateTime: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
+    dateTime: getLocalSaoPauloDateTime(),
     weaponSearchQuery: '',
     selectedWeapon: null as Weapon | null,
     weaponName: '',
@@ -3753,18 +3754,12 @@ function CadastrarResultadosPanel({
           checkinDate: data.checkinDate || undefined
         } : null);
 
-        // Se vinculou um check-in e dataExec/horaExec estiverem vazios, pré-preenche com a data/hora do check-in
+        // Se vinculou um check-in e dataExec/horaExec estiverem vazios, pré-preenche com a data/hora do check-in no fuso de São Paulo
         if (chkId && data.checkinDate) {
-          const chkDt = new Date(data.checkinDate);
-          if (!isNaN(chkDt.getTime())) {
-            const yyyy = chkDt.getFullYear();
-            const mm = String(chkDt.getMonth() + 1).padStart(2, '0');
-            const dd = String(chkDt.getDate()).padStart(2, '0');
-            const hh = String(chkDt.getHours()).padStart(2, '0');
-            const min = String(chkDt.getMinutes()).padStart(2, '0');
-            if (!dataExec) setDataExec(`${yyyy}-${mm}-${dd}`);
-            if (!horaExec) setHoraExec(`${hh}:${min}`);
-          }
+          const spDate = getLocalSaoPauloDate(data.checkinDate);
+          const spTime = getLocalSaoPauloTime(data.checkinDate);
+          if (spDate && !dataExec) setDataExec(spDate);
+          if (spTime && !horaExec) setHoraExec(spTime);
         }
       }
 

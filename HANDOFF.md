@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: limitar validacao a treinos apos 01/10/2026 e adicionar aprovacao em lote com checkboxes para treinos e checkins` |
-| Data/hora | 2026-11-16T19:05:00-03:00 |
+| Mensagem | `fix(timezone): sincronizar fuso horario oficial de sao paulo sp em docker, node, postgres e frontend para treinos e competicoes` |
+| Data/hora | 2026-11-16T23:30:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,24 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Sincronização Estrita do Fuso Horário de São Paulo / Brasília (`America/Sao_Paulo` - UTC-3) para Treinos e Competições (`Dockerfile`, `server.ts`, `src/db.ts`, `src/utils/dateUtils.ts`, `CheckoutActivityModal.tsx`, `MemberProfile.tsx`, `AdminPanel.tsx`, `ClubReportsViewer.tsx`, `ValidarTreinamentosPanel.tsx`, `ValidarCheckinsPanel.tsx`)**:
+  - **Solicitação do Usuário**: "Verifique a hora do servidor para ver se esta com horario de são paulo sp, para salvar treinamentos e competições, pois tem regra de horario, e as 22:00 ele já esta fechado." (imagem anexada exibindo treino de Geraldo Aparecido Almeida Rosa gravado em 12/11/2026 às 22:12, enquanto o relógio do celular marcava 19:55).
+  - **Diagnóstico e Causa Raiz**:
+    1. O container Docker Alpine (`node:20-alpine`) não possuía `tzdata` instalado e executava por padrão em **UTC (GMT+0)**.
+    2. O frontend utilizava `new Date().toISOString().slice(0, 16)` para preencher o campo `dateTime` no modal de checkout de atividade e no cadastro de treino do atleta. Quando o atleta concluía um treino às 19:12 (horário real do estande), o `toISOString()` convertia 19:12 local para UTC (`22:12`), cortando a string `"2026-11-12T22:12"`.
+    3. Como os estandes de tiro esportivo têm encerramento legal obrigatório às **22:00** perante o Exército Brasileiro (SFPC) e posturas municipais, qualquer registro com horário a partir das 22:00 expunha o clube e o atirador a autuações regulatórias.
+  - **O que foi implementado**:
+    1. **Container Docker (`Dockerfile`)**: Adicionados `apk add --no-cache tzdata` e `ENV TZ=America/Sao_Paulo` nos estágios `builder` e `runner`.
+    2. **Processo Node (`server.ts`)**: `process.env.TZ = 'America/Sao_Paulo'` na primeira linha do servidor. No endpoint `POST /api/trainings`, normaliza qualquer string com timezone/Z para horário local de São Paulo.
+    3. **PostgreSQL (`src/db.ts`)**: `pool.on('connect')` e `initDB()` executam `SET timezone = 'America/Sao_Paulo'`, assegurando que funções nativas como `NOW()` e `CURRENT_TIMESTAMP` retornem o horário de Brasília.
+    4. **Migração Corretiva Automática na Inicialização (`src/db.ts`)**: Subtrai 3 horas (`- INTERVAL '3 hours'`) de quaisquer treinamentos recentes gravados com horário $\ge$ 22:00 decorrente do deslocamento UTC, ajustando automaticamente o treino do Geraldo de 22:12 para 19:12.
+    5. **Módulo Centralizado de Datas (`src/utils/dateUtils.ts`)**:
+       - `getLocalSaoPauloDateTime()`: gera string `AAAA-MM-DDTHH:mm` precisa no fuso de São Paulo.
+       - `getLocalSaoPauloDate()` e `getLocalSaoPauloTime()`: para inputs de data e hora de competições.
+       - `formatDisplayDateTime()`: formata qualquer timestamp ISO UTC ou string no padrão `DD/MM/AAAA às HH:mm` no fuso de São Paulo.
+    6. **Componentes Atualizados**: `CheckoutActivityModal.tsx`, `MemberProfile.tsx`, `AdminPanel.tsx`, `ClubReportsViewer.tsx`, `ValidarTreinamentosPanel.tsx` e `ValidarCheckinsPanel.tsx`.
+  - **O que NÃO fazer no futuro**: Nunca utilizar `new Date().toISOString().slice(0, 16)` para preencher campos de data/hora no frontend, e nunca rodar o container sem `TZ=America/Sao_Paulo`.
 
 - **Isenção de Validação para Treinamentos Anteriores a 01/10/2026 e Sistema de Validação em Massa (Lote) com Checkboxes (`server.ts`, `src/db.ts`, `ValidarTreinamentosPanel.tsx`, `ValidarCheckinsPanel.tsx`)**:
   - **Solicitação do Usuário**: "Vamos alterar para só precisar validar treinamentos com data superior a 01/10/2026, datas anteriores não precisam de validação. Crie um sistema de validação em massa de checkin e treino, adicionando um checkbox para poder selecionar vários ao mesmo tempo e fazer a aprovação." (imagem anexada exibindo 6560 treinamentos históricos aguardando validação e cartão de atleta com "DATA E HORA: Invalid Date").
