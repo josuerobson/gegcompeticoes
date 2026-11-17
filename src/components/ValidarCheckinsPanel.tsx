@@ -330,7 +330,7 @@ export default function ValidarCheckinsPanel({
   };
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="space-y-6 pb-36">
       {/* Header */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -837,7 +837,7 @@ export default function ValidarCheckinsPanel({
 
       {/* Floating Action Bar quando houver check-ins selecionados */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 backdrop-blur-md text-white border border-slate-700 px-5 py-3 rounded-2xl shadow-2xl flex flex-wrap items-center gap-4 animate-in slide-in-from-bottom-5">
+        <div className="fixed bottom-20 md:bottom-22 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 backdrop-blur-md text-white border border-slate-700 px-5 py-3 rounded-2xl shadow-2xl flex flex-wrap items-center gap-4 animate-in slide-in-from-bottom-5">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
             <span className="text-xs font-bold">

@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(timezone): sincronizar fuso horario oficial de sao paulo sp em docker, node, postgres e frontend para treinos e competicoes` |
-| Data/hora | 2026-11-16T23:30:00-03:00 |
+| Mensagem | `fix(validation): elevar barra flutuante acima do menu inferior e permitir gestor editar data e hora do treino` |
+| Data/hora | 2026-11-17T15:05:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,24 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Elevação da Barra Flutuante de Ações em Lote e Edição de Data/Hora de Treinamentos pelo Gestor (`server.ts`, `ValidarTreinamentosPanel.tsx`, `ValidarCheckinsPanel.tsx`)**:
+  - **Solicitação do Usuário**:
+    1) "Quando seleciona varios atletas pelo checkbox o card para baixar fica parcialmente visível, conforem da para ver na imagem." (imagem anexada exibindo a barra flutuante escura de seleção em lote cortada pela metade, sobreposta pelo menu inferior do app).
+    2) "Preciso que fique editável a data e hora, para que o gestor possa ajustar conforme necessário."
+  - **Diagnóstico e Causa Raiz**:
+    1. A barra de ações em lote utilizava `bottom-6` (24px do rodapé). Como a barra de navegação principal inferior do app (`Feed | Campeonatos | Painel Diretor | Perfil`) fica fixada em `bottom-0` com altura `h-16` (64px) e `z-30`, os 40px inferiores da barra flutuante ficavam encobertos.
+    2. Treinamentos não possuíam mecanismo de retificação direta de data e hora pelo gestor no momento da homologação, impedindo ajustes quando o atleta lançou horário divergente da atividade no estande.
+  - **O que foi implementado**:
+    1. **Elevação da Barra Flutuante**: alterado de `bottom-6` para `bottom-20 md:bottom-22 z-50` com sombra `shadow-2xl` e espaçamento inferior do container aumentado para `pb-36` em `ValidarTreinamentosPanel.tsx` e `ValidarCheckinsPanel.tsx`. A barra agora flutua com folga acima da navegação inferior em qualquer tamanho de tela sem qualquer sobreposição.
+    2. **Edição de Data e Hora de Treinamento**:
+       - **Backend (`server.ts`)**:
+         - Novo endpoint `PATCH /api/trainings/:id/datetime`: permite atualizar `date_time` com validação de escopo estrito de clube (`club_admin` só altera treinos de atletas do seu clube) e normalização de timezone para horário oficial de São Paulo.
+         - Atualizado `PATCH /api/trainings/:id/validate`: aceita `dateTime` opcional no corpo da requisição para atualizar data/hora concomitantemente com a validação (aprovação ou reprovação).
+       - **Frontend (`ValidarTreinamentosPanel.tsx`)**:
+         - Botão de edição inline com ícone de lápis (`Pencil`) no card do treino ao lado de "DATA E HORA", abrindo seletor `datetime-local` com botões "Salvar" e "Cancelar".
+         - Campo `datetime-local` interativo adicionado ao modal individual de aprovação/reprovação com aviso "Ajustável pelo gestor", permitindo corrigir o horário antes de confirmar a validação.
+  - **O que NÃO fazer no futuro**: Não utilizar posicionamento inferior menor que `bottom-20` para elementos flutuantes fixados na viewport principal, preservando a área do menu inferior (`h-16`).
 
 - **Sincronização Estrita do Fuso Horário de São Paulo / Brasília (`America/Sao_Paulo` - UTC-3) para Treinos e Competições (`Dockerfile`, `server.ts`, `src/db.ts`, `src/utils/dateUtils.ts`, `CheckoutActivityModal.tsx`, `MemberProfile.tsx`, `AdminPanel.tsx`, `ClubReportsViewer.tsx`, `ValidarTreinamentosPanel.tsx`, `ValidarCheckinsPanel.tsx`)**:
   - **Solicitação do Usuário**: "Verifique a hora do servidor para ver se esta com horario de são paulo sp, para salvar treinamentos e competições, pois tem regra de horario, e as 22:00 ele já esta fechado." (imagem anexada exibindo treino de Geraldo Aparecido Almeida Rosa gravado em 12/11/2026 às 22:12, enquanto o relógio do celular marcava 19:55).

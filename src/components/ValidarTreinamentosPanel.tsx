@@ -3,10 +3,10 @@ import {
   CheckCircle2, XCircle, Clock, Search, Calendar, User as UserIcon,
   Crosshair, ShieldCheck, AlertTriangle, RefreshCw, Filter, MessageSquare,
   ChevronDown, ArrowRight, Eye, Check, X, ShieldAlert, CheckSquare, Square,
-  Layers, Info
+  Layers, Info, Pencil
 } from 'lucide-react';
 import { User, Club, TrainingSession, Weapon } from '../types';
-import { formatDisplayDateTime } from '../utils/dateUtils';
+import { formatDisplayDateTime, getLocalSaoPauloDateTime } from '../utils/dateUtils';
 
 interface ValidarTreinamentosPanelProps {
   currentUser: User | null;
@@ -75,8 +75,14 @@ export default function ValidarTreinamentosPanel({
   const [actionModalTarget, setActionModalTarget] = useState<TrainingSession | null>(null);
   const [actionType, setActionType] = useState<'aprovado' | 'reprovado'>('aprovado');
   const [validationNotes, setValidationNotes] = useState('');
+  const [actionDateTime, setActionDateTime] = useState('');
   const [submittingAction, setSubmittingAction] = useState(false);
   const [actionError, setActionError] = useState('');
+
+  // Edição inline de Data e Hora no Card pelo gestor
+  const [editingDateTimeId, setEditingDateTimeId] = useState<string | null>(null);
+  const [editDateTimeValue, setEditDateTimeValue] = useState<string>('');
+  const [savingDateTime, setSavingDateTime] = useState<boolean>(false);
 
   // Modal de Validação em Lote (Batch)
   const [batchModalOpen, setBatchModalOpen] = useState(false);
@@ -216,11 +222,47 @@ export default function ValidarTreinamentosPanel({
     setSelectedIds(new Set());
   };
 
+  // Funções de Edição de Data e Hora no Card
+  const startEditingDateTime = (t: TrainingSession) => {
+    setEditingDateTimeId(t.id);
+    setEditDateTimeValue(getLocalSaoPauloDateTime(t.dateTime));
+  };
+
+  const handleSaveDateTime = async (id: string) => {
+    if (!editDateTimeValue) return;
+    setSavingDateTime(true);
+    try {
+      const res = await fetch(`/api/trainings/${id}/datetime`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentUser?.id ? { 'x-user-id': currentUser.id } : {})
+        },
+        body: JSON.stringify({ dateTime: editDateTimeValue })
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Erro ao atualizar data e hora.');
+      }
+      setTrainings(prev => prev.map(t => t.id === id ? { ...t, dateTime: editDateTimeValue } : t));
+      setSuccessMessage('Data e hora do treinamento atualizadas com sucesso!');
+      setTimeout(() => setSuccessMessage(''), 4000);
+      setEditingDateTimeId(null);
+      if (onRefreshData) onRefreshData();
+    } catch (err: any) {
+      console.error('Error updating training datetime:', err);
+      setError(err.message || 'Falha ao salvar data e hora.');
+    } finally {
+      setSavingDateTime(false);
+    }
+  };
+
   // Abrir modal de validação individual
   const openActionModal = (training: TrainingSession, type: 'aprovado' | 'reprovado') => {
     setActionModalTarget(training);
     setActionType(type);
     setValidationNotes(training.validationNotes || '');
+    setActionDateTime(getLocalSaoPauloDateTime(training.dateTime));
     setActionError('');
   };
 
@@ -255,7 +297,8 @@ export default function ValidarTreinamentosPanel({
         },
         body: JSON.stringify({
           status: actionType,
-          validationNotes: validationNotes.trim() || undefined
+          validationNotes: validationNotes.trim() || undefined,
+          dateTime: actionDateTime || undefined
         })
       });
 
@@ -350,7 +393,7 @@ export default function ValidarTreinamentosPanel({
   };
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="space-y-6 pb-36">
       {/* Header */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -703,8 +746,51 @@ export default function ValidarTreinamentosPanel({
                       {/* Grade de Detalhes do Treino */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-white/70 p-3 rounded-xl border border-slate-100">
                         <div>
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Data e Hora</span>
-                          <span className="font-semibold text-slate-800">{formattedDate}</span>
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Data e Hora</span>
+                            {editingDateTimeId !== t.id && (
+                              <button
+                                type="button"
+                                onClick={() => startEditingDateTime(t)}
+                                className="text-[10.5px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5 hover:underline cursor-pointer"
+                                title="Editar data e hora deste treinamento"
+                              >
+                                <Pencil className="w-2.5 h-2.5" /> Editar
+                              </button>
+                            )}
+                          </div>
+
+                          {editingDateTimeId === t.id ? (
+                            <div className="mt-1 flex flex-col gap-1.5 animate-in fade-in">
+                              <input
+                                type="datetime-local"
+                                value={editDateTimeValue}
+                                onChange={(e) => setEditDateTimeValue(e.target.value)}
+                                className="text-xs bg-white border border-blue-400 rounded-lg px-2 py-1 font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-xs"
+                              />
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveDateTime(t.id)}
+                                  disabled={savingDateTime}
+                                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
+                                >
+                                  {savingDateTime ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                  Salvar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingDateTimeId(null)}
+                                  disabled={savingDateTime}
+                                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold transition cursor-pointer"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="font-semibold text-slate-800 block mt-0.5">{formattedDate}</span>
+                          )}
                         </div>
 
                         <div>
@@ -793,7 +879,7 @@ export default function ValidarTreinamentosPanel({
 
       {/* Floating Action Bar quando houver itens selecionados */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 backdrop-blur-md text-white border border-slate-700 px-5 py-3 rounded-2xl shadow-2xl flex flex-wrap items-center gap-4 animate-in slide-in-from-bottom-5">
+        <div className="fixed bottom-20 md:bottom-22 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 backdrop-blur-md text-white border border-slate-700 px-5 py-3 rounded-2xl shadow-2xl flex flex-wrap items-center gap-4 animate-in slide-in-from-bottom-5">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
             <span className="text-xs font-bold">
@@ -865,20 +951,36 @@ export default function ValidarTreinamentosPanel({
                 </div>
               )}
 
-              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/70 text-xs space-y-1">
-                <div className="flex justify-between text-slate-600">
-                  <span>Data do Treinamento:</span>
-                  <strong className="text-slate-900">{formatDisplayDateTime(actionModalTarget.dateTime)}</strong>
+              <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                    <span>Data e Hora do Treinamento:</span>
+                    <span className="text-[10.5px] text-blue-600 font-semibold flex items-center gap-1">
+                      <Pencil className="w-3 h-3" /> Ajustável pelo gestor
+                    </span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={actionDateTime}
+                    onChange={(e) => setActionDateTime(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-xs"
+                  />
+                  <p className="text-[10px] text-slate-400">
+                    Você pode corrigir a data/hora para refletir o horário real de realização no estande.
+                  </p>
                 </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Arma & Calibre:</span>
-                  <strong className="text-slate-900">
-                    {actionModalTarget.weaponName || 'Arma'} {actionModalTarget.caliber ? `(${actionModalTarget.caliber})` : ''}
-                  </strong>
-                </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Disparos:</span>
-                  <strong className="text-blue-900">{actionModalTarget.shotsCount ?? 0} tiros</strong>
+
+                <div className="pt-2 border-t border-slate-200/60 text-xs space-y-1">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Arma & Calibre:</span>
+                    <strong className="text-slate-900">
+                      {actionModalTarget.weaponName || 'Arma'} {actionModalTarget.caliber ? `(${actionModalTarget.caliber})` : ''}
+                    </strong>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Disparos:</span>
+                    <strong className="text-blue-900">{actionModalTarget.shotsCount ?? 0} tiros</strong>
+                  </div>
                 </div>
               </div>
 

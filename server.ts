@@ -8329,11 +8329,90 @@ app.patch('/api/trainings/validate-batch', requireAdmin, async (req, res) => {
   }
 });
 
+// Endpoint para o gestor ajustar data e hora de um treinamento
+app.patch('/api/trainings/:id/datetime', requireAdmin, async (req, res) => {
+  const currentUser = (req as any).user as User;
+  const { id } = req.params;
+  const { dateTime } = req.body;
+
+  if (!dateTime) {
+    return res.status(400).json({ error: 'Data e hora são obrigatórias.' });
+  }
+
+  // Normalizar para horário oficial de São Paulo
+  let normalizedDateTime = String(dateTime).trim();
+  const dParsed = new Date(normalizedDateTime);
+  if (!isNaN(dParsed.getTime()) && (normalizedDateTime.includes('Z') || /[+-]\d{2}/.test(normalizedDateTime))) {
+    const formatter = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    const parts: Record<string, string> = {};
+    formatter.formatToParts(dParsed).forEach(p => { parts[p.type] = p.value; });
+    normalizedDateTime = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+  }
+
+  try {
+    const trRes = await pool.query(
+      `SELECT t.*, u.club_id as athlete_club_id
+       FROM trainings t
+       LEFT JOIN users u ON u.id = t.user_id
+       WHERE t.id = $1`,
+      [id]
+    );
+
+    if (trRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Treinamento não encontrado.' });
+    }
+
+    const training = trRes.rows[0];
+
+    // Regra estrita: Clube só pode ajustar treinamentos de atletas vinculados ao seu estande
+    if (currentUser.role === 'club_admin') {
+      const allowedClubId = currentUser.clubId;
+      if (!allowedClubId || (training.club_id !== allowedClubId && training.athlete_club_id !== allowedClubId)) {
+        return res.status(403).json({ error: 'Você só pode alterar treinamentos de atletas vinculados ao seu clube.' });
+      }
+    }
+
+    await pool.query(
+      `UPDATE trainings
+       SET date_time = $1
+       WHERE id = $2`,
+      [normalizedDateTime, id]
+    );
+
+    const fullRes = await pool.query(
+      `SELECT t.*, u.full_name as athlete_name, u.cpf as athlete_cpf, u.cr_number as athlete_cr,
+              val_u.full_name as validator_name,
+              w.model as w_model, w.weapon_number as w_weapon_number, w.serial_number as w_serial_number,
+              w.sigma_number as w_sigma_number, w.caliber as w_caliber, w.manufacturer as w_manufacturer,
+              w.class as w_weapon_class, w.permission_status as w_permission_status, w.owner_id as w_owner_id
+       FROM trainings t
+       LEFT JOIN users u ON u.id = t.user_id
+       LEFT JOIN users val_u ON val_u.id = t.validated_by_user_id
+       LEFT JOIN weapons w ON w.id = t.weapon_id
+       WHERE t.id = $1`,
+      [id]
+    );
+
+    res.json({ success: true, training: mapTraining(fullRes.rows[0]), message: 'Data e hora atualizadas com sucesso!' });
+  } catch (err) {
+    console.error('Update training datetime error:', err);
+    res.status(500).json({ error: 'Erro ao atualizar data e hora do treinamento.' });
+  }
+});
+
 // Endpoint para validar (aprovar ou reprovar) um treinamento pelo clube
 app.patch('/api/trainings/:id/validate', requireAdmin, async (req, res) => {
   const currentUser = (req as any).user as User;
   const { id } = req.params;
-  const { status, validationNotes } = req.body;
+  const { status, validationNotes, dateTime } = req.body;
 
   if (!status || !['aprovado', 'reprovado', 'pendente'].includes(status)) {
     return res.status(400).json({ error: 'Status de validação inválido. Escolha entre aprovado ou reprovado.' });
@@ -8362,15 +8441,39 @@ app.patch('/api/trainings/:id/validate', requireAdmin, async (req, res) => {
       }
     }
 
-    await pool.query(
-      `UPDATE trainings
-       SET status = $1,
-           validated_at = NOW(),
-           validated_by_user_id = $2,
-           validation_notes = $3
-       WHERE id = $4`,
-      [status, currentUser.id, validationNotes || null, id]
-    );
+    let updateQuery = `
+      UPDATE trainings
+      SET status = $1,
+          validated_at = NOW(),
+          validated_by_user_id = $2,
+          validation_notes = $3
+    `;
+    const params: any[] = [status, currentUser.id, validationNotes || null];
+
+    if (dateTime) {
+      let normalizedDateTime = String(dateTime).trim();
+      const dParsed = new Date(normalizedDateTime);
+      if (!isNaN(dParsed.getTime()) && (normalizedDateTime.includes('Z') || /[+-]\d{2}/.test(normalizedDateTime))) {
+        const formatter = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+        const parts: Record<string, string> = {};
+        formatter.formatToParts(dParsed).forEach(p => { parts[p.type] = p.value; });
+        normalizedDateTime = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+      }
+      params.push(normalizedDateTime);
+      updateQuery += `, date_time = $${params.length}`;
+    }
+
+    params.push(id);
+    updateQuery += ` WHERE id = $${params.length}`;
+    await pool.query(updateQuery, params);
 
     const fullRes = await pool.query(
       `SELECT t.*, u.full_name as athlete_name, u.cpf as athlete_cpf, u.cr_number as athlete_cr,
