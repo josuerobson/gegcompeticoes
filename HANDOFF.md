@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(validation): elevar barra flutuante acima do menu inferior e permitir gestor editar data e hora do treino` |
-| Data/hora | 2026-11-17T15:05:00-03:00 |
+| Mensagem | `fix(checkin): atualizar textos dos botoes para Check-In - Entrar Clube e Check-Out - Sair Clube` |
+| Data/hora | 2026-11-17T17:52:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,12 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Atualização dos Rótulos dos Botões de Presença no Perfil do Atleta (`MemberProfile.tsx`)**:
+  - **Solicitação do Usuário**: "Nos botões de Check-in e check-out clube altere os textos dos botões para: Check-In - Entrar Clube / Check-Out - Sair Clube"
+  - **O que foi implementado**: No card de ações do perfil do atleta em `MemberProfile.tsx`, atualizados os rótulos de `Check-in Clube` para `Check-In - Entrar Clube` e de `Check-out Clube` para `Check-Out - Sair Clube`, mantendo o cronômetro em tempo real de permanência no clube quando ativo.
+  - **O que NÃO fazer no futuro**: Não alterar o nome desses botões sem alinhamento prévio, pois definem a semântica de entrada e saída no estande para habitualidade.
+
 
 - **Elevação da Barra Flutuante de Ações em Lote e Edição de Data/Hora de Treinamentos pelo Gestor (`server.ts`, `ValidarTreinamentosPanel.tsx`, `ValidarCheckinsPanel.tsx`)**:
   - **Solicitação do Usuário**:

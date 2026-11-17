@@ -2446,7 +2446,7 @@ export default function MemberProfile({
                       >
                         <span className="flex items-center gap-1.5 truncate">
                           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block shrink-0" />
-                          <span>Check-out Clube</span>
+                          <span>Check-Out - Sair Clube</span>
                         </span>
                         <span className="font-mono text-[11px] bg-black/25 px-2 py-0.5 rounded-lg shrink-0">
                           ⏱️ {formatStayTime(staySeconds)}
@@ -2458,7 +2458,7 @@ export default function MemberProfile({
                         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer"
                       >
                         <MapPin className="w-3.5 h-3.5" />
-                        Check-in Clube
+                        Check-In - Entrar Clube
                       </button>
                     )
                   )}
