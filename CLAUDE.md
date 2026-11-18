@@ -35,9 +35,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Legacy system parity.** Several `Painel Diretor` cadastro screens were rebuilt to match field-for-field specs from a legacy PHP system the user is migrating off of (raw HTML forms with generic field names like `info1`, `id4` were used as the source of truth — those internal names are not meaningful, only the field's label/position/options matter). Where this repo's data model needed to diverge from a first guess based on the legacy system, the actual legacy HTML always won. See "Painel Diretor module status" below for what's been aligned this way — don't assume an unconverted screen's fields are correct without checking for a legacy reference first.
 
-## Painel Diretor module status (as of 2026-11-17)
+## Painel Diretor module status (as of 2026-11-18)
 
 Real (backed by actual DB tables/endpoints, tested end-to-end):
+- **Histórico de Treinamentos com Filtro por Ano e Data/Hora de Saída (`AdminPanel.tsx`, `MemberProfile.tsx`, `server.ts`, `src/db.ts`)**:
+  - Filtro por ano padrão no ano corrente (2026), com seletor de 2021 até o ano atual + opção "Todos os Anos", reduzindo a sobrecarga de renderização.
+  - Campos de entrada e hora de saída (`departure_time`) com cálculo automático de permanência (`duration_minutes`).
+  - Treinamentos vinculados a check-in sincronizam automaticamente horários de entrada e saída do check-in sem digitação manual.
+  - Competições (`registrations`): suporte a `hora_saida` e `tempo_permanencia` ao registrar resultados.
+- **Relatórios de Habitualidade com Chegada, Saída e Permanência em PDF e Excel (`ClubReportsViewer.tsx`, `MemberProfile.tsx`, `src/utils/habitualitiesExport.ts`)**:
+  - Tabelas de declaração de habitualidade (individual e clube global) atualizadas para 8 colunas oficiais: `Ordem | Data | Chegada | Saída | Permanência | Sigma | Qtd Munições | Tipo de Evento`.
+  - Exportação para Excel (.xls) atualizada com as novas colunas de chegada, saída e permanência.
+- **Reprovação Direta de Check-in sem Justificativa (`ValidarCheckinsPanel.tsx`, `server.ts`)**:
+  - Reprovação unitária ou em lote exclui definitivamente o registro de check-in (`DELETE FROM club_checkins`) dispensando campo de texto para justificativa.
+- **Botão de Vincular Competição no Checkout Estilizado (`CheckoutActivityModal.tsx`)**:
+  - Botão "Vincular Competição / Etapas Disputadas" destacado em tom amarelo/âmbar (`bg-amber-400 border-amber-500 text-amber-950 font-bold`).
 - **Fuso Horário Estrito de Brasília / São Paulo (`America/Sao_Paulo` - UTC-3)**:
   - **Motivo Regulatório Crítico**: Os estandes de tiro esportivo encerram atividades obrigatoriamente às **22:00** por regulamentação do Exército Brasileiro (SFPC) e leis municipais/federais. O fuso horário de São Paulo é padronizado em todas as camadas para impedir que o fuso padrão UTC (GMT+0) grave horários de treinos ou competições noturnos (ex: 19:12) com +3 horas (22:12), o que caracterizaria infração administrativa.
   - **Camadas Sincronizadas**:

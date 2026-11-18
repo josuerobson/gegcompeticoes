@@ -593,28 +593,28 @@ export default function CheckoutActivityModal({
                 <button
                   type="button"
                   onClick={() => setStep('competition')}
-                  className={`w-full p-3 rounded-xl font-bold text-xs transition flex items-center justify-between cursor-pointer border ${
+                  className={`w-full p-3.5 rounded-xl font-bold text-xs transition flex items-center justify-between cursor-pointer border shadow-md ${
                     linkedRegistrations.length > 0
-                      ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
-                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                      ? 'bg-amber-400 hover:bg-amber-500 text-amber-950 border-amber-500 shadow-amber-400/25 ring-2 ring-amber-300'
+                      : 'bg-amber-400 hover:bg-amber-500 text-amber-950 border-amber-400 shadow-amber-400/20'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/30 text-amber-950 flex items-center justify-center font-bold">
                       <Trophy className="w-4 h-4" />
                     </div>
                     <div className="text-left">
-                      <div className="font-bold leading-tight">
+                      <div className="font-bold leading-tight text-amber-950">
                         {linkedRegistrations.length > 0
                           ? `Competições Vinculadas (${linkedRegistrations.length}) - Gerenciar`
                           : 'Vincular Competição / Etapas Disputadas'}
                       </div>
-                      <div className="text-[10px] text-slate-500 font-normal">
+                      <div className="text-[10px] text-amber-900/80 font-medium">
                         Marcar por checkbox inscrições realizadas nesta sessão
                       </div>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-4 h-4 text-amber-950" />
                 </button>
               </div>
 
@@ -681,16 +681,15 @@ export default function CheckoutActivityModal({
                 </div>
               )}
 
-              {/* Data e Hora */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">Data e Hora *</label>
-                <input
-                  type="datetime-local"
-                  value={trainingForm.dateTime}
-                  onChange={(e) => setTrainingForm({ ...trainingForm, dateTime: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:bg-white focus:border-blue-500 outline-none transition font-mono"
-                  required
-                />
+              {/* Data e Hora vinculadas automaticamente ao check-in */}
+              <div className="bg-blue-50/80 border border-blue-200/90 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 text-blue-950 font-bold">
+                  <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span>Horário de Entrada e Saída:</span>
+                </div>
+                <span className="text-[10.5px] font-bold text-blue-800 bg-white px-2.5 py-1 rounded-lg border border-blue-200 shadow-2xs">
+                  ⚡ Vinculado automaticamente ao Check-in
+                </span>
               </div>
 
               {/* Origem da Arma */}

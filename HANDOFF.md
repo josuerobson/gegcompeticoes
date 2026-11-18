@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(checkin): atualizar textos dos botoes para Check-In - Entrar Clube e Check-Out - Sair Clube` |
-| Data/hora | 2026-11-17T17:52:00-03:00 |
+| Mensagem | `feat: filtros de ano em treinos, botao amarelo checkout, hora saida e permanencia em habitualidade e reprovacao direta de checkin` |
+| Data/hora | 2026-11-18T10:45:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,34 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Filtro por Ano em Treinamentos, Botão Amarelo de Competições no Checkout, Hora de Saída e Permanência em Habitualidades e Exclusão Direta de Check-in Reprovado (`server.ts`, `src/db.ts`, `src/types.ts`, `AdminPanel.tsx`, `MemberProfile.tsx`, `CheckoutActivityModal.tsx`, `ValidarCheckinsPanel.tsx`, `ClubReportsViewer.tsx`, `src/utils/habitualitiesExport.ts`)**:
+  - **Solicitação do Usuário**:
+    1) "Em Historico de treinmentos, carrege no inicio somente o ano atual, e adicione filtros para os demais anos disponivies, no caso inicia em 2021"
+    2) "No botão vincular Competição na tela de checkout, coloque a cor de amarlo que marquei na imagem como cor do botão."
+    3) "Quando o atleta for fazer treinamento sem vincular a um check-in, adicionar mais um campo para ele preencher que é hora de saida. Para o lançamento de treinametnos já com check-in vinculados não precisa preencher nenhum campo de data e hora, o sistema deve vincular o treinamento a data e hora de entrada e saida do check-in check-out"
+    4) "Em competições, quando for cadastrar o resultado, e a inscrição não estiver vinculada a nenhum check-in adcionar a informação de hora de saida, funcionara da mesma forma que treinamento, se já tiver vincujlado, já pucha data e hora do check-in"
+    5) "Nos relatórios de habitualidade tanto nos treinamentos quanto nas competições exibir data e hora de chechada e hora da saida e tempo de permanência no clube."
+    6) "Quando um check-in for reprovado, apenas exlui defomotovp do sistema, não precisa preencher justificativa."
+  - **O que foi implementado**:
+    1. **Filtro por Ano em Treinamentos**: No backend (`GET /api/trainings?year=YYYY`) e no frontend (`AdminPanel.tsx` e `MemberProfile.tsx`), a listagem passa a carregar por padrão os registros do ano corrente (2026), com abas/seletor de filtro de 2021 até o ano atual + opção "Todos os Anos". Corrigida formatação para prevenir "Invalid Date".
+    2. **Estilo do Botão de Competição no Checkout**: Em `CheckoutActivityModal.tsx`, o botão "Vincular Competição / Etapas Disputadas" foi atualizado para amarelo/âmbar (`bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold border border-amber-500 shadow-md`) exatamente como indicado na marcação da imagem.
+    3. **Hora de Saída e Duração em Treinos**:
+       - Colunas aditivas no banco: `departure_time TEXT` e `duration_minutes INT` na tabela `trainings`.
+       - Lançamento sem check-in: exibe campo "Hora de Saída" ao lado da chegada, calculando a permanência.
+       - Lançamento com check-in vinculado: omite a digitação manual de data/hora e vincula automaticamente aos horários reais de `checkin_at` e `checkout_at`.
+       - Ao fechar o check-out (`POST /api/checkins/:id/checkout`), atualiza automaticamente os treinos vinculados com horário de saída e permanência em minutos.
+    4. **Hora de Saída e Permanência em Competições**:
+       - Colunas aditivas no banco: `hora_saida TEXT` e `tempo_permanencia TEXT` na tabela `registrations`.
+       - No modal de lançamento de notas de etapas (`CadastrarResultadosPanel`): campo "Hora de Saída" disponível quando não houver check-in vinculado; caso vinculado, sincroniza automaticamente com o check-in.
+    5. **Relatórios de Habitualidade (PDF e Excel)**:
+       - Em `ClubReportsViewer.tsx`, `MemberProfile.tsx` e `src/utils/habitualitiesExport.ts`: adicionadas as colunas `Hora Chegada`, `Hora Saída` e `Permanência`.
+       - A tabela do PDF oficial passa a ter 8 colunas (`Ordem | Data | Chegada | Saída | Permanência | Sigma | Qtd Munições | Tipo de Evento`), com as demais linhas ajustadas para `colspan="8"` e `colspan="4"`.
+       - Exportação para Excel (.xls) atualizada com as novas colunas tanto no relatório consolidado do clube quanto na declaração individual do atleta.
+    6. **Reprovação Direta de Check-in sem Justificativa**:
+       - Nos endpoints `PATCH /api/checkins/:id/validate` e `PATCH /api/checkins/validate-batch`: quando `status === 'reprovado'`, os registros são deletados definitivamente do banco (`DELETE FROM club_checkins`).
+       - No frontend (`ValidarCheckinsPanel.tsx`), o clique em "Reprovar" e a reprovação em lote realizam a exclusão direta com confirmação sem exigir justificativa em texto.
+  - **O que NÃO fazer no futuro**: Não reintroduzir formulário obrigatório de justificativa para reprovação de check-in, nem remover os campos de hora de saída e permanência das habitualidades.
 
 - **Atualização dos Rótulos dos Botões de Presença no Perfil do Atleta (`MemberProfile.tsx`)**:
   - **Solicitação do Usuário**: "Nos botões de Check-in e check-out clube altere os textos dos botões para: Check-In - Entrar Clube / Check-Out - Sair Clube"

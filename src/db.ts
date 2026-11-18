@@ -464,7 +464,9 @@ export async function initDB() {
         ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pendente',
         ADD COLUMN IF NOT EXISTS validated_at TIMESTAMPTZ,
         ADD COLUMN IF NOT EXISTS validated_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-        ADD COLUMN IF NOT EXISTS validation_notes TEXT;
+        ADD COLUMN IF NOT EXISTS validation_notes TEXT,
+        ADD COLUMN IF NOT EXISTS departure_time TEXT,
+        ADD COLUMN IF NOT EXISTS duration_minutes INT;
       CREATE INDEX IF NOT EXISTS idx_trainings_status ON trainings(status);
 
       -- Regra oficial: Somente treinamentos com data superior a 01/10/2026 necessitam de validação.
@@ -860,6 +862,8 @@ export async function initDB() {
         -- Execution metadata
         ADD COLUMN IF NOT EXISTS data_execucao TEXT,
         ADD COLUMN IF NOT EXISTS hora_execucao TEXT,
+        ADD COLUMN IF NOT EXISTS hora_saida TEXT,
+        ADD COLUMN IF NOT EXISTS tempo_permanencia TEXT,
         ADD COLUMN IF NOT EXISTS total_minutos TEXT,
         ADD COLUMN IF NOT EXISTS total_milesegundos INTEGER DEFAULT 0,
         -- Full series detail JSON (all series, for re-editing results later)

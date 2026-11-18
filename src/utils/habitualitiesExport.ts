@@ -5,6 +5,8 @@ export interface HabitualityItemExport {
   rawDate: Date;
   dateFormatted: string;
   timeFormatted: string;
+  exitTimeFormatted?: string;
+  durationFormatted?: string;
   eventType: 'Treinamento' | 'Competição';
   eventName: string;
   modality: string;
@@ -33,6 +35,62 @@ export interface ClubExportInfo {
   crNumber?: string;
   cnpj?: string;
   cityState?: string;
+}
+
+export function formatExitAndDuration(
+  entryDate: Date,
+  rawExit?: string,
+  rawDurationMinutes?: number,
+  rawDurationText?: string
+): { exitTimeFormatted: string; durationFormatted: string } {
+  let exitTimeFormatted = '-';
+  let durationFormatted = '-';
+
+  if (rawExit && rawExit.trim()) {
+    const trimmed = rawExit.trim();
+    if (trimmed.includes('T')) {
+      const d = new Date(trimmed);
+      if (!isNaN(d.getTime())) {
+        exitTimeFormatted = d.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+      }
+    } else if (trimmed.includes(':')) {
+      const parts = trimmed.split(':');
+      if (parts.length >= 2) {
+        exitTimeFormatted = `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+      }
+    } else {
+      exitTimeFormatted = trimmed;
+    }
+  }
+
+  if (rawDurationText && rawDurationText.trim()) {
+    durationFormatted = rawDurationText.trim();
+  } else if (typeof rawDurationMinutes === 'number' && rawDurationMinutes > 0) {
+    const h = Math.floor(rawDurationMinutes / 60);
+    const m = rawDurationMinutes % 60;
+    durationFormatted = h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m} min`;
+  } else if (exitTimeFormatted !== '-' && entryDate && !isNaN(entryDate.getTime())) {
+    const entryH = entryDate.getHours();
+    const entryM = entryDate.getMinutes();
+    const [exitHStr, exitMStr] = exitTimeFormatted.split(':');
+    const exitH = parseInt(exitHStr, 10);
+    const exitM = parseInt(exitMStr, 10);
+    if (!isNaN(exitH) && !isNaN(exitM)) {
+      let diffMin = (exitH * 60 + exitM) - (entryH * 60 + entryM);
+      if (diffMin > 0) {
+        const h = Math.floor(diffMin / 60);
+        const m = diffMin % 60;
+        durationFormatted = h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m} min`;
+      }
+    }
+  }
+
+  if (exitTimeFormatted === '-' && typeof rawDurationMinutes === 'number' && rawDurationMinutes > 0 && entryDate && !isNaN(entryDate.getTime())) {
+    const exitD = new Date(entryDate.getTime() + rawDurationMinutes * 60000);
+    exitTimeFormatted = exitD.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+  }
+
+  return { exitTimeFormatted, durationFormatted };
 }
 
 const slug = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
@@ -186,7 +244,9 @@ export function exportClubHabitualitiesCompleteToExcel(params: {
   const headers = [
     'Ordem',
     'Data',
-    'Hora',
+    'Hora Chegada',
+    'Hora Saída',
+    'Permanência',
     'Atleta',
     'CPF',
     'CR',
@@ -218,6 +278,8 @@ export function exportClubHabitualitiesCompleteToExcel(params: {
         <td style="padding:5px 6px;border:1px solid #cbd5e1;text-align:center;background-color:${bg};font-size:10px;font-weight:bold;">${idx + 1}</td>
         <td style="padding:5px 6px;border:1px solid #cbd5e1;text-align:center;background-color:${bg};font-size:10px;white-space:nowrap;">${act.dateFormatted}</td>
         <td style="padding:5px 6px;border:1px solid #cbd5e1;text-align:center;background-color:${bg};font-size:10px;">${act.timeFormatted}</td>
+        <td style="padding:5px 6px;border:1px solid #cbd5e1;text-align:center;background-color:${bg};font-size:10px;">${act.exitTimeFormatted || '—'}</td>
+        <td style="padding:5px 6px;border:1px solid #cbd5e1;text-align:center;background-color:${bg};font-size:10px;">${act.durationFormatted || '—'}</td>
         <td style="padding:5px 8px;border:1px solid #cbd5e1;text-align:left;background-color:${bg};font-size:10.5px;font-weight:bold;color:#0f172a;white-space:nowrap;">${a.fullName || '—'}</td>
         <td style="padding:5px 6px;border:1px solid #cbd5e1;text-align:center;background-color:${bg};font-size:10px;font-family:monospace;white-space:nowrap;">${a.cpf || '—'}</td>
         <td style="padding:5px 6px;border:1px solid #cbd5e1;text-align:center;background-color:${bg};font-size:10px;font-family:monospace;white-space:nowrap;">${a.crNumber || '—'}</td>
@@ -277,7 +339,9 @@ export function exportIndividualHabitualityToExcel(params: {
   const headers = [
     'Ordem',
     'Data',
-    'Hora',
+    'Hora Chegada',
+    'Hora Saída',
+    'Permanência',
     'Tipo de Evento',
     'Nome do Evento / Prova',
     'Modalidade',
@@ -311,6 +375,8 @@ export function exportIndividualHabitualityToExcel(params: {
         <td style="padding:5px 6px;border:1px solid #cbd5e1;text-align:center;background-color:${bg};font-size:10px;font-weight:bold;">${idx + 1}</td>
         <td style="padding:5px 6px;border:1px solid #cbd5e1;text-align:center;background-color:${bg};font-size:10px;white-space:nowrap;">${act.dateFormatted}</td>
         <td style="padding:5px 6px;border:1px solid #cbd5e1;text-align:center;background-color:${bg};font-size:10px;">${act.timeFormatted}</td>
+        <td style="padding:5px 6px;border:1px solid #cbd5e1;text-align:center;background-color:${bg};font-size:10px;">${act.exitTimeFormatted || '—'}</td>
+        <td style="padding:5px 6px;border:1px solid #cbd5e1;text-align:center;background-color:${bg};font-size:10px;">${act.durationFormatted || '—'}</td>
         <td style="padding:5px 6px;border:1px solid #cbd5e1;text-align:center;background-color:${bg};font-size:10px;font-weight:600;color:#1e40af;">${act.eventType}</td>
         <td style="padding:5px 8px;border:1px solid #cbd5e1;text-align:left;background-color:${bg};font-size:10px;color:#334155;">${act.eventName}</td>
         <td style="padding:5px 8px;border:1px solid #cbd5e1;text-align:left;background-color:${bg};font-size:10px;color:#334155;">${act.modality || '—'}</td>

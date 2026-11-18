@@ -188,10 +188,51 @@ export default function ValidarCheckinsPanel({
 
   // Abrir modal de validação individual
   const openActionModal = (chk: ClubCheckin, type: 'aprovado' | 'reprovado') => {
+    if (type === 'reprovado') {
+      handleDirectRejectCheckin(chk);
+      return;
+    }
     setActionModalTarget(chk);
     setActionType(type);
     setValidationNotes(chk.validationNotes || '');
     setActionError('');
+  };
+
+  // Reprovar e excluir individualmente de forma definitiva
+  const handleDirectRejectCheckin = async (chk: ClubCheckin) => {
+    if (!window.confirm(`Deseja realmente reprovar e excluir definitivamente o check-in de ${chk.athleteName || 'Atleta'}? Esta ação não pode ser desfeita.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/checkins/${chk.id}/validate`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentUser?.id ? { 'x-user-id': currentUser.id } : {})
+        },
+        body: JSON.stringify({ status: 'reprovado' })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Erro ao reprovar check-in.');
+      }
+
+      setCheckins(prev => prev.filter(c => c.id !== chk.id));
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        next.delete(chk.id);
+        return next;
+      });
+
+      setSuccessMessage(`Check-in de ${chk.athleteName || 'Atleta'} reprovado e excluído definitivamente com sucesso!`);
+      setTimeout(() => setSuccessMessage(''), 4000);
+
+      if (onRefreshData) onRefreshData();
+    } catch (err: any) {
+      alert(err.message || 'Falha ao reprovar check-in.');
+    }
   };
 
   // Abrir modal de validação em lote
@@ -261,11 +302,6 @@ export default function ValidarCheckinsPanel({
     e.preventDefault();
     if (selectedIds.size === 0) return;
 
-    if (batchActionType === 'reprovado' && !batchNotes.trim()) {
-      setBatchError('Por favor, informe a justificativa da reprovação para os check-ins selecionados.');
-      return;
-    }
-
     setSubmittingBatch(true);
     setBatchError('');
 
@@ -292,20 +328,24 @@ export default function ValidarCheckinsPanel({
       const data = await res.json();
       const affectedIds = new Set<string>(data.updatedIds || idsArray);
 
-      setCheckins(prev => prev.map(c => {
-        if (affectedIds.has(c.id)) {
-          return {
-            ...c,
-            status: batchActionType,
-            validationNotes: batchNotes.trim() || c.validationNotes,
-            validatedAt: new Date().toISOString()
-          };
-        }
-        return c;
-      }));
+      if (batchActionType === 'reprovado' || data.deleted) {
+        setCheckins(prev => prev.filter(c => !affectedIds.has(c.id)));
+      } else {
+        setCheckins(prev => prev.map(c => {
+          if (affectedIds.has(c.id)) {
+            return {
+              ...c,
+              status: batchActionType,
+              validationNotes: batchNotes.trim() || c.validationNotes,
+              validatedAt: new Date().toISOString()
+            };
+          }
+          return c;
+        }));
+      }
 
       setSuccessMessage(
-        data.message || `${idsArray.length} check-in(s) ${batchActionType === 'aprovado' ? 'aprovado(s)' : 'reprovado(s)'} em lote!`
+        data.message || `${idsArray.length} check-in(s) ${batchActionType === 'aprovado' ? 'aprovado(s)' : 'reprovado(s) e excluído(s)'} com sucesso!`
       );
       setTimeout(() => setSuccessMessage(''), 4500);
 
@@ -1045,33 +1085,41 @@ export default function ValidarCheckinsPanel({
                 </div>
               )}
 
-              <div className="p-3.5 bg-blue-50/70 border border-blue-200/70 rounded-xl text-xs text-blue-900">
-                <p>
-                  Você está prestes a <strong>{batchActionType === 'aprovado' ? 'APROVAR' : 'REPROVAR'}</strong> a presença de {selectedIds.size} check-in(s) de uma só vez.
-                </p>
-              </div>
+              {batchActionType === 'aprovado' ? (
+                <>
+                  <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/70 rounded-xl text-xs text-emerald-900">
+                    <p>
+                      Você está prestes a <strong>APROVAR</strong> a presença de {selectedIds.size} check-in(s) de uma só vez.
+                    </p>
+                  </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                  <span>
-                    {batchActionType === 'aprovado' ? 'Observações em Lote (Opcional):' : 'Justificativa da Reprovação (Obrigatória):'}
-                  </span>
-                  {batchActionType === 'reprovado' && (
-                    <span className="text-[10px] text-rose-600 font-bold uppercase">* Obrigatório</span>
-                  )}
-                </label>
-                <textarea
-                  rows={3}
-                  value={batchNotes}
-                  onChange={(e) => setBatchNotes(e.target.value)}
-                  placeholder={
-                    batchActionType === 'aprovado'
-                      ? 'Ex: Presenças validadas e homologadas pelo gestor do estande em lote.'
-                      : 'Ex: Descumprimento das normas de permanência no estande.'
-                  }
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">
+                      Observações em Lote (Opcional):
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={batchNotes}
+                      onChange={(e) => setBatchNotes(e.target.value)}
+                      placeholder="Ex: Presenças validadas e homologadas pelo gestor do estande em lote."
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-rose-800">
+                    <AlertTriangle className="w-4 h-4 text-rose-600" />
+                    Atenção: Exclusão Definitiva
+                  </div>
+                  <p>
+                    Você selecionou <strong>{selectedIds.size} check-in(s)</strong> para reprovar. Conforme a regra do sistema, ao reprovar, os registros serão <strong>excluídos definitivamente</strong> sem necessidade de justificativa.
+                  </p>
+                  <p className="font-semibold text-rose-700">
+                    Deseja prosseguir com a exclusão definitiva destes {selectedIds.size} check-in(s)?
+                  </p>
+                </div>
+              )}
 
               {/* Botões do Rodapé */}
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
@@ -1100,7 +1148,7 @@ export default function ValidarCheckinsPanel({
                     </>
                   ) : (
                     <>
-                      <X className="w-4 h-4" /> Confirmar Reprovação de {selectedIds.size}
+                      <Trash2 className="w-4 h-4" /> Confirmar Exclusão de {selectedIds.size}
                     </>
                   )}
                 </button>

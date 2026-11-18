@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Calendar, Users, Filter, Download, Loader2, CheckCircle, ShieldAlert, FileSpreadsheet } from 'lucide-react';
 import { downloadPdfFromHtml, downloadMultiSectionPdfFromHtml, sanitizePdfFilename } from '../utils/pdfDownloader';
-import { exportClubHabitualitiesSummaryToExcel, exportClubHabitualitiesCompleteToExcel, exportIndividualHabitualityToExcel } from '../utils/habitualitiesExport';
+import { exportClubHabitualitiesSummaryToExcel, exportClubHabitualitiesCompleteToExcel, exportIndividualHabitualityToExcel, formatExitAndDuration } from '../utils/habitualitiesExport';
 import { User, Club, TrainingSession, Registration, StageScore, Stage, Championship, Weapon, Modality } from '../types';
 
 interface ClubReportsViewerProps {
@@ -22,6 +22,8 @@ interface HabitualityItem {
   rawDate: Date;
   dateFormatted: string;
   timeFormatted: string;
+  exitTimeFormatted?: string;
+  durationFormatted?: string;
   eventType: 'Treinamento' | 'Competição';
   eventName: string;
   modality: string;
@@ -163,11 +165,19 @@ export default function ClubReportsViewer({
         ? t.weaponOwnerType === 'clube'
         : (w.ownerId === athlete.id ? false : (w.ownerId === athlete.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false)));
 
+      const { exitTimeFormatted, durationFormatted } = formatExitAndDuration(
+        rawDate,
+        t.departureTime,
+        t.durationMinutes
+      );
+
       items.push({
         id: `tr_${t.id}`,
         rawDate,
         dateFormatted: rawDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
         timeFormatted: t.dateTime ? rawDate.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '15:00',
+        exitTimeFormatted,
+        durationFormatted,
         eventType: 'Treinamento',
         eventName: 'TREINAMENTO NO ESTANDE',
         modality: t.modality || 'Treinamento Livre',
@@ -241,11 +251,20 @@ export default function ClubReportsViewer({
         ? reg.weaponSource === 'clube'
         : (w.ownerId === athlete.id ? false : (w.ownerId === athlete.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false)));
 
+      const { exitTimeFormatted, durationFormatted } = formatExitAndDuration(
+        rawDate,
+        reg?.horaSaida,
+        undefined,
+        reg?.tempoPermanencia
+      );
+
       items.push({
         id: `cmp_${s.id}`,
         rawDate,
         dateFormatted: rawDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
         timeFormatted: reg?.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '15:54',
+        exitTimeFormatted,
+        durationFormatted,
         eventType: 'Competição',
         eventName: champ?.title?.toUpperCase() || 'CAMPEONATO DE TIRO ESPORTIVO',
         modality: s.modality || (reg?.modalityId ? (modalities.find(m => m.id === reg.modalityId)?.name || 'Modalidade Oficial') : (stage?.title || 'Modalidade Oficial')),
@@ -303,11 +322,20 @@ export default function ClubReportsViewer({
         ? reg.weaponSource === 'clube'
         : (w.ownerId === athlete.id ? false : (w.ownerId === athlete.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false)));
 
+      const { exitTimeFormatted, durationFormatted } = formatExitAndDuration(
+        rawDate,
+        reg.horaSaida,
+        undefined,
+        reg.tempoPermanencia
+      );
+
       items.push({
         id: `reg_${reg.id}`,
         rawDate,
         dateFormatted: rawDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
         timeFormatted: reg.horaExecucao ? rawDate.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '15:54',
+        exitTimeFormatted,
+        durationFormatted,
         eventType: 'Competição',
         eventName: champ?.title?.toUpperCase() || 'CAMPEONATO DE TIRO ESPORTIVO',
         modality: reg.modalityId ? (modalities.find(m => m.id === reg.modalityId)?.name || 'Modalidade Oficial') : (stage?.title || 'Modalidade Oficial'),
@@ -428,41 +456,45 @@ export default function ClubReportsViewer({
           <table style="width: 100%; border-collapse: collapse; font-size: 9.5px; color: #0f172a;">
             <tbody>
               <tr style="border-bottom: 1px solid #0f172a; background-color: #f8fafc;">
-                <td colspan="6" style="padding: 4px 8px; font-weight: bold; text-transform: uppercase; font-size: 10px; text-align: left;">
+                <td colspan="8" style="padding: 4px 8px; font-weight: bold; text-transform: uppercase; font-size: 10px; text-align: left;">
                   Nome do evento: ${item.eventName}
                 </td>
               </tr>
               <tr style="border-bottom: 1px solid #0f172a;">
-                <td colspan="6" style="padding: 4px 8px; font-weight: 500; font-size: 9px; text-align: left; color: #334155;">
+                <td colspan="8" style="padding: 4px 8px; font-weight: 500; font-size: 9px; text-align: left; color: #334155;">
                   Arma utilizada: ${item.weaponClass} - ${item.model} - N° ${item.weaponNumber} - ${item.manufacturer} - Calibre: ${item.caliber} - ${item.permissionStatus}
                 </td>
               </tr>
-              <tr style="background-color: #f1f5f9; font-weight: bold; font-size: 8.5px; text-align: center; border-bottom: 1px solid #0f172a; text-transform: uppercase;">
-                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 45px;">Ordem</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 80px;">Data</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 60px;">Hora</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 100px;">Sigma</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 85px;">Qtd Munições</td>
-                <td style="padding: 4px;">Tipo de Evento</td>
+              <tr style="background-color: #f1f5f9; font-weight: bold; font-size: 8px; text-align: center; border-bottom: 1px solid #0f172a; text-transform: uppercase;">
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; width: 35px;">Ordem</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; width: 68px;">Data</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; width: 48px;">Chegada</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; width: 48px;">Saída</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; width: 64px;">Permanência</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; width: 85px;">Sigma</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; width: 65px;">Qtd Munições</td>
+                <td style="padding: 4px 2px;">Tipo de Evento</td>
               </tr>
-              <tr style="text-align: center; font-family: monospace; font-size: 9.5px; border-bottom: 1px solid #0f172a;">
-                <td style="border-right: 1px solid #0f172a; padding: 4px; font-weight: bold;">${String(idx + 1).padStart(2, '0')}</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px;">${item.dateFormatted}</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px;">${item.timeFormatted}</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px;">${item.sigma}</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px; font-weight: bold;">${item.shotsCount}</td>
-                <td style="padding: 4px; font-family: Arial, sans-serif; font-weight: 600; color: #1e293b;">${item.eventType}</td>
+              <tr style="text-align: center; font-family: monospace; font-size: 9px; border-bottom: 1px solid #0f172a;">
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; font-weight: bold;">${String(idx + 1).padStart(2, '0')}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px;">${item.dateFormatted}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px;">${item.timeFormatted}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px;">${item.exitTimeFormatted || '-'}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px;">${item.durationFormatted || '-'}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px;">${item.sigma}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; font-weight: bold;">${item.shotsCount}</td>
+                <td style="padding: 4px 2px; font-family: Arial, sans-serif; font-weight: 600; color: #1e293b;">${item.eventType}</td>
               </tr>
               <tr style="border-bottom: 1px solid #0f172a; font-size: 9px;">
-                <td colspan="3" style="border-right: 1px solid #0f172a; padding: 3px 8px; font-weight: 500; text-align: left;">
+                <td colspan="4" style="border-right: 1px solid #0f172a; padding: 3px 8px; font-weight: 500; text-align: left;">
                   Arma: ${item.weaponOwnerText}
                 </td>
-                <td colspan="3" style="padding: 3px 8px; font-weight: 500; text-align: left;">
+                <td colspan="4" style="padding: 3px 8px; font-weight: 500; text-align: left;">
                   Munições: ${item.ammoOwnerText}
                 </td>
               </tr>
               <tr>
-                <td colspan="6" style="padding: 3px 8px; font-weight: 500; text-transform: uppercase; font-size: 9px; text-align: left;">
+                <td colspan="8" style="padding: 3px 8px; font-weight: 500; text-transform: uppercase; font-size: 9px; text-align: left;">
                   Evento: ${item.eventName}
                 </td>
               </tr>

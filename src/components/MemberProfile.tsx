@@ -12,6 +12,7 @@ import { normalizeSearchText, resolveWeaponSerial, formatWeaponLabel, filterSele
 import { annuityStatus, ANNUITY_STATUS_LABELS } from '../utils/financeReports';
 import { downloadPdfFromElement, downloadPdfFromHtml, sanitizePdfFilename } from '../utils/pdfDownloader';
 import { getLocalSaoPauloDateTime, formatDisplayDateTime } from '../utils/dateUtils';
+import { formatExitAndDuration } from '../utils/habitualitiesExport';
 import {
   ShieldCheck, HelpCircle, Activity, Award, Grid, Target, CheckCircle2, XCircle, MapPin,
   DollarSign, Calendar, CreditCard, LogOut, FileText, Trophy,
@@ -1393,6 +1394,7 @@ export default function MemberProfile({
 
   const [trainingForm, setTrainingForm] = useState({
     dateTime: getLocalSaoPauloDateTime(),
+    departureTime: '',
     weaponSearchQuery: '',
     selectedWeapon: null as Weapon | null,
     weaponName: '',
@@ -1405,6 +1407,16 @@ export default function MemberProfile({
     score: 0,
     notes: ''
   });
+
+  const athleteTrainingYears = useMemo(() => {
+    const cy = new Date().getFullYear();
+    const list: string[] = [];
+    for (let y = cy; y >= 2021; y--) list.push(String(y));
+    list.push('all');
+    return list;
+  }, []);
+
+  const [trainingYearFilter, setTrainingYearFilter] = useState<string>(() => String(new Date().getFullYear()));
 
   const [exactWeaponSearchResults, setExactWeaponSearchResults] = useState<Weapon[]>([]);
   const [searchingExactWeapon, setSearchingExactWeapon] = useState(false);
@@ -1523,12 +1535,17 @@ export default function MemberProfile({
   const approvedRegs = registrations.filter(r => r.userId === selectedUser.id && r.paymentStatus === 'approved');
 
   // Fetch real training sessions from PostgreSQL
-  const fetchTrainings = useCallback(async () => {
+  const fetchTrainings = useCallback(async (yearOverride?: string) => {
     if (!selectedUser?.id) return;
     setLoadingTrainings(true);
+    const yr = yearOverride !== undefined ? yearOverride : trainingYearFilter;
     try {
       const authHeaders = currentUser ? { 'x-user-id': currentUser.id } : {};
-      const res = await fetch(`/api/trainings?userId=${selectedUser.id}`, { headers: authHeaders });
+      let url = `/api/trainings?userId=${selectedUser.id}`;
+      if (yr && yr !== 'all') {
+        url += `&year=${encodeURIComponent(yr)}`;
+      }
+      const res = await fetch(url, { headers: authHeaders });
       if (res.ok) {
         const data = await res.json();
         setTrainings(data.trainings || []);
@@ -1538,7 +1555,7 @@ export default function MemberProfile({
     } finally {
       setLoadingTrainings(false);
     }
-  }, [selectedUser.id, currentUser]);
+  }, [selectedUser.id, currentUser, trainingYearFilter]);
 
   useEffect(() => {
     fetchTrainings();
@@ -1611,6 +1628,7 @@ export default function MemberProfile({
 
       const payload = {
         dateTime: trainingForm.dateTime,
+        departureTime: trainingForm.departureTime || null,
         weaponId: trainingForm.selectedWeapon?.id,
         weaponName: nameToSave,
         weaponCaliber: trainingForm.weaponCaliber || trainingForm.selectedWeapon?.caliber || '',
@@ -1633,6 +1651,7 @@ export default function MemberProfile({
         setShowAddTraining(false);
         setTrainingForm({
           dateTime: getLocalSaoPauloDateTime(),
+          departureTime: '',
           weaponSearchQuery: '',
           selectedWeapon: null,
           weaponName: '',
@@ -1719,6 +1738,8 @@ export default function MemberProfile({
       rawDate: Date;
       dateFormatted: string;
       timeFormatted: string;
+      exitTimeFormatted?: string;
+      durationFormatted?: string;
       eventType: 'Treinamento' | 'Competição';
       eventName: string;
       modality: string;
@@ -1796,11 +1817,19 @@ export default function MemberProfile({
         ? t.weaponOwnerType === 'clube'
         : (w.ownerId === selectedUser.id ? false : (w.ownerId === selectedUser.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false)));
 
+      const { exitTimeFormatted, durationFormatted } = formatExitAndDuration(
+        rawDate,
+        t.departureTime,
+        t.durationMinutes
+      );
+
       items.push({
         id: `tr_${t.id}`,
         rawDate,
         dateFormatted,
         timeFormatted,
+        exitTimeFormatted,
+        durationFormatted,
         eventType: 'Treinamento',
         eventName: 'TREINAMENTO NO ESTANDE',
         modality: t.modality || 'Treinamento Livre',
@@ -1899,11 +1928,20 @@ export default function MemberProfile({
         ? reg.weaponSource === 'clube'
         : (w.ownerId === selectedUser.id ? false : (w.ownerId === selectedUser.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false)));
 
+      const { exitTimeFormatted, durationFormatted } = formatExitAndDuration(
+        rawDate,
+        reg?.horaSaida,
+        undefined,
+        reg?.tempoPermanencia
+      );
+
       items.push({
         id: `cmp_${s.id}`,
         rawDate,
         dateFormatted,
         timeFormatted,
+        exitTimeFormatted,
+        durationFormatted,
         eventType: 'Competição',
         eventName: champ?.title?.toUpperCase() || 'CAMPEONATO DE TIRO ESPORTIVO',
         modality: s.modality || (reg?.modalityId ? modalityName(reg.modalityId) : (stage?.title || 'Modalidade Oficial')),
@@ -1983,11 +2021,20 @@ export default function MemberProfile({
         ? reg.weaponSource === 'clube'
         : (w.ownerId === selectedUser.id ? false : (w.ownerId === selectedUser.clubId || (w.ownerId ? w.ownerId.startsWith('club_') : false)));
 
+      const { exitTimeFormatted, durationFormatted } = formatExitAndDuration(
+        rawDate,
+        reg?.horaSaida,
+        undefined,
+        reg?.tempoPermanencia
+      );
+
       items.push({
         id: `reg_${reg.id}`,
         rawDate,
         dateFormatted,
         timeFormatted,
+        exitTimeFormatted,
+        durationFormatted,
         eventType: 'Competição',
         eventName: champ?.title?.toUpperCase() || 'CAMPEONATO DE TIRO ESPORTIVO',
         modality: reg.modalityId ? modalityName(reg.modalityId) : (stage?.title || 'Modalidade Oficial'),
@@ -2136,41 +2183,45 @@ export default function MemberProfile({
           <table style="width: 100%; border-collapse: collapse; font-size: 9.5px; color: #0f172a;">
             <tbody>
               <tr style="border-bottom: 1px solid #0f172a; background-color: #f8fafc;">
-                <td colspan="6" style="padding: 4px 8px; font-weight: bold; text-transform: uppercase; font-size: 10px; text-align: left;">
+                <td colspan="8" style="padding: 4px 8px; font-weight: bold; text-transform: uppercase; font-size: 10px; text-align: left;">
                   Nome do evento: ${item.eventName}
                 </td>
               </tr>
               <tr style="border-bottom: 1px solid #0f172a;">
-                <td colspan="6" style="padding: 4px 8px; font-weight: 500; font-size: 9px; text-align: left; color: #334155;">
+                <td colspan="8" style="padding: 4px 8px; font-weight: 500; font-size: 9px; text-align: left; color: #334155;">
                   Arma utilizada: ${item.weaponClass} - ${item.model} - N° ${item.weaponNumber} - ${item.manufacturer} - Calibre: ${item.caliber} - ${item.permissionStatus}
                 </td>
               </tr>
-              <tr style="background-color: #f1f5f9; font-weight: bold; font-size: 8.5px; text-align: center; border-bottom: 1px solid #0f172a; text-transform: uppercase;">
-                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 45px;">Ordem</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 80px;">Data</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 60px;">Hora</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 100px;">Sigma</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px; width: 85px;">Qtd Munições</td>
-                <td style="padding: 4px;">Tipo de Evento</td>
+              <tr style="background-color: #f1f5f9; font-weight: bold; font-size: 8px; text-align: center; border-bottom: 1px solid #0f172a; text-transform: uppercase;">
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; width: 35px;">Ordem</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; width: 68px;">Data</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; width: 48px;">Chegada</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; width: 48px;">Saída</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; width: 64px;">Permanência</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; width: 85px;">Sigma</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; width: 65px;">Qtd Munições</td>
+                <td style="padding: 4px 2px;">Tipo de Evento</td>
               </tr>
-              <tr style="text-align: center; font-family: monospace; font-size: 9.5px; border-bottom: 1px solid #0f172a;">
-                <td style="border-right: 1px solid #0f172a; padding: 4px; font-weight: bold;">${String(idx + 1).padStart(2, '0')}</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px;">${item.dateFormatted}</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px;">${item.timeFormatted}</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px;">${item.sigma}</td>
-                <td style="border-right: 1px solid #0f172a; padding: 4px; font-weight: bold;">${item.shotsCount}</td>
-                <td style="padding: 4px; font-family: Arial, sans-serif; font-weight: 600; color: #1e293b;">${item.eventType}</td>
+              <tr style="text-align: center; font-family: monospace; font-size: 9px; border-bottom: 1px solid #0f172a;">
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; font-weight: bold;">${String(idx + 1).padStart(2, '0')}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px;">${item.dateFormatted}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px;">${item.timeFormatted}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px;">${item.exitTimeFormatted || '-'}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px;">${item.durationFormatted || '-'}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px;">${item.sigma}</td>
+                <td style="border-right: 1px solid #0f172a; padding: 4px 2px; font-weight: bold;">${item.shotsCount}</td>
+                <td style="padding: 4px 2px; font-family: Arial, sans-serif; font-weight: 600; color: #1e293b;">${item.eventType}</td>
               </tr>
               <tr style="border-bottom: 1px solid #0f172a; font-size: 9px;">
-                <td colspan="3" style="border-right: 1px solid #0f172a; padding: 3px 8px; font-weight: 500; text-align: left;">
+                <td colspan="4" style="border-right: 1px solid #0f172a; padding: 3px 8px; font-weight: 500; text-align: left;">
                   Arma: ${item.weaponOwnerText}
                 </td>
-                <td colspan="3" style="padding: 3px 8px; font-weight: 500; text-align: left;">
+                <td colspan="4" style="padding: 3px 8px; font-weight: 500; text-align: left;">
                   Munições: ${item.ammoOwnerText}
                 </td>
               </tr>
               <tr>
-                <td colspan="6" style="padding: 3px 8px; font-weight: 500; text-transform: uppercase; font-size: 9px; text-align: left;">
+                <td colspan="8" style="padding: 3px 8px; font-weight: 500; text-transform: uppercase; font-size: 9px; text-align: left;">
                   Evento: ${item.eventName}
                 </td>
               </tr>
@@ -4121,18 +4172,33 @@ export default function MemberProfile({
                       </div>
                     )}
 
-                    {/* 1. Data e Hora */}
-                    <div>
-                      <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
-                        Data e Hora do Treinamento <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="datetime-local"
-                        required
-                        value={trainingForm.dateTime}
-                        onChange={e => setTrainingForm({ ...trainingForm, dateTime: e.target.value })}
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
-                      />
+                    {/* 1. Data e Hora de Chegada e Hora de Saída */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
+                          Data e Hora de Chegada <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="datetime-local"
+                          required
+                          value={trainingForm.dateTime}
+                          onChange={e => setTrainingForm({ ...trainingForm, dateTime: e.target.value })}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-slate-600 font-bold uppercase mb-1">
+                          Hora de Saída <span className="text-slate-400 font-normal">(Término)</span>
+                        </label>
+                        <input
+                          type="time"
+                          value={trainingForm.departureTime}
+                          onChange={e => setTrainingForm({ ...trainingForm, departureTime: e.target.value })}
+                          placeholder="HH:mm"
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
+                        />
+                      </div>
                     </div>
 
                     {/* 2. Seleciona a Arma Utilizada (armas vinculadas + busca exata por Série/SIGMA) */}
@@ -4593,6 +4659,28 @@ export default function MemberProfile({
               </div>
 
               {/* Training Sessions List */}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-700">Ano:</span>
+                  <select
+                    value={trainingYearFilter}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setTrainingYearFilter(val);
+                      fetchTrainings(val);
+                    }}
+                    className="bg-white border border-slate-200 text-xs font-bold text-slate-800 rounded-xl px-3 py-1.5 outline-none focus:border-blue-500 cursor-pointer shadow-2xs"
+                  >
+                    {athleteTrainingYears.map(y => (
+                      <option key={y} value={y}>{y === 'all' ? 'Todos os Anos' : y}</option>
+                    ))}
+                  </select>
+                </div>
+                <span className="text-xs font-bold text-slate-500">
+                  {trainings.length} treinamento(s) no período
+                </span>
+              </div>
+
               {loadingTrainings ? (
                 <div className="py-12 text-center text-slate-500 flex items-center justify-center gap-2">
                   <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
@@ -4645,11 +4733,17 @@ export default function MemberProfile({
                                 </span>
                               )}
                             </div>
-                            <div className="text-[11px] text-slate-500 flex items-center gap-3">
+                            <div className="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap">
                               <span className="flex items-center gap-1 font-mono">
                                 <Clock className="w-3.5 h-3.5 text-slate-400" />
                                 {formattedDate}
                               </span>
+                              {t.departureTime && (
+                                <span className="flex items-center gap-1 font-mono text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
+                                  Saída: <strong>{t.departureTime}</strong>
+                                  {t.durationMinutes != null && <span className="text-blue-600 font-bold font-sans">({t.durationMinutes} min)</span>}
+                                </span>
+                              )}
                               {t.modality && (
                                 <span className="font-semibold text-slate-700">• {t.modality}</span>
                               )}
@@ -5595,51 +5689,55 @@ export default function MemberProfile({
                                 <tbody>
                                   {/* Row 1: Nome do Evento */}
                                   <tr className="border-b border-slate-900 bg-slate-50">
-                                    <td colSpan={6} className="px-3 py-1.5 font-bold uppercase text-left text-[11px]">
+                                    <td colSpan={8} className="px-3 py-1.5 font-bold uppercase text-left text-[11px]">
                                       Nome do evento: {item.eventName}
                                     </td>
                                   </tr>
 
                                   {/* Row 2: Arma Utilizada */}
                                   <tr className="border-b border-slate-900">
-                                    <td colSpan={6} className="px-3 py-1.5 font-medium text-[10.5px]">
+                                    <td colSpan={8} className="px-3 py-1.5 font-medium text-[10.5px]">
                                       Arma utilizada: {item.weaponClass} - {item.model} - N° {item.weaponNumber} - {item.manufacturer} - Calibre : {item.caliber} - {item.permissionStatus}
                                     </td>
                                   </tr>
 
                                   {/* Row 3: Table Header */}
-                                  <tr className="bg-slate-100 font-bold text-[10px] text-center border-b border-slate-900 uppercase tracking-wider">
-                                    <td className="border-r border-slate-900 py-1.5 px-2 w-14">Ordem</td>
-                                    <td className="border-r border-slate-900 py-1.5 px-2 w-28">Data</td>
-                                    <td className="border-r border-slate-900 py-1.5 px-2 w-20">Hora</td>
-                                    <td className="border-r border-slate-900 py-1.5 px-2 w-32">Sigma</td>
-                                    <td className="border-r border-slate-900 py-1.5 px-2 w-28">Qtd Munições</td>
-                                    <td className="py-1.5 px-2">Tipo de Evento</td>
+                                  <tr className="bg-slate-100 font-bold text-[9px] text-center border-b border-slate-900 uppercase tracking-wider">
+                                    <td className="border-r border-slate-900 py-1.5 px-1.5 w-10">Ordem</td>
+                                    <td className="border-r border-slate-900 py-1.5 px-1.5 w-24">Data</td>
+                                    <td className="border-r border-slate-900 py-1.5 px-1.5 w-16">Chegada</td>
+                                    <td className="border-r border-slate-900 py-1.5 px-1.5 w-16">Saída</td>
+                                    <td className="border-r border-slate-900 py-1.5 px-1.5 w-20">Permanência</td>
+                                    <td className="border-r border-slate-900 py-1.5 px-1.5 w-24">Sigma</td>
+                                    <td className="border-r border-slate-900 py-1.5 px-1.5 w-20">Qtd Munições</td>
+                                    <td className="py-1.5 px-1.5">Tipo de Evento</td>
                                   </tr>
 
                                   {/* Row 4: Data Row */}
-                                  <tr className="text-center font-mono text-[11px] border-b border-slate-900">
-                                    <td className="border-r border-slate-900 py-2 px-2 font-bold">{String(idx + 1).padStart(2, '0')}</td>
-                                    <td className="border-r border-slate-900 py-2 px-2">{item.dateFormatted}</td>
-                                    <td className="border-r border-slate-900 py-2 px-2">{item.timeFormatted}</td>
-                                    <td className="border-r border-slate-900 py-2 px-2">{item.sigma}</td>
-                                    <td className="border-r border-slate-900 py-2 px-2 font-bold">{item.shotsCount}</td>
-                                    <td className="py-2 px-2 font-sans font-semibold text-slate-800">{item.eventType}</td>
+                                  <tr className="text-center font-mono text-[10.5px] border-b border-slate-900">
+                                    <td className="border-r border-slate-900 py-2 px-1.5 font-bold">{String(idx + 1).padStart(2, '0')}</td>
+                                    <td className="border-r border-slate-900 py-2 px-1.5">{item.dateFormatted}</td>
+                                    <td className="border-r border-slate-900 py-2 px-1.5">{item.timeFormatted}</td>
+                                    <td className="border-r border-slate-900 py-2 px-1.5">{item.exitTimeFormatted || '-'}</td>
+                                    <td className="border-r border-slate-900 py-2 px-1.5">{item.durationFormatted || '-'}</td>
+                                    <td className="border-r border-slate-900 py-2 px-1.5">{item.sigma}</td>
+                                    <td className="border-r border-slate-900 py-2 px-1.5 font-bold">{item.shotsCount}</td>
+                                    <td className="py-2 px-1.5 font-sans font-semibold text-slate-800">{item.eventType}</td>
                                   </tr>
 
                                   {/* Row 5: Arma & Munições ownership */}
                                   <tr className="border-b border-slate-900 text-[10.5px]">
-                                    <td colSpan={3} className="border-r border-slate-900 px-3 py-1.5 font-medium">
+                                    <td colSpan={4} className="border-r border-slate-900 px-3 py-1.5 font-medium">
                                       Arma: {item.weaponOwnerText}
                                     </td>
-                                    <td colSpan={3} className="px-3 py-1.5 font-medium">
+                                    <td colSpan={4} className="px-3 py-1.5 font-medium">
                                       Munições: {item.ammoOwnerText}
                                     </td>
                                   </tr>
 
                                   {/* Row 6: Evento Footer */}
                                   <tr>
-                                    <td colSpan={6} className="px-3 py-1.5 font-medium uppercase text-[10.5px]">
+                                    <td colSpan={8} className="px-3 py-1.5 font-medium uppercase text-[10.5px]">
                                       Evento: {item.eventName}
                                     </td>
                                   </tr>

@@ -557,6 +557,8 @@ function mapRegistration(r: any): Registration {
     idscTotalSegundosExibe: r.idsc_total_segundos_exibe || undefined,
     dataExecucao: r.data_execucao || undefined,
     horaExecucao: r.hora_execucao || undefined,
+    horaSaida: r.hora_saida || undefined,
+    tempoPermanencia: r.tempo_permanencia || undefined,
     totalMinutos: r.total_minutos || undefined,
     totalMilesegundos: r.total_milesegundos ?? 0,
     seriesPontos: r.series_pontos || undefined,
@@ -793,6 +795,8 @@ function mapTraining(t: any): TrainingSession {
     athleteCr: t.athlete_cr || undefined,
     clubId: t.club_id || undefined,
     dateTime: t.date_time,
+    departureTime: t.departure_time || undefined,
+    durationMinutes: t.duration_minutes != null ? Number(t.duration_minutes) : undefined,
     weaponId: t.weapon_id || undefined,
     weaponName: t.weapon_name,
     weaponCaliber: t.weapon_caliber || undefined,
@@ -5799,7 +5803,7 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
   const championshipId = req.params.id;
   const {
     registrationId, acao,
-    dataExecucao, horaExecucao,
+    dataExecucao, horaExecucao, horaSaida,
     series, penalidade,
     ownAmmoShots, clubAmmoShots, clubAmmoType,
     weaponId, weaponSource,
@@ -5963,6 +5967,41 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
         });
       }
 
+      // Resolução de hora de saída e tempo de permanência (se vinculado ao check-in ou avulso)
+      let resolvedHoraSaida = horaSaida || reg.horaSaida || null;
+      let resolvedTempoPermanencia = reg.tempoPermanencia || null;
+
+      if (reg.checkinId) {
+        try {
+          const chkQuery = await client.query('SELECT checkout_at, duration_minutes FROM club_checkins WHERE id = $1', [reg.checkinId]);
+          if (chkQuery.rows.length > 0 && chkQuery.rows[0].checkout_at) {
+            const formatterSP = new Intl.DateTimeFormat('pt-BR', {
+              timeZone: 'America/Sao_Paulo',
+              hour: '2-digit', minute: '2-digit', hour12: false
+            });
+            resolvedHoraSaida = formatterSP.format(new Date(chkQuery.rows[0].checkout_at));
+            if (chkQuery.rows[0].duration_minutes != null) {
+              resolvedTempoPermanencia = `${chkQuery.rows[0].duration_minutes} min`;
+            }
+          }
+        } catch (e) {
+          console.warn('Error reading checkin exit time for score:', e);
+        }
+      }
+
+      if (resolvedHoraSaida && horaExecucao && !resolvedTempoPermanencia) {
+        const timeRegex = /(\d{1,2}):(\d{2})/;
+        const entryMatch = String(horaExecucao).match(timeRegex);
+        const exitMatch = String(resolvedHoraSaida).match(timeRegex);
+        if (entryMatch && exitMatch) {
+          const entryMin = Number(entryMatch[1]) * 60 + Number(entryMatch[2]);
+          const exitMin = Number(exitMatch[1]) * 60 + Number(exitMatch[2]);
+          if (exitMin >= entryMin) {
+            resolvedTempoPermanencia = `${exitMin - entryMin} min`;
+          }
+        }
+      }
+
       // Update registration with full score breakdown, ammo origin, ammo type, weapon source and weapon id
       // total_points is the final score with penalty deducted (e.g. 101 - 2 = 99)
       await client.query(`
@@ -5975,12 +6014,13 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
           idsc_total_seconds = $14,
           penalty = $15,
           data_execucao = $16, hora_execucao = $17,
-          series_pontos = $18, series_tempos = $19,
-          own_ammo_shots = $20, club_ammo_shots = $21, club_ammo_type = $22,
-          weapon_source = COALESCE($23, weapon_source),
-          weapon_id = COALESCE($24, weapon_id),
+          hora_saida = $18, tempo_permanencia = $19,
+          series_pontos = $20, series_tempos = $21,
+          own_ammo_shots = $22, club_ammo_shots = $23, club_ammo_type = $24,
+          weapon_source = COALESCE($25, weapon_source),
+          weapon_id = COALESCE($26, weapon_id),
           disqualified = false
-        WHERE id = $25`,
+        WHERE id = $27`,
         [
           finalPontos,
           bestSerie.x||0, bestSerie.p10||0, bestSerie.p9||0, bestSerie.p8||0, bestSerie.p7||0,
@@ -5989,6 +6029,7 @@ app.post('/api/championships/:id/scores', requireAdmin, async (req, res) => {
           idscTotalSeg || null,
           penValue,
           dataExecucao || null, horaExecucao || null,
+          resolvedHoraSaida || null, resolvedTempoPermanencia || null,
           seriesPontos.length > 0 ? JSON.stringify(seriesPontos) : null,
           seriesTempos.length > 0 ? JSON.stringify(seriesTempos) : null,
           ownAmmo, clubAmmo, clubType,
@@ -8130,6 +8171,12 @@ app.get('/api/trainings', requireAuth, async (req, res) => {
       whereConditions.push(`t.status = $${params.length}`);
     }
 
+    const yearFilter = req.query.year as string;
+    if (yearFilter && yearFilter !== 'all') {
+      params.push(yearFilter);
+      whereConditions.push(`(SUBSTRING(t.date_time, 1, 4) = $${params.length} OR t.date_time LIKE '%' || $${params.length} || '%')`);
+    }
+
     if (searchQuery && searchQuery.trim()) {
       params.push(`%${searchQuery.trim()}%`);
       whereConditions.push(`(u.full_name ILIKE $${params.length} OR u.cpf ILIKE $${params.length} OR t.weapon_name ILIKE $${params.length} OR t.modality ILIKE $${params.length})`);
@@ -8153,6 +8200,8 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
     userId,
     targetUserId,
     dateTime,
+    departureTime: rawDepartureTime,
+    durationMinutes: rawDurationMinutes,
     weaponId,
     weaponName,
     weaponCaliber,
@@ -8168,13 +8217,53 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
     status: requestedStatus,
   } = req.body;
 
-  if (!dateTime || !weaponName) {
+  let normalizedDateTime = String(dateTime || '').trim();
+  let resolvedDepartureTime: string | null = rawDepartureTime ? String(rawDepartureTime).trim() : null;
+  let resolvedDurationMinutes: number | null = rawDurationMinutes != null ? Number(rawDurationMinutes) : null;
+
+  // Se o treinamento foi vinculado a um check-in, puxa automaticamente entrada e saída do check-in
+  if (checkinId) {
+    try {
+      const chkQuery = await pool.query(
+        'SELECT checkin_at, checkout_at, duration_minutes FROM club_checkins WHERE id = $1',
+        [checkinId]
+      );
+      if (chkQuery.rows.length > 0) {
+        const chkRow = chkQuery.rows[0];
+        const formatterSP = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', hour12: false
+        });
+        const dChk = new Date(chkRow.checkin_at);
+        if (!isNaN(dChk.getTime())) {
+          const parts: Record<string, string> = {};
+          formatterSP.formatToParts(dChk).forEach(p => { parts[p.type] = p.value; });
+          normalizedDateTime = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+        }
+        if (chkRow.checkout_at) {
+          const dOut = new Date(chkRow.checkout_at);
+          if (!isNaN(dOut.getTime())) {
+            const partsOut: Record<string, string> = {};
+            formatterSP.formatToParts(dOut).forEach(p => { partsOut[p.type] = p.value; });
+            resolvedDepartureTime = `${partsOut.hour}:${partsOut.minute}`;
+          }
+        }
+        if (chkRow.duration_minutes != null) {
+          resolvedDurationMinutes = Number(chkRow.duration_minutes);
+        }
+      }
+    } catch (chkErr) {
+      console.warn('Could not auto-fetch checkin times for training:', chkErr);
+    }
+  }
+
+  if (!normalizedDateTime || !weaponName) {
     return res.status(400).json({ error: 'Data/Hora e Arma são obrigatórias.' });
   }
 
   // Normalizar dateTime para horário oficial de Brasília / São Paulo (America/Sao_Paulo - UTC-3)
   // Caso venha em formato ISO com Z ou offset UTC, converte para o horário local real do estande
-  let normalizedDateTime = String(dateTime).trim();
   const dParsed = new Date(normalizedDateTime);
   if (!isNaN(dParsed.getTime()) && (normalizedDateTime.includes('Z') || /[+-]\d{2}/.test(normalizedDateTime))) {
     const formatter = new Intl.DateTimeFormat('pt-BR', {
@@ -8189,6 +8278,20 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
     const parts: Record<string, string> = {};
     formatter.formatToParts(dParsed).forEach(p => { parts[p.type] = p.value; });
     normalizedDateTime = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+  }
+
+  // Se informada hora de saída avulsa (sem check-in), calcula o tempo de permanência em minutos
+  if (resolvedDepartureTime && normalizedDateTime && resolvedDurationMinutes == null) {
+    const timeRegex = /(\d{1,2}):(\d{2})/;
+    const entryMatch = normalizedDateTime.match(timeRegex);
+    const exitMatch = resolvedDepartureTime.match(timeRegex);
+    if (entryMatch && exitMatch) {
+      const entryMin = Number(entryMatch[1]) * 60 + Number(entryMatch[2]);
+      const exitMin = Number(exitMatch[1]) * 60 + Number(exitMatch[2]);
+      if (exitMin >= entryMin) {
+        resolvedDurationMinutes = exitMin - entryMin;
+      }
+    }
   }
 
   const requestedUserId = targetUserId || userId;
@@ -8228,15 +8331,17 @@ app.post('/api/trainings', requireAuth, async (req, res) => {
   try {
     const r = await pool.query(
       `INSERT INTO trainings (
-        id, user_id, club_id, date_time, weapon_id, weapon_name, weapon_caliber,
+        id, user_id, club_id, date_time, departure_time, duration_minutes, weapon_id, weapon_name, weapon_caliber,
         weapon_owner_type, total_shots, own_ammo_shots, club_ammo_shots, club_ammo_type, modality, score, notes, checkin_id, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       RETURNING *`,
       [
         id,
         finalUserId,
         effectiveClubId,
         normalizedDateTime,
+        resolvedDepartureTime,
+        resolvedDurationMinutes,
         weaponId || null,
         weaponName,
         weaponCaliber || null,
@@ -9197,20 +9302,34 @@ app.patch('/api/registrations/:id/link-checkin', requireAdmin, async (req, res) 
 
   try {
     let checkinDate: string | null = null;
+    let checkinCheckoutTime: string | null = null;
+    let checkinDuration: string | null = null;
     if (checkinId) {
-      const chkRes = await pool.query('SELECT id, checkin_at FROM club_checkins WHERE id = $1', [checkinId]);
+      const chkRes = await pool.query('SELECT id, checkin_at, checkout_at, duration_minutes FROM club_checkins WHERE id = $1', [checkinId]);
       if (chkRes.rows.length === 0) {
         return res.status(404).json({ error: 'Check-in não encontrado.' });
       }
       checkinDate = chkRes.rows[0].checkin_at;
+      if (chkRes.rows[0].checkout_at) {
+        const formatterSP = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          hour: '2-digit', minute: '2-digit', hour12: false
+        });
+        checkinCheckoutTime = formatterSP.format(new Date(chkRes.rows[0].checkout_at));
+      }
+      if (chkRes.rows[0].duration_minutes != null) {
+        checkinDuration = `${chkRes.rows[0].duration_minutes} min`;
+      }
     }
 
     const result = await pool.query(
       `UPDATE registrations
-       SET checkin_id = $1
-       WHERE id = $2
+       SET checkin_id = $1,
+           hora_saida = COALESCE($2, hora_saida),
+           tempo_permanencia = COALESCE($3, tempo_permanencia)
+       WHERE id = $4
        RETURNING *`,
-      [checkinId || null, id]
+      [checkinId || null, checkinCheckoutTime, checkinDuration, id]
     );
 
     if (result.rows.length === 0) {
@@ -9221,6 +9340,8 @@ app.patch('/api/registrations/:id/link-checkin', requireAdmin, async (req, res) 
       success: true,
       registration: mapRegistration(result.rows[0]),
       checkinDate: checkinDate || undefined,
+      checkoutTime: checkinCheckoutTime || undefined,
+      duration: checkinDuration || undefined,
     });
   } catch (err) {
     console.error('Link registration to checkin error:', err);
@@ -9338,13 +9459,38 @@ app.post('/api/checkins/:id/checkout', requireAuth, async (req, res) => {
 
     const updated = updateRes.rows[0];
 
+    const formatterSPTime = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    });
+    const exitTimeStr = formatterSPTime.format(effectiveCheckout);
+
+    // Sincroniza automaticamente hora de saída e tempo de permanência nos treinamentos vinculados a este checkin
+    await pool.query(
+      `UPDATE trainings
+       SET departure_time = $1,
+           duration_minutes = $2
+       WHERE checkin_id = $3`,
+      [exitTimeStr, durationMinutes, id]
+    );
+
     // Link any passed registrationIds to this checkin as well
     if (Array.isArray(registrationIds) && registrationIds.length > 0) {
       await pool.query(
         `UPDATE registrations
-         SET checkin_id = $1
-         WHERE id = ANY($2) AND (user_id = $3 OR $4 = true)`,
-        [id, registrationIds, checkin.user_id, isAdmin]
+         SET checkin_id = $1,
+             hora_saida = $2,
+             tempo_permanencia = $3
+         WHERE id = ANY($4) AND (user_id = $5 OR $6 = true)`,
+        [id, exitTimeStr, `${durationMinutes} min`, registrationIds, checkin.user_id, isAdmin]
+      );
+    } else {
+      await pool.query(
+        `UPDATE registrations
+         SET hora_saida = $1,
+             tempo_permanencia = $2
+         WHERE checkin_id = $3`,
+        [exitTimeStr, `${durationMinutes} min`, id]
       );
     }
 
@@ -9489,6 +9635,26 @@ app.patch('/api/checkins/validate-batch', requireAdmin, async (req, res) => {
     const isClubAdmin = currentUser.role === 'club_admin';
     const allowedClubId = isClubAdmin ? currentUser.clubId : null;
 
+    // Regra oficial: Quando reprovado, exclui definitivamente do sistema sem necessidade de justificativa
+    if (normalizedStatus === 'reprovado') {
+      let deleteQuery = `DELETE FROM club_checkins c WHERE c.id = ANY($1::text[])`;
+      const delParams: any[] = [ids];
+      if (isClubAdmin && allowedClubId) {
+        delParams.push(allowedClubId);
+        deleteQuery += ` AND (c.club_id = $2 OR c.user_id IN (SELECT id FROM users WHERE club_id = $2))`;
+      }
+      deleteQuery += ` RETURNING c.id`;
+      const deleted = await pool.query(deleteQuery, delParams);
+
+      return res.json({
+        success: true,
+        deleted: true,
+        updatedCount: deleted.rowCount,
+        updatedIds: deleted.rows.map(r => r.id),
+        message: `${deleted.rowCount} check-in(s) reprovado(s) e excluído(s) definitivamente com sucesso.`
+      });
+    }
+
     let updateQuery = `
       UPDATE club_checkins c
       SET status = $1,
@@ -9552,6 +9718,16 @@ app.patch('/api/checkins/:id/validate', requireAdmin, async (req, res) => {
       if (!allowedClubId || (checkin.club_id !== allowedClubId && checkin.athlete_club_id !== allowedClubId)) {
         return res.status(403).json({ error: 'Você só pode validar check-ins de atletas vinculados ao seu clube.' });
       }
+    }
+
+    // Regra oficial: Quando reprovado, exclui definitivamente do sistema sem necessidade de justificativa
+    if (normalizedStatus === 'reprovado') {
+      await pool.query(`DELETE FROM club_checkins WHERE id = $1`, [id]);
+      return res.json({
+        success: true,
+        deleted: true,
+        message: 'Check-in reprovado e excluído definitivamente do sistema com sucesso.'
+      });
     }
 
     await pool.query(

@@ -377,6 +377,7 @@ export interface Registration {
   idscTempoPista?: number; idscTempoPistaExibe?: string; idscTotalSegundosExibe?: string;
   dataExecucao?: string; horaExecucao?: string;
   totalMinutos?: string; totalMilesegundos?: number;
+  horaSaida?: string; tempoPermanencia?: string;
   seriesPontos?: any[]; seriesTempos?: any[];
   codigoInscricao?: number;
   ownAmmoShots?: number;
@@ -452,6 +453,8 @@ export interface TrainingSession {
   athleteCr?: string;
   clubId?: string;
   dateTime: string;
+  departureTime?: string;
+  durationMinutes?: number;
   weaponId?: string;
   weaponName: string;
   weaponCaliber?: string;

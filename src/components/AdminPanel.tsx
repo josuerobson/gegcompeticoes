@@ -9,7 +9,7 @@ import ValidarTreinamentosPanel from './ValidarTreinamentosPanel';
 import ValidarCheckinsPanel from './ValidarCheckinsPanel';
 import { SicoobPixManager } from './SicoobPixManager';
 import { downloadPdfFromElement } from '../utils/pdfDownloader';
-import { getLocalSaoPauloDateTime, getLocalSaoPauloDate, getLocalSaoPauloTime } from '../utils/dateUtils';
+import { getLocalSaoPauloDateTime, getLocalSaoPauloDate, getLocalSaoPauloTime, formatDisplayDateTime } from '../utils/dateUtils';
 import { MercadoPagoManager } from './MercadoPagoManager';
 import { PixPaymentModal } from './PixPaymentModal';
 import ClaimWeaponModal from './ClaimWeaponModal';
@@ -2436,6 +2436,7 @@ function TreinamentosCompeticoesAdminPanel({
   // Training Form State
   const [trainingForm, setTrainingForm] = React.useState({
     dateTime: getLocalSaoPauloDateTime(),
+    departureTime: '',
     weaponSearchQuery: '',
     selectedWeapon: null as Weapon | null,
     weaponName: '',
@@ -2470,6 +2471,19 @@ function TreinamentosCompeticoesAdminPanel({
     gtExpirationDate: '',
   });
 
+  // Filtro por ano (inicia em 2021 até o ano atual, padrão: ano atual)
+  const currentYear = new Date().getFullYear();
+  const availableYears = React.useMemo(() => {
+    const list: string[] = [];
+    for (let y = currentYear; y >= 2021; y--) {
+      list.push(String(y));
+    }
+    list.push('all');
+    return list;
+  }, [currentYear]);
+
+  const [selectedYear, setSelectedYear] = React.useState<string>(() => String(new Date().getFullYear()));
+
   // Trainings List State
   const [trainingsList, setTrainingsList] = React.useState<TrainingSession[]>([]);
   const [loadingTrainings, setLoadingTrainings] = React.useState(false);
@@ -2477,14 +2491,18 @@ function TreinamentosCompeticoesAdminPanel({
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [hidingId, setHidingId] = React.useState<string | null>(null);
 
-  // Fetch all trainings (scoped to club when in club view)
-  const loadAllTrainings = React.useCallback(async () => {
+  // Fetch all trainings (carregando por padrão somente o ano atual)
+  const loadAllTrainings = React.useCallback(async (yearOverride?: string) => {
     if (!currentUser) return;
     setLoadingTrainings(true);
+    const yr = yearOverride !== undefined ? yearOverride : selectedYear;
     try {
-      const url = isClubView && effectiveClubId
+      let url = isClubView && effectiveClubId
         ? `/api/trainings?all=true&clubId=${encodeURIComponent(effectiveClubId)}`
         : `/api/trainings?all=true`;
+      if (yr && yr !== 'all') {
+        url += `&year=${encodeURIComponent(yr)}`;
+      }
       const res = await fetch(url, {
         headers: { 'x-user-id': currentUser.id }
       });
@@ -2497,7 +2515,7 @@ function TreinamentosCompeticoesAdminPanel({
     } finally {
       setLoadingTrainings(false);
     }
-  }, [currentUser, isClubView, effectiveClubId]);
+  }, [currentUser, isClubView, effectiveClubId, selectedYear]);
 
   React.useEffect(() => {
     loadAllTrainings();
@@ -2663,6 +2681,7 @@ function TreinamentosCompeticoesAdminPanel({
           targetUserId: selectedAthlete.id,
           clubId: effectiveClubId,
           dateTime: trainingForm.dateTime,
+          departureTime: trainingForm.departureTime || null,
           weaponId: trainingForm.selectedWeapon?.id || null,
           weaponName: trainingForm.weaponName,
           weaponCaliber: trainingForm.weaponCaliber || trainingForm.selectedWeapon?.caliber || null,
@@ -2756,16 +2775,23 @@ function TreinamentosCompeticoesAdminPanel({
 
   // Filtered trainings for history
   const filteredTrainingsList = React.useMemo(() => {
+    let list = trainingsList;
+    if (selectedYear && selectedYear !== 'all') {
+      list = list.filter(t => {
+        const dt = t.dateTime || '';
+        return dt.startsWith(selectedYear) || dt.includes(`/${selectedYear}`) || dt.includes(`-${selectedYear}`);
+      });
+    }
     const q = normalizeSearchText(tableSearchQuery.trim());
-    if (!q) return trainingsList;
-    return trainingsList.filter(t =>
+    if (!q) return list;
+    return list.filter(t =>
       normalizeSearchText(t.athleteName).includes(q) ||
       normalizeSearchText(t.athleteCr).includes(q) ||
       normalizeSearchText(t.weaponName).includes(q) ||
       normalizeSearchText(t.modality).includes(q) ||
       normalizeSearchText(t.notes).includes(q)
     );
-  }, [trainingsList, tableSearchQuery]);
+  }, [trainingsList, tableSearchQuery, selectedYear]);
 
   return (
     <div className="space-y-6 text-slate-800">
@@ -2988,23 +3014,40 @@ function TreinamentosCompeticoesAdminPanel({
               </div>
             )}
 
-            {/* Data e Hora */}
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="block text-[11px] text-slate-600 font-bold uppercase">
-                  Data e Hora do Treinamento <span className="text-red-500">*</span>
-                </label>
-                <span className="text-[10px] text-blue-600 font-medium">
-                  Qualquer data (presente ou retroativa)
-                </span>
+            {/* Data e Hora de Chegada e Hora de Saída */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-[11px] text-slate-600 font-bold uppercase">
+                    Data e Hora de Chegada <span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-[10px] text-blue-600 font-medium">
+                    Qualquer data
+                  </span>
+                </div>
+                <input
+                  type="datetime-local"
+                  required
+                  value={trainingForm.dateTime}
+                  onChange={e => setTrainingForm({ ...trainingForm, dateTime: e.target.value })}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
+                />
               </div>
-              <input
-                type="datetime-local"
-                required
-                value={trainingForm.dateTime}
-                onChange={e => setTrainingForm({ ...trainingForm, dateTime: e.target.value })}
-                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
-              />
+
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-[11px] text-slate-600 font-bold uppercase">
+                    Hora de Saída <span className="text-slate-400 font-normal">(Término no estande)</span>
+                  </label>
+                </div>
+                <input
+                  type="time"
+                  value={trainingForm.departureTime}
+                  onChange={e => setTrainingForm({ ...trainingForm, departureTime: e.target.value })}
+                  placeholder="HH:mm"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium shadow-xs"
+                />
+              </div>
             </div>
 
             {/* Seleção da Arma com Pesquisa em Tempo Real */}
@@ -3435,15 +3478,34 @@ function TreinamentosCompeticoesAdminPanel({
             <p className="text-xs text-slate-400">Visão consolidada de todas as sessões de treinamento registradas no estande. Treinos ocultos não contam na habitualidade nem aparecem nos relatórios do atleta.</p>
           </div>
 
-          <div className="relative w-full sm:w-64">
-            <input
-              type="text"
-              placeholder="Filtrar por atleta, arma, modalidade..."
-              value={tableSearchQuery}
-              onChange={e => setTableSearchQuery(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 pl-8 pr-3 py-2 rounded-xl text-xs outline-none focus:border-blue-500 font-medium"
-            />
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs">
+              <span className="font-bold text-slate-500 text-[11px] uppercase">Ano:</span>
+              <select
+                value={selectedYear}
+                onChange={e => {
+                  const val = e.target.value;
+                  setSelectedYear(val);
+                  loadAllTrainings(val);
+                }}
+                className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer text-xs"
+              >
+                {availableYears.map(y => (
+                  <option key={y} value={y}>{y === 'all' ? 'Todos os Anos' : y}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="relative flex-1 sm:w-64">
+              <input
+                type="text"
+                placeholder="Filtrar por atleta, arma, modalidade..."
+                value={tableSearchQuery}
+                onChange={e => setTableSearchQuery(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 pl-8 pr-3 py-2 rounded-xl text-xs outline-none focus:border-blue-500 font-medium"
+              />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+            </div>
           </div>
         </div>
 
@@ -3475,7 +3537,7 @@ function TreinamentosCompeticoesAdminPanel({
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {filteredTrainingsList.map(t => {
-                  const formattedDate = t.dateTime ? new Date(t.dateTime).toLocaleString('pt-BR') : '-';
+                  const formattedDate = formatDisplayDateTime(t.dateTime);
                   return (
                     <tr key={t.id} className={`hover:bg-slate-50/70 transition ${t.hidden ? 'opacity-60 bg-slate-50/60' : ''}`}>
                       <td className="py-3 px-3">
@@ -3487,7 +3549,15 @@ function TreinamentosCompeticoesAdminPanel({
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-3 font-mono text-[11px] whitespace-nowrap">{formattedDate}</td>
+                      <td className="py-3 px-3 font-mono text-[11px] whitespace-nowrap">
+                        <div className="font-semibold text-slate-800">{formattedDate}</div>
+                        {t.departureTime && (
+                          <div className="text-[10px] text-slate-500 font-sans mt-0.5">
+                            Saída: <span className="font-mono font-bold text-slate-700">{t.departureTime}</span>
+                            {t.durationMinutes != null && <span className="ml-1 text-blue-600 font-semibold">({t.durationMinutes} min)</span>}
+                          </div>
+                        )}
+                      </td>
                       <td className="py-3 px-3">
                         <div className="font-semibold text-slate-800">{t.weaponName}</div>
                         {t.weaponCaliber && <div className="text-[10px] text-blue-600 font-mono">{t.weaponCaliber}</div>}
@@ -3670,6 +3740,7 @@ function CadastrarResultadosPanel({
   const [selectedReg, setSelectedReg] = React.useState<EnrichedRegistration | null>(null);
   const [dataExec, setDataExec] = React.useState('');
   const [horaExec, setHoraExec] = React.useState('');
+  const [horaSaida, setHoraSaida] = React.useState('');
   const [penalidade, setPenalidade] = React.useState('');
   const [ownAmmoShots, setOwnAmmoShots] = React.useState<number | string>('');
   const [clubAmmoShots, setClubAmmoShots] = React.useState<number | string>('');
@@ -3760,6 +3831,7 @@ function CadastrarResultadosPanel({
           const spTime = getLocalSaoPauloTime(data.checkinDate);
           if (spDate && !dataExec) setDataExec(spDate);
           if (spTime && !horaExec) setHoraExec(spTime);
+          if (data.checkoutTime) setHoraSaida(data.checkoutTime);
         }
       }
 
@@ -3869,6 +3941,7 @@ function CadastrarResultadosPanel({
     }
     setDataExec(reg.dataExecucao || '');
     setHoraExec(reg.horaExecucao || '');
+    setHoraSaida(reg.horaSaida || '');
     setPenalidade(reg.penalty ? String(reg.penalty) : '');
 
     setOwnAmmoShots(reg.ownAmmoShots ? String(reg.ownAmmoShots) : '');
@@ -4024,6 +4097,7 @@ function CadastrarResultadosPanel({
         body: JSON.stringify({
           registrationId: selectedReg.id,
           acao, dataExecucao: dataExec, horaExecucao: horaExec,
+          horaSaida: horaSaida || undefined,
           series, penalidade: Number(penalidade)||0,
           ownAmmoShots: Number(ownAmmoShots)||0,
           clubAmmoShots: Number(clubAmmoShots)||0,
@@ -4698,7 +4772,7 @@ function CadastrarResultadosPanel({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-500 uppercase block">Data da Prova</label>
                       <input
@@ -4709,11 +4783,21 @@ function CadastrarResultadosPanel({
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Hora da Prova</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Hora Entrada / Início</label>
                       <input
                         type="time"
                         value={horaExec}
                         onChange={e => setHoraExec(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold focus:bg-white focus:border-blue-500 transition"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Hora de Saída</label>
+                      <input
+                        type="time"
+                        value={horaSaida}
+                        onChange={e => setHoraSaida(e.target.value)}
+                        placeholder="HH:mm"
                         className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold focus:bg-white focus:border-blue-500 transition"
                       />
                     </div>
