@@ -135,6 +135,18 @@ async function isRegistrationEligible(user: User): Promise<boolean> {
   return Boolean(user.isProfileComplete);
 }
 
+const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
+
+// Gera uma assinatura curta do conteúdo para invalidar o cache do navegador quando a imagem mudar
+function computeCacheBuster(rawValue: string): string {
+  let hash = 0;
+  const len = rawValue.length;
+  for (let i = 0; i < Math.min(len, 300); i += 7) {
+    hash = ((hash << 5) - hash + rawValue.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(36) + '_' + len;
+}
+
 // Avatares e logos são salvos como base64 direto nas colunas do Postgres (sem
 // MinIO) — embuti-los em toda linha de /api/users e /api/clubs inflava esses
 // payloads em vários MB (1300+ atletas, cada um com sua foto completa). Como
@@ -143,11 +155,15 @@ async function isRegistrationEligible(user: User): Promise<boolean> {
 // <img src={user.avatarUrl}> precisa mudar. URLs externas (avatar padrão,
 // ou uma foto linkada de fora) passam direto, sem view.
 function avatarUrlFor(userId: string, rawValue: string | null | undefined): string {
-  if (rawValue && rawValue.startsWith('data:')) return `/api/users/${userId}/avatar`;
+  if (rawValue && rawValue.startsWith('data:')) {
+    return `/api/users/${userId}/avatar?v=${computeCacheBuster(rawValue)}`;
+  }
   return rawValue || DEFAULT_AVATAR;
 }
 function logoUrlFor(clubId: string, rawValue: string | null | undefined): string | undefined {
-  if (rawValue && rawValue.startsWith('data:')) return `/api/clubs/${clubId}/logo`;
+  if (rawValue && rawValue.startsWith('data:')) {
+    return `/api/clubs/${clubId}/logo?v=${computeCacheBuster(rawValue)}`;
+  }
   return rawValue || undefined;
 }
 
@@ -2071,8 +2087,6 @@ async function uniqueUsername(client: any, base: string): Promise<string> {
   }
 }
 
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
-
 // Keeps the stored is_profile_complete column in sync too, in case anything
 // ever queries it directly — mapUser above no longer relies on it for reads.
 async function recomputeUserProfileComplete(client: { query: (text: string, params?: unknown[]) => Promise<any> }, userId: string): Promise<void> {
@@ -3022,6 +3036,17 @@ async function applyUserProfileFields(
   await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${values.length}`, values);
   await recomputeUserProfileComplete(pool, userId);
 
+  // Se o avatar foi alterado, propaga para os posts e comentários do usuário
+  if (Object.prototype.hasOwnProperty.call(payload, 'avatarUrl') && typeof payload.avatarUrl === 'string') {
+    try {
+      const newAvatarUrl = avatarUrlFor(userId, payload.avatarUrl as string);
+      await pool.query('UPDATE posts SET user_avatar = $1 WHERE user_id = $2', [newAvatarUrl, userId]);
+      await pool.query('UPDATE comments SET user_avatar = $1 WHERE user_id = $2', [newAvatarUrl, userId]);
+    } catch (e) {
+      console.warn('Falha ao propagar avatar para posts e comentários:', e);
+    }
+  }
+
   const fullUserRes = await pool.query(
     `SELECT u.*,
       COALESCE((SELECT json_agg(follower_id) FROM follows WHERE following_id = u.id), '[]'::json) as followers,
@@ -3691,7 +3716,11 @@ app.get('/api/users/:id/avatar', async (req, res) => {
       return res.redirect(302, DEFAULT_AVATAR);
     }
     res.setHeader('Content-Type', match[1]);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    if (req.query.v) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    }
     res.send(Buffer.from(match[2], 'base64'));
   } catch (err) {
     console.error('Fetch user avatar database error:', err);
@@ -4667,7 +4696,11 @@ app.get('/api/clubs/:id/logo', async (req, res) => {
       return res.status(404).end();
     }
     res.setHeader('Content-Type', match[1]);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    if (req.query.v) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    }
     res.send(Buffer.from(match[2], 'base64'));
   } catch (err) {
     console.error('Fetch club logo database error:', err);

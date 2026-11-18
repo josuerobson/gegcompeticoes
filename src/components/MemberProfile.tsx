@@ -396,6 +396,13 @@ export default function MemberProfile({
   // Avatar change
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [avatarError, setAvatarError] = useState('');
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAvatarPreview(null);
+  }, [selectedUser.avatarUrl]);
+
+  const effectiveAvatar = avatarPreview || selectedUser.avatarUrl;
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -409,10 +416,15 @@ export default function MemberProfile({
     setAvatarSaving(true);
     try {
       const dataUrl = await resizeImageToDataUrl(file);
+      setAvatarPreview(dataUrl);
       const ok = await onUpdateProfile({ avatarUrl: dataUrl });
-      if (!ok) setAvatarError('Erro ao atualizar foto.');
+      if (!ok) {
+        setAvatarPreview(null);
+        setAvatarError('Erro ao atualizar foto.');
+      }
     } catch (err) {
       console.error(err);
+      setAvatarPreview(null);
       setAvatarError('Erro ao processar imagem.');
     } finally {
       setAvatarSaving(false);
@@ -826,7 +838,7 @@ export default function MemberProfile({
                 ) : isFotoToken ? (
                   <div className="w-[85px] h-[105px] rounded bg-white p-0.5 border border-white/80 shadow-md shrink-0 overflow-hidden flex items-center justify-center">
                     <img
-                      src={selectedUser.avatarUrl}
+                      src={effectiveAvatar}
                       alt={selectedUser.username}
                       className="w-full h-full rounded object-cover"
                       onError={(e) => {
@@ -856,7 +868,7 @@ export default function MemberProfile({
         <div className="flex gap-2 items-start">
           <div className="w-[70px] h-[86px] rounded-lg bg-white p-0.5 border border-white/80 shadow-md shrink-0 overflow-hidden flex items-center justify-center">
             <img
-              src={selectedUser.avatarUrl}
+              src={effectiveAvatar}
               alt={selectedUser.username}
               className="w-full h-full rounded object-cover"
               onError={(e) => {
@@ -1084,7 +1096,7 @@ export default function MemberProfile({
           ) : isFotoToken ? (
             <div className="w-[85px] h-[105px] rounded bg-white p-0.5 border border-white/80 shadow-md shrink-0 overflow-hidden flex items-center justify-center">
               <img
-                src={selectedUser.avatarUrl}
+                src={effectiveAvatar}
                 alt={selectedUser.username}
                 className="w-full h-full rounded object-cover"
                 onError={(e) => {
@@ -2397,7 +2409,7 @@ export default function MemberProfile({
               <div className="col-span-1 flex justify-center md:w-full">
                 <div className="relative w-20 h-20 md:w-28 md:h-28 rounded-full bg-slate-50 p-[3px] border border-slate-200 shadow-sm flex-shrink-0">
                   <img
-                    src={selectedUser.avatarUrl}
+                    src={effectiveAvatar}
                     alt={selectedUser.username}
                     className="w-full h-full object-cover rounded-full"
                     referrerPolicy="no-referrer"
@@ -4038,7 +4050,7 @@ export default function MemberProfile({
                   {/* Body info */}
                   <div className="flex gap-3 items-center my-2">
                     <img
-                      src={selectedUser.avatarUrl}
+                      src={effectiveAvatar}
                       alt={selectedUser.username}
                       className="w-14 h-14 rounded-lg object-cover border-2 border-amber-500/40 bg-slate-900"
                       onError={(e) => {
@@ -5436,7 +5448,7 @@ export default function MemberProfile({
                     <div className="flex gap-2 items-start">
                       <div className="w-[66px] h-[80px] rounded bg-white p-0.5 border border-white/80 shrink-0 overflow-hidden flex items-center justify-center">
                         <img
-                          src={selectedUser.avatarUrl}
+                          src={effectiveAvatar}
                           alt="avatar"
                           className="w-full h-full rounded object-cover"
                           onError={(e) => {

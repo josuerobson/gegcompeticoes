@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat: filtros de ano em treinos, botao amarelo checkout, hora saida e permanencia em habitualidade e reprovacao direta de checkin` |
-| Data/hora | 2026-11-18T10:45:00-03:00 |
+| Mensagem | `fix(profile): atualizar foto de perfil em tempo real com cache-busting, preview otimista e sincronizacao de estado` |
+| Data/hora | 2026-11-18T15:38:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,22 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Atualização de Foto de Perfil em Tempo Real com Cache-Busting, Preview Otimista e Sincronização de Estado (`MemberProfile.tsx`, `src/App.tsx`, `server.ts`, `ValidarCheckinsPanel.tsx`, `AdminPanel.tsx`)**:
+  - **Solicitação do Usuário**: "Ao tentar trocar a foto do perfil, clico, seleciono a nova foto, aparece a mensagem de enviando, mas nada altera"
+  - **Diagnóstico e Causa Raiz**:
+    1. **Estado Stale em `selectedProfileUser`**: Na rota `/perfil`, o `App.tsx` guardava o objeto do usuário logado na variável de estado `selectedProfileUser`. Ao atualizar o perfil (`handleUpdateProfile`), `currentUser` e a lista `users` eram atualizados, porém `selectedProfileUser` permanecia com o objeto antigo em memória. Como `MemberProfile` recebia `selectedUser={selectedProfileUser || currentUser}`, o componente continuava consumindo os dados antigos.
+    2. **URL Estática sem Invalidação de Cache**: O backend gerava a URL estática fixa `/api/users/:id/avatar` com cabeçalho HTTP `Cache-Control: public, max-age=86400` (24 horas). Mesmo após salvar a nova imagem na coluna `avatar_url` do PostgreSQL, o valor da string `avatarUrl` retornado era 100% idêntico. O navegador, vendo a mesma URL em cache por 24 horas, nem sequer realizava requisição de rede e continuava exibindo os pixels antigos em memória.
+    3. **Ausência de Preview Otimista Imediato**: `MemberProfile.tsx` não tinha estado local de preview para refletir imediatamente a imagem selecionada enquanto aguardava o ciclo de rede.
+    4. **Propagação Ausente para Posts e Comentários**: Ao alterar a foto do perfil, os posts e comentários legados do atleta mantinham a URL anterior.
+    5. **Erros de Tipagem Pendentes**: Corrigidos `horaSaida` faltando em `EnrichedRegistration` (`AdminPanel.tsx`) e `Trash2` faltando na importação de `ValidarCheckinsPanel.tsx`.
+  - **O que foi implementado**:
+    1. **Cache-Busting Baseado em Hash de Conteúdo**: Em `server.ts`, as funções `avatarUrlFor` e `logoUrlFor` agora calculam uma assinatura baseada no hash e tamanho da string base64 (`computeCacheBuster`), gerando URLs com versionamento dinâmico: `/api/users/:id/avatar?v=<hash>_<len>`.
+    2. **Política de Cache Otimizada**: Nos endpoints `GET /api/users/:id/avatar` e `GET /api/clubs/:id/logo`: requisições com parâmetro `?v=` recebem `Cache-Control: public, max-age=31536000, immutable`; requisições diretas sem versionamento recebem `Cache-Control: no-cache, must-revalidate`.
+    3. **Preview Otimista Instantâneo**: Em `MemberProfile.tsx`, criado `avatarPreview` e `effectiveAvatar = avatarPreview || selectedUser.avatarUrl`. A foto selecionada é exibida na tela instantaneamente antes mesmo da resposta do servidor, com reversão automática caso a requisição falhe.
+    4. **Sincronização Reativa no `App.tsx`**: `handleUpdateProfile` e `handleUpdateMemberProfile` agora atualizam `selectedProfileUser` com o usuário retornado pela API e utilizam `buildAuthHeaders()`. Adicionado `useEffect` de garantia para sincronizar `selectedProfileUser` sempre que `currentUser` for modificado.
+    5. **Propagação Automática em Posts e Comentários**: No endpoint de atualização de perfil em `server.ts`, a alteração do avatar agora atualiza em cascata `posts.user_avatar` e `comments.user_avatar` do respectivo usuário.
+  - **O que NÃO fazer no futuro**: Não remover o parâmetro de cache-busting `?v=` de `avatarUrlFor` e `logoUrlFor`, pois URLs estáticas sem hash causam retenção de imagens antigas em cache de navegadores e proxies.
 
 - **Filtro por Ano em Treinamentos, Botão Amarelo de Competições no Checkout, Hora de Saída e Permanência em Habitualidades e Exclusão Direta de Check-in Reprovado (`server.ts`, `src/db.ts`, `src/types.ts`, `AdminPanel.tsx`, `MemberProfile.tsx`, `CheckoutActivityModal.tsx`, `ValidarCheckinsPanel.tsx`, `ClubReportsViewer.tsx`, `src/utils/habitualitiesExport.ts`)**:
   - **Solicitação do Usuário**:

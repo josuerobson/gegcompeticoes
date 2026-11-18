@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ShieldCheck, CheckCircle2, XCircle, Clock, MapPin, Search, Calendar,
   User as UserIcon, RefreshCw, AlertTriangle, Eye, Check, X, LogOut,
-  ExternalLink, Navigation, Camera, Layers, Info
+  ExternalLink, Navigation, Camera, Layers, Info, Trash2
 } from 'lucide-react';
 import { User, Club, ClubCheckin } from '../types';
 import { formatDisplayDateTime } from '../utils/dateUtils';

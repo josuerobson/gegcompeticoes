@@ -3660,7 +3660,7 @@ type EnrichedRegistration = {
   evaluationType?: string; weaponId?: string; weaponModel?: string; weaponSerial?: string;
   weaponNumber?: string; weaponSigma?: string; weaponCaliber?: string;
   weaponSource?: 'propria' | 'clube' | string;
-  totalPoints?: number; dataExecucao?: string; horaExecucao?: string;
+  totalPoints?: number; dataExecucao?: string; horaExecucao?: string; horaSaida?: string;
   seriesPontos?: any[]; seriesTempos?: any[];
   ownAmmoShots?: number; clubAmmoShots?: number; clubAmmoType?: 'nova' | 'recarga';
   registeredByUserId?: string; registrationType?: string;

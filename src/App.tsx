@@ -617,6 +617,13 @@ export default function App() {
     }
   }, [activeTab, selectedProfileUser, currentUser, showLoginModal, booting, initialRouteApplied, validationUserId]);
 
+  // Mantém selectedProfileUser sincronizado sempre que o currentUser é atualizado
+  useEffect(() => {
+    if (currentUser && selectedProfileUser && selectedProfileUser.id === currentUser.id) {
+      setSelectedProfileUser(currentUser);
+    }
+  }, [currentUser]);
+
   // Handler para processar a rota da URL e setar os estados
   const handleRouteNavigation = (pathname: string) => {
     const cleanPath = pathname.replace(/\/$/, '') || '/';
@@ -917,13 +924,14 @@ export default function App() {
     try {
       const res = await fetch('/api/users/me/profile', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        headers: buildAuthHeaders(),
         body: JSON.stringify(fields)
       });
       const data = await res.json();
       if (res.ok && data.user) {
         setCurrentUser(data.user);
         setUsers(prev => prev.map(u => u.id === data.user.id ? data.user : u));
+        setSelectedProfileUser(prev => prev && prev.id === data.user.id ? data.user : prev);
         return true;
       }
       return false;
@@ -1109,12 +1117,14 @@ export default function App() {
     try {
       const res = await fetch(`/api/admin/members/${memberId}/profile`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        headers: buildAuthHeaders(),
         body: JSON.stringify(fields)
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.user) {
         setUsers(prev => prev.map(u => u.id === data.user.id ? data.user : u));
+        setSelectedProfileUser(prev => prev && prev.id === data.user.id ? data.user : prev);
+        if (currentUser.id === data.user.id) setCurrentUser(data.user);
         return true;
       }
       return false;
