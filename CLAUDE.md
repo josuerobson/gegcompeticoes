@@ -38,6 +38,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Painel Diretor module status (as of 2026-11-19)
 
 Real (backed by actual DB tables/endpoints, tested end-to-end):
+- **Reprovação Direta de Treinamentos sem Justificativa com Exclusão Definitiva (`ValidarTreinamentosPanel.tsx`, `server.ts`)**:
+  - Reprovação unitária ou em lote exclui definitivamente o treinamento do sistema (`DELETE FROM trainings`), dispensando preenchimento de justificativa textual e removendo imediatamente da listagem.
 - **Seletor de Status de Campeonatos (Aberto / Finalizado / Rascunho) (`AdminPanel.tsx`, `server.ts`, `src/types.ts`)**:
   - Adicionado seletor de `Status do Campeonato` (`open` - Aberto / `completed` - Finalizado / `draft` - Rascunho) nos formulários de "Editar Campeonato" e "Cadastrar Campeonato" do Painel Diretor.
   - Atualizada a tabela de "Campeonatos Cadastrados" para exibir badge colorido de status em cada item.

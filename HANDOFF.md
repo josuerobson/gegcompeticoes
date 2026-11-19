@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(championships): adicionar seletor de status no cadastro e edicao de campeonatos no painel diretor` |
-| Data/hora | 2026-11-19T08:12:00-03:00 |
+| Mensagem | `feat(trainings): reprovar treinamento sem justificativa e com exclusao definitiva do sistema` |
+| Data/hora | 2026-11-19T08:35:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,19 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Reprovação de Treinamento sem Justificativa e com Exclusão Definitiva do Sistema (`ValidarTreinamentosPanel.tsx`, `server.ts`)**:
+  - **Solicitação do Usuário**: "Quando reprovar treinamento, não precisa mais de justificativa, e exclui o lançamento do sistema" (com captura de tela exibindo o modal de reprovação contendo o campo obrigatório de justificativa textual).
+  - **O que foi implementado**:
+    1. **Backend (`server.ts`)**:
+       - No endpoint `PATCH /api/trainings/:id/validate`: ao receber `status: 'reprovado'`, o sistema executa `DELETE FROM trainings WHERE id = $1` (respeitando o escopo do clube logado quando `currentUser.role === 'club_admin'`) e retorna `{ success: true, deleted: true }`.
+       - No endpoint `PATCH /api/trainings/validate-batch`: ao receber `status: 'reprovado'`, executa a exclusão definitiva em massa `DELETE FROM trainings t WHERE t.id = ANY($1::text[])` (também respeitando o escopo do clube) e retorna os IDs excluídos.
+    2. **Frontend (`ValidarTreinamentosPanel.tsx`)**:
+       - No modal individual de reprovação: removido o textarea obrigatório de justificativa. Adicionado card de aviso em vermelho (`bg-rose-50 border-rose-200`) alertando sobre a exclusão definitiva do lançamento do sistema.
+       - Atualizado o botão de confirmação para `Confirmar Reprovação e Exclusão` com ícone `<Trash2 className="w-4 h-4" />`.
+       - No modal em lote: para reprovação em massa, removida a exigência de preenchimento de justificativa, exibindo aviso de exclusão definitiva com o botão de confirmação com `<Trash2 className="w-4 h-4" /> Confirmar Exclusão de {selectedIds.size}`.
+       - Nas funções `handleSubmitValidation` e `handleSubmitBatchValidation`: removidas as validações impeditivas de texto vazio, e ao receber a confirmação de exclusão do servidor, os registros são removidos imediatamente do estado `trainings` da listagem.
+  - **O que NÃO fazer no futuro**: Não exigir justificativa de reprovação de treinos nem deixar treinos reprovados como registros órfãos no banco de dados.
 
 - **Seletor de Status de Campeonato no Cadastro e Edição (`AdminPanel.tsx`, `server.ts`, `src/types.ts`)**:
   - **Solicitação do Usuário**: "Porque esta aparecendo 'Finalizado' em cima dos campeonatos" seguido de "Opção 2, adicionar seletor de status na tela de editar Campeonato, para que caso queira alterar, o gestor vai la e faz."

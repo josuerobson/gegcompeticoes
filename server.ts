@@ -8442,6 +8442,25 @@ app.patch('/api/trainings/validate-batch', requireAdmin, async (req, res) => {
     const isClubAdmin = currentUser.role === 'club_admin';
     const allowedClubId = isClubAdmin ? currentUser.clubId : null;
 
+    // Regra oficial: Quando reprovado, exclui definitivamente do sistema sem necessidade de justificativa
+    if (status === 'reprovado') {
+      let deleteQuery = `DELETE FROM trainings t WHERE t.id = ANY($1::text[])`;
+      const params: any[] = [ids];
+      if (isClubAdmin && allowedClubId) {
+        params.push(allowedClubId);
+        deleteQuery += ` AND (t.club_id = $2 OR t.user_id IN (SELECT id FROM users WHERE club_id = $2))`;
+      }
+      deleteQuery += ` RETURNING t.id`;
+      const deleted = await pool.query(deleteQuery, params);
+      return res.json({
+        success: true,
+        deleted: true,
+        updatedCount: deleted.rowCount,
+        updatedIds: deleted.rows.map(r => r.id),
+        message: `${deleted.rowCount} treinamento(s) reprovado(s) e excluído(s) definitivamente do sistema com sucesso.`
+      });
+    }
+
     let updateQuery = `
       UPDATE trainings t
       SET status = $1,
@@ -8582,6 +8601,16 @@ app.patch('/api/trainings/:id/validate', requireAdmin, async (req, res) => {
       if (!allowedClubId || (training.club_id !== allowedClubId && training.athlete_club_id !== allowedClubId)) {
         return res.status(403).json({ error: 'Você só pode validar treinamentos de atletas vinculados ao seu clube.' });
       }
+    }
+
+    // Regra oficial: Quando reprovado, exclui definitivamente do sistema sem necessidade de justificativa
+    if (status === 'reprovado') {
+      await pool.query(`DELETE FROM trainings WHERE id = $1`, [id]);
+      return res.json({
+        success: true,
+        deleted: true,
+        message: 'Treinamento reprovado e excluído definitivamente do sistema com sucesso.'
+      });
     }
 
     let updateQuery = `

@@ -3,7 +3,7 @@ import {
   CheckCircle2, XCircle, Clock, Search, Calendar, User as UserIcon,
   Crosshair, ShieldCheck, AlertTriangle, RefreshCw, Filter, MessageSquare,
   ChevronDown, ArrowRight, Eye, Check, X, ShieldAlert, CheckSquare, Square,
-  Layers, Info, Pencil
+  Layers, Info, Pencil, Trash2
 } from 'lucide-react';
 import { User, Club, TrainingSession, Weapon } from '../types';
 import { formatDisplayDateTime, getLocalSaoPauloDateTime } from '../utils/dateUtils';
@@ -280,11 +280,6 @@ export default function ValidarTreinamentosPanel({
     e.preventDefault();
     if (!actionModalTarget) return;
 
-    if (actionType === 'reprovado' && !validationNotes.trim()) {
-      setActionError('Por favor, informe a justificativa da reprovação para ciência do atleta.');
-      return;
-    }
-
     setSubmittingAction(true);
     setActionError('');
 
@@ -297,7 +292,7 @@ export default function ValidarTreinamentosPanel({
         },
         body: JSON.stringify({
           status: actionType,
-          validationNotes: validationNotes.trim() || undefined,
+          validationNotes: actionType === 'aprovado' ? (validationNotes.trim() || undefined) : undefined,
           dateTime: actionDateTime || undefined
         })
       });
@@ -308,15 +303,17 @@ export default function ValidarTreinamentosPanel({
       }
 
       const data = await res.json();
-      const updatedTraining = data.training;
 
-      setTrainings(prev => prev.map(t => t.id === updatedTraining.id ? updatedTraining : t));
-
-      setSuccessMessage(
-        actionType === 'aprovado'
-          ? `Treinamento de ${actionModalTarget.athleteName || 'Atleta'} aprovado com sucesso!`
-          : `Treinamento de ${actionModalTarget.athleteName || 'Atleta'} reprovado.`
-      );
+      if (data.deleted || actionType === 'reprovado') {
+        setTrainings(prev => prev.filter(t => t.id !== actionModalTarget.id));
+        setSuccessMessage(`Treinamento de ${actionModalTarget.athleteName || 'Atleta'} reprovado e excluído do sistema com sucesso!`);
+      } else {
+        const updatedTraining = data.training;
+        if (updatedTraining) {
+          setTrainings(prev => prev.map(t => t.id === updatedTraining.id ? updatedTraining : t));
+        }
+        setSuccessMessage(`Treinamento de ${actionModalTarget.athleteName || 'Atleta'} aprovado com sucesso!`);
+      }
       setTimeout(() => setSuccessMessage(''), 4000);
 
       setActionModalTarget(null);
@@ -334,11 +331,6 @@ export default function ValidarTreinamentosPanel({
     e.preventDefault();
     if (selectedIds.size === 0) return;
 
-    if (batchActionType === 'reprovado' && !batchNotes.trim()) {
-      setBatchError('Por favor, informe a justificativa da reprovação para os itens selecionados.');
-      return;
-    }
-
     setSubmittingBatch(true);
     setBatchError('');
 
@@ -353,7 +345,7 @@ export default function ValidarTreinamentosPanel({
         body: JSON.stringify({
           ids: idsArray,
           status: batchActionType,
-          validationNotes: batchNotes.trim() || undefined
+          validationNotes: batchActionType === 'aprovado' ? (batchNotes.trim() || undefined) : undefined
         })
       });
 
@@ -365,24 +357,29 @@ export default function ValidarTreinamentosPanel({
       const data = await res.json();
       const affectedIds = new Set<string>(data.updatedIds || idsArray);
 
-      setTrainings(prev => prev.map(t => {
-        if (affectedIds.has(t.id)) {
-          return {
-            ...t,
-            status: batchActionType,
-            validationNotes: batchNotes.trim() || t.validationNotes
-          };
-        }
-        return t;
-      }));
+      if (data.deleted || batchActionType === 'reprovado') {
+        setTrainings(prev => prev.filter(t => !affectedIds.has(t.id)));
+      } else {
+        setTrainings(prev => prev.map(t => {
+          if (affectedIds.has(t.id)) {
+            return {
+              ...t,
+              status: batchActionType,
+              validationNotes: batchNotes.trim() || t.validationNotes
+            };
+          }
+          return t;
+        }));
+      }
 
       setSuccessMessage(
-        data.message || `${idsArray.length} treinamento(s) ${batchActionType === 'aprovado' ? 'aprovado(s)' : 'reprovado(s)'} em lote!`
+        data.message || `${idsArray.length} treinamento(s) ${batchActionType === 'aprovado' ? 'aprovado(s)' : 'reprovado(s) e excluído(s)'} em lote!`
       );
       setTimeout(() => setSuccessMessage(''), 4500);
 
       setSelectedIds(new Set());
       setBatchModalOpen(false);
+      if (onRefreshData) onRefreshData();
       if (onRefreshData) onRefreshData();
     } catch (err: any) {
       console.error('Error submitting batch training validation:', err);
@@ -854,7 +851,7 @@ export default function ValidarTreinamentosPanel({
                       <button
                         onClick={() => openActionModal(t, 'reprovado')}
                         className="flex-1 sm:flex-initial px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
-                        title="Reprovar o treinamento com justificativa"
+                        title="Reprovar e excluir o treinamento do sistema"
                       >
                         <X className="w-4 h-4" /> Reprovar
                       </button>
@@ -984,32 +981,36 @@ export default function ValidarTreinamentosPanel({
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                  <span>
-                    {actionType === 'aprovado' ? 'Observações da Aprovação (Opcional):' : 'Justificativa da Reprovação (Obrigatória):'}
-                  </span>
-                  {actionType === 'reprovado' && (
-                    <span className="text-[10px] text-rose-600 font-bold uppercase">* Obrigatório</span>
-                  )}
-                </label>
-                <textarea
-                  rows={3}
-                  value={validationNotes}
-                  onChange={(e) => setValidationNotes(e.target.value)}
-                  placeholder={
-                    actionType === 'aprovado'
-                      ? 'Ex: Presença conferida pelo instrutor de plantão no estande.'
-                      : 'Ex: Disparos não conferem com o estande / Arma sem guia de tráfego apresentada.'
-                  }
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-[10px] text-slate-400">
-                  {actionType === 'aprovado'
-                    ? 'Esta observação ficará registrada no histórico da habitualidade do atirador.'
-                    : 'A justificativa ficará visível para o atirador no perfil dele e na emissão de declarações.'}
-                </p>
-              </div>
+              {actionType === 'aprovado' ? (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700">
+                    Observações da Aprovação (Opcional):
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={validationNotes}
+                    onChange={(e) => setValidationNotes(e.target.value)}
+                    placeholder="Ex: Presença conferida pelo instrutor de plantão no estande."
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-[10px] text-slate-400">
+                    Esta observação ficará registrada no histórico da habitualidade do atirador.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-rose-800">
+                    <AlertTriangle className="w-4 h-4 text-rose-600" />
+                    Atenção: Exclusão Definitiva
+                  </div>
+                  <p>
+                    Ao confirmar a reprovação, o lançamento deste treinamento de <strong>{actionModalTarget.athleteName || 'Atleta'}</strong> será <strong>excluído definitivamente do sistema</strong> sem necessidade de justificativa.
+                  </p>
+                  <p className="font-semibold text-rose-700">
+                    Deseja confirmar a reprovação e exclusão deste treinamento?
+                  </p>
+                </div>
+              )}
 
               {/* Botões do Rodapé */}
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
@@ -1031,14 +1032,14 @@ export default function ValidarTreinamentosPanel({
                   }`}
                 >
                   {submittingAction ? (
-                    <>Salvando...</>
+                    <>Processando...</>
                   ) : actionType === 'aprovado' ? (
                     <>
                       <Check className="w-4 h-4" /> Confirmar Aprovação
                     </>
                   ) : (
                     <>
-                      <X className="w-4 h-4" /> Confirmar Reprovação
+                      <Trash2 className="w-4 h-4" /> Confirmar Reprovação e Exclusão
                     </>
                   )}
                 </button>
@@ -1084,33 +1085,41 @@ export default function ValidarTreinamentosPanel({
                 </div>
               )}
 
-              <div className="p-3.5 bg-blue-50/70 border border-blue-200/70 rounded-xl text-xs text-blue-900">
-                <p>
-                  Você está prestes a <strong>{batchActionType === 'aprovado' ? 'APROVAR' : 'REPROVAR'}</strong> {selectedIds.size} registros de treinamento de uma só vez.
-                </p>
-              </div>
+              {batchActionType === 'aprovado' ? (
+                <>
+                  <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/70 rounded-xl text-xs text-emerald-900">
+                    <p>
+                      Você está prestes a <strong>APROVAR</strong> {selectedIds.size} registros de treinamento de uma só vez.
+                    </p>
+                  </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                  <span>
-                    {batchActionType === 'aprovado' ? 'Observações em Lote (Opcional):' : 'Justificativa da Reprovação (Obrigatória):'}
-                  </span>
-                  {batchActionType === 'reprovado' && (
-                    <span className="text-[10px] text-rose-600 font-bold uppercase">* Obrigatório</span>
-                  )}
-                </label>
-                <textarea
-                  rows={3}
-                  value={batchNotes}
-                  onChange={(e) => setBatchNotes(e.target.value)}
-                  placeholder={
-                    batchActionType === 'aprovado'
-                      ? 'Ex: Passagens de treino homologadas pelo estande do clube em lote.'
-                      : 'Ex: Documentação de habitualidade inconsistente.'
-                  }
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">
+                      Observações em Lote (Opcional):
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={batchNotes}
+                      onChange={(e) => setBatchNotes(e.target.value)}
+                      placeholder="Ex: Passagens de treino homologadas pelo estande do clube em lote."
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-rose-800">
+                    <AlertTriangle className="w-4 h-4 text-rose-600" />
+                    Atenção: Exclusão Definitiva
+                  </div>
+                  <p>
+                    Você selecionou <strong>{selectedIds.size} treinamento(s)</strong> para reprovar. Conforme a regra do sistema, ao reprovar, os lançamentos serão <strong>excluídos definitivamente do sistema</strong> sem necessidade de justificativa.
+                  </p>
+                  <p className="font-semibold text-rose-700">
+                    Deseja prosseguir com a exclusão definitiva destes {selectedIds.size} treinamento(s)?
+                  </p>
+                </div>
+              )}
 
               {/* Botões do Rodapé */}
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
@@ -1139,7 +1148,7 @@ export default function ValidarTreinamentosPanel({
                     </>
                   ) : (
                     <>
-                      <X className="w-4 h-4" /> Confirmar Reprovação de {selectedIds.size}
+                      <Trash2 className="w-4 h-4" /> Confirmar Exclusão de {selectedIds.size}
                     </>
                   )}
                 </button>
