@@ -9639,6 +9639,7 @@ export default function AdminPanel({
   const [champFee, setChampFee] = useState(100);
   const [selectedMods, setSelectedMods] = useState<string[]>([]);
   const [champStages, setChampStages] = useState(4);
+  const [champStatus, setChampStatus] = useState<'open' | 'completed' | 'draft'>('open');
   const [champBanner, setChampBanner] = useState('');
   const [champImageSourceMode, setChampImageSourceMode] = useState<'url' | 'upload' | 'gallery'>('gallery');
   const [createSuccess, setCreateSuccess] = useState(false);
@@ -9658,6 +9659,7 @@ export default function AdminPanel({
   const [editChampFee, setEditChampFee] = useState(100);
   const [editSelectedMods, setEditSelectedMods] = useState<string[]>([]);
   const [editChampStages, setEditChampStages] = useState(4);
+  const [editChampStatus, setEditChampStatus] = useState<'open' | 'completed' | 'draft'>('open');
   const [editChampBanner, setEditChampBanner] = useState('');
   const [editChampImageSourceMode, setEditChampImageSourceMode] = useState<'url' | 'upload' | 'gallery'>('gallery');
   const [editSuccess, setEditSuccess] = useState(false);
@@ -10878,6 +10880,7 @@ export default function AdminPanel({
       modalities: selectedMods,
       stagesCount: Number(champStages),
       bannerUrl: champBanner || undefined,
+      status: champStatus,
       ...extraStateToPayload(champExtra)
     });
 
@@ -10893,6 +10896,7 @@ export default function AdminPanel({
     setChampTitle('');
     setChampDesc('');
     setChampBanner('');
+    setChampStatus('open');
     setSelectedMods([]);
     setChampExtra(DEFAULT_CHAMP_EXTRA);
     setChampRegulamentoFile(null);
@@ -10914,6 +10918,7 @@ export default function AdminPanel({
       modalities: editSelectedMods,
       stagesCount: Number(editChampStages),
       bannerUrl: editChampBanner || undefined,
+      status: editChampStatus,
       ...extraStateToPayload(editChampExtra)
     });
 
@@ -10928,6 +10933,7 @@ export default function AdminPanel({
     setEditSuccess(true);
     setEditingChampId(null);
     setEditChampBanner('');
+    setEditChampStatus('open');
     setEditChampRegulamentoFile(null);
     setEditChampSumulaFile(null);
     setTimeout(() => setEditSuccess(false), 3000);
@@ -10954,6 +10960,7 @@ export default function AdminPanel({
     setEditChampFee(champ.registrationFee);
     setEditSelectedMods(champ.modalities);
     setEditChampStages(champ.stagesCount);
+    setEditChampStatus(champ.status || 'open');
     setEditChampBanner(champ.bannerUrl || '');
     setEditChampExtra(championshipToExtraState(champ));
     setEditChampRegulamentoFile(null);
@@ -14207,6 +14214,19 @@ export default function AdminPanel({
                         />
                       </div>
 
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Status do Campeonato</label>
+                        <select
+                          value={editChampStatus}
+                          onChange={(e) => setEditChampStatus(e.target.value as 'open' | 'completed' | 'draft')}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold cursor-pointer"
+                        >
+                          <option value="open">🟢 Aberto (Em andamento / Inscrições ativas)</option>
+                          <option value="completed">⚪ Finalizado (Concluído / Histórico)</option>
+                          <option value="draft">🟡 Rascunho (Não publicado)</option>
+                        </select>
+                      </div>
+
                       <div className="space-y-1 sm:col-span-2">
                         <label className="text-[10px] font-bold text-slate-500 uppercase block">Conjunto de Modalidades e Regras</label>
                         <p className="text-[10px] text-slate-400 mb-1">Selecione as modalidades já cadastradas. Séries/tiros/tempo/avaliação vêm da própria modalidade e só podem ser alterados na tela "Modalidades".</p>
@@ -14431,6 +14451,19 @@ export default function AdminPanel({
                           onChange={(e) => setChampStages(Number(e.target.value))}
                           className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700"
                         />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Status do Campeonato</label>
+                        <select
+                          value={champStatus}
+                          onChange={(e) => setChampStatus(e.target.value as 'open' | 'completed' | 'draft')}
+                          className="w-full bg-slate-50 border border-slate-200 outline-none p-3 rounded-xl focus:border-blue-500 text-xs text-slate-700 font-semibold cursor-pointer"
+                        >
+                          <option value="open">🟢 Aberto (Em andamento / Inscrições ativas)</option>
+                          <option value="completed">⚪ Finalizado (Concluído / Histórico)</option>
+                          <option value="draft">🟡 Rascunho (Não publicado)</option>
+                        </select>
                       </div>
 
                       <div className="space-y-1 sm:col-span-2">
@@ -14671,6 +14704,15 @@ export default function AdminPanel({
                         <tr key={champ.id} className="hover:bg-slate-50/50">
                           <td className="py-3 px-2">
                             <span className="font-bold text-slate-800 block">{champ.title}</span>
+                            <span className={`inline-block mt-0.5 text-[8.5px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                              champ.status === 'open' 
+                                ? 'bg-emerald-100 text-emerald-700' 
+                                : champ.status === 'completed' 
+                                  ? 'bg-slate-200 text-slate-700' 
+                                  : 'bg-amber-100 text-amber-700'
+                            }`}>
+                              {champ.status === 'open' ? 'Aberto' : champ.status === 'completed' ? 'Finalizado' : 'Rascunho'}
+                            </span>
                           </td>
                           <td className="py-3 px-2 font-mono text-slate-600">
                             {new Date(champ.startDate).toLocaleDateString()} - {new Date(champ.endDate).toLocaleDateString()}

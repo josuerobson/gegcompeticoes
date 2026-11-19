@@ -342,7 +342,7 @@ export interface HomeBanner {
 // Payload shape for creating/editing a championship — the required "quick create"
 // fields plus every optional cadastro-completo field from Championship.
 export type ChampionshipInput = Pick<Championship, 'title' | 'description' | 'startDate' | 'endDate' | 'registrationFee' | 'modalities' | 'stagesCount'> &
-  Partial<Omit<Championship, 'id' | 'title' | 'description' | 'startDate' | 'endDate' | 'registrationFee' | 'modalities' | 'stagesCount' | 'status' | 'currentStage' | 'regulamentoUploaded' | 'sumulaUploaded'>>;
+  Partial<Omit<Championship, 'id' | 'title' | 'description' | 'startDate' | 'endDate' | 'registrationFee' | 'modalities' | 'stagesCount' | 'currentStage' | 'regulamentoUploaded' | 'sumulaUploaded'>>;
 
 export interface Registration {
   id: string;

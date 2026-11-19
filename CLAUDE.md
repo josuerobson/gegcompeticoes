@@ -35,9 +35,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Legacy system parity.** Several `Painel Diretor` cadastro screens were rebuilt to match field-for-field specs from a legacy PHP system the user is migrating off of (raw HTML forms with generic field names like `info1`, `id4` were used as the source of truth — those internal names are not meaningful, only the field's label/position/options matter). Where this repo's data model needed to diverge from a first guess based on the legacy system, the actual legacy HTML always won. See "Painel Diretor module status" below for what's been aligned this way — don't assume an unconverted screen's fields are correct without checking for a legacy reference first.
 
-## Painel Diretor module status (as of 2026-11-18)
+## Painel Diretor module status (as of 2026-11-19)
 
 Real (backed by actual DB tables/endpoints, tested end-to-end):
+- **Seletor de Status de Campeonatos (Aberto / Finalizado / Rascunho) (`AdminPanel.tsx`, `server.ts`, `src/types.ts`)**:
+  - Adicionado seletor de `Status do Campeonato` (`open` - Aberto / `completed` - Finalizado / `draft` - Rascunho) nos formulários de "Editar Campeonato" e "Cadastrar Campeonato" do Painel Diretor.
+  - Atualizada a tabela de "Campeonatos Cadastrados" para exibir badge colorido de status em cada item.
+  - Atualizados endpoints `POST /api/championships` e `PUT /api/championships/:id` em `server.ts` para aceitar e persistir a coluna `status`.
+  - Tipo `ChampionshipInput` em `src/types.ts` atualizado para incluir `status`.
 - **Histórico de Treinamentos com Filtro por Ano e Data/Hora de Saída (`AdminPanel.tsx`, `MemberProfile.tsx`, `server.ts`, `src/db.ts`)**:
   - Filtro por ano padrão no ano corrente (2026), com seletor de 2021 até o ano atual + opção "Todos os Anos", reduzindo a sobrecarga de renderização.
   - Campos de entrada e hora de saída (`departure_time`) com cálculo automático de permanência (`duration_minutes`).

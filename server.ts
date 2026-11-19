@@ -4173,19 +4173,21 @@ const CHAMPIONSHIP_EXTRA_COLUMNS: Record<string, string> = {
 };
 
 app.post('/api/championships', requireFranchiseAdmin, async (req, res) => {
-  const { title, description, startDate, endDate, registrationFee, modalities, stagesCount, bannerUrl, clubId, type } = req.body;
+  const { title, description, startDate, endDate, registrationFee, modalities, stagesCount, bannerUrl, clubId, type, status } = req.body;
   const currentUser = (req as any).user as User;
 
   if (!title || !description || registrationFee === undefined || registrationFee === null || !modalities || !stagesCount) {
     return res.status(400).json({ error: 'Preencha todos os campos obrigatórios do campeonato.' });
   }
 
+  const finalStatus = (status && ['open', 'completed', 'draft'].includes(status)) ? status : 'open';
+
   const id = `champ_${Date.now()}`;
   const columns = ['id', 'title', 'description', 'start_date', 'end_date', 'registration_fee', 'modalities', 'stages_count', 'status', 'banner_url', 'club_id', 'type'];
   const values: unknown[] = [
     id, title, description, startDate, endDate, Number(registrationFee),
     JSON.stringify(Array.isArray(modalities) ? modalities : [modalities]),
-    Number(stagesCount), 'open',
+    Number(stagesCount), finalStatus,
     bannerUrl || 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80',
     (currentUser.role === 'master_admin' && clubId) || currentUser.clubId || DEFAULT_TENANT_ID, type === 'clube' ? 'clube' : 'individual'
   ];
@@ -4260,7 +4262,7 @@ app.post('/api/championships/:id/ranking', requireFranchiseAdmin, async (req, re
 
 app.put('/api/championships/:id', requireFranchiseAdmin, async (req, res) => {
   const champId = req.params.id;
-  const { title, description, startDate, endDate, registrationFee, modalities, stagesCount, bannerUrl } = req.body;
+  const { title, description, startDate, endDate, registrationFee, modalities, stagesCount, bannerUrl, status } = req.body;
 
   if (!title || !description || registrationFee === undefined || registrationFee === null || !modalities || !stagesCount) {
     return res.status(400).json({ error: 'Preencha todos os campos obrigatórios.' });
@@ -4273,13 +4275,16 @@ app.put('/api/championships/:id', requireFranchiseAdmin, async (req, res) => {
     }
 
     const currentBanner = champRes.rows[0].banner_url;
+    const currentStatus = champRes.rows[0].status || 'open';
+    const finalStatus = (status && ['open', 'completed', 'draft'].includes(status)) ? status : currentStatus;
 
-    const columns = ['title', 'description', 'start_date', 'end_date', 'registration_fee', 'modalities', 'stages_count', 'banner_url'];
+    const columns = ['title', 'description', 'start_date', 'end_date', 'registration_fee', 'modalities', 'stages_count', 'banner_url', 'status'];
     const values: unknown[] = [
       title, description, startDate, endDate, Number(registrationFee),
       JSON.stringify(Array.isArray(modalities) ? modalities : [modalities]),
       Number(stagesCount),
-      bannerUrl || currentBanner || 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80'
+      bannerUrl || currentBanner || 'https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800&auto=format&fit=crop&q=80',
+      finalStatus
     ];
 
     for (const [key, column] of Object.entries(CHAMPIONSHIP_EXTRA_COLUMNS)) {

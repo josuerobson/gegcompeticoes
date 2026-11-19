@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `fix(profile): atualizar foto de perfil em tempo real com cache-busting, preview otimista e sincronizacao de estado` |
-| Data/hora | 2026-11-18T15:38:00-03:00 |
+| Mensagem | `feat(championships): adicionar seletor de status no cadastro e edicao de campeonatos no painel diretor` |
+| Data/hora | 2026-11-19T08:12:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,27 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Seletor de Status de Campeonato no Cadastro e Edição (`AdminPanel.tsx`, `server.ts`, `src/types.ts`)**:
+  - **Solicitação do Usuário**: "Porque esta aparecendo 'Finalizado' em cima dos campeonatos" seguido de "Opção 2, adicionar seletor de status na tela de editar Campeonato, para que caso queira alterar, o gestor vai la e faz."
+  - **Contexto & Diagnóstico**:
+    1. No visualizador de resultados de campeonatos (`CompetitionResultsViewer.tsx`), cada card de campeonato exibe um badge no topo indicando se está "Aberto" (`open`, verde), "Finalizado" (`completed`, cinza) ou "Rascunho" (`draft`, amarelo).
+    2. Os campeonatos de 2026 importados do sistema PHP legado foram gravados no banco de dados com `status = 'completed'` pela rotina de migração histórica.
+    3. No Painel Diretor, tanto no formulário de "Editar Campeonato" quanto no de "Cadastrar Campeonato", não existia um campo de status exposto na interface para o gestor alterar o status do campeonato, e os endpoints do backend (`PUT /api/championships/:id` e `POST /api/championships`) não aceitavam nem persistiam o campo `status`.
+  - **O que foi implementado**:
+    1. **Frontend (`AdminPanel.tsx`)**:
+       - Adicionado seletor de "Status do Campeonato" com opções:
+         - `open`: "🟢 Aberto (Em andamento / Inscrições ativas)"
+         - `completed`: "⚪ Finalizado (Concluído / Histórico)"
+         - `draft`: "🟡 Rascunho (Não publicado)"
+       - Integrado tanto no formulário de "Editar Campeonato" quanto no formulário de "Cadastrar Campeonato".
+       - Ao clicar em "Editar" em qualquer campeonato, o status atual dele é carregado no formulário (`champ.status || 'open'`).
+       - Na tabela de "Campeonatos Cadastrados", adicionado um badge visual com o status logo abaixo do título do campeonato para identificação rápida pelo gestor.
+    2. **Backend (`server.ts`)**:
+       - Atualizados os endpoints `PUT /api/championships/:id` e `POST /api/championships` para aceitar `status` (`open`, `completed`, `draft`) e persistir diretamente na coluna `status` da tabela `championships`.
+    3. **Tipagem (`src/types.ts`)**:
+       - Atualizado `ChampionshipInput` para incluir `status?: 'draft' | 'open' | 'completed'`.
+  - **O que NÃO fazer no futuro**: Não omitir a coluna `status` de queries de inserção e atualização de campeonatos, e respeitar a validação de opções válidas (`open`, `completed`, `draft`).
 
 - **Atualização de Foto de Perfil em Tempo Real com Cache-Busting, Preview Otimista e Sincronização de Estado (`MemberProfile.tsx`, `src/App.tsx`, `server.ts`, `ValidarCheckinsPanel.tsx`, `AdminPanel.tsx`)**:
   - **Solicitação do Usuário**: "Ao tentar trocar a foto do perfil, clico, seleciono a nova foto, aparece a mensagem de enviando, mas nada altera"
