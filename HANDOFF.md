@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(trainings): reprovar treinamento sem justificativa e com exclusao definitiva do sistema` |
-| Data/hora | 2026-11-19T08:35:00-03:00 |
+| Mensagem | `feat(championships): preencher data da prova e hora de entrada a partir do check-in vinculado` |
+| Data/hora | 2026-11-20T09:05:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,20 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Pré-preenchimento Automático de Data da Prova e Hora de Entrada a partir do Check-in Vinculado (`AdminPanel.tsx`, `server.ts`)**:
+  - **Solicitação do Usuário**: "Quando for cadastrar o resultado e já tiver vinculado ao check-in preencher a data da prova e hora de entrada conforme check-in" (com anexo demonstrando que ao abrir a inscrição com check-in já vinculado, a data e hora de entrada ficavam em branco enquanto a hora de saída estava preenchida).
+  - **O que foi implementado**:
+    1. **Frontend (`AdminPanel.tsx`)**:
+       - No painel de cadastro de notas/resultados (`CadastrarResultadosPanel`):
+         - Na função `selectReg(reg: EnrichedRegistration)`: quando a inscrição possui check-in vinculado (`reg.checkinDate` ou `reg.checkinId`), se `dataExecucao` ou `horaExecucao` estiverem vazias, pré-preenche automaticamente "Data da Prova" com a data do check-in no fuso de Brasília/São Paulo (`getLocalSaoPauloDate(reg.checkinDate)`) e "Hora Entrada / Início" com a hora de entrada do check-in no fuso de Brasília/São Paulo (`getLocalSaoPauloTime(reg.checkinDate)`). Se `horaSaida` estiver vazia, preenche a partir de `reg.checkoutDate` / `reg.checkoutTime`.
+         - Na função `handleLinkCheckin`: ao vincular ou trocar o check-in pelo modal, os campos de Data da Prova, Hora de Entrada e Hora de Saída são imediatamente atualizados para os horários do check-in selecionado, sem travas indevidas.
+         - Adicionados `checkoutDate` e `checkoutTime` no tipo `EnrichedRegistration`.
+    2. **Backend (`server.ts`)**:
+       - Em `GET /api/admin/registrations`: incluído `chk.checkout_at as checkout_date` na query SQL e mapeados `checkoutDate` e `checkoutTime`.
+       - Em `PATCH /api/registrations/:id/link-checkin`: calcula data e hora no fuso `America/Sao_Paulo` a partir de `checkin_at` e atualiza `data_execucao = COALESCE(data_execucao, $date)` e `hora_execucao = COALESCE(hora_execucao, $time)`, retornando `checkinDate`, `checkoutDate`, `checkoutTime`, `entryDate`, `entryTime`.
+       - Em `POST /api/checkins/:id/registrations` e `POST /api/checkins/:id/checkout`: ao associar inscrições ao check-in ou ao finalizar o checkout, sincroniza automaticamente `data_execucao` e `hora_execucao` com o horário de entrada do check-in e `hora_saida` com a hora de saída.
+  - **O que NÃO fazer no futuro**: Nunca sobrescrever dados que o gestor tenha editado manualmente caso decida alterar a data/hora da prova, e sempre manter datas e horas sincronizadas estritamente no fuso horário oficial de Brasília/São Paulo (`America/Sao_Paulo` - UTC-3).
 
 - **Reprovação de Treinamento sem Justificativa e com Exclusão Definitiva do Sistema (`ValidarTreinamentosPanel.tsx`, `server.ts`)**:
   - **Solicitação do Usuário**: "Quando reprovar treinamento, não precisa mais de justificativa, e exclui o lançamento do sistema" (com captura de tela exibindo o modal de reprovação contendo o campo obrigatório de justificativa textual).

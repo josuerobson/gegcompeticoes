@@ -5642,7 +5642,8 @@ app.get('/api/admin/registrations', requireAdmin, async (req, res) => {
       c.name as club_name,
       m.name as modality_name, m.series_count, m.shots_per_series, m.evaluation_type,
       w.model as weapon_model, w.serial_number as weapon_serial, w.weapon_number as weapon_number, w.sigma_number, w.caliber as weapon_caliber,
-      chk.checkin_at as checkin_date
+      chk.checkin_at as checkin_date,
+      chk.checkout_at as checkout_date
       FROM registrations r
       LEFT JOIN users u ON u.id = r.user_id
       LEFT JOIN clubs c ON c.id = r.club_id
@@ -5678,6 +5679,7 @@ app.get('/api/admin/registrations', requireAdmin, async (req, res) => {
       weaponCaliber: r.weapon_caliber,
       checkinId: r.checkin_id || undefined,
       checkinDate: r.checkin_date || undefined,
+      checkoutDate: r.checkout_date || undefined,
     }));
     res.json({ registrations });
   } catch (err) {
@@ -9311,11 +9313,49 @@ app.post('/api/checkins/:id/link-registrations', requireAuth, async (req, res) =
 
     // Vincula as inscricoes selecionadas ao check-in
     if (registrationIds.length > 0) {
+      let spDateStr: string | null = null;
+      let spTimeStr: string | null = null;
+      if (checkin.checkin_at) {
+        const dCheckin = new Date(checkin.checkin_at);
+        const partsDate = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          year: 'numeric', month: '2-digit', day: '2-digit'
+        }).formatToParts(dCheckin);
+        const dObj: Record<string, string> = {};
+        partsDate.forEach(p => { dObj[p.type] = p.value; });
+        spDateStr = `${dObj.year}-${dObj.month}-${dObj.day}`;
+
+        const partsTime = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          hour: '2-digit', minute: '2-digit', hour12: false
+        }).formatToParts(dCheckin);
+        const tObj: Record<string, string> = {};
+        partsTime.forEach(p => { tObj[p.type] = p.value; });
+        spTimeStr = `${tObj.hour}:${tObj.minute}`;
+      }
+
+      let checkinCheckoutTime: string | null = null;
+      let checkinDuration: string | null = null;
+      if (checkin.checkout_at) {
+        const formatterSP = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          hour: '2-digit', minute: '2-digit', hour12: false
+        });
+        checkinCheckoutTime = formatterSP.format(new Date(checkin.checkout_at));
+      }
+      if (checkin.duration_minutes != null) {
+        checkinDuration = `${checkin.duration_minutes} min`;
+      }
+
       await pool.query(
         `UPDATE registrations
-         SET checkin_id = $1
-         WHERE id = ANY($2) AND (user_id = $3 OR $4 = true)`,
-        [id, registrationIds, checkin.user_id, isAdmin]
+         SET checkin_id = $1,
+             data_execucao = COALESCE(data_execucao, $2),
+             hora_execucao = COALESCE(hora_execucao, $3),
+             hora_saida = COALESCE($4, hora_saida),
+             tempo_permanencia = COALESCE($5, tempo_permanencia)
+         WHERE id = ANY($6) AND (user_id = $7 OR $8 = true)`,
+        [id, spDateStr, spTimeStr, checkinCheckoutTime, checkinDuration, registrationIds, checkin.user_id, isAdmin]
       );
     }
 
@@ -9369,14 +9409,39 @@ app.patch('/api/registrations/:id/link-checkin', requireAdmin, async (req, res) 
 
   try {
     let checkinDate: string | null = null;
+    let checkoutDate: string | null = null;
     let checkinCheckoutTime: string | null = null;
     let checkinDuration: string | null = null;
+    let spDateStr: string | null = null;
+    let spTimeStr: string | null = null;
+
     if (checkinId) {
       const chkRes = await pool.query('SELECT id, checkin_at, checkout_at, duration_minutes FROM club_checkins WHERE id = $1', [checkinId]);
       if (chkRes.rows.length === 0) {
         return res.status(404).json({ error: 'Check-in não encontrado.' });
       }
       checkinDate = chkRes.rows[0].checkin_at;
+      checkoutDate = chkRes.rows[0].checkout_at;
+
+      if (checkinDate) {
+        const dCheckin = new Date(checkinDate);
+        const partsDate = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          year: 'numeric', month: '2-digit', day: '2-digit'
+        }).formatToParts(dCheckin);
+        const dObj: Record<string, string> = {};
+        partsDate.forEach(p => { dObj[p.type] = p.value; });
+        spDateStr = `${dObj.year}-${dObj.month}-${dObj.day}`;
+
+        const partsTime = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          hour: '2-digit', minute: '2-digit', hour12: false
+        }).formatToParts(dCheckin);
+        const tObj: Record<string, string> = {};
+        partsTime.forEach(p => { tObj[p.type] = p.value; });
+        spTimeStr = `${tObj.hour}:${tObj.minute}`;
+      }
+
       if (chkRes.rows[0].checkout_at) {
         const formatterSP = new Intl.DateTimeFormat('pt-BR', {
           timeZone: 'America/Sao_Paulo',
@@ -9392,11 +9457,13 @@ app.patch('/api/registrations/:id/link-checkin', requireAdmin, async (req, res) 
     const result = await pool.query(
       `UPDATE registrations
        SET checkin_id = $1,
-           hora_saida = COALESCE($2, hora_saida),
-           tempo_permanencia = COALESCE($3, tempo_permanencia)
-       WHERE id = $4
+           data_execucao = COALESCE(data_execucao, $2),
+           hora_execucao = COALESCE(hora_execucao, $3),
+           hora_saida = COALESCE($4, hora_saida),
+           tempo_permanencia = COALESCE($5, tempo_permanencia)
+       WHERE id = $6
        RETURNING *`,
-      [checkinId || null, checkinCheckoutTime, checkinDuration, id]
+      [checkinId || null, spDateStr, spTimeStr, checkinCheckoutTime, checkinDuration, id]
     );
 
     if (result.rows.length === 0) {
@@ -9407,8 +9474,11 @@ app.patch('/api/registrations/:id/link-checkin', requireAdmin, async (req, res) 
       success: true,
       registration: mapRegistration(result.rows[0]),
       checkinDate: checkinDate || undefined,
+      checkoutDate: checkoutDate || undefined,
       checkoutTime: checkinCheckoutTime || undefined,
       duration: checkinDuration || undefined,
+      entryDate: spDateStr || undefined,
+      entryTime: spTimeStr || undefined,
     });
   } catch (err) {
     console.error('Link registration to checkin error:', err);
@@ -9532,6 +9602,24 @@ app.post('/api/checkins/:id/checkout', requireAuth, async (req, res) => {
     });
     const exitTimeStr = formatterSPTime.format(effectiveCheckout);
 
+    let spDateStr: string | null = null;
+    let spTimeStr: string | null = null;
+    if (checkin.checkin_at) {
+      const dCheckin = new Date(checkin.checkin_at);
+      const partsDate = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric', month: '2-digit', day: '2-digit'
+      }).formatToParts(dCheckin);
+      const dObj: Record<string, string> = {};
+      partsDate.forEach(p => { dObj[p.type] = p.value; });
+      spDateStr = `${dObj.year}-${dObj.month}-${dObj.day}`;
+
+      const partsTime = formatterSPTime.formatToParts(dCheckin);
+      const tObj: Record<string, string> = {};
+      partsTime.forEach(p => { tObj[p.type] = p.value; });
+      spTimeStr = `${tObj.hour}:${tObj.minute}`;
+    }
+
     // Sincroniza automaticamente hora de saída e tempo de permanência nos treinamentos vinculados a este checkin
     await pool.query(
       `UPDATE trainings
@@ -9546,18 +9634,22 @@ app.post('/api/checkins/:id/checkout', requireAuth, async (req, res) => {
       await pool.query(
         `UPDATE registrations
          SET checkin_id = $1,
-             hora_saida = $2,
-             tempo_permanencia = $3
-         WHERE id = ANY($4) AND (user_id = $5 OR $6 = true)`,
-        [id, exitTimeStr, `${durationMinutes} min`, registrationIds, checkin.user_id, isAdmin]
+             data_execucao = COALESCE(data_execucao, $2),
+             hora_execucao = COALESCE(hora_execucao, $3),
+             hora_saida = $4,
+             tempo_permanencia = $5
+         WHERE id = ANY($6) AND (user_id = $7 OR $8 = true)`,
+        [id, spDateStr, spTimeStr, exitTimeStr, `${durationMinutes} min`, registrationIds, checkin.user_id, isAdmin]
       );
     } else {
       await pool.query(
         `UPDATE registrations
-         SET hora_saida = $1,
-             tempo_permanencia = $2
-         WHERE checkin_id = $3`,
-        [exitTimeStr, `${durationMinutes} min`, id]
+         SET data_execucao = COALESCE(data_execucao, $1),
+             hora_execucao = COALESCE(hora_execucao, $2),
+             hora_saida = $3,
+             tempo_permanencia = $4
+         WHERE checkin_id = $5`,
+        [spDateStr, spTimeStr, exitTimeStr, `${durationMinutes} min`, id]
       );
     }
 

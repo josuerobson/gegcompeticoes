@@ -35,9 +35,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Legacy system parity.** Several `Painel Diretor` cadastro screens were rebuilt to match field-for-field specs from a legacy PHP system the user is migrating off of (raw HTML forms with generic field names like `info1`, `id4` were used as the source of truth — those internal names are not meaningful, only the field's label/position/options matter). Where this repo's data model needed to diverge from a first guess based on the legacy system, the actual legacy HTML always won. See "Painel Diretor module status" below for what's been aligned this way — don't assume an unconverted screen's fields are correct without checking for a legacy reference first.
 
-## Painel Diretor module status (as of 2026-11-19)
+## Painel Diretor module status (as of 2026-11-20)
 
 Real (backed by actual DB tables/endpoints, tested end-to-end):
+- **Pré-preenchimento Automático de Data da Prova e Hora de Entrada a partir do Check-in Vinculado (`AdminPanel.tsx`, `server.ts`)**:
+  - No Painel Diretor > Cadastrar Resultados (`CadastrarResultadosPanel`): ao selecionar uma inscrição vinculada a um check-in, preenche automaticamente os campos "Data da Prova" (com a data do check-in no fuso de São Paulo) e "Hora Entrada / Início" (com a hora de entrada do check-in no fuso de São Paulo), além da "Hora de Saída" (a partir do check-out do check-in).
+  - Ao alterar ou vincular um novo check-in pelo modal, os campos de data da prova e horários de entrada/saída são imediatamente atualizados para os dados do check-in vinculado.
+  - No backend (`server.ts`), os endpoints de listagem de inscrições (`GET /api/admin/registrations`), vinculação de check-in (`PATCH /api/registrations/:id/link-checkin`), associação de inscrições (`POST /api/checkins/:id/registrations`) e encerramento de presença (`POST /api/checkins/:id/checkout`) sincronizam automaticamente `data_execucao` e `hora_execucao` no fuso oficial de São Paulo (`America/Sao_Paulo`).
 - **Reprovação Direta de Treinamentos sem Justificativa com Exclusão Definitiva (`ValidarTreinamentosPanel.tsx`, `server.ts`)**:
   - Reprovação unitária ou em lote exclui definitivamente o treinamento do sistema (`DELETE FROM trainings`), dispensando preenchimento de justificativa textual e removendo imediatamente da listagem.
 - **Seletor de Status de Campeonatos (Aberto / Finalizado / Rascunho) (`AdminPanel.tsx`, `server.ts`, `src/types.ts`)**:

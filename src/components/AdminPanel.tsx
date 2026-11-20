@@ -3665,6 +3665,7 @@ type EnrichedRegistration = {
   ownAmmoShots?: number; clubAmmoShots?: number; clubAmmoType?: 'nova' | 'recarga';
   registeredByUserId?: string; registrationType?: string;
   checkinId?: string; checkinDate?: string;
+  checkoutDate?: string; checkoutTime?: string;
 };
 
 const ZONES = ['x','p10','p9','p8','p7','p6','p5','p4','p3','p2','p1','p0'] as const;
@@ -3810,11 +3811,20 @@ function CadastrarResultadosPanel({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao vincular check-in.');
 
+      const spDate = (chkId && data.checkinDate) ? getLocalSaoPauloDate(data.checkinDate) : '';
+      const spTime = (chkId && data.checkinDate) ? getLocalSaoPauloTime(data.checkinDate) : '';
+      const exitTime = chkId ? (data.checkoutTime || (data.checkoutDate ? getLocalSaoPauloTime(data.checkoutDate) : '')) : '';
+
       // Atualiza na lista de registrations local
       setRegistrations(prev => prev.map(r => r.id === checkinModalReg.id ? {
         ...r,
         checkinId: chkId || undefined,
-        checkinDate: data.checkinDate || undefined
+        checkinDate: data.checkinDate || undefined,
+        checkoutDate: data.checkoutDate || undefined,
+        checkoutTime: data.checkoutTime || undefined,
+        dataExecucao: spDate || r.dataExecucao,
+        horaExecucao: spTime || r.horaExecucao,
+        horaSaida: exitTime || r.horaSaida
       } : r));
 
       // Se o modal de lançamento de notas está aberto para essa inscrição, atualiza selectedReg
@@ -3822,16 +3832,19 @@ function CadastrarResultadosPanel({
         setSelectedReg(prev => prev ? {
           ...prev,
           checkinId: chkId || undefined,
-          checkinDate: data.checkinDate || undefined
+          checkinDate: data.checkinDate || undefined,
+          checkoutDate: data.checkoutDate || undefined,
+          checkoutTime: data.checkoutTime || undefined,
+          dataExecucao: spDate || prev.dataExecucao,
+          horaExecucao: spTime || prev.horaExecucao,
+          horaSaida: exitTime || prev.horaSaida
         } : null);
 
-        // Se vinculou um check-in e dataExec/horaExec estiverem vazios, pré-preenche com a data/hora do check-in no fuso de São Paulo
+        // Se vinculou um check-in, preenche com a data/hora do check-in no fuso de São Paulo
         if (chkId && data.checkinDate) {
-          const spDate = getLocalSaoPauloDate(data.checkinDate);
-          const spTime = getLocalSaoPauloTime(data.checkinDate);
-          if (spDate && !dataExec) setDataExec(spDate);
-          if (spTime && !horaExec) setHoraExec(spTime);
-          if (data.checkoutTime) setHoraSaida(data.checkoutTime);
+          if (spDate) setDataExec(spDate);
+          if (spTime) setHoraExec(spTime);
+          if (exitTime) setHoraSaida(exitTime);
         }
       }
 
@@ -3939,9 +3952,13 @@ function CadastrarResultadosPanel({
     } else {
       setSeriesData(Array.from({length: Math.max(1, n)}, () => Object.fromEntries(ZONES.map(z => [z,'']))));
     }
-    setDataExec(reg.dataExecucao || '');
-    setHoraExec(reg.horaExecucao || '');
-    setHoraSaida(reg.horaSaida || '');
+    const initialDataExec = reg.dataExecucao || (reg.checkinDate ? getLocalSaoPauloDate(reg.checkinDate) : '');
+    const initialHoraExec = reg.horaExecucao || (reg.checkinDate ? getLocalSaoPauloTime(reg.checkinDate) : '');
+    const initialHoraSaida = reg.horaSaida || (reg.checkoutDate ? getLocalSaoPauloTime(reg.checkoutDate) : (reg.checkoutTime || ''));
+
+    setDataExec(initialDataExec);
+    setHoraExec(initialHoraExec);
+    setHoraSaida(initialHoraSaida);
     setPenalidade(reg.penalty ? String(reg.penalty) : '');
 
     setOwnAmmoShots(reg.ownAmmoShots ? String(reg.ownAmmoShots) : '');
