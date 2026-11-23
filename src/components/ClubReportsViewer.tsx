@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar, Users, Filter, Download, Loader2, CheckCircle, ShieldAlert, FileSpreadsheet } from 'lucide-react';
+import { Calendar, Users, Filter, Download, Loader2, CheckCircle, ShieldAlert, FileSpreadsheet, Search, X, FileText } from 'lucide-react';
 import { downloadPdfFromHtml, downloadMultiSectionPdfFromHtml, sanitizePdfFilename } from '../utils/pdfDownloader';
 import { exportClubHabitualitiesSummaryToExcel, exportClubHabitualitiesCompleteToExcel, exportIndividualHabitualityToExcel, formatExitAndDuration } from '../utils/habitualitiesExport';
+import { normalizeSearchText } from '../utils/textSearch';
 import { User, Club, TrainingSession, Registration, StageScore, Stage, Championship, Weapon, Modality } from '../types';
 
 interface ClubReportsViewerProps {
@@ -106,20 +107,28 @@ export default function ClubReportsViewer({
     loadTrainings();
   }, [trainings, currentUser?.id]);
 
-  // Athletes belonging to current club
-  const clubAthletes = useMemo(() => {
+  // All athletes belonging to current club (unfiltered total)
+  const allClubAthletes = useMemo(() => {
     return users.filter(u => {
-      const belongs = u.clubId === currentClub?.id || (!u.clubId && currentClub?.id === 'club_aranas');
-      if (!belongs) return false;
-      if (!athleteSearchQuery.trim()) return true;
-      const q = athleteSearchQuery.toLowerCase();
-      return (
-        (u.fullName || '').toLowerCase().includes(q) ||
-        (u.cpf || '').includes(q) ||
-        (u.crNumber || '').toLowerCase().includes(q)
-      );
+      return u.clubId === currentClub?.id || (!u.clubId && currentClub?.id === 'club_aranas');
     }).sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
-  }, [users, currentClub?.id, athleteSearchQuery]);
+  }, [users, currentClub?.id]);
+
+  // Athletes filtered by athleteSearchQuery (busca por Nome sem acento ou CPF com/sem pontuação ou CR)
+  const clubAthletes = useMemo(() => {
+    if (!athleteSearchQuery.trim()) return allClubAthletes;
+    const qClean = normalizeSearchText(athleteSearchQuery.trim());
+    const qDigits = athleteSearchQuery.replace(/\D/g, '');
+
+    return allClubAthletes.filter(u => {
+      const nameMatch = normalizeSearchText(u.fullName).includes(qClean);
+      const crMatch = normalizeSearchText(u.crNumber).includes(qClean);
+      const crDigitsMatch = qDigits.length >= 3 && (u.crNumber || '').replace(/\D/g, '').includes(qDigits);
+      const cpfRawMatch = (u.cpf || '').toLowerCase().includes(qClean);
+      const cpfDigitsMatch = qDigits.length >= 2 && (u.cpf || '').replace(/\D/g, '').includes(qDigits);
+      return nameMatch || crMatch || crDigitsMatch || cpfRawMatch || cpfDigitsMatch;
+    });
+  }, [allClubAthletes, athleteSearchQuery]);
 
   // Helper to compute athlete habitualities (STRICTLY NO LEGACY DATA)
   const computeAthleteHabitualities = (athlete: User, sDate: Date, eDate: Date): HabitualityItem[] => {
@@ -743,7 +752,7 @@ export default function ClubReportsViewer({
         </div>
         <div className="text-right">
           <span className="text-xs font-bold text-blue-900 bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-2xs">
-            {clubAthletes.length} Atleta(s) Vinculado(s)
+            {allClubAthletes.length} Atleta(s) Vinculado(s)
           </span>
         </div>
       </div>
@@ -774,14 +783,34 @@ export default function ClubReportsViewer({
             />
           </div>
           <div>
-            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Buscar Atleta</label>
-            <input
-              type="text"
-              placeholder="Nome, CPF ou CR..."
-              value={athleteSearchQuery}
-              onChange={e => setAthleteSearchQuery(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-800 outline-none focus:border-blue-500"
-            />
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase block">Buscar Atleta</label>
+              {athleteSearchQuery && (
+                <span className="text-[9.5px] font-semibold text-blue-600">
+                  {clubAthletes.length} encontrado(s)
+                </span>
+              )}
+            </div>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Nome, CPF ou CR..."
+                value={athleteSearchQuery}
+                onChange={e => setAthleteSearchQuery(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-lg pl-8 pr-7 p-2 text-xs text-slate-800 outline-none focus:border-blue-500 font-medium"
+              />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              {athleteSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setAthleteSearchQuery('')}
+                  className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                  title="Limpar busca"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
           {activeTab === 'global_habitualidade' && (
             <div className="flex flex-col gap-1.5 pb-1">
@@ -881,6 +910,7 @@ export default function ClubReportsViewer({
                   <th className="py-2.5 px-3">CR</th>
                   <th className="py-2.5 px-3 text-center">Habitualidades</th>
                   <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3 text-right">Ação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -903,11 +933,25 @@ export default function ClubReportsViewer({
                         <span className="text-[10px] font-semibold text-slate-400">Sem registros</span>
                       )}
                     </td>
+                    <td className="py-2.5 px-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedAthleteId(athlete.id);
+                          setActiveTab('individual');
+                        }}
+                        className="text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-1 rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
+                        title="Abrir Declaração Individual deste atleta"
+                      >
+                        <FileText className="w-3 h-3" />
+                        Declaração
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {globalData.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-6 text-center text-xs text-slate-400">
+                    <td colSpan={6} className="py-6 text-center text-xs text-slate-400">
                       Nenhum atleta encontrado com os filtros aplicados.
                     </td>
                   </tr>
@@ -921,24 +965,131 @@ export default function ClubReportsViewer({
       {/* TAB 2: DECLARAÇÃO INDIVIDUAL */}
       {activeTab === 'individual' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-            <div className="sm:col-span-2 space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 uppercase block">Selecione o Atleta</label>
-              <select
-                value={selectedAthleteId}
-                onChange={e => setSelectedAthleteId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-800 font-semibold focus:border-blue-500"
-              >
-                <option value="">Selecione um atleta vinculado ao clube...</option>
-                {clubAthletes.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.fullName} {u.cpf ? `(CPF: ${u.cpf})` : ''} {u.crNumber ? `— CR: ${u.crNumber}` : ''}
-                  </option>
-                ))}
-              </select>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
+            <div className="sm:col-span-2 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold text-slate-500 uppercase block">
+                  Selecione o Atleta
+                </label>
+                <span className="text-[10px] text-slate-400 font-medium">
+                  {clubAthletes.length} de {allClubAthletes.length} atletas disponíveis
+                </span>
+              </div>
+
+              {!selectedAthleteId ? (
+                <div className="space-y-2">
+                  {/* Campo de pesquisa por Nome ou CPF */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Pesquisar atleta por Nome ou CPF..."
+                      value={athleteSearchQuery}
+                      onChange={e => setAthleteSearchQuery(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-8 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-xs font-semibold text-slate-800 shadow-xs"
+                    />
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    {athleteSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setAthleteSearchQuery('')}
+                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                        title="Limpar pesquisa"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Seletor dropdown com as opções filtradas */}
+                  <select
+                    value={selectedAthleteId}
+                    onChange={e => setSelectedAthleteId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-800 font-semibold focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="">
+                      {clubAthletes.length === 0
+                        ? 'Nenhum atleta encontrado para esta busca'
+                        : `Selecione um atleta na lista (${clubAthletes.length} opções)...`}
+                    </option>
+                    {clubAthletes.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.fullName} {u.cpf ? `(CPF: ${u.cpf})` : ''} {u.crNumber ? `— CR: ${u.crNumber}` : ''}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Sugestões rápidas com clique direto quando houver busca ativa */}
+                  {athleteSearchQuery.trim() && clubAthletes.length > 0 && clubAthletes.length <= 6 && (
+                    <div className="bg-white border border-blue-100 rounded-xl p-2 shadow-xs space-y-1">
+                      <div className="text-[10px] font-bold text-blue-900 uppercase px-1">
+                        Atletas Encontrados ({clubAthletes.length}):
+                      </div>
+                      <div className="divide-y divide-slate-100">
+                        {clubAthletes.map(u => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedAthleteId(u.id);
+                            }}
+                            className="w-full text-left p-2 hover:bg-blue-50 rounded-lg transition flex items-center justify-between cursor-pointer group"
+                          >
+                            <div>
+                              <div className="font-bold text-xs text-slate-900 group-hover:text-blue-700">
+                                {u.fullName}
+                              </div>
+                              <div className="text-[10px] text-slate-500 font-mono">
+                                CPF: {u.cpf || 'Não informado'} • CR: {u.crNumber || 'Não informado'}
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-blue-100 text-blue-800 group-hover:bg-blue-600 group-hover:text-white transition">
+                              Selecionar
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {athleteSearchQuery.trim() && clubAthletes.length === 0 && (
+                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 font-medium">
+                      Nenhum atleta vinculado encontrado para "{athleteSearchQuery}". Tente buscar por outros termos, apenas os números do CPF ou o primeiro nome.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                /* Card do atleta selecionado com destaque e botão de troca */
+                <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3.5 flex items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-xs shrink-0">
+                      {(singleAthlete?.fullName || 'A').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold text-blue-800 uppercase tracking-wide">
+                        Atleta Selecionado
+                      </div>
+                      <div className="font-bold text-sm text-slate-900">
+                        {singleAthlete?.fullName}
+                      </div>
+                      <div className="text-[11px] text-slate-600 font-mono mt-0.5">
+                        CPF: <span className="font-semibold text-slate-800">{singleAthlete?.cpf || 'Não informado'}</span> • CR: <span className="font-semibold text-slate-800">{singleAthlete?.crNumber || 'Não informado'}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAthleteId('')}
+                    className="text-xs text-blue-700 hover:text-blue-900 font-bold px-3 py-1.5 bg-white hover:bg-blue-100/70 border border-blue-200 rounded-lg transition shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    Trocar Atleta
+                  </button>
+                </div>
+              )}
             </div>
+
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 uppercase block">Tipo</label>
+              <label className="text-[10px] font-bold text-slate-500 uppercase block">Tipo de Declaração</label>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"

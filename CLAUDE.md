@@ -38,6 +38,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Painel Diretor module status (as of 2026-11-23)
 
 Real (backed by actual DB tables/endpoints, tested end-to-end):
+- **Filtro de Pesquisa de Atletas por Nome ou CPF nos Relatórios e Declarações do Clube (`ClubReportsViewer.tsx`, `textSearch.ts`)**:
+  - Na tela de Relatórios e Declarações (`Painel Diretor > Gerenciamento Clube > Relatórios e Declarações`), busca e filtragem de atletas por **Nome** (com normalização de acentos e case-insensitive via `normalizeSearchText`) ou **CPF** (aceitando dígitos brutos desformatados ou CPF com pontuação), além de número de CR.
+  - **Aba Declaração Individual**: campo de pesquisa interativo integrado na seleção do atleta com busca em tempo real, cards de sugestões rápidas para seleção em 1 clique, card visual do atleta selecionado com badge de CPF/CR e botão "Trocar Atleta", mantendo o `<select>` nativo perfeitamente sincronizado com as opções filtradas.
+  - **Aba Relatório Global do Clube**: filtragem imediata da tabela consolidada de habitualidades, preservação da contagem total de atletas vinculados no cabeçalho institucional do clube (`allClubAthletes.length`) sem distorção pelo filtro, e botão direto "Declaração" em cada linha para abrir a declaração individual do atleta com 1 clique.
 - **Cadastro de Resultados sem Check-out Prévio e Preenchimento Automático da Hora de Saída no Check-out (`AdminPanel.tsx`, `server.ts`)**:
   - Permite que o gestor cadastre e salve resultados de campeonatos mesmo enquanto o atleta ainda está presente no clube (com check-in ativo e check-out pendente), sem exigir preenchimento prévio da hora de saída.
   - Indicador visual no card de Presença no Clube (`Atleta no Estande (Saída Pendente)`) e aviso amigável no campo de Hora de Saída.

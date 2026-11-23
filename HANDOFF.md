@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(championships): permitir cadastro de resultados sem check-out e sincronizar hora de saida no check-out` |
-| Data/hora | 2026-11-23T10:22:00-03:00 |
+| Mensagem | `feat(reports): adicionar filtro de pesquisa por nome e cpf na selecao de atletas` |
+| Data/hora | 2026-11-23T18:41:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -941,6 +941,24 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
     1. Injetada a propriedade `onUpdateClub={handleUpdateClub}` no `<AdminPanel>` em `App.tsx`.
     2. Atualizada a função `handleUpdateClub` para utilizar `headers: buildAuthHeaders()` garantindo autenticação completa (`Authorization: Bearer <token>` e `x-user-id`).
     3. Executada migração aditiva `ALTER TABLE clubs ADD COLUMN IF NOT EXISTS fantasy_name TEXT;` no PostgreSQL e garantida a permissão em `PATCH /api/clubs/:id` para administradores e gestores de plataforma.
+
+- **Filtro de Pesquisa de Atletas por Nome ou CPF nos Relatórios e Declarações do Clube (`ClubReportsViewer.tsx`, `textSearch.ts`)**:
+  - **Exigência**: Permitir pesquisar/filtrar atletas de forma ágil por Nome ou CPF na tela de Relatórios e Declarações do Clube (`Painel Diretor > Gerenciamento Clube > Relatórios e Declarações`).
+  - **Problemas Identificados**:
+    1. A pesquisa por CPF usava apenas `(u.cpf || '').includes(q)`. Se o gestor digitasse o CPF sem formatação (apenas dígitos numéricos, ex: `12345678900`) e o banco armazenasse com máscara (`123.456.789-00`), ou vice-versa, nenhum resultado era encontrado.
+    2. A pesquisa por nome não utilizava `normalizeSearchText`, de modo que nomes com acentos (ex: "João", "José", "Cássio") não eram localizados ao digitar "joao", "jose" ou "cassio".
+    3. Na aba "Declaração Individual", havia apenas um `<select>` nativo com centenas de opções e sem campo de busca integrado, obrigando o usuário a rolar uma lista extensa para selecionar um atleta. Além disso, o filtro no cabeçalho universal distorcia o contador total de atletas vinculados no banner do clube.
+  - **Implementações Realizadas**:
+    1. **Busca Robusta por Nome e CPF**: Normalização de texto via `normalizeSearchText` para busca insensível a maiúsculas e acentos, e normalização de dígitos numéricos para CPF (`qDigits.length >= 2 && u.cpf.replace(/\D/g, '').includes(qDigits)`), além de suporte a busca por CR.
+    2. **Aba Declaração Individual**:
+       - Adicionado campo de pesquisa moderno *"Pesquisar atleta por Nome ou CPF..."* com ícone de lupa, botão de limpar (X) e contagem em tempo real de atletas encontrados.
+       - Lista de sugestões rápidas para seleção com 1 clique (exibindo nome, CPF formatado e CR).
+       - Card destacado de Atleta Selecionado com avatar, nome, CPF, CR e botão *"Trocar Atleta"*.
+       - `<select>` nativo mantido e perfeitamente sincronizado com as opções filtradas pela pesquisa.
+    3. **Aba Relatório Global do Clube**:
+       - Tabela de habitualidades consolidada agora filtra instantaneamente por nome ou CPF com o mesmo critério robusto.
+       - Adicionado botão de atalho *"Declaração"* em cada linha da tabela para abrir diretamente a declaração individual do atleta com 1 clique.
+       - O cabeçalho institucional do clube preserva o total real de atletas vinculados (`allClubAthletes.length`), sem ser reduzido pela busca.
 
 - **Exportação de Resultados para Excel e PDF (`CompetitionResultsViewer.tsx`, `resultsExport.ts`)**:
   - **Implementação Centralizada**: Criado o utilitário `src/utils/resultsExport.ts` contendo as funções `exportResultsToExcel` (gera planilha `.xls` estruturada com metadados do Excel, cabeçalhos estilizados, linhas zebradas e alinhamentos tipográficos) e `exportResultsToPdf` (gera documento oficial de impressão em alta resolução vetorial com cabeçalho institucional G&G Competições, tabela zebrada, repetição de cabeçalho em múltiplas páginas via `thead` e alternância inteligente de orientação Paisagem/Retrato).
