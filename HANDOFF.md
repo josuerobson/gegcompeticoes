@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(championships): preencher data da prova e hora de entrada a partir do check-in vinculado` |
-| Data/hora | 2026-11-20T09:05:00-03:00 |
+| Mensagem | `feat(championships): permitir cadastro de resultados sem check-out e sincronizar hora de saida no check-out` |
+| Data/hora | 2026-11-23T10:22:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,21 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Cadastro de Resultados sem Check-out Prévio e Preenchimento Automático da Hora de Saída no Check-out (`AdminPanel.tsx`, `server.ts`)**:
+  - **Solicitação do Usuário**: "Hoje quando o atleta faz o check-in e estando no clube, participa do campeonato, o gestor vai fazer o cadastro dos resultados e o atleta ainda esta no clube, sem ter feito o check-out, o sistema não salva o resultado porque o check-out da hora de saida ainda não foi registrado. O que preciso é que o cadastro do resultado possa ocorrer mesmo sem o check-out , e quando o atleta no sistema registrar o check-out, o sistema vai e registra a hora de saida nos resultados lançados vinculados somente ao check-in mas sem hora de saida."
+  - **O que foi implementado**:
+    1. **Frontend (`AdminPanel.tsx`)**:
+       - No painel de cadastro de resultados de campeonatos (`CadastrarResultadosPanel`):
+         - O campo "Hora de Saída" permanece opcional para inscrições vinculadas a um check-in em aberto (com atleta no estande).
+         - Adicionado aviso explicativo e badge `Auto no check-out` no campo de Hora de Saída para o gestor saber com clareza que o resultado pode ser lançado e salvo imediatamente sem preenchimento de saída.
+         - Status visual no card de Presença no Clube atualizado: exibe badge azul `Atleta no Estande (Saída Pendente)` com mensagem informando que a pontuação pode ser salva agora e a hora de saída será sincronizada quando o atleta registrar o check-out.
+    2. **Backend (`server.ts`)**:
+       - No endpoint `POST /api/checkins/:id/checkout`:
+         - Ao registrar o check-out (seja pelo atleta no aplicativo ou pelo gestor no painel de check-ins), o sistema consulta todas as inscrições/resultados vinculados àquele check-in (`WHERE checkin_id = $id`) que estejam sem hora de saída (`hora_saida IS NULL OR hora_saida = ''`).
+         - Atualiza automaticamente `hora_saida = exitTimeStr` e calcula o `tempo_permanencia` (calculado entre a `hora_execucao` da prova e a hora de saída do check-out, ou a duração total do check-in).
+         - Vincula quaisquer `registrationIds` passados explicitamente no payload do checkout e preserva quaisquer horas de saída que o gestor já tenha customizado manualmente.
+  - **O que NÃO fazer no futuro**: Nunca exigir obrigatoriedade de `hora_saida` para salvar resultados de atletas que estão com check-in ativo no clube, e sempre propagar a saída para os resultados vinculados ao realizar o check-out.
 
 - **Pré-preenchimento Automático de Data da Prova e Hora de Entrada a partir do Check-in Vinculado (`AdminPanel.tsx`, `server.ts`)**:
   - **Solicitação do Usuário**: "Quando for cadastrar o resultado e já tiver vinculado ao check-in preencher a data da prova e hora de entrada conforme check-in" (com anexo demonstrando que ao abrir a inscrição com check-in já vinculado, a data e hora de entrada ficavam em branco enquanto a hora de saída estava preenchida).

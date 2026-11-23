@@ -9629,27 +9629,48 @@ app.post('/api/checkins/:id/checkout', requireAuth, async (req, res) => {
       [exitTimeStr, durationMinutes, id]
     );
 
-    // Link any passed registrationIds to this checkin as well
+    // 1. Vincula quaisquer registrationIds passados explicitamente a este check-in
     if (Array.isArray(registrationIds) && registrationIds.length > 0) {
       await pool.query(
         `UPDATE registrations
          SET checkin_id = $1,
              data_execucao = COALESCE(data_execucao, $2),
-             hora_execucao = COALESCE(hora_execucao, $3),
-             hora_saida = $4,
-             tempo_permanencia = $5
-         WHERE id = ANY($6) AND (user_id = $7 OR $8 = true)`,
-        [id, spDateStr, spTimeStr, exitTimeStr, `${durationMinutes} min`, registrationIds, checkin.user_id, isAdmin]
+             hora_execucao = COALESCE(hora_execucao, $3)
+         WHERE id = ANY($4) AND (user_id = $5 OR $6 = true)`,
+        [id, spDateStr, spTimeStr, registrationIds, checkin.user_id, isAdmin]
       );
-    } else {
+    }
+
+    // 2. Registra automaticamente a hora de saída e tempo de permanência em TODOS os resultados/inscrições vinculados a este check-in que ainda estão sem hora de saída
+    const pendingRegs = await pool.query(
+      `SELECT id, hora_execucao, data_execucao, tempo_permanencia FROM registrations WHERE checkin_id = $1 AND (hora_saida IS NULL OR hora_saida = '')`,
+      [id]
+    );
+
+    for (const reg of pendingRegs.rows) {
+      let perm = `${durationMinutes} min`;
+      const execTime = reg.hora_execucao || spTimeStr;
+      if (execTime) {
+        const timeRegex = /(\d{1,2}):(\d{2})/;
+        const entryMatch = String(execTime).match(timeRegex);
+        const exitMatch = String(exitTimeStr).match(timeRegex);
+        if (entryMatch && exitMatch) {
+          const entryMin = Number(entryMatch[1]) * 60 + Number(entryMatch[2]);
+          const exitMin = Number(exitMatch[1]) * 60 + Number(exitMatch[2]);
+          if (exitMin >= entryMin) {
+            perm = `${exitMin - entryMin} min`;
+          }
+        }
+      }
+
       await pool.query(
         `UPDATE registrations
-         SET data_execucao = COALESCE(data_execucao, $1),
-             hora_execucao = COALESCE(hora_execucao, $2),
-             hora_saida = $3,
-             tempo_permanencia = $4
-         WHERE checkin_id = $5`,
-        [spDateStr, spTimeStr, exitTimeStr, `${durationMinutes} min`, id]
+         SET hora_saida = $1,
+             tempo_permanencia = COALESCE(NULLIF(tempo_permanencia, ''), $2),
+             data_execucao = COALESCE(data_execucao, $3),
+             hora_execucao = COALESCE(hora_execucao, $4)
+         WHERE id = $5`,
+        [exitTimeStr, perm, spDateStr, spTimeStr, reg.id]
       );
     }
 

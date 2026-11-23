@@ -4725,9 +4725,15 @@ function CadastrarResultadosPanel({
                         <span>Presença no Clube / Check-in</span>
                       </div>
                       {selectedReg.checkinId ? (
-                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3 text-emerald-600" /> Check-in Validado
-                        </span>
+                        (selectedReg.checkoutDate || horaSaida) ? (
+                          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3 text-emerald-600" /> Check-in Validado (Saída Registrada)
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-blue-600 animate-pulse" /> Atleta no Estande (Saída Pendente)
+                          </span>
+                        )
                       ) : (
                         <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
                           <Clock className="w-3 h-3 text-amber-600" /> Nenhum Check-in Vinculado
@@ -4746,7 +4752,9 @@ function CadastrarResultadosPanel({
                               </span>
                             </div>
                             <p className="text-[11px] text-slate-500">
-                              Esta inscrição/resultado está vinculada e validada para emissão de habitualidade no clube.
+                              {(selectedReg.checkoutDate || horaSaida)
+                                ? 'Esta inscrição/resultado está vinculada e validada para emissão de habitualidade no clube.'
+                                : 'Atleta presente no estande. Você pode lançar e salvar o resultado agora normalmente; a hora de saída será preenchida automaticamente quando o atleta fizer o check-out no clube.'}
                             </p>
                           </>
                         ) : (
@@ -4809,7 +4817,14 @@ function CadastrarResultadosPanel({
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Hora de Saída</label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Hora de Saída</label>
+                        {selectedReg.checkinId && !selectedReg.checkoutDate && !horaSaida && (
+                          <span className="text-[9px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                            Auto no check-out
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="time"
                         value={horaSaida}
@@ -4817,6 +4832,11 @@ function CadastrarResultadosPanel({
                         placeholder="HH:mm"
                         className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-xs text-slate-700 font-semibold focus:bg-white focus:border-blue-500 transition"
                       />
+                      {selectedReg.checkinId && !selectedReg.checkoutDate && !horaSaida && (
+                        <p className="text-[10px] text-slate-500">
+                          Opcional agora: ao dar check-out, a saída será preenchida automaticamente.
+                        </p>
+                      )}
                     </div>
                   </div>
 

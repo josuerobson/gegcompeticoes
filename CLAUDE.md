@@ -35,9 +35,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Legacy system parity.** Several `Painel Diretor` cadastro screens were rebuilt to match field-for-field specs from a legacy PHP system the user is migrating off of (raw HTML forms with generic field names like `info1`, `id4` were used as the source of truth — those internal names are not meaningful, only the field's label/position/options matter). Where this repo's data model needed to diverge from a first guess based on the legacy system, the actual legacy HTML always won. See "Painel Diretor module status" below for what's been aligned this way — don't assume an unconverted screen's fields are correct without checking for a legacy reference first.
 
-## Painel Diretor module status (as of 2026-11-20)
+## Painel Diretor module status (as of 2026-11-23)
 
 Real (backed by actual DB tables/endpoints, tested end-to-end):
+- **Cadastro de Resultados sem Check-out Prévio e Preenchimento Automático da Hora de Saída no Check-out (`AdminPanel.tsx`, `server.ts`)**:
+  - Permite que o gestor cadastre e salve resultados de campeonatos mesmo enquanto o atleta ainda está presente no clube (com check-in ativo e check-out pendente), sem exigir preenchimento prévio da hora de saída.
+  - Indicador visual no card de Presença no Clube (`Atleta no Estande (Saída Pendente)`) e aviso amigável no campo de Hora de Saída.
+  - Ao registrar o check-out (seja pelo atleta no app ou pelo gestor no painel), o backend (`POST /api/checkins/:id/checkout`) localiza todas as inscrições/resultados vinculados àquele check-in que estiverem sem hora de saída (`hora_saida IS NULL OR hora_saida = ''`) e registra automaticamente a hora de saída oficial e calcula o tempo de permanência correspondente.
 - **Pré-preenchimento Automático de Data da Prova e Hora de Entrada a partir do Check-in Vinculado (`AdminPanel.tsx`, `server.ts`)**:
   - No Painel Diretor > Cadastrar Resultados (`CadastrarResultadosPanel`): ao selecionar uma inscrição vinculada a um check-in, preenche automaticamente os campos "Data da Prova" (com a data do check-in no fuso de São Paulo) e "Hora Entrada / Início" (com a hora de entrada do check-in no fuso de São Paulo), além da "Hora de Saída" (a partir do check-out do check-in).
   - Ao alterar ou vincular um novo check-in pelo modal, os campos de data da prova e horários de entrada/saída são imediatamente atualizados para os dados do check-in vinculado.
