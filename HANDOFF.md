@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(franchise): reestruturar relatorio financeiro da franquia com filtros avancados e download de pdf` |
-| Data/hora | 2026-11-27T10:39:00-03:00 |
+| Mensagem | `feat(landing): adicionar link discreto desenvolvido por J4 Sistemas no rodape inicial` |
+| Data/hora | 2026-11-27T16:05:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -1039,6 +1039,13 @@ These came directly from the user reviewing legacy-system specs (real HTML forms
        - Cada card de arma pendente exibe badge em âmbar chamativo `⚠️ Status: Pendente de Atribuição`, legenda `Aguardando apontamento manual (Atleta ou Clube)` e botão direto `📝 Apontar Vínculo`.
        - No formulário de edição de arma pendente, exibe caixa de aviso orientando o gestor a escolher entre **Acervo do Clube** ou **Arma de Atleta** (com busca de CPF em tempo real, validação e seleção automática do clube), salvando a decisão e regularizando o status no sistema.
   - **O que NÃO fazer no futuro**: Nunca associar automaticamente armas importadas ou sem definição a nenhum clube ou atleta sem intervenção manual explícita.
+
+- **Link Institucional "Desenvolvido por J4 Sistemas" no Rodapé da Landing Page (`src/App.tsx`)**:
+  - **Exigência**: Inserir exclusivamente no rodapé da página inicial (antes do login) uma informação bem discreta "Desenvolvido por J4 Sistemas" com link para `https://j4sistemas.com.br`.
+  - **Implementação**:
+    1. No rodapé de `LandingPageView` em `src/App.tsx` (exclusivo para visitantes não autenticados), adicionado bloco tipográfico abaixo de `© G&G COMPETIÇÕES DE TIRO PRÁTICO - BRASÍLIA / DF`.
+    2. Utilizada tipografia discreta (`text-[10px]`), com adaptação harmônica para os modos claro e escuro (`text-slate-400` / `text-slate-600`), efeito hover sutil (`hover:underline`) e abertura segura em nova aba (`target="_blank" rel="noopener noreferrer"`).
+    3. Assegurado que telas internas autenticadas (atletas, clubes, administradores) não exibem esse rodapé.
 
 ## Infra / deploy
 

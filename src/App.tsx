@@ -2220,7 +2220,19 @@ export default function App() {
             <span>•</span>
             <a href="#" className="hover:text-blue-500 transition" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>Topo</a>
           </div>
-          <p>© G&G COMPETIÇÕES DE TIRO PRÁTICO - BRASÍLIA / DF</p>
+          <div className="space-y-1">
+            <p>© G&G COMPETIÇÕES DE TIRO PRÁTICO - BRASÍLIA / DF</p>
+            <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-600' : 'text-slate-400'}`}>
+              <a
+                href="https://j4sistemas.com.br"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`transition hover:underline ${theme === 'dark' ? 'hover:text-slate-400' : 'hover:text-slate-600'}`}
+              >
+                Desenvolvido por J4 Sistemas
+              </a>
+            </p>
+          </div>
         </footer>
 
         {/* Shared Login Modal (Overlay dialog) */}
