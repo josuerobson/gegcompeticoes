@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(reports): adicionar filtro de pesquisa por nome e cpf na selecao de atletas` |
-| Data/hora | 2026-11-23T18:41:00-03:00 |
+| Mensagem | `feat(franchise): reestruturar relatorio financeiro da franquia com filtros avancados e download de pdf` |
+| Data/hora | 2026-11-27T10:39:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,38 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Reestruturação Completa do Relatório Financeiro da Franquia (`FranchiseFinancialReport.tsx`, `AdminPanel.tsx`, `server.ts`)**:
+  - **Solicitação do Usuário**:
+    1. Tirar Anuidades de Atletas, Conciliação Pix e Anuidades Clubes Filiados deste menu, mantendo somente "Faturas de Inscrição — Clubes Filiados".
+    2. Ao entrar no menu, trazer o relatório global dos últimos 6 meses com campos de data pré-preenchidos.
+    3. Adicionar filtro por entre datas e navegação anual (`< ano anterior`, `2025`, `Próximo ano >`).
+    4. Filtro por campeonatos (selecionar todos ou conjunto específico) e filtro por etapas dependente dos campeonatos selecionados.
+    5. Filtro na tabela por clube filiado para localização rápida.
+    6. Na tabela, números exibidos (Inscrições, 0–30 dias, 31–60 dias, 61+ dias, Valor Devido) clicáveis com abertura de popup detalhando cada informação e opção para gerar PDF.
+    7. Remover "WhatsApp" e "Copiar mensagem" da coluna Ação e deixar o botão "Baixar relatório" que gera PDF com resumo completo das informações de cada clube.
+  - **O que foi implementado**:
+    1. **Backend (`server.ts`)**:
+       - Atualizados os SELECTs de `registrations` e `idsc_registrations` no endpoint `GET /api/club-invoices/unbilled-summary` (tanto no modo credor quanto no modo devedor) para incluir `championship_id`, `championship_title`, `stage_id`, `stage_title`, `stage_num` e `modality_name`.
+       - Cada inscrição retornada no array `entry.registrations` agora transporta metadados completos de campeonato, etapa, modalidade, atleta, valor pago, valor devido à franquia e data de registro.
+    2. **Componente dedicado (`src/components/FranchiseFinancialReport.tsx`)**:
+       - Criado componente isolado e modular que substitui a visualização anterior no `case 'financeiro_franquia'` de `AdminPanel.tsx`.
+       - Removidas da tela as seções de Anuidades de Atletas (`AnnuityRoster`), Conciliação Pix (`PixReconciliation`) e o card de Anuidades de Clubes Filiados, focando 100% em "Faturas de Inscrição — Clubes Filiados".
+       - **Período padrão de 6 meses**: estado inicial de `startDate` (hoje - 6 meses) e `endDate` (hoje), com botão rápido "Últimos 6 meses" para reset.
+       - **Visualização Anual**: botões `< Anterior` e `Próximo >` com display do ano ativo que sincronizam automaticamente o intervalo para `01/01/ANO` a `31/12/ANO`.
+       - **Filtros de Campeonatos e Etapas**: dropdowns popover interativos com suporte a seleção de "Todos" ou seleção múltipla via checkboxes. O filtro de etapas reage imediatamente aos campeonatos selecionados.
+       - **Cards de Métricas**: Saldo Não Faturado, Faturas Pendentes de Pagamento e Faturas Já Pagas calculados em tempo real de acordo com as datas e filtros selecionados.
+       - **Busca por Clube**: campo de texto em tempo real com normalização de acentos na tabela.
+       - **Números Clicáveis com Popup Modal de Detalhamento**:
+         - Clicar em "Inscrições" ou "Valor Devido" abre modal com todas as inscrições pendentes do clube no período.
+         - Clicar em "0–30 dias", "31–60 dias" ou "61+ dias" abre modal filtrado exclusivamente com as inscrições daquela faixa de idade da dívida.
+         - O modal possui cabeçalho com badges, tabela completa com Atleta, Campeonato, Etapa, Modalidade, Data, Idade da dívida com badge colorido e Valor Devido.
+         - Botão "Gerar PDF" no modal exporta o detalhamento em layout oficial via `downloadPdfFromHtml` em orientação paisagem.
+       - **Coluna Ação com Botão "Baixar Relatório"**:
+         - Removidos os botões de WhatsApp e Copiar Mensagem.
+         - Adicionado botão "Baixar relatório" que gera e faz download direto do extrato financeiro do clube filiado em PDF contendo cabeçalho institucional, dados do clube devedor, cards de distribuição por idade da dívida e tabela analítica de inscrições.
+         - Adicionado botão no topo "Baixar Geral (PDF)" para emitir o relatório consolidado de todos os clubes filiados no período.
+  - **O que NÃO fazer no futuro**: Nunca reintroduzir blocos de anuidades de atletas ou conciliação pix dentro da tela do Financeiro da Franquia sem solicitação explícita do usuário, e manter a geração de PDFs utilizando o utilitário nativo `pdfDownloader` sem janelas de impressão.
 
 - **Cadastro de Resultados sem Check-out Prévio e Preenchimento Automático da Hora de Saída no Check-out (`AdminPanel.tsx`, `server.ts`)**:
   - **Solicitação do Usuário**: "Hoje quando o atleta faz o check-in e estando no clube, participa do campeonato, o gestor vai fazer o cadastro dos resultados e o atleta ainda esta no clube, sem ter feito o check-out, o sistema não salva o resultado porque o check-out da hora de saida ainda não foi registrado. O que preciso é que o cadastro do resultado possa ocorrer mesmo sem o check-out , e quando o atleta no sistema registrar o check-out, o sistema vai e registra a hora de saida nos resultados lançados vinculados somente ao check-in mas sem hora de saida."

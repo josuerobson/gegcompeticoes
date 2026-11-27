@@ -10872,10 +10872,14 @@ app.get('/api/club-invoices/unbilled-summary', requireAuth, async (req, res) => 
       const champRows = await pool.query(
         `SELECT r.id, r.valor_pago, r.club_owed_amount, r.registered_at, r.club_id AS debtor_club_id,
                 dcl.name AS debtor_club_name,
-                ch.title AS championship_title, ch.club_id AS creditor_club_id,
+                ch.id AS championship_id, ch.title AS championship_title, ch.club_id AS creditor_club_id,
+                s.id AS stage_id, s.title AS stage_title, s.stage_num,
+                m.name AS modality_name,
                 cl.name AS creditor_club_name, u.full_name AS athlete_name
          FROM registrations r
          JOIN championships ch ON ch.id = r.championship_id
+         LEFT JOIN stages s ON s.id = r.stage_id
+         LEFT JOIN modalities m ON m.id = r.modality_id
          LEFT JOIN clubs cl ON cl.id = ch.club_id
          LEFT JOIN clubs dcl ON dcl.id = r.club_id
          LEFT JOIN users u ON u.id = r.user_id
@@ -10885,7 +10889,9 @@ app.get('/api/club-invoices/unbilled-summary', requireAuth, async (req, res) => 
       const idscRows = await pool.query(
         `SELECT ir.id, ir.valor_pago, ir.club_owed_amount, ir.registered_at, ir.club_id AS debtor_club_id,
                 dcl.name AS debtor_club_name,
-                co.name AS championship_title, ic.club_id AS creditor_club_id,
+                ic.id AS championship_id, ic.title AS championship_title, ic.club_id AS creditor_club_id,
+                st.id AS stage_id, st.title AS stage_title,
+                co.name AS modality_name,
                 cl.name AS creditor_club_name, u.full_name AS athlete_name
          FROM idsc_registrations ir
          JOIN idsc_courses co ON co.id = ir.course_id
@@ -10926,7 +10932,12 @@ app.get('/api/club-invoices/unbilled-summary', requireAuth, async (req, res) => 
         entry.registrations.push({
           id: row.id,
           source: row.source,
+          championshipId: row.championship_id,
           championshipTitle: row.championship_title,
+          stageId: row.stage_id,
+          stageTitle: row.stage_title,
+          stageNum: row.stage_num,
+          modalityName: row.modality_name,
           athleteName: row.athlete_name,
           valorPago: Number(row.valor_pago),
           clubOwedAmount: Number(row.club_owed_amount),
@@ -10954,10 +10965,14 @@ app.get('/api/club-invoices/unbilled-summary', requireAuth, async (req, res) => 
     const champRows = await pool.query(
       `SELECT r.id, r.valor_pago, r.club_owed_amount, r.registered_at, r.club_id AS debtor_club_id,
               dcl.name AS debtor_club_name,
-              ch.title AS championship_title, ch.club_id AS creditor_club_id,
+              ch.id AS championship_id, ch.title AS championship_title, ch.club_id AS creditor_club_id,
+              s.id AS stage_id, s.title AS stage_title, s.stage_num,
+              m.name AS modality_name,
               cl.name AS creditor_club_name, u.full_name AS athlete_name
        FROM registrations r
        JOIN championships ch ON ch.id = r.championship_id
+       LEFT JOIN stages s ON s.id = r.stage_id
+       LEFT JOIN modalities m ON m.id = r.modality_id
        LEFT JOIN clubs cl ON cl.id = ch.club_id
        LEFT JOIN clubs dcl ON dcl.id = r.club_id
        LEFT JOIN users u ON u.id = r.user_id
@@ -10967,7 +10982,9 @@ app.get('/api/club-invoices/unbilled-summary', requireAuth, async (req, res) => 
     const idscRows = await pool.query(
       `SELECT ir.id, ir.valor_pago, ir.club_owed_amount, ir.registered_at, ir.club_id AS debtor_club_id,
               dcl.name AS debtor_club_name,
-              co.name AS championship_title, ic.club_id AS creditor_club_id,
+              ic.id AS championship_id, ic.title AS championship_title, ic.club_id AS creditor_club_id,
+              st.id AS stage_id, st.title AS stage_title,
+              co.name AS modality_name,
               cl.name AS creditor_club_name, u.full_name AS athlete_name
        FROM idsc_registrations ir
        JOIN idsc_courses co ON co.id = ir.course_id
@@ -11012,7 +11029,12 @@ app.get('/api/club-invoices/unbilled-summary', requireAuth, async (req, res) => 
       entry.registrations.push({
         id: row.id,
         source: row.source,
+        championshipId: row.championship_id,
         championshipTitle: row.championship_title,
+        stageId: row.stage_id,
+        stageTitle: row.stage_title,
+        stageNum: row.stage_num,
+        modalityName: row.modality_name,
         athleteName: row.athlete_name,
         valorPago: Number(row.valor_pago),
         clubOwedAmount: Number(row.club_owed_amount),
