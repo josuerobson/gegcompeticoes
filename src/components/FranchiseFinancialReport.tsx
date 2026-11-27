@@ -95,6 +95,8 @@ export default function FranchiseFinancialReport({
   const [selectedChampionshipIds, setSelectedChampionshipIds] = useState<string[]>([]);
   const [selectedStageIds, setSelectedStageIds] = useState<string[]>([]);
   const [clubSearch, setClubSearch] = useState('');
+  const [champSearch, setChampSearch] = useState('');
+  const [stageSearch, setStageSearch] = useState('');
 
   // Dropdown popover open states
   const [champFilterOpen, setChampFilterOpen] = useState(false);
@@ -195,6 +197,20 @@ export default function FranchiseFinancialReport({
 
     return list.sort((a, b) => a.title.localeCompare(b.title));
   }, [stages, entries, selectedChampionshipIds]);
+
+  // Filter available championships by search text
+  const filteredAvailableChampionships = useMemo(() => {
+    if (!champSearch.trim()) return availableChampionships;
+    const q = normalizeSearchText(champSearch);
+    return availableChampionships.filter(c => normalizeSearchText(c.title).includes(q));
+  }, [availableChampionships, champSearch]);
+
+  // Filter available stages by search text
+  const filteredAvailableStages = useMemo(() => {
+    if (!stageSearch.trim()) return availableStages;
+    const q = normalizeSearchText(stageSearch);
+    return availableStages.filter(s => normalizeSearchText(s.title).includes(q));
+  }, [availableStages, stageSearch]);
 
   // Championship selection helpers
   const toggleChampionship = (champId: string) => {
@@ -829,39 +845,108 @@ export default function FranchiseFinancialReport({
             </button>
 
             {champFilterOpen && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-30 p-2 max-h-60 overflow-y-auto space-y-1">
-                <button
-                  type="button"
-                  onClick={toggleAllChampionships}
-                  className="w-full text-left px-2 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-2"
-                >
-                  {selectedChampionshipIds.length === availableChampionships.length ? (
-                    <CheckSquare className="w-3.5 h-3.5" />
-                  ) : (
-                    <Square className="w-3.5 h-3.5" />
-                  )}
-                  Todos os campeonatos
-                </button>
-                <div className="border-t border-slate-100 my-1"></div>
-                {availableChampionships.map(champ => {
-                  const isChecked = selectedChampionshipIds.includes(champ.id);
-                  return (
+              <>
+                <div
+                  className="fixed inset-0 z-20"
+                  onClick={() => setChampFilterOpen(false)}
+                />
+                <div className="absolute top-full right-0 sm:right-auto sm:left-0 mt-1 w-80 sm:w-96 md:w-[420px] max-w-[90vw] bg-white border border-slate-200 rounded-2xl shadow-xl z-30 p-3 space-y-2.5 animate-fade-in">
+                  {/* Busca por nome do campeonato */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Filtrar campeonato por nome..."
+                      value={champSearch}
+                      onChange={e => setChampSearch(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-7 py-1.5 text-xs text-slate-700 outline-none focus:border-blue-500 focus:bg-white transition"
+                      autoFocus
+                    />
+                    {champSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setChampSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Ações / Selecionar Todos */}
+                  <div className="flex items-center justify-between px-1">
                     <button
-                      key={champ.id}
                       type="button"
-                      onClick={() => toggleChampionship(champ.id)}
-                      className="w-full text-left px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+                      onClick={toggleAllChampionships}
+                      className="text-left text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 cursor-pointer"
                     >
-                      {isChecked ? (
-                        <CheckSquare className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      {selectedChampionshipIds.length === availableChampionships.length ? (
+                        <CheckSquare className="w-4 h-4 text-blue-600" />
                       ) : (
-                        <Square className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                        <Square className="w-4 h-4 text-slate-400" />
                       )}
-                      <span className="truncate">{champ.title}</span>
+                      Todos os campeonatos
                     </button>
-                  );
-                })}
-              </div>
+                    {selectedChampionshipIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedChampionshipIds([]); setSelectedStageIds([]); }}
+                        className="text-[11px] text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        Limpar seleção
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="border-t border-slate-100"></div>
+
+                  {/* Lista de Campeonatos com nome completo */}
+                  <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
+                    {filteredAvailableChampionships.length === 0 ? (
+                      <p className="text-xs text-slate-400 text-center py-4">Nenhum campeonato encontrado.</p>
+                    ) : (
+                      filteredAvailableChampionships.map(champ => {
+                        const isChecked = selectedChampionshipIds.includes(champ.id);
+                        return (
+                          <button
+                            key={champ.id}
+                            type="button"
+                            onClick={() => toggleChampionship(champ.id)}
+                            className={`w-full text-left px-2.5 py-2 text-xs rounded-xl flex items-start gap-2.5 transition cursor-pointer ${
+                              isChecked ? 'bg-blue-50/70 text-blue-900 font-semibold' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className="mt-0.5 shrink-0">
+                              {isChecked ? (
+                                <CheckSquare className="w-4 h-4 text-blue-600" />
+                              ) : (
+                                <Square className="w-4 h-4 text-slate-300" />
+                              )}
+                            </span>
+                            <span className="leading-snug break-words whitespace-normal text-left">{champ.title}</span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Rodapé do Popover */}
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 px-1">
+                    <span>
+                      {selectedChampionshipIds.length === 0
+                        ? 'Todos selecionados'
+                        : `${selectedChampionshipIds.length} de ${availableChampionships.length} selecionado(s)`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setChampFilterOpen(false)}
+                      className="font-bold text-blue-600 hover:text-blue-800 text-[11px] cursor-pointer"
+                    >
+                      Concluir
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
 
@@ -885,45 +970,110 @@ export default function FranchiseFinancialReport({
             </button>
 
             {stageFilterOpen && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-30 p-2 max-h-60 overflow-y-auto space-y-1">
-                {availableStages.length === 0 ? (
-                  <p className="text-[11px] text-slate-400 p-2">Nenhuma etapa encontrada.</p>
-                ) : (
-                  <>
+              <>
+                <div
+                  className="fixed inset-0 z-20"
+                  onClick={() => setStageFilterOpen(false)}
+                />
+                <div className="absolute top-full right-0 mt-1 w-80 sm:w-96 md:w-[400px] max-w-[90vw] bg-white border border-slate-200 rounded-2xl shadow-xl z-30 p-3 space-y-2.5 animate-fade-in">
+                  {/* Busca por nome da etapa */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Filtrar etapa por nome..."
+                      value={stageSearch}
+                      onChange={e => setStageSearch(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-7 py-1.5 text-xs text-slate-700 outline-none focus:border-blue-500 focus:bg-white transition"
+                      autoFocus
+                    />
+                    {stageSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setStageSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Ações / Selecionar Todas */}
+                  <div className="flex items-center justify-between px-1">
                     <button
                       type="button"
                       onClick={toggleAllStages}
-                      className="w-full text-left px-2 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-2"
+                      className="text-left text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 cursor-pointer"
                     >
                       {selectedStageIds.length === availableStages.length ? (
-                        <CheckSquare className="w-3.5 h-3.5" />
+                        <CheckSquare className="w-4 h-4 text-blue-600" />
                       ) : (
-                        <Square className="w-3.5 h-3.5" />
+                        <Square className="w-4 h-4 text-slate-400" />
                       )}
                       Todas as etapas
                     </button>
-                    <div className="border-t border-slate-100 my-1"></div>
-                    {availableStages.map(stage => {
-                      const isChecked = selectedStageIds.includes(stage.id);
-                      return (
-                        <button
-                          key={stage.id}
-                          type="button"
-                          onClick={() => toggleStage(stage.id)}
-                          className="w-full text-left px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 rounded-lg flex items-center gap-2"
-                        >
-                          {isChecked ? (
-                            <CheckSquare className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                          ) : (
-                            <Square className="w-3.5 h-3.5 text-slate-300 shrink-0" />
-                          )}
-                          <span className="truncate">{stage.title}</span>
-                        </button>
-                      );
-                    })}
-                  </>
-                )}
-              </div>
+                    {selectedStageIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedStageIds([])}
+                        className="text-[11px] text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        Limpar seleção
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="border-t border-slate-100"></div>
+
+                  {/* Lista de Etapas com nome completo */}
+                  <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
+                    {availableStages.length === 0 ? (
+                      <p className="text-xs text-slate-400 text-center py-4">Nenhuma etapa encontrada.</p>
+                    ) : filteredAvailableStages.length === 0 ? (
+                      <p className="text-xs text-slate-400 text-center py-4">Nenhuma etapa encontrada com a busca.</p>
+                    ) : (
+                      filteredAvailableStages.map(stage => {
+                        const isChecked = selectedStageIds.includes(stage.id);
+                        return (
+                          <button
+                            key={stage.id}
+                            type="button"
+                            onClick={() => toggleStage(stage.id)}
+                            className={`w-full text-left px-2.5 py-2 text-xs rounded-xl flex items-start gap-2.5 transition cursor-pointer ${
+                              isChecked ? 'bg-blue-50/70 text-blue-900 font-semibold' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className="mt-0.5 shrink-0">
+                              {isChecked ? (
+                                <CheckSquare className="w-4 h-4 text-blue-600" />
+                              ) : (
+                                <Square className="w-4 h-4 text-slate-300" />
+                              )}
+                            </span>
+                            <span className="leading-snug break-words whitespace-normal text-left">{stage.title}</span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Rodapé do Popover */}
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 px-1">
+                    <span>
+                      {selectedStageIds.length === 0
+                        ? 'Todas selecionadas'
+                        : `${selectedStageIds.length} de ${availableStages.length} selecionada(s)`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setStageFilterOpen(false)}
+                      className="font-bold text-blue-600 hover:text-blue-800 text-[11px] cursor-pointer"
+                    >
+                      Concluir
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </div>

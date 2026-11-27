@@ -9,8 +9,8 @@ This is a knowledge-transfer document, not auto-loaded by Claude Code (unlike `C
 | Campo | Valor |
 |-------|-------|
 | Hash | `HEAD (main)` |
-| Mensagem | `feat(landing): adicionar link discreto desenvolvido por J4 Sistemas no rodape inicial` |
-| Data/hora | 2026-11-27T16:05:00-03:00 |
+| Mensagem | `fix(franchise): expandir largura dos filtros de campeonatos e etapas e adicionar busca por nome` |
+| Data/hora | 2026-11-27T18:00:00-03:00 |
 | Push feito? | ✅ Sim |
 | Deploy EasyPanel confirmado? | ⏳ Em andamento (auto-deploy via push único) |
 | Tarefa estava completa? | ✅ Sim |
@@ -57,6 +57,15 @@ Anyone can also self-register (no invite/approval needed): the landing page's "C
 - **`weaponType`/legacy free-text fields**: some older weapon rows may still have values in columns that the current form no longer collects (`weapon_type`) — harmless, just don't be surprised if you see them on old data.
 
 ## Decisions made this session, and why
+
+- **Exibição do Nome Completo e Busca em Tempo Real no Filtro de Campeonatos e Etapas (`FranchiseFinancialReport.tsx`)**:
+  - **Solicitação do Usuário**: "no filtro tem que ajustar de forma que de para ver o nome do campeonato inteiro e poder fltrar pelo nome" (com captura de tela demonstrando o popover estreito cortando os títulos com reticências `1ª Compe...`).
+  - **O que foi implementado**:
+    1. **Largura e Layout**: O popover dropdown de Campeonatos foi expandido para `w-80 sm:w-96 md:w-[420px] max-w-[90vw]`, com remoção da classe `truncate` e aplicação de quebra natural de linha (`leading-snug break-words whitespace-normal text-left`), permitindo a leitura de 100% do nome de qualquer campeonato sem cortes ou reticências.
+    2. **Busca em Tempo Real por Nome**: Adicionado campo de pesquisa interativo com ícone de lupa e botão de limpar (X) no topo do popover, filtrando a lista instantaneamente sem distinção de acentos ou maiúsculas/minúsculas via `normalizeSearchText`.
+    3. **Mesma Melhoria Aplicada ao Filtro de Etapas**: O popover de Etapas também recebeu campo de pesquisa por nome e expansão de largura sem truncamento.
+    4. **Fechamento ao Clicar Fora**: Adicionado backdrop invisível (`fixed inset-0 z-20`) para fechar o popover com um clique fora, além de botões "Limpar seleção" e "Concluir".
+  - **O que NÃO fazer no futuro**: Nunca restringir popovers de seleção de entidades com nomes longos à largura do botão original usando `left-0 right-0` nem truncar o título com `truncate` sem dar opção de visualização completa.
 
 - **Reestruturação Completa do Relatório Financeiro da Franquia (`FranchiseFinancialReport.tsx`, `AdminPanel.tsx`, `server.ts`)**:
   - **Solicitação do Usuário**:
